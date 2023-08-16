@@ -9,6 +9,13 @@
       "Cannot use all columns for partition columns."
     ]
   },
+  "ALTER_TABLE_CHANGE_COLUMN_NOT_SUPPORTED_FOR_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE CHANGE COLUMN is not supported for partition columns in non-delta tables.",
+      "<columnName> is a partition column in non-delta table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -6346,4 +6353,4 @@
     ],
     "sqlState" : "P0001"
   }
-}
+},
