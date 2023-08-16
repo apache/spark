@@ -377,8 +377,8 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Find the origin column from dataSchema by column name.
-    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
+    verifyNonPartitionColumn(table, columnName, resolver)
+    val originColumn = findDataColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
@@ -415,9 +415,22 @@ case class AlterTableChangeColumnCommand(
     Seq.empty[Row]
   }
 
+  private def verifyNonPartitionColumn(
+      table: CatalogTable, name: String, resolver: Resolver): Unit = {
+    table.partitionSchema.fields.collectFirst {
+        case field if resolver(field.name, name) => field
+    } match {
+      case Some(_) =>
+        throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForPartitionColumn(
+          table.qualifiedName,
+          columnName)
+      case None =>
+    }
+  }
+
   // Find the origin column from schema by column name, throw an AnalysisException if the column
   // reference is invalid.
-  private def findColumnByName(
+  private def findDataColumnByName(
       schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
