@@ -4406,6 +4406,24 @@ object SQLConf {
       .booleanConf
       .createOptional
 
+  val PLAN_MERGE_FILTER_PROPAGATION_ENABLED =
+    buildConf("spark.sql.planMerge.filterPropagation.enabled")
+      .internal()
+      .doc(s"When set to true different filters can be propagated up to aggregates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PLAN_MERGE_FILTER_PROPAGATION_MAX_COST =
+    buildConf("spark.sql.planMerge.filterPropagation.maxCost")
+      .internal()
+      .doc("The maximum allowed additional cost of merging. By setting this value to -1 filter " +
+        "propagation is always allowed.")
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(c => c >= 0 || c == -1, "The maximum allowed cost must not be negative")
+      .createWithDefault(100)
+
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
