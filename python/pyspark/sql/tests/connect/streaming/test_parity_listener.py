@@ -49,6 +49,7 @@ def get_start_event_schema():
         ]
     )
 
+
 def get_idle_event_schema():
     return StructType(
         [
@@ -57,6 +58,7 @@ def get_idle_event_schema():
             StructField("timestamp", StringType(), False),
         ]
     )
+
 
 def get_terminated_event_schema():
     return StructType(
@@ -67,6 +69,7 @@ def get_terminated_event_schema():
             StructField("errorClassOnException", StringType(), True),
         ]
     )
+
 
 def get_state_operators_progress_schema():
     return StructType(
@@ -125,7 +128,7 @@ def get_streaming_query_progress_schema():
             StructField("eventTime", MapType(StringType(), StringType(), True), True),
             StructField("stateOperators", ArrayType(get_state_operators_progress_schema()), True),
             StructField("sources", ArrayType(get_source_progress_schema()), True),
-            StructField("sink", get_sink_progress_schema(), True), # TODO: false?
+            StructField("sink", get_sink_progress_schema(), True),  # TODO: false?
             StructField("numInputRows", IntegerType(), False),
             StructField("inputRowsPerSecond", FloatType(), False),
             StructField("processedRowsPerSecond", FloatType(), False),
@@ -139,7 +142,6 @@ def get_progress_event_schema():
 
 
 class TestListener(StreamingQueryListener):
-
     def onQueryStarted(self, event):
         df = self.spark.createDataFrame(
             data=[(event.asDict())],

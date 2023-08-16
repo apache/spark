@@ -537,8 +537,9 @@ class StreamingQueryProgress:
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],
             observedMetrics={
-                k: Row(row) if isinstance(row, str) else
-                Row(*row.keys())(*row.values())  # Assume no nested rows
+                k: Row(row)
+                if isinstance(row, str)
+                else Row(*row.keys())(*row.values())  # Assume no nested rows
                 for k, row in j["observedMetrics"].items()
             }
             if "observedMetrics" in j
@@ -560,7 +561,9 @@ class StreamingQueryProgress:
             else:
                 return obj
 
-        return {k[1:]: conv(v) for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]}
+        return {
+            k[1:]: conv(v) for k, v in self.__dict__.items() if k not in ["_jprogress", "_jdict"]
+        }
 
     @property
     def id(self) -> uuid.UUID:
