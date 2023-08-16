@@ -118,6 +118,9 @@ object StreamingForeachBatchHelper extends Logging {
       //     This is because MicroBatch execution clones the session during start.
       //     The session attached to the foreachBatch dataframe is different from the one the one
       //     the query was started with. `sessionHolder` here contains the latter.
+      //     Another issue with not creating new session id: foreachBatch worker keeps
+      //     the session alive. The session mapping at Connect server does not expire and query
+      //     keeps running even if the original client disappears. This keeps the query running.
 
       PythonRDD.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)

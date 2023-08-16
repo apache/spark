@@ -213,5 +213,8 @@ private[connect] object SparkConnectStreamingQueryCache {
       session: SparkSession, // Holds the reference to the session.
       query: StreamingQuery, // Holds the reference to the query.
       expiresAtMs: Option[Long] = None // Expiry time for a stopped query.
-  )
+  ) {
+    override def toString(): String =
+      s"[session id: $sessionId, query id: ${query.id}, run id: ${query.runId}]"
+  }
 }

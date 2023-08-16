@@ -2866,6 +2866,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         }
       } catch {
         case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
+          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
           foreachBatchRunnerCleaner.foreach(_.close())
           throw ex
       }
