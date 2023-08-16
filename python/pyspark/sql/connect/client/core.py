@@ -675,6 +675,11 @@ class SparkConnectClient(object):
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
 
+    def _retrying(self) -> "Retrying":
+        return Retrying(
+            can_retry=SparkConnectClient.retry_exception, **self._retry_policy  # type: ignore
+        )
+
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
         return self
@@ -1096,9 +1101,7 @@ class SparkConnectClient(object):
             )
 
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1139,9 +1142,7 @@ class SparkConnectClient(object):
                 for b in generator:
                     handle_response(b)
             else:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             handle_response(b)
@@ -1226,9 +1227,7 @@ class SparkConnectClient(object):
                 for b in generator:
                     yield from handle_response(b)
             else:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
@@ -1337,9 +1336,7 @@ class SparkConnectClient(object):
         req = self._config_request_with_metadata()
         req.operation.CopyFrom(operation)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1382,9 +1379,7 @@ class SparkConnectClient(object):
     def interrupt_all(self) -> Optional[List[str]]:
         req = self._interrupt_request("all")
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1400,9 +1395,7 @@ class SparkConnectClient(object):
     def interrupt_tag(self, tag: str) -> Optional[List[str]]:
         req = self._interrupt_request("tag", tag)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1418,9 +1411,7 @@ class SparkConnectClient(object):
     def interrupt_operation(self, op_id: str) -> Optional[List[str]]:
         req = self._interrupt_request("operation", op_id)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1544,12 +1535,14 @@ class RetryState:
         self._done = False
         self._count = 0
 
-    def set_exception(self, exc: Optional[BaseException]) -> None:
+    def set_exception(self, exc: BaseException) -> None:
         self._exception = exc
         self._count += 1
 
-    def exception(self) -> Optional[BaseException]:
-        return self._exception
+    def throw(self) -> None:
+        if self._exception is None:
+            raise RuntimeError("No exception is set")
+        raise self._exception
 
     def set_done(self) -> None:
         self._done = True
@@ -1664,4 +1657,4 @@ class Retrying:
 
         if not retry_state.done():
             # Exceeded number of retries, throw last exception we had
-            raise retry_state.exception()
+            retry_state.throw()
