@@ -83,7 +83,7 @@ def _create_py_udtf(
             else:
                 raise e
 
-    eval_type = PythonEvalType.SQL_TABLE_UDF
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
 
     if arrow_enabled:
         from pyspark.sql.pandas.utils import (

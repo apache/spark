@@ -19,11 +19,10 @@ User-defined table function related classes and functions
 """
 import pickle
 from dataclasses import dataclass
-from functools import wraps
 import inspect
 import sys
 import warnings
-from typing import Any, Iterable, Iterator, Type, TYPE_CHECKING, Optional, Union, Callable
+from typing import Any, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -112,7 +111,8 @@ def _create_py_udtf(
             if isinstance(value, str) and value.lower() == "true":
                 arrow_enabled = True
 
-    eval_type = PythonEvalType.SQL_TABLE_UDF
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
+
     if arrow_enabled:
         # Return the regular UDTF if the required dependencies are not satisfied.
         try:
