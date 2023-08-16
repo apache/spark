@@ -24,7 +24,7 @@ import time
 from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
 import json
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -636,29 +636,33 @@ def read_udtf(pickleSer, infile, eval_type):
                 )
                 return result
 
-            def evaluate(*args: pd.Series):
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            def func(*args: Any) -> Any:
                 try:
-                    if len(args) == 0:
-                        yield verify_result(pd.DataFrame(f())), arrow_return_type
-                    else:
-                        # Create tuples from the input pandas Series, each tuple
-                        # represents a row across all Series.
-                        row_tuples = zip(*args)
-                        for row in row_tuples:
-                            res = f(*row)
-                            if res is not None and not isinstance(res, Iterable):
-                                raise PySparkRuntimeError(
-                                    error_class="UDTF_RETURN_NOT_ITERABLE",
-                                    message_parameters={
-                                        "type": type(res).__name__,
-                                    },
-                                )
-                            yield verify_result(pd.DataFrame(res)), arrow_return_type
+                    return f(*args)
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
                         message_parameters={"method_name": f.__name__, "error": str(e)},
                     )
+
+            def evaluate(*args: pd.Series):
+                if len(args) == 0:
+                    yield verify_result(pd.DataFrame(func())), arrow_return_type
+                else:
+                    # Create tuples from the input pandas Series, each tuple
+                    # represents a row across all Series.
+                    row_tuples = zip(*args)
+                    for row in row_tuples:
+                        res = func(*row)
+                        if res is not None and not isinstance(res, Iterable):
+                            raise PySparkRuntimeError(
+                                error_class="UDTF_RETURN_NOT_ITERABLE",
+                                message_parameters={
+                                    "type": type(res).__name__,
+                                },
+                            )
+                        yield verify_result(pd.DataFrame(res)), arrow_return_type
 
             return evaluate
 
