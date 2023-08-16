@@ -430,7 +430,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    * @since 4.0.0
    */
   def xml(xmlDataset: Dataset[String]): DataFrame =
-    parse(xmlDataset, ParseFormat.PARSE_FORMAT_XML)
+    parse(xmlDataset, ParseFormat.PARSE_FORMAT_UNSPECIFIED)
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
