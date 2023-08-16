@@ -494,8 +494,9 @@ def main():
     original_head = get_current_ref()
 
     # Check this up front to avoid failing the JIRA update at the very end
-    if not JIRA_USERNAME or not JIRA_PASSWORD:
-        continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
+    if not JIRA_ACCESS_TOKEN and (not JIRA_USERNAME or not JIRA_PASSWORD):
+        msg = "The env-vars JIRA_ACCESS_TOKEN or JIRA_USERNAME/JIRA_PASSWORD are not set. Continue?"
+        continue_maybe(msg)
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
@@ -595,7 +596,7 @@ def main():
         merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
     if JIRA_IMPORTED:
-        if JIRA_USERNAME and JIRA_PASSWORD:
+        if JIRA_ACCESS_TOKEN or (JIRA_USERNAME and JIRA_PASSWORD):
             continue_maybe("Would you like to update an associated JIRA?")
             jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
                 pr_num,
@@ -604,7 +605,7 @@ def main():
             )
             resolve_jira_issues(title, merged_refs, jira_comment)
         else:
-            print("JIRA_USERNAME and JIRA_PASSWORD not set")
+            print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
             print("Exiting without trying to close the associated JIRA.")
     else:
         print("Could not find jira-python library. Run 'pip3 install jira' to install.")
