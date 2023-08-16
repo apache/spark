@@ -49,26 +49,19 @@ case class SortMergeJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  def streamedOrdering(): Seq[SortOrder] = {
-    val ordering = streamedPlan.outputOrdering
-    if (ordering.length >= streamedKeys.length) {
-      ordering.takeRight(ordering.length - streamedKeys.length)
-    } else Nil
-  }
-
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
     case _: InnerLike =>
       val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
-      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
+      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering, false)
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
         // Also add expressions from right side sort order
         val sameOrderExpressions = ExpressionSet(lKey.sameOrderExpressions ++ rKey.children)
         SortOrder(lKey.child, Ascending, sameOrderExpressions.toSeq)
-      } ++ streamedOrdering()
+      }
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
-    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering) ++ streamedOrdering()
-    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering) ++ streamedOrdering()
+    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
+    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
     // There are null rows in both streams, so there is no order.
     case FullOuter => Nil
     case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
@@ -85,13 +78,21 @@ case class SortMergeJoinExec(
    * again, returns the required ordering for this child with extra "sameOrderExpressions" from
    * the child's outputOrdering.
    */
-  private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
-    : Seq[SortOrder] = {
+  private def getKeyOrdering(
+      keys: Seq[Expression],
+      childOutputOrdering: Seq[SortOrder],
+      isStreamSide: Boolean = true) : Seq[SortOrder] = {
     val requiredOrdering = requiredOrders(keys)
     if (SortOrder.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
-      keys.zip(childOutputOrdering).map { case (key, childOrder) =>
-        val sameOrderExpressionsSet = ExpressionSet(childOrder.children) - key
-        SortOrder(key, Ascending, sameOrderExpressionsSet.toSeq)
+      val newRequiredOrdering =
+        keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+          val sameOrderExpressionsSet = ExpressionSet(childOrder.children) - key
+          SortOrder(key, Ascending, sameOrderExpressionsSet.toSeq)
+        }
+      if (isStreamSide) {
+        newRequiredOrdering ++ childOutputOrdering.drop(requiredOrdering.size)
+      } else {
+        newRequiredOrdering
       }
     } else {
       requiredOrdering
