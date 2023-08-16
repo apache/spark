@@ -215,17 +215,6 @@ class QueryStartedEvent:
 
         return {k[1:]: conv(v) for k, v in self.__dict__.items()}
 
-    @staticmethod
-    def schema():
-        return StructType(
-            [
-                StructField("id", StringType(), False),
-                StructField("runId", StringType(), False),
-                StructField("name", StringType(), True),
-                StructField("timestamp", StringType(), False),
-            ]
-        )
-
     @property
     def id(self) -> uuid.UUID:
         """

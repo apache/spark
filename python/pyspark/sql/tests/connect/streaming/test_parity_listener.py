@@ -145,7 +145,7 @@ class TestListener(StreamingQueryListener):
     def onQueryStarted(self, event):
         df = self.spark.createDataFrame(
             data=[(event.asDict())],
-            schema=event.schema(),
+            schema=get_start_event_schema(),
         )
         df.write.saveAsTable("listener_start_events")
 
@@ -177,7 +177,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
             # This ensures the read socket on the server won't crash (i.e. because of timeout)
             # when there hasn't been a new event for a long time
-            # time.sleep(30)
+            time.sleep(30)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
