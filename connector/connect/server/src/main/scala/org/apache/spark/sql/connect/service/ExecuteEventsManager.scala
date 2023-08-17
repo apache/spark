@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonIgnoreProperties}
 import com.google.protobuf.Message
 
 import org.apache.spark.connect.proto
@@ -278,6 +278,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
  * @param extraTags:
  *   Additional metadata during the request.
  */
+@JsonIgnoreProperties(value = Array("planRequest"))
 case class SparkListenerConnectOperationStarted(
     jobTag: String,
     operationId: String,
