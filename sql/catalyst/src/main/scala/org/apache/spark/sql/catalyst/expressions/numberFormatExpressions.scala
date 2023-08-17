@@ -223,7 +223,7 @@ case class TryToNumber(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "string_funcs")
-object ToCharacter extends ExpressionBuilder {
+object ToCharacterBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (expressions.length == 2) {
