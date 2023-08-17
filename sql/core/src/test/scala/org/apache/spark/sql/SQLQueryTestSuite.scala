@@ -202,6 +202,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val udf: TestUDF
   }
 
+  protected trait UDTFTest {
+    val udtf: TestUDTF
+  }
+
   /** A regular test case. */
   protected case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase {
@@ -235,6 +239,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       udf: TestUDF) extends TestCase with UDFTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
+
+  protected case class UDTFTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udtf: TestUDTF) extends TestCase with UDTFTest {
+
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDTFAnalyzerTestCase(newName, inputFile, newResultFile, udtf)
   }
 
   /** A UDAF test case. */
@@ -285,6 +299,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected case class UDFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
+  protected case class UDTFAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udtf: TestUDTF)
+      extends AnalyzerTest with UDTFTest
   protected case class UDAFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
@@ -488,6 +505,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     testCase match {
       case udfTestCase: UDFTest =>
         registerTestUDF(udfTestCase.udf, localSparkSession)
+      case udtfTestCase: UDTFTest =>
+        registerTestUDTF(udtfTestCase.udtf, localSparkSession)
       case _ =>
     }
 
@@ -574,6 +593,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udtfTestCase: UDTFTest
+          if udtfTestCase.udtf.isInstanceOf[TestPythonUDTF] && shouldTestPythonUDFs =>
+        s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
       case _ =>
         s"${testCase.name}${System.lineSeparator()}"
     }
@@ -619,6 +641,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         Seq(TestGroupedAggPandasUDF("udaf")).map { udf =>
           UDAFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
+        Seq(TestPythonUDTF("udtf")).map { udtf =>
+          UDTFTestCase(
+            s"$testCaseName - ${udtf.prettyName}", absPath, resultFile, udtf
+          )
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
