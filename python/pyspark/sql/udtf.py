@@ -58,7 +58,7 @@ def _create_py_udtf(
     cls: Type,
     returnType: Union[StructType, str],
     name: Optional[str] = None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     """Create a regular or an Arrow-optimized Python UDTF."""
@@ -133,7 +133,7 @@ class UserDefinedTableFunction:
         returnType: Union[StructType, str],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
-        deterministic: bool = True,
+        deterministic: bool = False,
     ):
         _validate_udtf_handler(func)
 
@@ -218,13 +218,13 @@ class UserDefinedTableFunction:
         jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, cols, _to_java_column))
         return DataFrame(jPythonUDTF, spark)
 
-    def asNondeterministic(self) -> "UserDefinedTableFunction":
+    def asDeterministic(self) -> "UserDefinedTableFunction":
         """
-        Updates UserDefinedTableFunction to nondeterministic.
+        Updates UserDefinedTableFunction to deterministic.
         """
         # Explicitly clean the cache to create a JVM UDTF instance.
         self._judtf_placeholder = None
-        self.deterministic = False
+        self.deterministic = True
         return self
 
 

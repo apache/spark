@@ -393,7 +393,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       pythonScript: String,
       returnType: StructType,
       evalType: Int = PythonEvalType.SQL_TABLE_UDF,
-      deterministic: Boolean = true): UserDefinedPythonTableFunction = {
+      deterministic: Boolean = false): UserDefinedPythonTableFunction = {
     UserDefinedPythonTableFunction(
       name = name,
       func = SimplePythonFunction(
