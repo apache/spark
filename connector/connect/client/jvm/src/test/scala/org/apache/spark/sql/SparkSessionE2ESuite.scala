@@ -77,6 +77,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       assert(q2Interrupted)
     }
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+
+    assert(spark.client.heartbeatLevel == 0)
   }
 
   test("interrupt all - foreground queries, background interrupt") {
@@ -106,6 +108,101 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     finished = true
     assert(awaitResult(interruptor, 10.seconds))
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+
+    assert(spark.client.heartbeatLevel == 0)
+  }
+
+  test("Test heartbeat with simple operations") {
+    val n: Long = 10
+    val cnt = spark.range(0, n, 1, numPartitions = 1).count()
+    assert(cnt == n)
+
+    spark
+      .sql("select val from (values ('Hello'), ('World')) as t(val)", Map.empty[String, String])
+      .collect()
+
+    spark
+      .sql("select val from (values ('Hello'), ('World')) as t(val)", Array.empty)
+      .collect()
+
+    assert(spark.client.heartbeatLevel == 0)
+  }
+
+  test("Test heartbeat with long operation") {
+    val session = spark
+    import session.implicits._
+    implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+
+    Future {
+      assertThrows[SparkException] {
+        spark.range(10).map(n => {
+          Thread.sleep(30000);
+          n
+        }).collect()
+      }
+    }
+
+    // wait until query execution kicks-off
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(spark.client.heartbeatLevel == 1)
+    }
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      spark.interruptAll()
+      assert(spark.client.heartbeatLevel == 0)
+    }
+  }
+
+  test("Test heartbeat gets executed") {
+    // Importing here to avoid extra edge changes in imports section
+    import org.apache.spark.sql.connect.client.Heartbeat
+
+    val originalSleep = Heartbeat.SLEEP_TIMER_MILLIS
+    try {
+      Heartbeat.SLEEP_TIMER_MILLIS = 300
+
+      // create a new session so the new heartbeat timer is used
+      val session = SparkSession
+        .builder()
+        .client(spark.client.copy())
+        .create()
+      import session.implicits._
+
+      session.range(1).map(n => {
+        Thread.sleep(3000);
+        n
+      }).collect()
+
+      assert(session.client.heartbeatCount > 0)
+    } finally {
+      Heartbeat.SLEEP_TIMER_MILLIS = originalSleep
+    }
+  }
+
+  test("Test no heartbeat") {
+    // Importing here to avoid extra edge changes in imports section
+    import org.apache.spark.sql.connect.client.Heartbeat
+
+    val originalSleep = Heartbeat.SLEEP_TIMER_MILLIS
+    try {
+      Heartbeat.SLEEP_TIMER_MILLIS = 300
+
+      // create a new session which doesn't do heartbeats
+      val session = SparkSession
+        .builder()
+        .client(spark.client.configuration.copy(enableHeartbeat = false).toSparkConnectClient)
+        .create()
+      import session.implicits._
+
+      session.range(1).map(n => {
+        Thread.sleep(3000);
+        n
+      }).collect()
+
+      assert(session.client.heartbeatCount == 0)
+    } finally {
+      Heartbeat.SLEEP_TIMER_MILLIS = originalSleep
+    }
   }
 
   test("interrupt tag") {

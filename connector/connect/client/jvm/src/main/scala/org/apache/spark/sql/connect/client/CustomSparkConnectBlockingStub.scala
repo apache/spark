@@ -23,59 +23,88 @@ import io.grpc.ManagedChannel
 import org.apache.spark.connect.proto._
 
 private[client] class CustomSparkConnectBlockingStub(
-    channel: ManagedChannel,
-    retryPolicy: GrpcRetryHandler.RetryPolicy) {
+    private[client] val channel: ManagedChannel,
+    retryPolicy: GrpcRetryHandler.RetryPolicy,
+    enableHeartbeat: Boolean = true) {
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
   private val retryHandler = new GrpcRetryHandler(retryPolicy)
+  private[client] val heartbeat: Heartbeat = {
+    if (enableHeartbeat) {
+      new HeartbeatImpl(this)
+    } else {
+      new Heartbeat
+    }
+  }
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    GrpcExceptionConverter.convert {
-      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
-        retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
-          request,
-          r => CloseableIterator(stub.executePlan(r).asScala)))
+    heartbeat.beatIterator {
+      GrpcExceptionConverter.convert {
+        GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+          retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
+            request,
+            r => CloseableIterator(stub.executePlan(r).asScala)))
+      }
     }
   }
 
   def executePlanReattachable(
       request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    GrpcExceptionConverter.convert {
-      GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
-        // Don't use retryHandler - own retry handling is inside.
-        new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
+    heartbeat.beatIterator {
+      GrpcExceptionConverter.convert {
+        GrpcExceptionConverter.convertIterator[ExecutePlanResponse](
+          // Don't use retryHandler - own retry handling is inside.
+          new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
+      }
     }
   }
 
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
-    GrpcExceptionConverter.convert {
-      retryHandler.retry {
-        stub.analyzePlan(request)
+    heartbeat.beat {
+      GrpcExceptionConverter.convert {
+        retryHandler.retry {
+          stub.analyzePlan(request)
+        }
       }
     }
   }
 
   def config(request: ConfigRequest): ConfigResponse = {
-    GrpcExceptionConverter.convert {
-      retryHandler.retry {
-        stub.config(request)
+    heartbeat.beat {
+      GrpcExceptionConverter.convert {
+        retryHandler.retry {
+          stub.config(request)
+        }
       }
     }
   }
 
   def interrupt(request: InterruptRequest): InterruptResponse = {
-    GrpcExceptionConverter.convert {
-      retryHandler.retry {
-        stub.interrupt(request)
+    heartbeat.beat {
+      GrpcExceptionConverter.convert {
+        retryHandler.retry {
+          stub.interrupt(request)
+        }
       }
     }
   }
 
   def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
-    GrpcExceptionConverter.convert {
-      retryHandler.retry {
-        stub.artifactStatus(request)
+    heartbeat.beat {
+      GrpcExceptionConverter.convert {
+        retryHandler.retry {
+          stub.artifactStatus(request)
+        }
       }
+    }
+  }
+
+  private[client] def executePing(): Unit = {
+    val request = AnalyzePlanRequest.newBuilder().setSparkVersion(
+      AnalyzePlanRequest.SparkVersion.newBuilder().build()).build()
+
+    retryHandler.retry {
+      stub.analyzePlan(request)
     }
   }
 }
