@@ -2104,7 +2104,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         Example 1: Retrieve column names of a DataFrame
         >>> df = spark.createDataFrame(
-        ...     [(14, "Tom", "CA"), (23, "Alice", "NY"), (16, "Bob", "TX")], ["age", "name", "state"])
+        ...     [(14, "Tom", "CA"), (23, "Alice", "NY"), (16, "Bob", "TX")],
+        ...     ["age", "name", "state"]
+        ... )
         >>> df.columns
         ['age', 'name', 'state']
 
@@ -2143,16 +2145,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.columns
         ['age', 'first_name', 'state']
 
-        Example 6: Using the `columns` property to ensure two DataFrames have the same columns before a union
+        Example 6: Using the `columns` property to ensure two DataFrames have the
+        same columns before a union
         >>> df2 = spark.createDataFrame(
         ...     [(30, "Eve", "FL"), (40, "Sam", "WA")], ["age", "name", "location"])
         >>> df.columns == df2.columns
         False
-
-        Notes
-        -----
-        - The returned list of column names is in the same order as they appear in the DataFrame.
-        - Always verify column names, especially when working with operations that involve multiple DataFrames.
         """
         return [f.name for f in self.schema.fields]
 
