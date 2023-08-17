@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.client
 
-import scala.annotation.tailrec
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.Random
 import scala.util.control.NonFatal
 
 import io.grpc.{Status, StatusRuntimeException}
@@ -26,13 +26,15 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
-private[client] class GrpcRetryHandler(private val retryPolicy: GrpcRetryHandler.RetryPolicy) {
+private[client] class GrpcRetryHandler(
+    private val retryPolicy: GrpcRetryHandler.RetryPolicy,
+    private val sleep: Long => Unit = Thread.sleep) {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    */
-  def retry[T](fn: => T, currentRetryNum: Int = 0): T =
-    GrpcRetryHandler.retry(retryPolicy)(fn, currentRetryNum)
+  def retry[T](fn: => T): T =
+    GrpcRetryHandler.retry(retryPolicy, sleep)(fn)
 
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
@@ -148,37 +150,62 @@ private[client] object GrpcRetryHandler extends Logging {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
+   *
    * @param retryPolicy
    *   The retry policy
+   * @param sleep
+   *   The function which sleeps (takes number of milliseconds to sleep)
    * @param fn
    *   The function to retry.
-   * @param currentRetryNum
-   *   Current number of retries.
    * @tparam T
    *   The return type of the function.
    * @return
    *   The result of the function.
    */
-  @tailrec final def retry[T](retryPolicy: RetryPolicy)(fn: => T, currentRetryNum: Int = 0): T = {
-    if (currentRetryNum > retryPolicy.maxRetries) {
-      throw new IllegalArgumentException(
-        s"The number of retries ($currentRetryNum) must not exceed " +
-          s"the maximum number of retires (${retryPolicy.maxRetries}).")
+  final def retry[T](retryPolicy: RetryPolicy, sleep: Long => Unit = Thread.sleep)(
+      fn: => T): T = {
+    var currentRetryNum = 0
+    var exceptionList: Seq[Throwable] = Seq.empty
+    var nextBackoff: Duration = retryPolicy.initialBackoff
+
+    if (retryPolicy.maxRetries < 0) {
+      throw new IllegalArgumentException("Can't have negative number of retries")
     }
-    try {
-      return fn
-    } catch {
-      case NonFatal(e)
-          if (retryPolicy.canRetry(e) || e.isInstanceOf[RetryException])
-            && currentRetryNum < retryPolicy.maxRetries =>
-        logWarning(
-          s"Non fatal error during RPC execution: $e, " +
-            s"retrying (currentRetryNum=$currentRetryNum)")
-        Thread.sleep(
-          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
-            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
+
+    while (currentRetryNum <= retryPolicy.maxRetries) {
+      if (currentRetryNum != 0) {
+        var currentBackoff = nextBackoff
+        nextBackoff = nextBackoff * retryPolicy.backoffMultiplier min retryPolicy.maxBackoff
+
+        if (currentBackoff >= retryPolicy.minJitterThreshold) {
+          currentBackoff += Random.nextDouble() * retryPolicy.jitter
+        }
+
+        sleep(currentBackoff.toMillis)
+      }
+
+      try {
+        return fn
+      } catch {
+        case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
+          currentRetryNum += 1
+          exceptionList = e +: exceptionList
+
+          if (currentRetryNum <= retryPolicy.maxRetries) {
+            logWarning(
+              s"Non-Fatal error during RPC execution: $e, " +
+                s"retrying (currentRetryNum=$currentRetryNum)")
+          } else {
+            logWarning(
+              s"Non-Fatal error during RPC execution: $e, " +
+                s"exceeded retries (currentRetryNum=$currentRetryNum)")
+          }
+      }
     }
-    retry(retryPolicy)(fn, currentRetryNum + 1)
+
+    val exception = exceptionList.head
+    exceptionList.tail.foreach(exception.addSuppressed(_))
+    throw exception
   }
 
   /**
@@ -210,10 +237,17 @@ private[client] object GrpcRetryHandler extends Logging {
    *   Function that determines whether a retry is to be performed in the event of an error.
    */
   case class RetryPolicy(
+      // Please synchronize changes here with Python side:
+      // pyspark/sql/connect/client/core.py
+      //
+      // Note: these constants are selected so that the maximum tolerated wait is guaranteed
+      // to be at least 10 minutes
       maxRetries: Int = 15,
       initialBackoff: FiniteDuration = FiniteDuration(50, "ms"),
       maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
       backoffMultiplier: Double = 4.0,
+      jitter: FiniteDuration = FiniteDuration(500, "ms"),
+      minJitterThreshold: FiniteDuration = FiniteDuration(2, "s"),
       canRetry: Throwable => Boolean = retryException) {}
 
   /**
