@@ -780,7 +780,6 @@ def read_udtf(pickleSer, infile, eval_type):
             def evaluate(*a, **kw) -> tuple:
                 try:
                     res = f(*a, **kw)
-
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
