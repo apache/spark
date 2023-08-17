@@ -26,6 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.connect.client.Heartbeat
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
@@ -157,9 +158,6 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
   }
 
   test("Test heartbeat gets executed") {
-    // Importing here to avoid extra edge changes in imports section
-    import org.apache.spark.sql.connect.client.Heartbeat
-
     val originalSleep = Heartbeat.SLEEP_TIMER_MILLIS
     try {
       Heartbeat.SLEEP_TIMER_MILLIS = 300
@@ -186,9 +184,6 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
   }
 
   test("Test no heartbeat") {
-    // Importing here to avoid extra edge changes in imports section
-    import org.apache.spark.sql.connect.client.Heartbeat
-
     val originalSleep = Heartbeat.SLEEP_TIMER_MILLIS
     try {
       Heartbeat.SLEEP_TIMER_MILLIS = 300
