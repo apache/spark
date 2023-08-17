@@ -349,6 +349,12 @@ object SparkConnectService extends Logging {
   }
 
   /**
+   * If there are no executions, return Left with System.currentTimeMillis of last active
+   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
+   */
+  def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionManager.listActiveExecutions
+
+  /**
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {

@@ -19,11 +19,10 @@ User-defined table function related classes and functions
 """
 import pickle
 from dataclasses import dataclass
-from functools import wraps
 import inspect
 import sys
 import warnings
-from typing import Any, Iterable, Iterator, Type, TYPE_CHECKING, Optional, Union, Callable
+from typing import Any, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -95,7 +94,7 @@ def _create_py_udtf(
     cls: Type,
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     """Create a regular or an Arrow-optimized Python UDTF."""
@@ -112,105 +111,28 @@ def _create_py_udtf(
             if isinstance(value, str) and value.lower() == "true":
                 arrow_enabled = True
 
-    # Create a regular Python UDTF and check for invalid handler class.
-    regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
 
-    if not arrow_enabled:
-        return regular_udtf
+    if arrow_enabled:
+        # Return the regular UDTF if the required dependencies are not satisfied.
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+            eval_type = PythonEvalType.SQL_ARROW_TABLE_UDF
+        except ImportError as e:
+            warnings.warn(
+                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+                f"Falling back to using regular Python UDTFs.",
+                UserWarning,
+            )
 
-    # Return the regular UDTF if the required dependencies are not satisfied.
-    try:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-    except ImportError as e:
-        warnings.warn(
-            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-            f"Falling back to using regular Python UDTFs.",
-            UserWarning,
-        )
-        return regular_udtf
-
-    # Return the vectorized UDTF.
-    vectorized_udtf = _vectorize_udtf(cls)
     return _create_udtf(
-        cls=vectorized_udtf,
+        cls=cls,
         returnType=returnType,
         name=name,
-        evalType=PythonEvalType.SQL_ARROW_TABLE_UDF,
-        deterministic=regular_udtf.deterministic,
+        evalType=eval_type,
+        deterministic=deterministic,
     )
-
-
-def _vectorize_udtf(cls: Type) -> Type:
-    """Vectorize a Python UDTF handler class."""
-    import pandas as pd
-
-    # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
-    def wrap_func(f: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(f)
-        def evaluate(*a: Any, **kw: Any) -> Any:
-            try:
-                return f(*a, **kw)
-            except Exception as e:
-                raise PySparkRuntimeError(
-                    error_class="UDTF_EXEC_ERROR",
-                    message_parameters={"method_name": f.__name__, "error": str(e)},
-                )
-
-        return evaluate
-
-    class VectorizedUDTF:
-        def __init__(self) -> None:
-            self.func = cls()
-
-        if hasattr(cls, "analyze") and isinstance(
-            inspect.getattr_static(cls, "analyze"), staticmethod
-        ):
-
-            @staticmethod
-            def analyze(*args: AnalyzeArgument, **kwargs: AnalyzeArgument) -> AnalyzeResult:
-                return cls.analyze(*args, **kwargs)
-
-        def eval(self, *args: pd.Series, **kwargs: pd.Series) -> Iterator[pd.DataFrame]:
-            if len(args) == 0 and len(kwargs) == 0:
-                yield pd.DataFrame(wrap_func(self.func.eval)())
-            else:
-                # Create tuples from the input pandas Series, each tuple
-                # represents a row across all Series.
-                keys = list(kwargs.keys())
-                len_args = len(args)
-                row_tuples = zip(*args, *[kwargs[key] for key in keys])
-                for row in row_tuples:
-                    res = wrap_func(self.func.eval)(
-                        *row[:len_args], **{key: row[len_args + i] for i, key in enumerate(keys)}
-                    )
-                    if res is not None and not isinstance(res, Iterable):
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_NOT_ITERABLE",
-                            message_parameters={
-                                "type": type(res).__name__,
-                            },
-                        )
-                    yield pd.DataFrame(res)
-
-        if hasattr(cls, "terminate"):
-
-            def terminate(self) -> Iterator[pd.DataFrame]:
-                yield pd.DataFrame(wrap_func(self.func.terminate)())
-
-    vectorized_udtf = VectorizedUDTF
-    vectorized_udtf.__name__ = cls.__name__
-    vectorized_udtf.__module__ = cls.__module__
-    vectorized_udtf.__doc__ = cls.__doc__
-    vectorized_udtf.__init__.__doc__ = cls.__init__.__doc__
-    vectorized_udtf.eval.__doc__ = getattr(cls, "eval").__doc__
-    if hasattr(cls, "terminate"):
-        getattr(vectorized_udtf, "terminate").__doc__ = getattr(cls, "terminate").__doc__
-
-    if hasattr(vectorized_udtf, "analyze"):
-        getattr(vectorized_udtf, "analyze").__doc__ = getattr(cls, "analyze").__doc__
-
-    return vectorized_udtf
 
 
 def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
@@ -261,7 +183,7 @@ class UserDefinedTableFunction:
         returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
-        deterministic: bool = True,
+        deterministic: bool = False,
     ):
         _validate_udtf_handler(func, returnType)
 
@@ -363,13 +285,13 @@ class UserDefinedTableFunction:
         jPythonUDTF = judtf.apply(spark._jsparkSession, _to_seq(sc, jcols))
         return DataFrame(jPythonUDTF, spark)
 
-    def asNondeterministic(self) -> "UserDefinedTableFunction":
+    def asDeterministic(self) -> "UserDefinedTableFunction":
         """
-        Updates UserDefinedTableFunction to nondeterministic.
+        Updates UserDefinedTableFunction to deterministic.
         """
         # Explicitly clean the cache to create a JVM UDTF instance.
         self._judtf_placeholder = None
-        self.deterministic = False
+        self.deterministic = True
         return self
 
 
