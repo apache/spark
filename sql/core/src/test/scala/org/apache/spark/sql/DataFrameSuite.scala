@@ -3675,7 +3675,8 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-44846: PushFoldableIntoBranches in complex grouping expressions cause bindReference error") {
+  test("SPARK-44846: PushFoldableIntoBranches in complex grouping expressions " +
+    "cause bindReference error") {
     withTempView("t") {
       Seq(-1, 1, 2).toDF("a").createOrReplaceTempView("t")
       val _sql =
