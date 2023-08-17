@@ -7787,10 +7787,13 @@ def to_unix_timestamp(
     >>> spark.conf.unset("spark.sql.session.timeZone")
 
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> old_value = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "false")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
     [Row(r=None)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
+    >>> spark.conf.set("spark.sql.ansi.enabled", old_value)
     """
     if format is not None:
         return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
