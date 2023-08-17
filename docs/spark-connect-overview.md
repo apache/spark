@@ -115,6 +115,9 @@ when writing client applications.
 
 ## Use Spark Connect in client applications
 
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
 When creating a Spark session, you can specify that you want to use Spark Connect
 and there are a few ways to do that outlined as follows.
 
@@ -140,7 +143,6 @@ And start the Spark shell as usual:
 
 <div class="codetabs">
 
-<div data-lang="python"  markdown="1">
 {% highlight bash %}
 ./bin/pyspark
 {% endhighlight %}
@@ -150,22 +152,15 @@ The PySpark shell is now connected to Spark using Spark Connect as indicated in 
 {% highlight python %}
 Client connected to the Spark Connect server at localhost
 {% endhighlight %}
-</div>
 
 </div>
 
 And if you write your own program, create a Spark session as shown in this example:
 
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
 {% highlight python %}
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 {% endhighlight %}
-</div>
-
-</div>
 
 This will create a Spark Connect session from your application by reading the
 `SPARK_REMOTE` environment variable we set previously.
@@ -178,9 +173,6 @@ create a Spark session.
 For example, you can launch the PySpark shell with Spark Connect as
 illustrated here.
 
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
 To launch the PySpark shell with Spark Connect, simply include the `remote`
 parameter and specify the location of your Spark server. We are using `localhost`
 in this example to connect to the local Spark server we started previously:
@@ -219,29 +211,78 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 |  2|Maria|
 +---+-----+
 {% endhighlight %}
-</div>
-
-</div>
 
 Or, when writing your own code, include the `remote` function with a reference to
 your Spark server when you create a Spark session, as in this example:
 
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
 {% highlight python %}
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
 {% endhighlight %}
+
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% highlight scala %}
-import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost").build()
+<div data-lang="scala-REPL"  markdown="1">
+For Scala, we utilize an Ammonite-based REPL that is currently not included by default in the Apache Spark package.
+
+To set up the new Scala REPL, first download and install [Coursier CLI](https://get-coursier.io/docs/cli-installation).
+Then, install the REPL using the following command in a terminal window:
+{% highlight bash %}
+cs install –-contrib spark-connect-repl
 {% endhighlight %}
-</div>
 
+And now you can start the Ammonite-based Scala REPL/shell to connect to your Spark server like this:
+
+{% highlight bash %}
+spark-connect-repl
+{% endhighlight %}
+
+By default, the REPL will attempt to connect to a locally-hosted Spark Server.
+Run the following Scala code in the shell to see Spark Connect in action:
+
+{% highlight scala %}
+@ spark.range(10).count
+res0: Long = 10L
+{% endhighlight %}
+
+### Configure client-server connection
+
+By default, the REPL will attempt to connect to a locally-hosted Spark Server with the port 15002.
+The connection, however, may be configured in several ways as described in this configuration
+[reference](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+
+#### Set SPARK_REMOTE environment variable
+
+The SPARK_REMOTE environment variable can be set on the client machine to customize the client-server 
+connection that is initialized at REPL startup.
+
+{% highlight bash %}
+export SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG"
+spark-connect-repl
+{% endhighlight %}
+or
+{% highlight bash %}
+SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG" spark-connect-repl
+{% endhighlight %}
+
+#### Use CLI Arguments
+
+The customisations may also be passed in through CLI arguments as shown below:
+{% highlight bash %}
+spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
+{% endhighlight %}
+
+The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
+
+#### Configure Programmatically with Connection String
+
+The connection may also be programmatically built using _SparkSession#builder_ in the manner below:
+{% highlight scala %}
+@ import org.apache.spark.sql.SparkSession
+@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").build()
+{% endhighlight %}
+
+</div>
 </div>
 
 # Client application authentication
