@@ -34,8 +34,8 @@ from pyspark.testing.sqlutils import SQLTestUtils
 class StatsTestsMixin:
     def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
         self.assert_eq(
-            psdf_or_psser.count(numeric_only=True),
-            pdf_or_pser.count(numeric_only=True),
+            psdf_or_psser.count(),
+            pdf_or_pser.count(),
             almost=True,
         )
 
