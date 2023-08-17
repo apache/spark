@@ -3346,6 +3346,25 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
+class SparkConnectSessionWithOptionsTest(ReusedConnectTestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder
+            .config("spark.sql.adaptive.enabled", False)
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
+    def test_config(self):
+        # Config
+        self.assertEqual(self.spark.conf.get("spark.sql.adaptive.enabled"), "false")
+        with self.assertRaises(SparkConnectException) as e:
+            self.spark.conf.get("some.conf")
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
