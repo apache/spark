@@ -47,6 +47,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   private var interrupted = false
 
+  // Time at which this sender should finish if the response stream is not finished by then.
+  private var deadlineTimeMillis = Long.MaxValue
+
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
 
@@ -62,6 +65,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    */
   def interrupt(): Unit = executionObserver.synchronized {
     interrupted = true
+    executionObserver.notifyAll()
+  }
+
+  // For testing
+  private[connect] def setDeadline(deadlineMs: Long) = executionObserver.synchronized {
+    deadlineTimeMillis = deadlineMs
     executionObserver.notifyAll()
   }
 
@@ -150,7 +159,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     var finished = false
 
     // Time at which this sender should finish if the response stream is not finished by then.
-    val deadlineTimeMillis = if (!executeHolder.reattachable) {
+    deadlineTimeMillis = if (!executeHolder.reattachable) {
       Long.MaxValue
     } else {
       val confSize =
