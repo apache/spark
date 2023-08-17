@@ -456,6 +456,17 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, err_msg):
             TestUDTF(lit(1)).show()
 
+    def test_udtf_determinism(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+        func = udtf(TestUDTF, returnType="x: int")
+        # The UDTF is marked as non-deterministic by default.
+        self.assertFalse(func.deterministic)
+        func = func.asDeterministic()
+        self.assertTrue(func.deterministic)
+
     def test_nondeterministic_udtf(self):
         import random
 
@@ -463,7 +474,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a + int(random.random()),
 
-        random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
+        random_udtf = udtf(RandomUDTF, returnType="x: int")
         assertDataFrameEqual(random_udtf(lit(1)), [Row(x=1)])
         self.spark.udtf.register("random_udtf", random_udtf)
         assertDataFrameEqual(self.spark.sql("select * from random_udtf(1)"), [Row(x=1)])
