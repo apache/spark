@@ -4232,7 +4232,7 @@ class SeriesGroupBy(GroupBy[Series]):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(groupkeys, groupkey_names)
             ],
-            column_labels=[self._agg_columns[0]._column_label],
+            column_labels=[("count",)],
             data_spark_columns=[scol_for(sdf, agg_column)],
         )
         return first_series(DataFrame(internal))
