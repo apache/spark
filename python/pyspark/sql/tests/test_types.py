@@ -1221,7 +1221,6 @@ class TypesTestsMixin:
             "INTERVAL '1563:04' MINUTE TO SECOND AS h",
             "INTERVAL '1563' MINUTE AS i",
             "INTERVAL '93784' SECOND AS j",
-            # "INTERVAL '50357692 00:00:56144.999980' DAY TO SECOND AS k",
         ]
         df = self.spark.range(1).selectExpr(exprs)
 
@@ -1237,7 +1236,6 @@ class TypesTestsMixin:
             datetime.timedelta(minutes=1563, seconds=4),
             datetime.timedelta(minutes=1563),
             datetime.timedelta(seconds=93784),
-            # datetime.timedelta(days=50357692, seconds=56144, microseconds=999980)
         ]
 
         for n, (a, e) in enumerate(zip(actual, expected)):
