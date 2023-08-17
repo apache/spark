@@ -83,34 +83,26 @@ def _create_py_udtf(
             else:
                 raise e
 
-    # Create a regular Python UDTF and check for invalid handler class.
-    regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
 
-    if not arrow_enabled:
-        return regular_udtf
-
-    from pyspark.sql.pandas.utils import (
-        require_minimum_pandas_version,
-        require_minimum_pyarrow_version,
-    )
-
-    try:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-    except ImportError as e:
-        warnings.warn(
-            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-            f"Falling back to using regular Python UDTFs.",
-            UserWarning,
+    if arrow_enabled:
+        from pyspark.sql.pandas.utils import (
+            require_minimum_pandas_version,
+            require_minimum_pyarrow_version,
         )
-        return regular_udtf
 
-    from pyspark.sql.udtf import _vectorize_udtf
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+            eval_type = PythonEvalType.SQL_ARROW_TABLE_UDF
+        except ImportError as e:
+            warnings.warn(
+                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+                f"Falling back to using regular Python UDTFs.",
+                UserWarning,
+            )
 
-    vectorized_udtf = _vectorize_udtf(cls)
-    return _create_udtf(
-        vectorized_udtf, returnType, name, PythonEvalType.SQL_ARROW_TABLE_UDF, deterministic
-    )
+    return _create_udtf(cls, returnType, name, eval_type, deterministic)
 
 
 class UserDefinedTableFunction:
