@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
-private case object SnowflakeDialect extends JdbcDialect with SQLConfHelper {
+private case object SnowflakeDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:snowflake")
 
