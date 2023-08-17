@@ -185,18 +185,6 @@ private[yarn] class YarnAllocator(
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
 
-  private val isYarnExecutorDecommissionEnabled: Boolean = {
-    (sparkConf.get(DECOMMISSION_ENABLED),
-      sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
-      case (true, false) => true
-      case (true, true) =>
-        logWarning(s"Yarn Executor Decommissioning is supported only " +
-          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
-        false
-      case (false, _) => false
-    }
-  }
-
   private val decommissioningNodesCache = new LinkedHashMap[String, Boolean]() {
     override def removeEldestEntry(entry: Entry[String, Boolean]): Boolean = {
       size() > DECOMMISSIONING_NODES_CACHE_SIZE
@@ -431,7 +419,7 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
-    if (isYarnExecutorDecommissionEnabled) {
+    if (sparkConf.get(DECOMMISSION_ENABLED)) {
       handleNodesInDecommissioningState(allocateResponse)
     }
 
