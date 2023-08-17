@@ -2003,7 +2003,7 @@ class BaseUDTFTestsMixin:
             [Row(partition_col=x, total=3) for x in range(1, 21)],
         )
 
-        # These caseas partition by constant values.
+        # These cases partition by constant values.
         for str_first, str_second, result_first, result_second in (
             ("123", "456", 123, 456),
             ("123", "NULL", None, 123),
