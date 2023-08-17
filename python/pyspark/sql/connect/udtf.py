@@ -50,7 +50,7 @@ def _create_udtf(
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
-    deterministic: bool = True,
+    deterministic: bool = False,
 ) -> "UserDefinedTableFunction":
     udtf_obj = UserDefinedTableFunction(
         cls, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
@@ -62,7 +62,7 @@ def _create_py_udtf(
     cls: Type,
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     if useArrow is not None:
