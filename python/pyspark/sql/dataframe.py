@@ -3773,8 +3773,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The method resolves columns by position (not by name), following the standard behavior
         in SQL.
 
-        Alias: The `union` method was previously named `unionAll` in versions before 2.0.0.
-
         Examples
         --------
         Example 1: Combining two DataFrames with the same schema
