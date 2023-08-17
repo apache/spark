@@ -1984,6 +1984,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield self._partition_col, self._sum
 
+        # This is a basic example.
         func = udtf(TestUDTF, returnType="partition_col: int, total: int")
         self.spark.udtf.register("test_udtf", func)
         self.assertEqual(
@@ -2002,6 +2003,7 @@ class BaseUDTFTestsMixin:
             [Row(partition_col=x, total=3) for x in range(1, 21)],
         )
 
+        # These caseas partition by constant values.
         for str_first, str_second, result_first, result_second in (
             ("123", "456", 123, 456),
             ("123", "NULL", None, 123),
@@ -2024,6 +2026,27 @@ class BaseUDTFTestsMixin:
                     Row(partition_col=result_second, total=1),
                 ],
             )
+
+        # Combine a lateral join with a TABLE argument with PARTITION BY .
+        func = udtf(TestUDTF, returnType="partition_col: int, total: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id AS partition_col, 1 AS input FROM range(1, 3)
+                  UNION ALL
+                  SELECT id AS partition_col, 2 AS input FROM range(1, 3)
+                )
+                SELECT v.a, v.b, f.partition_col, f.total
+                FROM VALUES (0, 1) AS v(a, b),
+                LATERAL test_udtf(TABLE(t) PARTITION BY partition_col - 1) f
+                ORDER BY 1, 2, 3, 4
+                """
+            ).collect(),
+            [Row(a=0, b=1, partition_col=1, total=3),
+             Row(a=0, b=1, partition_col=2, total=3)],
+        )
 
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:

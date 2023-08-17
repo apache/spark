@@ -23,7 +23,7 @@ import sys
 import time
 from inspect import getfullargspec
 import json
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 import traceback
 import faulthandler
@@ -579,25 +579,38 @@ def read_udtf(pickleSer, infile, eval_type):
         This implements the logic of a UDTF that accepts an input TABLE argument with one or more
         PARTITION BY expressions.
 
-        Parameters
-        ----------
-        create_udtf: function
-            Function to create a new instance of the UDTF to be invoked.
-        partition_child_indexes: list
-            List of integers identifying zero-based indexes of the columns of the input table that
-            contain projected partitioning expressions. This class will inspect these values for
-            each pair of consecutive input rows. When they change, this indicates the boundary
-            between two partitions, and we will invoke the 'terminate' method on the UDTF class
-            instance and then destroy it and create a new one to implement the desired partitioning
-            semantics.
+        For example, let's assume we have a table like:
+            CREATE TABLE t (c1 INT, c2 INT) USING delta;
+        Then for the following queries:
+            SELECT * FROM my_udtf(TABLE (t) PARTITION BY c1, c2);
+            The partition_child_indexes will be: 0, 1.
+            SELECT * FROM my_udtf(TABLE (t) PARTITION BY c1, c2 + 4);
+            The partition_child_indexes will be: 0, 2 (where we add a projection for "c2 + 4").
         """
-        def __init__(self, create_udtf, partition_child_indexes):
+        def __init__(self, create_udtf: Callable, partition_child_indexes: list):
+            """
+            Creates a new instance of this class to wrap the provided UDTF with another one that
+            checks the values of projected partitioning expressions on consecutive rows to figure
+            out when the partition boundaries change.
+
+            Parameters
+            ----------
+            create_udtf: function
+                Function to create a new instance of the UDTF to be invoked.
+            partition_child_indexes: list
+                List of integers identifying zero-based indexes of the columns of the input table that
+                contain projected partitioning expressions. This class will inspect these values for
+                each pair of consecutive input rows. When they change, this indicates the boundary
+                between two partitions, and we will invoke the 'terminate' method on the UDTF class
+                instance and then destroy it and create a new one to implement the desired partitioning
+                semantics.
+            """
             self._create_udtf = create_udtf
             self._udtf = create_udtf()
             self._prev_arguments = None
             self._partition_child_indexes = partition_child_indexes
 
-        def eval(self, *args, **kwargs):
+        def eval(self, *args, **kwargs) -> Iterator:
             changed_partitions = self._check_partition_boundaries(
                 list(args) + list(kwargs.values()))
             if changed_partitions:
@@ -613,11 +626,11 @@ def read_udtf(pickleSer, infile, eval_type):
                     for row in result:
                         yield row
 
-        def terminate(self):
+        def terminate(self) -> Iterator:
             if self._udtf.terminate is not None:
                 return self._udtf.terminate()
 
-        def _check_partition_boundaries(self, arguments):
+        def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
             if self._prev_arguments is not None:
                 cur_table_arg = self._get_table_arg(arguments)
@@ -632,7 +645,7 @@ def read_udtf(pickleSer, infile, eval_type):
             self._prev_arguments = arguments
             return result
 
-        def _get_table_arg(self, inputs):
+        def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
 
     # Instantiate the UDTF class.

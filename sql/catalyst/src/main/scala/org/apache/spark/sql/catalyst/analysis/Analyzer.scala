@@ -2122,23 +2122,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
               // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
+              def assignUDTFPartitionColumnIndexes(
+                  fn: PythonUDTFPartitionColumnIndexes => LogicalPlan): Option[LogicalPlan] = {
+                val indexes: Seq[Int] = functionTableSubqueryArgs.headOption
+                  .map(_.partitioningExpressionIndexes).getOrElse(Seq.empty)
+                if (indexes.nonEmpty) {
+                  Some(fn(PythonUDTFPartitionColumnIndexes(indexes)))
+                } else {
+                  None
+                }
+              }
               val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
-                case g @ Generate(p: PythonUDTF, _, _, _, _, _) =>
-                  functionTableSubqueryArgs.headOption.map { tableArg =>
-                    val indexes = PythonUDTFPartitionColumnIndexes(
-                      tableArg.partitioningExpressionIndexes)
-                    g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
-                  }.getOrElse {
-                    g
-                  }
-                case g @ Generate(p: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
-                  functionTableSubqueryArgs.headOption.map { tableArg =>
-                    val indexes = PythonUDTFPartitionColumnIndexes(
-                      tableArg.partitioningExpressionIndexes)
-                    g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(indexes)))
-                  }.getOrElse {
-                    g
-                  }
+                case g@Generate(p: PythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
+                case g@Generate(p: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
                 case _ =>
                   tvf
               }
