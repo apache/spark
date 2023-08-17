@@ -2405,6 +2405,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "operation" -> "generated columns")
     )
   }
+
+  test("SPARK-44837: Error when altering partition column in non-delta table") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
+      }
+      checkError(
+        exception = e,
+        errorClass = "ALTER_TABLE_CHANGE_COLUMN_NOT_SUPPORTED_FOR_PARTITION_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "spark_catalog.default.t",
+          "columnName" -> "i"))
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {

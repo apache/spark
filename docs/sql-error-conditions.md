@@ -35,6 +35,13 @@ SQLSTATE: none assigned
 
 Cannot use all columns for partition columns.
 
+### ALTER_TABLE_CHANGE_COLUMN_NOT_SUPPORTED_FOR_PARTITION_COLUMN
+
+[SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE CHANGE COLUMN is not supported for partition columns in non-delta tables.
+`<columnName>` is a partition column in non-delta table `<tableName>`.
+
 ### ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2242,3 +2249,5 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+
