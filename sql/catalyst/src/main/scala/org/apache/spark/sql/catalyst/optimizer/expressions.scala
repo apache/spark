@@ -644,8 +644,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
-    case a @ Aggregate(groupingExpressions, _, _)
-      if !groupingExpressions.forall(_.isInstanceOf[NamedExpression]) => a
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
       case u @ UnaryExpression(i @ If(_, trueValue, falseValue))

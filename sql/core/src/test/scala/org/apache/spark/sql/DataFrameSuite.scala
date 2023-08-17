@@ -3674,21 +3674,6 @@ class DataFrameSuite extends QueryTest
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
   }
-
-  test("SPARK-44846: PushFoldableIntoBranches in complex grouping expressions " +
-    "cause bindReference error") {
-    withTempView("t") {
-      Seq(-1, 1, 2).toDF("a").createOrReplaceTempView("t")
-      val _sql =
-        """
-          |select c*2 as d from
-          |(select if(b > 1, 1, b) as c from
-          |(select if(a < 0, 0 ,a) as b from t group by b) t1
-          |group by c) t2
-          |""".stripMargin
-      checkAnswer(sql(_sql), Seq(Row(0), Row(2)))
-    }
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
