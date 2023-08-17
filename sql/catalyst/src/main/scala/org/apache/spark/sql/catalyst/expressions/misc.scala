@@ -302,6 +302,24 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - connected user name.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       mockingjay
+  """,
+  since = "3.5.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class SessionUser() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "session_user"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
+
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
  * For versions prior to JDK 8u161, 192 and 256 bits keys can be used

@@ -23,7 +23,7 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, CurrentUser, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, CurrentUser, Literal, SessionUser}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -79,6 +79,9 @@ trait SQLQueryTestHelper extends Logging {
         deterministic = false
         expr
       case expr: CurrentUser =>
+        deterministic = false
+        expr
+      case expr: SessionUser =>
         deterministic = false
         expr
       case expr: Literal if expr.dataType == DateType || expr.dataType == TimestampType =>

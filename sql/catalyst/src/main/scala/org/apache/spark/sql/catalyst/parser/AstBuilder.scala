@@ -2101,6 +2101,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           CurrentTimestamp()
         case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
           CurrentUser()
+        case SqlBaseParser.SESSION_USER =>
+          SessionUser()
       }
     } else {
       // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
