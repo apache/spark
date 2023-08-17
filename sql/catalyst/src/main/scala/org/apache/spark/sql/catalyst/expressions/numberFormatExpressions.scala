@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
-import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
@@ -222,6 +223,21 @@ case class TryToNumber(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "string_funcs")
+object ToCharacter extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (expressions.length == 2) {
+      val inputExpr = expressions.head
+      inputExpr.dataType match {
+        case _: DatetimeType => DateFormatClass(inputExpr, expressions(1))
+        case _ => NumberToCharacter(inputExpr, expressions(1))
+      }
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+  }
+}
+
 case class NumberToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   private lazy val numberFormatter = {
