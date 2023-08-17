@@ -29,7 +29,7 @@ private case object SnowflakeDialect extends JdbcDialect {
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case BooleanType =>
-      // By default, BOOLEAN is mapped to BIT
+      // By default, BOOLEAN is mapped to BIT(1) in Snowflake.
       // but Snowflake does not have a BIT type. It uses BOOLEAN instead.
       Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case _ => JdbcUtils.getCommonJDBCType(dt)
