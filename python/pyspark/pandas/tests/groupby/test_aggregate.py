@@ -288,9 +288,6 @@ class GroupbyAggregateMixin:
 
 
 class GroupbyAggregateTests(GroupbyAggregateMixin, ComparisonTestBase, SQLTestUtils):
-    def test_aggregate(self):
-        super(GroupbyAggregateTests, self).test_aggregate()
-
     pass
 
 

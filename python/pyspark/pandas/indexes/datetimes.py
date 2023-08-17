@@ -731,7 +731,7 @@ class DatetimeIndex(Index):
         Examples
         --------
         >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
-        >>> psidx  # doctest: +SKIP
+        >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
