@@ -46,6 +46,7 @@ from pyspark.pandas.internal import (
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
+    SPARK_DEFAULT_INDEX_NAME,
 )
 
 
