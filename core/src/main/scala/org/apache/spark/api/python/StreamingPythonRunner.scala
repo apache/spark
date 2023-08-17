@@ -109,7 +109,10 @@ private[spark] class StreamingPythonRunner(
    */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
-      pythonWorkerFactory.get.stop(worker)
+      pythonWorkerFactory.foreach { factory =>
+        factory.stopWorker(worker)
+        factory.stop()
+      }
     }
   }
 }
