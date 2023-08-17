@@ -230,7 +230,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
       val inputExpr = expressions.head
       inputExpr.dataType match {
         case _: DatetimeType => DateFormatClass(inputExpr, expressions(1))
-        case _ => NumberToCharacter(inputExpr, expressions(1))
+        case _ => ToCharacter(inputExpr, expressions(1))
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
@@ -238,7 +238,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
   }
 }
 
-case class NumberToCharacter(left: Expression, right: Expression)
+case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -294,6 +294,6 @@ case class NumberToCharacter(left: Expression, right: Expression)
     ev.copy(code = stripped)
   }
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): NumberToCharacter =
+      newLeft: Expression, newRight: Expression): ToCharacter =
     copy(left = newLeft, right = newRight)
 }
