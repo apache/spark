@@ -1204,6 +1204,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
@@ -1219,6 +1221,7 @@ class TypesTestsMixin:
             "INTERVAL '1563:04' MINUTE TO SECOND AS h",
             "INTERVAL '1563' MINUTE AS i",
             "INTERVAL '93784' SECOND AS j",
+            # "INTERVAL '50357692 00:00:56144.999980' DAY TO SECOND AS k",
         ]
         df = self.spark.range(1).selectExpr(exprs)
 
@@ -1234,6 +1237,7 @@ class TypesTestsMixin:
             datetime.timedelta(minutes=1563, seconds=4),
             datetime.timedelta(minutes=1563),
             datetime.timedelta(seconds=93784),
+            # datetime.timedelta(days=50357692, seconds=56144, microseconds=999980)
         ]
 
         for n, (a, e) in enumerate(zip(actual, expected)):
