@@ -222,7 +222,7 @@ case class TryToNumber(left: Expression, right: Expression)
   """,
   since = "3.4.0",
   group = "string_funcs")
-case class ToCharacter(left: Expression, right: Expression)
+case class NumberToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -278,6 +278,6 @@ case class ToCharacter(left: Expression, right: Expression)
     ev.copy(code = stripped)
   }
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ToCharacter =
+      newLeft: Expression, newRight: Expression): NumberToCharacter =
     copy(left = newLeft, right = newRight)
 }

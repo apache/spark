@@ -4406,7 +4406,7 @@ object functions {
    * @since 3.5.0
    */
   def to_char(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
+    NumberToCharacter(e.expr, format.expr)
   }
 
   /**
@@ -4434,7 +4434,7 @@ object functions {
    * @since 3.5.0
    */
   def to_varchar(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
+    NumberToCharacter(e.expr, format.expr)
   }
 
   /**
