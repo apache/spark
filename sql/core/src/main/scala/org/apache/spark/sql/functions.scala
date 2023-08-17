@@ -3198,7 +3198,7 @@ object functions {
    * Returns the connected user name.
    *
    * @group misc_funcs
-   * @since 3.5.0
+   * @since 4.0.0
    */
   def session_user(): Column = withExpr { SessionUser() }
 
