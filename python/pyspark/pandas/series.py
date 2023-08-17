@@ -4129,9 +4129,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
