@@ -100,8 +100,10 @@ private[client] class CustomSparkConnectBlockingStub(
   }
 
   private[client] def executePing(): Unit = {
-    val request = AnalyzePlanRequest.newBuilder().setSparkVersion(
-      AnalyzePlanRequest.SparkVersion.newBuilder().build()).build()
+    val request = AnalyzePlanRequest
+      .newBuilder()
+      .setSparkVersion(AnalyzePlanRequest.SparkVersion.newBuilder().build())
+      .build()
 
     retryHandler.retry {
       stub.analyzePlan(request)

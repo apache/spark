@@ -24,6 +24,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 
 
+/**
+ * This class contains an interface for Heartbeat functionality and the dummy implementation which
+ * doesn't do anything.
+ *
+ * The actual implementation is in HeartbeatImpl
+ */
 private[sql] class Heartbeat {
   def beat[T](fn: => T): T = fn
 
@@ -35,14 +41,14 @@ private[sql] class Heartbeat {
 }
 
 /**
- * This class implements Heartbeat.
- * Heartbeat consists of sending a dummy request once in a while if there is at least
- * one long-term query running.
+ * This class implements Heartbeat. Heartbeat consists of sending a dummy request once in a while
+ * if there is at least one long-term query running.
  *
  * Otherwise the connection may disconnect before client receives the response back.
  */
 private[sql] class HeartbeatImpl(bstub: CustomSparkConnectBlockingStub)
-  extends Heartbeat with Logging {
+    extends Heartbeat
+    with Logging {
   val beatLevel: AtomicInteger = new AtomicInteger(0)
   var count: AtomicLong = new AtomicLong(0)
 

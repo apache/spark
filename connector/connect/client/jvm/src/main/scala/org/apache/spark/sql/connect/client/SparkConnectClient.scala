@@ -41,9 +41,10 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy,
+    configuration.enableHeartbeat)
   private[this] val stub = new CustomSparkConnectStub(channel, configuration.retryPolicy)
-  private[sql] def heartbeatLevel: Int = bstub.heartbeat.heartbeatLevel
+  private[sql] def heartbeatLedvel: Int = bstub.heartbeat.heartbeatLevel
   private[sql] def heartbeatCount: Long = bstub.heartbeat.pingCount
 
   private[client] def userAgent: String = configuration.userAgent

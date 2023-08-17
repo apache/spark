@@ -135,10 +135,13 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     Future {
       assertThrows[SparkException] {
-        spark.range(10).map(n => {
-          Thread.sleep(30000);
-          n
-        }).collect()
+        spark
+          .range(10)
+          .map(n => {
+            Thread.sleep(30000);
+            n
+          })
+          .collect()
       }
     }
 
@@ -168,10 +171,13 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
         .create()
       import session.implicits._
 
-      session.range(1).map(n => {
-        Thread.sleep(3000);
-        n
-      }).collect()
+      session
+        .range(1)
+        .map(n => {
+          Thread.sleep(3000);
+          n
+        })
+        .collect()
 
       assert(session.client.heartbeatCount > 0)
     } finally {
@@ -194,10 +200,13 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
         .create()
       import session.implicits._
 
-      session.range(1).map(n => {
-        Thread.sleep(3000);
-        n
-      }).collect()
+      session
+        .range(1)
+        .map(n => {
+          Thread.sleep(3000);
+          n
+        })
+        .collect()
 
       assert(session.client.heartbeatCount == 0)
     } finally {
