@@ -59,7 +59,7 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec")
+    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec)")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -98,7 +98,7 @@ private[spark] class StreamingPythonRunner(
       new BufferedInputStream(pythonWorker.get.getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    logInfo(s"Runner initialization returned $resFromPython")
+    logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
@@ -108,7 +108,10 @@ private[spark] class StreamingPythonRunner(
    */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
-      pythonWorkerFactory.foreach(_.stopWorker(worker))
+      pythonWorkerFactory.foreach { factory =>
+        factory.stopWorker(worker)
+        factory.stop()
+      }
     }
   }
 }
