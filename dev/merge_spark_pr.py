@@ -365,13 +365,13 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 def choose_jira_assignee(issue, asf_jira):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
-    including the original reporter and all commentors
+    including the original reporter and all commentators
     """
     while True:
         try:
             reporter = issue.fields.reporter
-            commentors = list(map(lambda x: x.author, issue.fields.comment.comments))
-            candidates = set(commentors)
+            commentators = list(map(lambda x: x.author, issue.fields.comment.comments))
+            candidates = set(commentators)
             candidates.add(reporter)
             candidates = list(candidates)
             print("JIRA is unassigned, choose assignee")
@@ -379,8 +379,8 @@ def choose_jira_assignee(issue, asf_jira):
                 if author.key == "apachespark":
                     continue
                 annotations = ["Reporter"] if author == reporter else []
-                if author in commentors:
-                    annotations.append("Commentor")
+                if author in commentators:
+                    annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = input(
                 "Enter number of user, or userid, to assign to (blank to leave unassigned):"

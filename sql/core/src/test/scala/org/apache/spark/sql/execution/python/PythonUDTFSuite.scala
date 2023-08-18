@@ -41,19 +41,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val arrowPythonScript: String =
-    """
-      |import pandas as pd
-      |class VectorizedUDTF:
-      |    def eval(self, a: pd.Series, b: pd.Series):
-      |        data = [
-      |            [a, b, a + b],
-      |            [a, b, a - b],
-      |            [a, b, b - a],
-      |        ]
-      |        yield pd.DataFrame(data)
-      |""".stripMargin
-
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
@@ -61,8 +48,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "VectorizedUDTF",
-      arrowPythonScript,
+      "SimpleUDTF",
+      pythonScript,
       returnType,
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
