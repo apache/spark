@@ -119,6 +119,25 @@ object SortOrder {
       }
     }
   }
+
+  /**
+   * Returns if a sequence of SortOrder satisfies a sequence of expressions.
+   * @param orderings the sequence of SortOrder
+   * @param groupExpressions the sequence of expressions
+   * @return
+   */
+  def satisfiesExpressions(
+      orderings: Seq[SortOrder],
+      groupExpressions: Seq[Expression]): Boolean = {
+    var collectedExpr = Seq[Expression]()
+    orderings.foreach { order =>
+      groupExpressions.foreach {
+        case e if order.children.exists(_.semanticEquals(e)) => collectedExpr :+= e
+        case _ =>
+      }
+    }
+    groupExpressions.toSet == collectedExpr.toSet
+  }
 }
 
 /**

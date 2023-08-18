@@ -71,8 +71,8 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
         hashAgg.child match {
           case partialAgg: BaseAggregateExec
             if isHashBasedAggWithKeys(partialAgg) && isPartialAgg(partialAgg, hashAgg) =>
-            if (SortOrder.orderingSatisfies(
-                partialAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
+            if (SortOrder.satisfiesExpressions(
+                partialAgg.child.outputOrdering, hashAgg.groupingExpressions)) {
               sortAgg.copy(
                 aggregateExpressions = sortAgg.aggregateExpressions.map(_.copy(mode = Complete)),
                 child = partialAgg.child)
@@ -80,8 +80,8 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
               hashAgg
             }
           case other =>
-            if (SortOrder.orderingSatisfies(
-                other.outputOrdering, sortAgg.requiredChildOrdering.head)) {
+            if (SortOrder.satisfiesExpressions(
+                other.outputOrdering, hashAgg.groupingExpressions)) {
               sortAgg
             } else {
               hashAgg

@@ -132,6 +132,34 @@ abstract class ReplaceHashWithSortAggSuiteBase
       }
     }
   }
+
+  test("SPARK-44870: The orders of grouping expressions and child outputOrdering not matched") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query =
+        s"""SELECT a, b, count(1)
+           |FROM values(1, 1, 1), (2, 2, 2) t1(a, b, c)
+           |JOIN values(1, 1, 1), (2, 2, 2) t2(d, e, f)
+           |ON a = d
+           |AND b = e
+           |GROUP by b, a
+           |""".stripMargin
+      checkAggs(query, 0, 1, 2, 0)
+    }
+  }
+
+  test("SPARK-44870: There are semantic expressions in grouping expression") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val query =
+        s"""SELECT a, b, count(1)
+           |FROM values(1, 1, 1), (2, 2, 2) t1(a, b, c)
+           |JOIN values(1, 1, 1), (2, 2, 2) t2(d, e, f)
+           |ON a = d
+           |AND b = e
+           |GROUP by a, b, d
+           |""".stripMargin
+      checkAggs(query, 0, 1, 2, 0)
+    }
+  }
 }
 
 class ReplaceHashWithSortAggSuite extends ReplaceHashWithSortAggSuiteBase
