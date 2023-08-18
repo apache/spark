@@ -15677,14 +15677,13 @@ def udtf(
 
     Notes
     -----
-    User-defined table functions (UDTFs) are considered deterministic by default.
-    Use `asNondeterministic()` to mark a function as non-deterministic. E.g.:
+    User-defined table functions (UDTFs) are considered non-deterministic by default.
+    Use `asDeterministic()` to mark a function as deterministic. E.g.:
 
-    >>> import random
-    >>> class RandomUDTF:
+    >>> class PlusOne:
     ...     def eval(self, a: int):
-    ...         yield a * int(random.random() * 100),
-    >>> random_udtf = udtf(RandomUDTF, returnType="r: int").asNondeterministic()
+    ...         yield a + 1,
+    >>> plus_one = udtf(PlusOne, returnType="r: int").asDeterministic()
 
     Use "yield" to produce one row for the UDTF result relation as many times
     as needed. In the context of a lateral join, each such result row will be

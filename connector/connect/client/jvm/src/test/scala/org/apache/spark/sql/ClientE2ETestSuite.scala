@@ -1203,6 +1203,28 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       .dropDuplicatesWithinWatermark("newcol")
     testAndVerify(result2)
   }
+
+  test("Dataset.metadataColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark
+        .range(0, 100, 1, 1)
+        .withColumn("_metadata", concat(lit("lol_"), col("id")))
+        .write
+        .parquet(file.toPath.toAbsolutePath.toString)
+
+      val df = spark.read.parquet(path)
+      val (filepath, rc) = df
+        .groupBy(df.metadataColumn("_metadata").getField("file_path"))
+        .count()
+        .as[(String, Long)]
+        .head()
+      assert(filepath.startsWith(path))
+      assert(rc == 100)
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

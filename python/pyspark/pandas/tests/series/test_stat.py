@@ -53,10 +53,6 @@ class SeriesStatMixin:
         self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
         self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43464): Enable SeriesTests.test_value_counts for pandas 2.0.0.",
-    )
     def test_value_counts(self):
         # this is also containing test for Index & MultiIndex
         pser = pd.Series(
