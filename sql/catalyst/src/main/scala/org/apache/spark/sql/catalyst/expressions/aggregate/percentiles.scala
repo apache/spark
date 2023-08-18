@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
@@ -48,6 +49,9 @@ abstract class PercentileBase
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   @transient
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
+
+  private val legacyDiscCalculation: Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION)
 
   @transient
   protected lazy val percentages = percentageExpression.eval() match {
@@ -164,10 +168,14 @@ abstract class PercentileBase
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = accumulatedCounts.last._2 - 1
+    val maxPosition = accumulatedCounts.last._2
 
     percentages.map { percentile =>
-      getPercentile(accumulatedCounts, maxPosition * percentile)
+      if (discrete && !legacyDiscCalculation) {
+        getPercentileDisc(accumulatedCounts, maxPosition * percentile)
+      } else {
+        getPercentile(accumulatedCounts, (maxPosition - 1) * percentile)
+      }
     }
   }
 
@@ -220,6 +228,30 @@ abstract class PercentileBase
       // Linear interpolation to get the exact percentile
       (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
     }
+  }
+
+  private def getPercentileDisc(
+      accumulatedCounts: Seq[(AnyRef, Long)],
+      position: Double): Double = {
+    val lower = position.floor.toLong
+    val higher = position.ceil.toLong
+
+    // Use binary search to find the lower and the higher position.
+    val countsArray = accumulatedCounts.map(_._2).toArray[Long]
+
+    val lowerIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, lower)
+    val lowerKey = accumulatedCounts(lowerIndex)._1
+    if (higher == lower) {
+      return toDoubleValue(lowerKey)
+    }
+
+    val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher)
+    val higherKey = accumulatedCounts(higherIndex)._1
+    if (higherKey == lowerKey) {
+      return toDoubleValue(lowerKey)
+    }
+
+    toDoubleValue(higherKey)
   }
 
   /**
