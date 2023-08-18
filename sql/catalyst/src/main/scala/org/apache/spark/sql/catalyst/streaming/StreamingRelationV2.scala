@@ -44,6 +44,25 @@ case class StreamingRelationV2(
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
 
+  import DataSourceV2Implicits._
+
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+    case _ =>
+      Nil
+  }
+
+  def withMetadataColumns(): StreamingRelationV2 = {
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      StreamingRelationV2(source, sourceName, table, extraOptions,
+        output ++ newMetadata, catalog, identifier, v1Relation)
+    } else {
+      this
+    }
+  }
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(conf.defaultSizeInBytes)
   )
