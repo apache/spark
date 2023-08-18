@@ -238,16 +238,14 @@ object TableOutputResolver {
 
     if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
+        val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
+          .map(col => s"${toSQLId(col.name)}").mkString(", ")
         if (colPath.isEmpty) {
-          val cannotFindCol = expectedCols.filter(col => !matchedCols.contains(col.name)).head.name
-          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName,
-            cannotFindCol)
+          throw QueryCompilationErrors.incompatibleDataToTableExtraFieldsError(tableName,
+            extraCols)
         } else {
-          val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-            .map(col => s"${toSQLId(col.name)}").mkString(", ")
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-            tableName, colPath.quoted, extraCols
-          )
+            tableName, colPath.quoted, extraCols)
         }
       } else {
         reordered

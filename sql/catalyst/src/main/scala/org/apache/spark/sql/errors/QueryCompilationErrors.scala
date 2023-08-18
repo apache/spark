@@ -2173,6 +2173,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
+  def incompatibleDataToTableExtraFieldsError(
+      tableName: String, colName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_FIELDS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
   def incompatibleDataToTableExtraStructFieldsError(
       tableName: String, colName: String, extraFields: String): Throwable = {
     new AnalysisException(
