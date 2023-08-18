@@ -4165,7 +4165,6 @@ class SeriesGroupBy(GroupBy[Series]):
 
         Examples
         --------
-        >>> import numpy as np
         >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, np.nan]},
         ...                   columns=['A', 'B'])
