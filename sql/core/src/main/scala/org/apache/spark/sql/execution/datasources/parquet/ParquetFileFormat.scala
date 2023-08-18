@@ -277,7 +277,8 @@ class ParquetFileFormat
       val footerStartTime = System.currentTimeMillis()
 
       val fileFooter = if (enableVectorizedReader) {
-        ParquetFileMetaUtils.readFooterByNoFilter(metaCacheEnabled, sharedConf, filePath)
+        ParquetFileMetaUtils.readFooterByRange(
+          metaCacheEnabled, sharedConf, filePath, file.start, file.start + file.length)
       } else {
         ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS)
       }
