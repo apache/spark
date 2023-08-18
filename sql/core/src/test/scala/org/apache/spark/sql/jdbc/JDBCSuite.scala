@@ -2058,7 +2058,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(df.collect.toSet === Set(Row("smith", 1)))
   }
 
-  test(" SnowflakeDialect type mapping of BOOLEAN") {
+  test("SPARK-44866: SnowflakeDialect BOOLEAN type mapping") {
     val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
     assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
   }
