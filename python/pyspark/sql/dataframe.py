@@ -2088,7 +2088,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Retrieves the names of all columns in the :class:`DataFrame` as a list.
 
         The order of the column names in the list reflects their order in the DataFrame.
-        This property is often used for introspection tasks and for iterating over columns.
 
         .. versionadded:: 1.3.0
 
@@ -2097,12 +2096,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        List[str]
+        list
             List of column names in the DataFrame.
 
         Examples
         --------
         Example 1: Retrieve column names of a DataFrame
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom", "CA"), (23, "Alice", "NY"), (16, "Bob", "TX")],
         ...     ["age", "name", "state"]
@@ -2111,6 +2111,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ['age', 'name', 'state']
 
         Example 2: Using column names to project specific columns
+
         >>> selected_cols = [col for col in df.columns if col != "age"]
         >>> df.select(selected_cols).show()
         +-----+-----+
@@ -2122,12 +2123,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+-----+
 
         Example 3: Checking if a specific column exists in a DataFrame
+
         >>> "state" in df.columns
         True
         >>> "salary" in df.columns
         False
 
         Example 4: Iterating over columns to apply a transformation
+
         >>> import pyspark.sql.functions as f
         >>> for col_name in df.columns:
         ...     df = df.withColumn(col_name, f.upper(f.col(col_name)))
@@ -2141,12 +2144,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+-----+
 
         Example 5: Renaming columns and checking the updated column names
+
         >>> df = df.withColumnRenamed("name", "first_name")
         >>> df.columns
         ['age', 'first_name', 'state']
 
         Example 6: Using the `columns` property to ensure two DataFrames have the
         same columns before a union
+
         >>> df2 = spark.createDataFrame(
         ...     [(30, "Eve", "FL"), (40, "Sam", "WA")], ["age", "name", "location"])
         >>> df.columns == df2.columns
