@@ -347,8 +347,9 @@ val spark = SparkSession.builder().remote("sc://localhost").build()
 {% endhighlight %}
 
 
-**Note: Operations that references User Defined Code such as UDFs, filter, map, etc require a `ClassFinder` to be registered 
-to pickup and upload any required classfiles. Further, any JAR dependencies must be uploaded to the server using `SparkSession#AddArtifact`.**
+**Note**: Operations that reference User Defined Code such as UDFs, filter, map, etc require a 
+[ClassFinder](https://github.com/apache/spark/blob/bb41cd889efdd0602385e70b4c8f1c93740db332/connector/connect/common/src/main/scala/org/apache/spark/sql/connect/client/ClassFinder.scala#L26) 
+to be registered to pickup and upload any required classfiles. Further, any JAR dependencies must be uploaded to the server using `SparkSession#AddArtifact`.
 
 Example:
 {% highlight scala %}
