@@ -587,6 +587,7 @@ def read_udtf(pickleSer, infile, eval_type):
             SELECT * FROM my_udtf(TABLE (t) PARTITION BY c1, c2 + 4);
             The partition_child_indexes will be: 0, 2 (where we add a projection for "c2 + 4").
         """
+
         def __init__(self, create_udtf: Callable, partition_child_indexes: list):
             """
             Creates a new instance of this class to wrap the provided UDTF with another one that
@@ -612,7 +613,8 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def eval(self, *args, **kwargs) -> Iterator:
             changed_partitions = self._check_partition_boundaries(
-                list(args) + list(kwargs.values()))
+                list(args) + list(kwargs.values())
+            )
             if changed_partitions:
                 if self._udtf.terminate is not None:
                     result = self._udtf.terminate()

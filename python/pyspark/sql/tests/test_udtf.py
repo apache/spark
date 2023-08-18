@@ -2044,8 +2044,7 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2, 3, 4
                 """
             ).collect(),
-            [Row(a=0, b=1, partition_col=1, total=3),
-             Row(a=0, b=1, partition_col=2, total=3)],
+            [Row(a=0, b=1, partition_col=1, total=3), Row(a=0, b=1, partition_col=2, total=3)],
         )
 
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
@@ -2105,8 +2104,7 @@ class BaseUDTFTestsMixin:
                 # Make sure that the rows arrive in the expected order.
                 if self._last is not None and self._last > row["input"]:
                     raise Exception(
-                        f"self._last was {self._last} but the row "
-                        + f"value was {row['input']}"
+                        f"self._last was {self._last} but the row " + f"value was {row['input']}"
                     )
                 self._count += 1
                 self._last = row["input"]
@@ -2132,6 +2130,7 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [Row(count=40, total=60, last=2)],
         )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
