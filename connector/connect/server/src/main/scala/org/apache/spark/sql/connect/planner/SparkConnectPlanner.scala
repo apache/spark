@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
 import com.google.common.collect.{Lists, Maps}
@@ -1403,6 +1404,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
     if (attr.hasPlanId) {
       expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
+    }
+    if (attr.hasIsMetadataColumn) {
+      expr.setTagValue(LogicalPlan.IS_METADATA_COL, attr.getIsMetadataColumn)
     }
     expr
   }
@@ -2862,11 +2866,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       }
     }
 
+    // This is filled when a foreach batch runner started for Python.
+    var foreachBatchRunnerCleaner: Option[StreamingForeachBatchHelper.RunnerCleaner] = None
+
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          val (fn, cleaner) =
+            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
           val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
@@ -2881,16 +2891,26 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       writer.foreachBatch(foreachBatchFn)
     }
 
-    val query = writeOp.getPath match {
-      case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
-      case "" => writer.start()
-      case path => writer.start(path)
-    }
+    val query =
+      try {
+        writeOp.getPath match {
+          case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
+          case "" => writer.start()
+          case path => writer.start(path)
+        }
+      } catch {
+        case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
+          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          foreachBatchRunnerCleaner.foreach(_.close())
+          throw ex
+      }
 
-    // Register the new query so that the session and query references are cached.
-    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-      sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
-      query = query)
+    // Register the new query so that its reference is cached and is stopped on session timeout.
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
+    // Register the runner with the query if Python foreachBatch is enabled.
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
+    }
     executeHolder.eventsManager.postFinished()
 
     val result = WriteStreamOperationStartResult
