@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 /**
@@ -53,10 +53,6 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
 
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
-  }
-
-  def toSQLSchema(schema: String): String = {
-    QuotingUtils.toSQLSchema(schema)
   }
 
   // Converts an error class parameter to its SQL representation

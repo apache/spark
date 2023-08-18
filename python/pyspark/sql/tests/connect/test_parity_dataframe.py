@@ -84,6 +84,9 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_from_mixed_dataframe(self):
         self.check_to_pandas_from_mixed_dataframe()
 
+    def test_toDF_with_string(self):
+        super().test_toDF_with_string()
+
 
 if __name__ == "__main__":
     import unittest

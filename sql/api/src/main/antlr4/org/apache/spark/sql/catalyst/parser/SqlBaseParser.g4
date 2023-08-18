@@ -165,7 +165,10 @@ statement
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
-    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference      #dropFunction
+    | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
+    | DECLARE (OR REPLACE)? VARIABLE?
+        identifierReference dataType? variableDefaultExpression?       #createVariable
+    | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
@@ -210,6 +213,9 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET (VARIABLE | VAR) assignmentList                              #setVariable
+    | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+          LEFT_PAREN query RIGHT_PAREN                                 #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
@@ -795,8 +801,13 @@ functionTableSubqueryArgument
     ;
 
 tableArgumentPartitioning
-    : (PARTITION | DISTRIBUTE) BY expressionSeq
-      ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?
+    : ((WITH SINGLE PARTITION)
+        | ((PARTITION | DISTRIBUTE) BY
+            (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | partition+=expression)))
+      ((ORDER | SORT) BY
+        (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | sortItem)))?
     ;
 
 functionTableNamedArgumentExpression
@@ -942,7 +953,7 @@ datetimeUnit
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER)                                   #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
+    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
@@ -1102,6 +1113,10 @@ colDefinitionDescriptorWithPosition
 
 defaultExpression
     : DEFAULT expression
+    ;
+
+variableDefaultExpression
+    : (DEFAULT | EQ) expression
     ;
 
 colTypeList
@@ -1330,6 +1345,7 @@ ansiNonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1472,6 +1488,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SORT
@@ -1494,6 +1511,7 @@ ansiNonReserved
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
+    | TIMEDIFF
     | TIMESTAMP
     | TIMESTAMP_LTZ
     | TIMESTAMP_NTZ
@@ -1519,6 +1537,8 @@ ansiNonReserved
     | USE
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS
@@ -1634,6 +1654,7 @@ nonReserved
     | DBPROPERTIES
     | DEC
     | DECIMAL
+    | DECLARE
     | DEFAULT
     | DEFINED
     | DELETE
@@ -1806,6 +1827,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SINGLE
     | SKEWED
     | SMALLINT
     | SOME
@@ -1832,6 +1854,7 @@ nonReserved
     | TERMINATED
     | THEN
     | TIME
+    | TIMEDIFF
     | TIMESTAMP
     | TIMESTAMP_LTZ
     | TIMESTAMP_NTZ
@@ -1862,6 +1885,8 @@ nonReserved
     | USER
     | VALUES
     | VARCHAR
+    | VAR
+    | VARIABLE
     | VERSION
     | VIEW
     | VIEWS

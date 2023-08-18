@@ -19,7 +19,7 @@ import inspect
 import os
 import sys
 import traceback
-from typing import List, IO
+from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
@@ -40,6 +40,7 @@ from pyspark.worker_util import (
     pickleSer,
     send_accumulator_updates,
     setup_broadcasts,
+    setup_memory_limits,
     setup_spark_files,
     utf8_deserializer,
 )
@@ -68,11 +69,12 @@ def read_udtf(infile: IO) -> type:
     return handler
 
 
-def read_arguments(infile: IO) -> List[AnalyzeArgument]:
+def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, AnalyzeArgument]]:
     """Reads the arguments for `analyze` static method."""
     # Receive arguments
     num_args = read_int(infile)
     args: List[AnalyzeArgument] = []
+    kwargs: Dict[str, AnalyzeArgument] = {}
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if read_bool(infile):  # is foldable
@@ -82,8 +84,15 @@ def read_arguments(infile: IO) -> List[AnalyzeArgument]:
         else:
             value = None
         is_table = read_bool(infile)  # is table argument
-        args.append(AnalyzeArgument(data_type=dt, value=value, is_table=is_table))
-    return args
+        argument = AnalyzeArgument(data_type=dt, value=value, is_table=is_table)
+
+        is_named_arg = read_bool(infile)
+        if is_named_arg:
+            name = utf8_deserializer.loads(infile)
+            kwargs[name] = argument
+        else:
+            args.append(argument)
+    return args, kwargs
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -96,15 +105,19 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+
+        memory_limit_mb = int(os.environ.get("PYSPARK_UDTF_ANALYZER_MEMORY_MB", "-1"))
+        setup_memory_limits(memory_limit_mb)
+
         setup_spark_files(infile)
         setup_broadcasts(infile)
 
         _accumulatorRegistry.clear()
 
         handler = read_udtf(infile)
-        args = read_arguments(infile)
+        args, kwargs = read_arguments(infile)
 
-        result = handler.analyze(*args)  # type: ignore[attr-defined]
+        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
 
         if not isinstance(result, AnalyzeResult):
             raise PySparkValueError(

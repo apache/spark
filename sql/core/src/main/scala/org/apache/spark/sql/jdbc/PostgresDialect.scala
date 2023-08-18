@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException, Timestamp, Types}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
@@ -280,5 +280,35 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
     }
     s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
+  }
+
+  /**
+   * java.sql timestamps are measured with millisecond accuracy (from Long.MinValue
+   * milliseconds to Long.MaxValue milliseconds), while Spark timestamps are measured
+   * at microseconds accuracy. For the "infinity values" in PostgreSQL (represented by
+   * big constants), we need clamp them to avoid overflow. If it is not one of the infinity
+   * values, fall back to default behavior.
+   */
+  override def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = {
+    // Variable names come from PostgreSQL "constant field docs":
+    // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
+    val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
+    val POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY = -185543533774800000L
+    val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
+    val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
+
+    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
+    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+
+    val time = t.getTime
+    if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||
+      time == POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY) {
+      new Timestamp(maxTimestamp)
+    } else if (time == POSTGRESQL_DATE_NEGATIVE_INFINITY ||
+      time == POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY) {
+      new Timestamp(minTimeStamp)
+    } else {
+      t
+    }
   }
 }

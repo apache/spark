@@ -78,40 +78,6 @@ class FrameComputeMixin:
         str_psdf = ps.DataFrame({"A": ["a", "b", "c"]}, index=np.random.rand(3))
         self.assert_eq(str_psdf.clip(1, 3), str_psdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43560): Enable DataFrameSlowTests.test_mad for pandas 2.0.0.",
-    )
-    def test_mad(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, None, 4, np.nan],
-                "B": [-0.1, 0.2, -0.3, np.nan, 0.5],
-                "C": ["a", "b", "c", "d", "e"],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        with self.assertRaises(ValueError):
-            psdf.mad(axis=2)
-
-        # MultiIndex columns
-        columns = pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "Z")])
-        pdf.columns = columns
-        psdf.columns = columns
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        pdf = pd.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
     def test_mode(self):
         pdf = pd.DataFrame(
             {

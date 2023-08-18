@@ -313,7 +313,7 @@ named `SimpleApp.scala`:
 import org.apache.spark.sql.SparkSession
 
 object SimpleApp {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val logFile = "YOUR_SPARK_HOME/README.md" // Should be some file on your system
     val spark = SparkSession.builder.appName("Simple Application").getOrCreate()
     val logData = spark.read.textFile(logFile).cache()

@@ -448,9 +448,6 @@ case class MapGroups(
     copy(child = newChild)
 }
 
-/** Internal class representing State */
-trait LogicalGroupState[S]
-
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](

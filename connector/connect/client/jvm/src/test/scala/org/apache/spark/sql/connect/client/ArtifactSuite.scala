@@ -28,8 +28,8 @@ import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsRequest
+import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
@@ -57,7 +57,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     retryPolicy = GrpcRetryHandler.RetryPolicy()
     bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
     stub = new CustomSparkConnectStub(channel, retryPolicy)
-    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), "", bstub, stub)
+    artifactManager = new ArtifactManager(Configuration(), "", bstub, stub)
   }
 
   override def beforeEach(): Unit = {

@@ -942,7 +942,8 @@ case class CollapseCodegenStages(
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.wholeStageEnabled) {
+    if (conf.wholeStageEnabled && CodegenObjectFactoryMode.withName(conf.codegenFactoryMode)
+      != CodegenObjectFactoryMode.NO_CODEGEN) {
       insertWholeStageCodegen(plan)
     } else {
       plan

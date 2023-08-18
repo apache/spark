@@ -95,23 +95,21 @@ case class WindowExec(
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val spillSize = longMetric("spillSize")
-
     val evaluatorFactory =
       new WindowEvaluatorFactory(
         windowExpression,
         partitionSpec,
         orderSpec,
         child.output,
-        spillSize)
+        longMetric("spillSize"))
 
     // Start processing.
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsWithIndex { (index, rowIterator) =>
         val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(0, iter)
+        evaluator.eval(index, rowIterator)
       }
     }
   }

@@ -156,7 +156,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     executeManagerCmd(
       _.getAddListenerBuilder
         .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
-          .serialize(StreamingListenerPacket(id, listener)))))
+          .serialize(StreamingListenerPacket(id, listener))))
+        .setId(id))
   }
 
   /**
@@ -168,8 +169,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     val id = getIdByListener(listener)
     executeManagerCmd(
       _.getRemoveListenerBuilder
-        .setListenerPayload(ByteString.copyFrom(SparkSerDeUtils
-          .serialize(StreamingListenerPacket(id, listener)))))
+        .setId(id))
     removeCachedListener(id)
   }
 

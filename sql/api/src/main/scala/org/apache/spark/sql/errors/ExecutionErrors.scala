@@ -206,6 +206,13 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_2021",
       messageParameters = Map("cls" -> cls.toString))
   }
+
+  def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2154",
+      messageParameters = Map(
+        "innerCls" -> innerCls.getName))
+  }
 }
 
 private[sql] object ExecutionErrors extends ExecutionErrors

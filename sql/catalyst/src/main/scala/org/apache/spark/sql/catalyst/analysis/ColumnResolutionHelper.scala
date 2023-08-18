@@ -29,12 +29,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 trait ColumnResolutionHelper extends Logging {
 
   def conf: SQLConf
+
+  def catalogManager: CatalogManager
 
   /**
    * This method tries to resolve expressions and find missing attributes recursively.
@@ -192,7 +195,8 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      if (allowOuter) resolveOuterRef(resolved) else resolved
+      val withOuterResolved = if (allowOuter) resolveOuterRef(resolved) else resolved
+      resolveVariables(withOuterResolved)
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -227,6 +231,87 @@ trait ColumnResolutionHelper extends Logging {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
+      // Aggregate but failed.
+      case t: TempResolvedColumn if t.hasTried =>
+        resolve(t.nameParts).getOrElse(t)
+    }
+  }
+
+  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+    // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
+    def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
+      nameParts.length == 1 || {
+        if (nameParts.length == 2) {
+          nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else if (nameParts.length == 3) {
+          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else {
+          false
+        }
+      }
+    }
+
+    if (maybeTempVariableName(nameParts)) {
+      val variableName = if (conf.caseSensitiveAnalysis) {
+        nameParts.last
+      } else {
+        nameParts.last.toLowerCase(Locale.ROOT)
+      }
+      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+        VariableReference(
+          nameParts,
+          FakeSystemCatalog,
+          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          varDef)
+      }
+    } else {
+      None
+    }
+  }
+
+  // Resolves `UnresolvedAttribute` to its value.
+  protected def resolveVariables(e: Expression): Expression = {
+    def resolveVariable(nameParts: Seq[String]): Option[Expression] = {
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      if (isResolvingView) {
+        if (AnalysisContext.get.referredTempVariableNames.contains(nameParts)) {
+          lookupVariable(nameParts)
+        } else {
+          None
+        }
+      } else {
+        lookupVariable(nameParts)
+      }
+    }
+
+    def resolve(nameParts: Seq[String]): Option[Expression] = {
+      var resolvedVariable: Option[Expression] = None
+      // We only support temp variables for now, so the variable name can at most have 3 parts.
+      var numInnerFields: Int = math.max(0, nameParts.length - 3)
+      // Follow the column resolution and prefer the longest match. This makes sure that users
+      // can always use fully qualified variable name to avoid name conflicts.
+      while (resolvedVariable.isEmpty && numInnerFields < nameParts.length) {
+        resolvedVariable = resolveVariable(nameParts.dropRight(numInnerFields))
+        if (resolvedVariable.isEmpty) numInnerFields += 1
+      }
+
+      resolvedVariable.map { variable =>
+        if (numInnerFields != 0) {
+          val nestedFields = nameParts.takeRight(numInnerFields)
+          nestedFields.foldLeft(variable: Expression) { (e, name) =>
+            ExtractValue(e, Literal(name), conf.resolver)
+          }
+        } else {
+          variable
+        }
+      }.map(e => Alias(e, nameParts.last)())
+    }
+
+    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+      case u: UnresolvedAttribute =>
+        resolve(u.nameParts).getOrElse(u)
+      // Re-resolves `TempResolvedColumn` as variable references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
         resolve(t.nameParts).getOrElse(t)
@@ -426,8 +511,15 @@ trait ColumnResolutionHelper extends Logging {
     }
     val plan = planOpt.get
 
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).contains(true)
     try {
-      plan.resolve(u.nameParts, conf.resolver)
+      if (!isMetadataAccess) {
+        plan.resolve(u.nameParts, conf.resolver)
+      } else if (u.nameParts.size == 1) {
+        plan.getMetadataAttributeByNameOpt(u.nameParts.head)
+      } else {
+        None
+      }
     } catch {
       case e: AnalysisException =>
         logDebug(s"Fail to resolve $u with $plan due to $e")

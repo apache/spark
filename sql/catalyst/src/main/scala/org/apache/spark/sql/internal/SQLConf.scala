@@ -513,10 +513,10 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
+        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
       .version("2.3.0")
-      .booleanConf
-      .createWithDefault(false)
+      .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -885,7 +885,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
+  val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
@@ -1374,6 +1374,12 @@ object SQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString(s"${5 * 60}")
 
+  val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
+    .doc("When true, all running tasks will be interrupted if one cancels a query.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")
@@ -1394,8 +1400,7 @@ object SQLConf {
       .doc("When true, all running tasks will be interrupted if one cancels a query. " +
         "When false, all running tasks will remain until finished.")
       .version("3.2.0")
-      .booleanConf
-      .createWithDefault(true)
+      .fallbackConf(INTERRUPT_ON_CANCEL)
 
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
@@ -1850,6 +1855,17 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
+
+  val NUM_STATE_STORE_MAINTENANCE_THREADS =
+    buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
+      .internal()
+      .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
+        "for stateful streaming queries. The default value is the number of cores * 0.25 " +
+        "so that this thread pool doesn't take too many resources " +
+        "away from the query and affect performance.")
+      .intConf
+      .checkValue(_ > 0, "Must be greater than 0")
+      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
 
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
@@ -2657,7 +2673,7 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
       "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
@@ -2926,7 +2942,19 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
+
+  val PYTHON_TABLE_UDF_ANALYZER_MEMORY =
+    buildConf("spark.sql.analyzer.pythonUDTF.analyzeInPython.memory")
+      .doc("The amount of memory to be allocated to PySpark for Python UDTF analyzer, in MiB " +
+        "unless otherwise specified. If set, PySpark memory for Python UDTF analyzer will be " +
+        "limited to this amount. If not set, Spark will not limit Python's " +
+        "memory use and it is up to the application to avoid exceeding the overhead memory space " +
+        "shared with other non-JVM processes.\nNote: Windows does not support resource limiting " +
+        "and actual resource is not limited on MacOS.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.MiB)
+      .createOptional
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -4260,18 +4288,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
-    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
-      .internal()
-      .doc("When set to false, if types in Avro are encoded in the same format, but " +
-        "the type in the Avro schema explicitly says that the data types are different, " +
-        "reject reading the data type in the format to avoid returning incorrect results. " +
-        "When set to true, it restores the legacy behavior of allow reading the data in the" +
-        " format, which may return incorrect results.")
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
@@ -4334,13 +4350,23 @@ object SQLConf {
       .createWithDefault(false)
 
   val LOCAL_RELATION_CACHE_THRESHOLD =
-    buildConf("spark.sql.session.localRelationCacheThreshold")
+    buildConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
       .doc("The threshold for the size in bytes of local relations to be cached at " +
         "the driver side after serialization.")
       .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
+
+  val DECORRELATE_JOIN_PREDICATE_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
+        "predicates. This configuration is only effective when " +
+        "'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4518,6 +4544,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
+  def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
@@ -4690,6 +4718,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
+
+  def codegenFactoryMode: String = getConf(CODEGEN_FACTORY_MODE)
 
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
@@ -4993,6 +5023,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
+
+  def pythonUDTFAnalyzerMemory: Option[Long] = getConf(PYTHON_TABLE_UDF_ANALYZER_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

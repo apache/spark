@@ -904,8 +904,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         1    2
         dtype: int64
 
-        >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')  # doctest: +SKIP
-        Int64Index([1, 2], dtype='int64', name='a')
+        >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
+        Index([1, 2], dtype='int64', name='a')
         """
         return self._dtype_op.astype(self, dtype)
 
@@ -1247,8 +1247,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         4    23
         Name: Col2, dtype: int64
 
-        >>> df.index.shift(periods=3, fill_value=0)  # doctest: +SKIP
-        Int64Index([0, 0, 0, 0, 1], dtype='int64')
+        >>> df.index.shift(periods=3, fill_value=0)
+        Index([0, 0, 0, 0, 1], dtype='int64')
         """
         return self._shift(periods, fill_value).spark.analyzed
 
@@ -1317,39 +1317,42 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> df = ps.DataFrame({'x':[0, 0, 1, 1, 1, np.nan]})
         >>> df.x.value_counts()  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    3
         0.0    2
-        Name: x, dtype: int64
+        Name: count, dtype: int64
 
         With `normalize` set to `True`, returns the relative frequency by
         dividing all values by the sum of values.
 
         >>> df.x.value_counts(normalize=True)  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    0.6
         0.0    0.4
-        Name: x, dtype: float64
+        Name: proportion, dtype: float64
 
         **dropna**
         With `dropna` set to `False` we can also see NaN index values.
 
         >>> df.x.value_counts(dropna=False)  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    3
         0.0    2
         NaN    1
-        Name: x, dtype: int64
+        Name: count, dtype: int64
 
         For Index
 
         >>> idx = ps.Index([3, 1, 2, 3, 4, np.nan])
-        >>> idx  # doctest: +SKIP
-        Float64Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
+        >>> idx
+        Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
 
         >>> idx.value_counts().sort_index()
         1.0    1
         2.0    1
         3.0    2
         4.0    1
-        dtype: int64
+        Name: count, dtype: int64
 
         **sort**
 
@@ -1360,7 +1363,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2.0    1
         3.0    2
         4.0    1
-        dtype: int64
+        Name: count, dtype: int64
 
         **normalize**
 
@@ -1372,7 +1375,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2.0    0.2
         3.0    0.4
         4.0    0.2
-        dtype: float64
+        Name: proportion, dtype: float64
 
         **dropna**
 
@@ -1411,7 +1414,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (falcon, length)    2
         (falcon, weight)    1
         (lama, weight)      3
-        dtype: int64
+        Name: count, dtype: int64
 
         >>> s.index.value_counts(normalize=True).sort_index()
         (cow, length)       0.111111
@@ -1419,31 +1422,37 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (falcon, length)    0.222222
         (falcon, weight)    0.111111
         (lama, weight)      0.333333
-        dtype: float64
+        Name: proportion, dtype: float64
 
         If Index has name, keep the name up.
 
         >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='pandas-on-Spark')
         >>> idx.value_counts().sort_index()
+        pandas-on-Spark
         0    3
         1    2
         2    1
         3    1
-        Name: pandas-on-Spark, dtype: int64
+        Name: count, dtype: int64
         """
-        from pyspark.pandas.series import first_series, Series
-
-        if isinstance(self, Series):
-            warnings.warn(
-                "The resulting Series will have a fixed name of 'count' from 4.0.0.",
-                FutureWarning,
-            )
+        from pyspark.pandas.series import first_series
+        from pyspark.pandas.indexes.multi import MultiIndex
 
         if bins is not None:
             raise NotImplementedError("value_counts currently does not support bins")
 
         if dropna:
-            sdf_dropna = self._internal.spark_frame.select(self.spark.column).dropna()
+            if isinstance(self, MultiIndex):
+                # If even one StructField is null, that row should be dropped.
+                index_spark_column_names = self._internal.index_spark_column_names
+                spark_column = self.spark.column
+                cond = F.lit(False)
+                for index_spark_column_name in index_spark_column_names:
+                    cond = cond | spark_column.getItem(index_spark_column_name).isNull()
+                sdf = self._internal.spark_frame.select(spark_column)
+                sdf_dropna = sdf.filter(~cond)
+            else:
+                sdf_dropna = self._internal.spark_frame.select(self.spark.column).dropna()
         else:
             sdf_dropna = self._internal.spark_frame.select(self.spark.column)
         index_name = SPARK_DEFAULT_INDEX_NAME
@@ -1456,13 +1465,17 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 sdf = sdf.orderBy(F.col("count").desc())
 
         if normalize:
+            result_column_name = "proportion"
             drop_sum = sdf_dropna.count()
             sdf = sdf.withColumn("count", F.col("count") / F.lit(drop_sum))
+        else:
+            result_column_name = "count"
 
         internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, index_name)],
-            column_labels=self._internal.column_labels,
+            index_names=self._internal.column_labels,
+            column_labels=[(result_column_name,)],
             data_spark_columns=[scol_for(sdf, "count")],
             column_label_names=self._internal.column_label_names,
         )
@@ -1511,8 +1524,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3
 
         >>> idx = ps.Index([1, 1, 2, None])
-        >>> idx  # doctest: +SKIP
-        Float64Index([1.0, 1.0, 2.0, nan], dtype='float64')
+        >>> idx
+        Index([1.0, 1.0, 2.0, nan], dtype='float64')
 
         >>> idx.nunique()
         2
@@ -1586,11 +1599,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Index
 
         >>> psidx = ps.Index([100, 200, 300, 400, 500])
-        >>> psidx  # doctest: +SKIP
-        Int64Index([100, 200, 300, 400, 500], dtype='int64')
+        >>> psidx
+        Index([100, 200, 300, 400, 500], dtype='int64')
 
-        >>> psidx.take([0, 2, 4]).sort_values()  # doctest: +SKIP
-        Int64Index([100, 300, 500], dtype='int64')
+        >>> psidx.take([0, 2, 4]).sort_values()
+        Index([100, 300, 500], dtype='int64')
 
         MultiIndex
 
@@ -1614,7 +1627,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return cast(IndexOpsLike, self._psdf.iloc[indices].index)
 
     def factorize(
-        self: IndexOpsLike, sort: bool = True, na_sentinel: Optional[int] = -1
+        self: IndexOpsLike, sort: bool = True, use_na_sentinel: bool = True
     ) -> Tuple[IndexOpsLike, pd.Index]:
         """
         Encode the object as an enumerated type or categorical variable.
@@ -1625,11 +1638,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         sort : bool, default True
-        na_sentinel : int or None, default -1
-            Value to mark "not found". If None, will not drop the NaN
-            from the uniques of the values.
-
-            .. deprecated:: 3.4.0
+        use_na_sentinel : bool, default True
+            If True, the sentinel -1 will be used for NaN values, effectively assigning them
+            a distinct category. If False, NaN values will be encoded as non-negative integers,
+            treating them as unique categories in the encoding process and retaining them in the
+            set of unique categories in the data.
 
         Returns
         -------
@@ -1658,7 +1671,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')
 
-        >>> codes, uniques = psser.factorize(na_sentinel=None)
+        >>> codes, uniques = psser.factorize(use_na_sentinel=False)
         >>> codes
         0    1
         1    3
@@ -1669,30 +1682,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c', None], dtype='object')
 
-        >>> codes, uniques = psser.factorize(na_sentinel=-2)
-        >>> codes
-        0    1
-        1   -2
-        2    0
-        3    2
-        4    1
-        dtype: int32
-        >>> uniques
-        Index(['a', 'b', 'c'], dtype='object')
-
         For Index:
 
         >>> psidx = ps.Index(['b', None, 'a', 'c', 'b'])
         >>> codes, uniques = psidx.factorize()
-        >>> codes  # doctest: +SKIP
-        Int64Index([1, -1, 0, 2, 1], dtype='int64')
+        >>> codes
+        Index([1, -1, 0, 2, 1], dtype='int32')
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')
         """
         from pyspark.pandas.series import first_series
 
-        assert (na_sentinel is None) or isinstance(na_sentinel, int)
         assert sort is True
+        use_na_sentinel = -1 if use_na_sentinel else False  # type: ignore[assignment]
 
         warnings.warn(
             "Argument `na_sentinel` will be removed in 4.0.0.",
@@ -1716,7 +1718,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 scol = map_scol[self.spark.column]
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
-            ).factorize(na_sentinel=na_sentinel)
+            ).factorize(use_na_sentinel=use_na_sentinel)
             return codes, uniques.astype(self.dtype)
 
         uniq_sdf = self._internal.spark_frame.select(self.spark.column).distinct()
@@ -1743,13 +1745,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         # Constructs `unique_to_code` mapping non-na unique to code
         unique_to_code = {}
-        if na_sentinel is not None:
-            na_sentinel_code = na_sentinel
+        if use_na_sentinel:
+            na_sentinel_code = use_na_sentinel
         code = 0
         for unique in uniques_list:
             if pd.isna(unique):
-                if na_sentinel is None:
-                    na_sentinel_code = code
+                if not use_na_sentinel:
+                    na_sentinel_code = code  # type: ignore[assignment]
             else:
                 unique_to_code[unique] = code
             code += 1
@@ -1767,7 +1769,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 
-        if na_sentinel is not None:
+        if use_na_sentinel:
             # Drops the NaN from the uniques of the values
             uniques_list = [x for x in uniques_list if not pd.isna(x)]
 

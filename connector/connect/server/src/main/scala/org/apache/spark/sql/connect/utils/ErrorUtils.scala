@@ -133,11 +133,28 @@ private[connect] object ErrorUtils extends Logging {
     }
     partial
       .andThen { case (original, wrapped) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
-        if (isInterrupted) {
-          events.foreach(_.postCanceled)
+        if (events.isDefined) {
+          // Errors thrown inside execution are user query errors, return then as INFO.
+          logInfo(
+            s"Spark Connect error " +
+              s"during: $opType. UserId: $userId. SessionId: $sessionId.",
+            original)
         } else {
-          events.foreach(_.postFailed(wrapped.getMessage))
+          // Other errors are server RPC errors, return them as ERROR.
+          logError(
+            s"Spark Connect RPC error " +
+              s"during: $opType. UserId: $userId. SessionId: $sessionId.",
+            original)
+        }
+
+        // If ExecuteEventsManager is present, this this is an execution error that needs to be
+        // posted to it.
+        events.foreach { executeEventsManager =>
+          if (isInterrupted) {
+            executeEventsManager.postCanceled()
+          } else {
+            executeEventsManager.postFailed(wrapped.getMessage)
+          }
         }
         observer.onError(wrapped)
       }

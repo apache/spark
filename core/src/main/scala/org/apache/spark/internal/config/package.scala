@@ -2555,4 +2555,18 @@ package object config {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CONNECT_SCALA_UDF_STUB_PREFIXES =
+    ConfigBuilder("spark.connect.scalaUdf.stubPrefixes")
+      .internal()
+      .doc("""
+          |Comma-separated list of binary names of classes/packages that should be stubbed during
+          |the Scala UDF serde and execution if not found on the server classpath.
+          |An empty list effectively disables stubbing for all missing classes.
+          |By default, the server stubs classes from the Scala client package.
+          |""".stripMargin)
+      .version("3.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
 }
