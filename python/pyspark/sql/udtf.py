@@ -70,9 +70,28 @@ class AnalyzeResult:
     ----------
     schema : :class:`StructType`
         The schema that the Python UDTF will return.
+    with_single_partition : bool
+        If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
+        argument to one collection for consumption by exactly one instance of the correpsonding
+        UDTF class.
+    partition_by : list[str]
+        If non-empty, this is a list of column names that the UDTF is specifying for Catalyst
+        to partition the input TABLE argument by. In this case, calls to the UDTF may not include
+        any explicit PARTITION BY clause, in which case Catalyst will return an error. This option
+        is mutually exclusive with 'with_single_partition'.
+    order_by_asc : list[str]
+        If non-empty, this is a list of column names that the UDTF is specifying for Catalyst
+        to sort the input TABLE argument by (ascending). Note that the 'partition_by' list must
+        also be non-empty in this case.
+    order_by_desc : list[str]
+        Same as 'order_by_asc', but sorts by descending order instead.
     """
 
     schema: StructType
+    with_single_partition: bool = False
+    partition_by: list[str] = []
+    order_by_asc: list[str] = []
+    order_by_desc: list[str] = []
 
 
 def _create_udtf(

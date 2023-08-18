@@ -127,6 +127,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
+        # Return the list of partitioning columns, if any.
     except BaseException as e:
         try:
             exc_info = None
