@@ -3741,7 +3741,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
 
     def union(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
+        """Return a new :class:`DataFrame` containing the union of rows in this and another
         :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
@@ -3752,11 +3752,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         other : :class:`DataFrame`
-            Another :class:`DataFrame` that needs to be unioned
+            Another :class:`DataFrame` that needs to be unioned.
 
         Returns
         -------
         :class:`DataFrame`
+            A new :class:`DataFrame` containing the combined rows with corresponding columns.
 
         See Also
         --------
@@ -3764,34 +3765,81 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method performs a SQL-style set union of the rows from both `DataFrame` objects,
+        with no automatic deduplication of elements.
 
-        Also as standard in SQL, this function resolves columns by position (not by name).
+        Use the `distinct()` method to perform deduplication of rows.
+
+        The method resolves columns by position (not by name), following the standard behavior
+        in SQL.
 
         Examples
         --------
-        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
-        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
-        >>> df1.union(df2).show()
-        +----+----+----+
-        |col0|col1|col2|
-        +----+----+----+
-        |   1|   2|   3|
-        |   4|   5|   6|
-        +----+----+----+
-        >>> df1.union(df1).show()
-        +----+----+----+
-        |col0|col1|col2|
-        +----+----+----+
-        |   1|   2|   3|
-        |   1|   2|   3|
-        +----+----+----+
+        Example 1: Combining two DataFrames with the same schema
+
+        >>> df1 = spark.createDataFrame([(1, 'A'), (2, 'B')], ['id', 'value'])
+        >>> df2 = spark.createDataFrame([(3, 'C'), (4, 'D')], ['id', 'value'])
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        |  2|    B|
+        |  3|    C|
+        |  4|    D|
+        +---+-----+
+
+        Example 2: Combining two DataFrames with different schemas
+
+        >>> from pyspark.sql.functions import lit
+        >>> df1 = spark.createDataFrame([("Alice", 1), ("Bob", 2)], ["name", "id"])
+        >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], ["id", "name"])
+        >>> df1 = df1.withColumn("age", lit(30))
+        >>> df2 = df2.withColumn("age", lit(40))
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +-----+-------+---+
+        | name|     id|age|
+        +-----+-------+---+
+        |Alice|      1| 30|
+        |  Bob|      2| 30|
+        |    3|Charlie| 40|
+        |    4|   Dave| 40|
+        +-----+-------+---+
+
+        Example 3: Combining two DataFrames with mismatched columns
+
+        >>> df1 = spark.createDataFrame([(1, 2)], ["A", "B"])
+        >>> df2 = spark.createDataFrame([(3, 4)], ["C", "D"])
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  2|
+        |  3|  4|
+        +---+---+
+
+        Example 4: Combining duplicate rows from two different DataFrames
+
+        >>> df1 = spark.createDataFrame([(1, 'A'), (2, 'B'), (3, 'C')], ['id', 'value'])
+        >>> df2 = spark.createDataFrame([(3, 'C'), (4, 'D')], ['id', 'value'])
+        >>> df3 = df1.union(df2).distinct().sort("id")
+        >>> df3.show()
+        +---+-----+
+        | id|value|
+        +---+-----+
+        |  1|    A|
+        |  2|    B|
+        |  3|    C|
+        |  4|    D|
+        +---+-----+
         """
         return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        """Return a new :class:`DataFrame` containing union of rows in this and another
+        """Return a new :class:`DataFrame` containing the union of rows in this and another
         :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -3807,14 +3855,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
-            Combined DataFrame
+            A new :class:`DataFrame` containing combined rows from both dataframes.
 
         Notes
         -----
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method combines all rows from both `DataFrame` objects with no automatic
+        deduplication of elements.
 
-        Also as standard in SQL, this function resolves columns by position (not by name).
+        Use the `distinct()` method to perform deduplication of rows.
 
         :func:`unionAll` is an alias to :func:`union`
 
@@ -3828,8 +3876,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
-        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
-        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+        This method performs a union operation on both input DataFrames, resolving columns by
+        name (rather than position). When `allowMissingColumns` is True, missing columns will
+        be filled with null.
 
         .. versionadded:: 2.3.0
 
@@ -3848,12 +3897,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
-            Combined DataFrame.
+            A new :class:`DataFrame` containing the combined rows with corresponding
+            columns of the two given DataFrames.
 
         Examples
         --------
-        The difference between this function and :func:`union` is that this function
-        resolves columns by name (not by position):
+        Example 1: Union of two DataFrames with same columns in different order.
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
@@ -3865,10 +3914,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   6|   4|   5|
         +----+----+----+
 
-        When the parameter `allowMissingColumns` is ``True``, the set of column names
-        in this and other :class:`DataFrame` can differ; missing columns will be filled with null.
-        Further, the missing columns of this :class:`DataFrame` will be added at the end
-        in the schema of the union result:
+        Example 2: Union with missing columns and setting `allowMissingColumns=True`.
 
         >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
         >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col3"])
@@ -3879,6 +3925,30 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   1|   2|   3|NULL|
         |NULL|   4|   5|   6|
         +----+----+----+----+
+
+        Example 3: Union of two DataFrames with few common columns.
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6, 7]], ["col1", "col2", "col3", "col4"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+----+
+        |col0|col1|col2|col3|col4|
+        +----+----+----+----+----+
+        |   1|   2|   3|NULL|NULL|
+        |NULL|   4|   5|   6|   7|
+        +----+----+----+----+----+
+
+        Example 4: Union of two DataFrames with completely different columns.
+
+        >>> df1 = spark.createDataFrame([[0, 1, 2]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[3, 4, 5]], ["col3", "col4", "col5"])
+        >>> df1.unionByName(df2, allowMissingColumns=True).show()
+        +----+----+----+----+----+----+
+        |col0|col1|col2|col3|col4|col5|
+        +----+----+----+----+----+----+
+        |   0|   1|   2|NULL|NULL|NULL|
+        |NULL|NULL|NULL|   3|   4|   5|
+        +----+----+----+----+----+----+
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
 
