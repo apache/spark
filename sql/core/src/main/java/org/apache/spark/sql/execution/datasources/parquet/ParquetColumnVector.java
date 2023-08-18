@@ -84,8 +84,6 @@ final class ParquetColumnVector {
       if (defaultValue == null) {
         vector.setAllNull();
         return;
-      } else {
-        vector.setHasDefaultValue();
       }
       // For Parquet tables whose columns have associated DEFAULT values, this reader must return
       // those values instead of NULL when the corresponding columns are not present in storage.

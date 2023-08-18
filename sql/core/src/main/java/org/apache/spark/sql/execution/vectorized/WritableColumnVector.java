@@ -851,15 +851,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public final void setIsConstant() { isConstant = true; }
 
-  public final void setHasDefaultValue() {
-    if (childColumns != null) {
-      for (WritableColumnVector c : childColumns) {
-        c.setHasDefaultValue();
-      }
-    }
-    hasDefaultValue = true;
-  }
-
   /**
    * Marks this column only contains null values.
    */
@@ -889,13 +880,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
-
-  /**
-   * True if this column has default values. Return the default values instead of NULL when the
-   * corresponding columns are not present in storage. We can not reset the data of column vectors
-   * that has default values.
-   */
-  protected boolean hasDefaultValue = false;
 
   protected int hugeVectorThreshold;
 
