@@ -30,6 +30,5 @@ SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VE
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
 CONNECT_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export connect-client-jvm/fullClasspath" | grep jar | tail -n1)"
-SQL_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
-echo "$CONNECT_CLASSPATH:$CLASSPATH"
+echo "$CONNECT_CLASSPATH"
