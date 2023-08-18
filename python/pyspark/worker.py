@@ -608,7 +608,7 @@ def read_udtf(pickleSer, infile, eval_type):
             """
             self._create_udtf = create_udtf
             self._udtf = create_udtf()
-            self._prev_arguments = None
+            self._prev_arguments = list()
             self._partition_child_indexes = partition_child_indexes
 
         def eval(self, *args, **kwargs) -> Iterator:
@@ -631,10 +631,11 @@ def read_udtf(pickleSer, infile, eval_type):
         def terminate(self) -> Iterator:
             if self._udtf.terminate is not None:
                 return self._udtf.terminate()
+            return iter(())
 
         def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
-            if self._prev_arguments is not None:
+            if len(self._prev_arguments) > 0:
                 cur_table_arg = self._get_table_arg(arguments)
                 prev_table_arg = self._get_table_arg(self._prev_arguments)
                 cur_partitions_args = []
