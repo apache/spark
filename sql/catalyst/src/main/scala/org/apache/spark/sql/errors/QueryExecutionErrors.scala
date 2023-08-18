@@ -2718,4 +2718,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
       messageParameters = Map.empty)
   }
+
+  def raiseError(errorMessage: String, sqlState: String,
+                 errorClass: String = "USER_RAISED_EXCEPTION",
+                ): RuntimeException = {
+
+    if (errorClass == "USER_RAISED_EXCEPTION") {
+        new SparkRuntimeException(
+          errorClass = errorClass,
+          messageParameters = Map("errorMessage" -> errorMessage))
+    } else if (validateErrorClass(errorClass)) {
+      new SparkRuntimeException(
+        errorClass = errorClass,
+        messageParameters = Map("errorMessage" -> errorMessage))
+    } else {
+
+    }
+  }
 }

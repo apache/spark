@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -85,9 +86,9 @@ case class RaiseError(child: Expression, dataType: DataType)
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      throw new RuntimeException()
+      throw raiseError(errorMessage = "", sqlState = "")
     }
-    throw new RuntimeException(value.toString)
+    throw raiseError(errorMessage = value.toString, sqlState = "")
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
@@ -97,9 +98,10 @@ case class RaiseError(child: Expression, dataType: DataType)
       code = code"""${eval.code}
         |if (true) {
         |  if (${eval.isNull}) {
-        |    throw new RuntimeException();
+        |    throw QueryExecutionErrors.raiseError("", "", "");
         |  }
-        |  throw new RuntimeException(${eval.value}.toString());
+        |  throw QueryExecutionErrors.raiseError(
+        |    ${eval.value}.toString(), "", "");
         |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)

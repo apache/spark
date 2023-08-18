@@ -85,6 +85,18 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .flatMap(_.sqlState)
       .orNull
   }
+
+  def validateErrorClass(errorClass: String): Boolean = {
+    val errorClasses = errorClass.split("\\.")
+    val result = errorClasses match {
+      case Array(mainClass) => errorInfoMap.contains(mainClass)
+      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).map { info =>
+        info.subClass.get.contains(subClass)
+      }.getOrElse(false)
+      case _ => false
+    }
+    result
+  }
 }
 
 private object ErrorClassesJsonReader {
