@@ -131,6 +131,10 @@ private[sql] object UdfUtils extends Serializable {
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
 
+  def traversableOnceToSeq[A, B](f: A => TraversableOnce[B]): A => Seq[B] = { value =>
+    f(value).toSeq
+  }
+
   //  (1 to 22).foreach { i =>
   //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
   //    val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
