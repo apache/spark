@@ -165,7 +165,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    analyzeResult: Option[PythonUDTFAnalyzeResult] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -193,7 +194,7 @@ case class UnresolvedPolymorphicPythonUDTF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resolveElementSchema: (PythonFunction, Seq[Expression]) => StructType,
+    resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
@@ -206,6 +207,17 @@ case class UnresolvedPolymorphicPythonUDTF(
       newChildren: IndexedSeq[Expression]): UnresolvedPolymorphicPythonUDTF =
     copy(children = newChildren)
 }
+
+/**
+ * Represents the result of invoking the polymorphic 'analyze' method on a Python user-defined table
+ * function. This returns the table function's output schema in addition to other optional metadata.
+ * @param schema
+ */
+case class PythonUDTFAnalyzeResult(
+    schema: StructType,
+    withSinglePartition: Boolean,
+    partitionByColumns: Seq[Expression],
+    orderBy: Seq[SortOrder])
 
 /**
  * A place holder used when printing expressions without debugging information such as the
