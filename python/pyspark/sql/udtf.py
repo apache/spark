@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import inspect
 import sys
 import warnings
-from typing import Any, Type, TYPE_CHECKING, Optional, Union
+from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -62,6 +62,23 @@ class AnalyzeArgument:
 
 
 @dataclass(frozen=True)
+class Column:
+    """
+    Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
+    """
+    name: str
+
+
+@dataclass(frozen=True)
+class OrderItem:
+    """
+    Represents a single ordering element for purposes of returning metadata from the 'analyze' method.
+    """
+    column: Column
+    ascending: bool = True
+
+
+@dataclass(frozen=True)
 class AnalyzeResult:
     """
     The return of Python UDTF's analyze static method.
@@ -86,25 +103,8 @@ class AnalyzeResult:
     """
     schema: StructType
     with_single_partition: bool = False
-    partition_by: list[Column] = []
-    order_by: list[OrderItem] = []
-
-
-@dataclass(frozen=True)
-class Column:
-    """
-    Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
-    """
-    name: str
-
-
-@dataclass(frozen=True)
-class OrderItem:
-    """
-    Represents a single ordering element for purposes of returning metadata from the 'analyze' method.
-    """
-    column: Column
-    ascending: bool = True
+    partition_by: Sequence[Column] = ()
+    order_by: Sequence[OrderItem] = ()
 
 
 def _create_udtf(
