@@ -182,7 +182,16 @@ case class BatchScanExec(
 
               // Now fill missing partition keys with empty partitions
               val partitionMapping = nestGroupedPartitions.toMap
-              finalPartitions = spjParams.commonPartitionValues.get.flatMap {
+
+              // SPARK-41471: We keep to order of partition keys in `commonPartitionValues` to
+              // make sure the order of partitions is deterministic in different case.
+              val partitionDataTypes = p.expressions.map(_.dataType)
+              val partitionOrdering: Ordering[(InternalRow, Int)] = {
+                RowOrdering.createNaturalAscendingOrdering(partitionDataTypes).on(_._1)
+              }
+              val sortedCommonPartitionValues = spjParams.commonPartitionValues.get
+                .sorted(partitionOrdering)
+              finalPartitions = sortedCommonPartitionValues.flatMap {
                 case (partValue, numSplits) =>
                   // Use empty partition for those partition values that are not present.
                   partitionMapping.getOrElse(

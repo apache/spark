@@ -301,8 +301,8 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case KeyGroupedPartitioning(expressions, n, partitionValues) =>
-        val valueMap = partitionValues.zipWithIndex.map {
+      case k @ KeyGroupedPartitioning(expressions, n, _) =>
+        val valueMap = k.uniquePartitionValues.zipWithIndex.map {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
         }.toMap
         new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
