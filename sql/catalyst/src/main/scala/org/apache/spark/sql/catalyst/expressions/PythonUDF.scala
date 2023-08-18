@@ -216,8 +216,10 @@ case class UnresolvedPolymorphicPythonUDTF(
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
     withSinglePartition: Boolean,
-    partitionByColumns: Seq[Expression],
-    orderBy: Seq[SortOrder])
+    partitionByExpressions: Seq[Expression],
+    orderByExpressions: Seq[SortOrder]) {
+  def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty
+}
 
 /**
  * A place holder used when printing expressions without debugging information such as the

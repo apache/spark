@@ -310,8 +310,8 @@ object UserDefinedPythonTableFunction {
       PythonUDTFAnalyzeResult(
         schema = schema,
         withSinglePartition = withSinglePartition,
-        partitionByColumns = partitionByColumns,
-        orderBy = orderBy)
+        partitionByExpressions = partitionByColumns,
+        orderByExpressions = orderBy)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

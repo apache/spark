@@ -124,6 +124,21 @@ def main(infile: IO, outfile: IO) -> None:
                 "Output of `analyze` static method of Python UDTFs expects "
                 f"a pyspark.sql.udtf.AnalyzeResult but got: {type(result)}"
             )
+        def prefix():
+            return "Output of `analyze` static method of Python UDTF is invalid: "
+        if result.with_single_partition and len(result.partition_by) > 0:
+            raise PySparkValueError(
+                prefix + "the 'with_single_partition' field cannot be assigned to true "
+                "if the 'partition_by' list is non-empty"
+            )
+        if (len(result.order_by) > 0 and
+            not result.with_single_partition and
+            len(result.partition_by) == 0):
+            raise PySparkValueError(
+                prefix + "the 'order_by' field cannot be non-empty unless the "
+                "'with_single_partition' field is set to true or the 'partition_by' list is "
+                "non-empty"
+            )
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
