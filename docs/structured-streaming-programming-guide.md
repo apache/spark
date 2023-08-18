@@ -4093,7 +4093,7 @@ The table below describes the configurations for this feature and default values
 | Option    | Value           | Default | Description       |
 |-------------|-----------------|------------|---------------------|
 |asyncProgressTrackingEnabled|true/false|false|enable or disable asynchronous progress tracking|
-|asyncProgressCheckpointingInterval|minutes|1|the interval in which we commit offsets and completion commits|
+|asyncProgressTrackingCheckpointIntervalMs|millisecond|1000|the interval in which we commit offsets and completion commits|
 
 ## Limitations
 The initial version of the feature has the following limitations:
@@ -4114,7 +4114,7 @@ Also the following error message may be printed in the driver logs:
 The offset log for batch x doesn't exist, which is required to restart the query from the latest batch x from the offset log. Please ensure there are two subsequent offset logs available for the latest batch via manually deleting the offset file(s). Please also ensure the latest batch for commit log is equal or one batch earlier than the latest batch for offset log.
 ```
 
-This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
+This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressTrackingCheckpointIntervalMs” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
 
 # Continuous Processing
 ## [Experimental]
