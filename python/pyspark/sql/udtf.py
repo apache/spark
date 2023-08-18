@@ -62,7 +62,7 @@ class AnalyzeArgument:
 
 
 @dataclass(frozen=True)
-class Column:
+class PartitioningColumn:
     """
     Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
     """
@@ -70,11 +70,12 @@ class Column:
 
 
 @dataclass(frozen=True)
-class OrderItem:
+class OrderingColumn:
     """
-    Represents a single ordering element for purposes of returning metadata from the 'analyze' method.
+    Represents a single ordering column name for purposes of returning metadata from the 'analyze'
+    method.
     """
-    column: Column
+    name: str
     ascending: bool = True
 
 
@@ -91,20 +92,20 @@ class AnalyzeResult:
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partition_by : list[Column]
-        If non-empty, this is a list of columns that the UDTF is specifying for Catalyst to
+    partition_by : Sequence[PartitioningColumn]
+        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
         mutually exclusive with 'with_single_partition'.
-    order_by: list[OrderItem]
-        If non-empty, this is a list of columns that the UDTF is specifying for Catalyst to sort
-        the input TABLE argument by. Note that the 'partition_by' list must also be non-empty in
-        this case.
+    order_by: Sequence[OrderingColumn]
+        If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
+        sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
+        in this case.
     """
     schema: StructType
     with_single_partition: bool = False
-    partition_by: Sequence[Column] = ()
-    order_by: Sequence[OrderItem] = ()
+    partition_by: Sequence[PartitioningColumn] = ()
+    order_by: Sequence[OrderingColumn] = ()
 
 
 def _create_udtf(

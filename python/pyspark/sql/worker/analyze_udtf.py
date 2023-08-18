@@ -145,13 +145,15 @@ def main(infile: IO, outfile: IO) -> None:
         # Return the list of partitioning columns, if any.
         write_int(1 if result.with_single_partition else 0, outfile)
         write_int(len(result.partition_by), outfile)
-        for col in reuslt.partition_by:
-            write_with_length(col.name, outfile)
+        for col in result.partition_by:
+            write_with_length(col.name.encode("utf-8"), outfile)
         # Return the requested input table ordering, if any.
         write_int(len(result.order_by), outfile)
-        for item in result.order_by:
-            write_with_length(item.column.name, outfile)
-            write_int(1 if item.ascending else 0, outfile)
+        '''
+        for col in result.order_by:
+            write_with_length(col.name.encode("utf-8"), outfile)
+            write_int(1 if col.ascending else 0, outfile)
+        '''
 
     except BaseException as e:
         try:

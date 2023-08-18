@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets
 import java.util.HashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.Pickler
 
@@ -33,7 +34,7 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -278,23 +279,28 @@ object UserDefinedPythonTableFunction {
 
       // Receive the list of requested partitioning columns, if any.
       val withSinglePartition = dataIn.readInt() == 1
-      val partitionByColumns: Seq[Expression] =
-        (0 until dataIn.readInt()).map { _ =>
-          val length = dataIn.readInt()
-          val obj = new Array[Byte](length)
-          dataIn.readFully(obj)
-          UnresolvedAttribute(obj.toString)
-        }
+      val numPartitionByColumns = dataIn.readInt()
+      val partitionByColumns = ArrayBuffer.empty[Expression]
+      for (_ <- 0 until numPartitionByColumns) {
+        val length = dataIn.readInt()
+        val obj = new Array[Byte](length)
+        dataIn.readFully(obj)
+        val columnName = new String(obj, StandardCharsets.UTF_8)
+        partitionByColumns.append(UnresolvedAttribute(columnName))
+      }
       // Receive the list of requested ordering columns, if any.
-      val orderBy: Seq[SortOrder] =
-        (0 until dataIn.readInt()).map { _ =>
-          val length = dataIn.readInt()
-          val obj = new Array[Byte](length)
-          dataIn.readFully(obj)
-          val columnName = obj.toString
-          val ascending = if (dataIn.readInt() == 1) Ascending else Descending
-          SortOrder(UnresolvedAttribute(columnName), ascending)
-        }
+      val orderBy = ArrayBuffer.empty[SortOrder]
+      val numOrderByItems = dataIn.readInt()
+      /*
+      for (_ <- 0 until numOrderByItems) {
+        val length = dataIn.readInt()
+        val obj = new Array[Byte](length)
+        dataIn.readFully(obj)
+        val columnName = new String(obj, StandardCharsets.UTF_8)
+        val ascending = if (dataIn.readInt() == 1) Ascending else Descending
+        SortOrder(UnresolvedAttribute(columnName), ascending)
+      }
+       */
 
       PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
       Option(func.accumulator).foreach(_.merge(maybeAccumulator.get))
@@ -310,8 +316,8 @@ object UserDefinedPythonTableFunction {
       PythonUDTFAnalyzeResult(
         schema = schema,
         withSinglePartition = withSinglePartition,
-        partitionByExpressions = partitionByColumns,
-        orderByExpressions = orderBy)
+        partitionByExpressions = partitionByColumns.toSeq,
+        orderByExpressions = orderBy.toSeq)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

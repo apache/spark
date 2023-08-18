@@ -41,6 +41,8 @@ from pyspark.sql.functions import (
     udtf,
     AnalyzeArgument,
     AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -2125,6 +2127,55 @@ class BaseUDTFTestsMixin:
                 )
                 SELECT count, total, last
                 FROM test_udtf(TABLE(t) WITH SINGLE PARTITION ORDER BY (input, partition_col))
+                ORDER BY 1, 2
+                """
+            ).collect(),
+            [Row(count=40, total=60, last=2)],
+        )
+
+    def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
+        class TestUDTF:
+            def __init__(self):
+                self._count = 0
+                self._sum = 0
+                self._last = None
+
+            @staticmethod
+            def analyze(self):
+                return AnalyzeResult(
+                    schema=StructType()
+                        .add("count", IntegerType())
+                        .add("total", IntegerType())
+                        .add("laste", IntegerType()),
+                    with_single_partition=True,
+                    order_by=[
+                        OrderingColumn("input"),
+                        OrderingColumn("partition_col")])
+
+            def eval(self, row: Row):
+                # Make sure that the rows arrive in the expected order.
+                if self._last is not None and self._last > row["input"]:
+                    raise Exception(
+                        f"self._last was {self._last} but the row value was {row['input']}"
+                    )
+                self._count += 1
+                self._last = row["input"]
+                self._sum += row["input"]
+
+            def terminate(self):
+                yield self._count, self._sum, self._last
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+                  UNION ALL
+                  SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+                )
+                SELECT count, total, last
+                FROM test_udtf(TABLE(t))
                 ORDER BY 1, 2
                 """
             ).collect(),
