@@ -16,9 +16,9 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream, ObjectStreamClass}
 
-object SparkSerDeUtils {
+trait SparkSerDeUtils {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -34,4 +34,21 @@ object SparkSerDeUtils {
     val ois = new ObjectInputStream(bis)
     ois.readObject.asInstanceOf[T]
   }
+
+  /**
+   * Deserialize an object using Java serialization and the given ClassLoader
+   */
+  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ois = new ObjectInputStream(bis) {
+      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
+        // scalastyle:off classforname
+        Class.forName(desc.getName, false, loader)
+        // scalastyle:on classforname
+      }
+    }
+    ois.readObject.asInstanceOf[T]
+  }
 }
+
+object SparkSerDeUtils extends SparkSerDeUtils

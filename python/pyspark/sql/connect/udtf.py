@@ -22,11 +22,11 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import warnings
-from typing import Type, TYPE_CHECKING, Optional, Union
+from typing import List, Type, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import ColumnReference
+from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
@@ -50,7 +50,7 @@ def _create_udtf(
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
-    deterministic: bool = True,
+    deterministic: bool = False,
 ) -> "UserDefinedTableFunction":
     udtf_obj = UserDefinedTableFunction(
         cls, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
@@ -62,48 +62,47 @@ def _create_py_udtf(
     cls: Type,
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
     if useArrow is not None:
         arrow_enabled = useArrow
     else:
-        from pyspark.sql.connect.session import _active_spark_session
+        from pyspark.sql.connect.session import SparkSession
 
-        arrow_enabled = (
-            _active_spark_session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled") == "true"
-            if _active_spark_session is not None
-            else True
+        arrow_enabled = False
+        try:
+            session = SparkSession.active()
+            arrow_enabled = (
+                str(session.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")).lower()
+                == "true"
+            )
+        except PySparkRuntimeError as e:
+            if e.error_class == "NO_ACTIVE_OR_DEFAULT_SESSION":
+                pass  # Just uses the default if no session found.
+            else:
+                raise e
+
+    eval_type: int = PythonEvalType.SQL_TABLE_UDF
+
+    if arrow_enabled:
+        from pyspark.sql.pandas.utils import (
+            require_minimum_pandas_version,
+            require_minimum_pyarrow_version,
         )
 
-    # Create a regular Python UDTF and check for invalid handler class.
-    regular_udtf = _create_udtf(cls, returnType, name, PythonEvalType.SQL_TABLE_UDF, deterministic)
+        try:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+            eval_type = PythonEvalType.SQL_ARROW_TABLE_UDF
+        except ImportError as e:
+            warnings.warn(
+                f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
+                f"Falling back to using regular Python UDTFs.",
+                UserWarning,
+            )
 
-    if not arrow_enabled:
-        return regular_udtf
-
-    from pyspark.sql.pandas.utils import (
-        require_minimum_pandas_version,
-        require_minimum_pyarrow_version,
-    )
-
-    try:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-    except ImportError as e:
-        warnings.warn(
-            f"Arrow optimization for Python UDTFs cannot be enabled: {str(e)}. "
-            f"Falling back to using regular Python UDTFs.",
-            UserWarning,
-        )
-        return regular_udtf
-
-    from pyspark.sql.udtf import _vectorize_udtf
-
-    vectorized_udtf = _vectorize_udtf(cls)
-    return _create_udtf(
-        vectorized_udtf, returnType, name, PythonEvalType.SQL_ARROW_TABLE_UDF, deterministic
-    )
+    return _create_udtf(cls, returnType, name, eval_type, deterministic)
 
 
 class UserDefinedTableFunction:
@@ -122,7 +121,7 @@ class UserDefinedTableFunction:
         returnType: Optional[Union[StructType, str]],
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_TABLE_UDF,
-        deterministic: bool = True,
+        deterministic: bool = False,
     ) -> None:
         _validate_udtf_handler(func, returnType)
 
@@ -139,12 +138,14 @@ class UserDefinedTableFunction:
         self.deterministic = deterministic
 
     def _build_common_inline_user_defined_table_function(
-        self, *cols: "ColumnOrName"
+        self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedTableFunction:
-        arg_cols = [
-            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
+        def to_expr(col: "ColumnOrName") -> Expression:
+            return col._expr if isinstance(col, Column) else ColumnReference(col)
+
+        arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
+            NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()
         ]
-        arg_exprs = [col._expr for col in arg_cols]
 
         udtf = PythonUDTF(
             func=self.func,
@@ -159,21 +160,17 @@ class UserDefinedTableFunction:
             arguments=arg_exprs,
         )
 
-    def __call__(self, *cols: "ColumnOrName") -> "DataFrame":
+    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
+        from pyspark.sql.connect.session import SparkSession
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.connect.session import _active_spark_session
 
-        if _active_spark_session is None:
-            raise PySparkRuntimeError(
-                "An active SparkSession is required for "
-                "executing a Python user-defined table function."
-            )
+        session = SparkSession.active()
 
-        plan = self._build_common_inline_user_defined_table_function(*cols)
-        return DataFrame.withPlan(plan, _active_spark_session)
+        plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
+        return DataFrame.withPlan(plan, session)
 
-    def asNondeterministic(self) -> "UserDefinedTableFunction":
-        self.deterministic = False
+    def asDeterministic(self) -> "UserDefinedTableFunction":
+        self.deterministic = True
         return self
 
 

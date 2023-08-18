@@ -242,9 +242,11 @@ private[spark] class IndexShuffleBlockResolver(
           s"${blockId.getClass().getSimpleName()}", category = "SHUFFLE")
     }
     val fileTmp = createTempFile(file)
-    val channel = Channels.newChannel(
-      serializerManager.wrapStream(blockId,
-        new FileOutputStream(fileTmp)))
+
+    // Shuffle blocks' file bytes are being sent directly over the wire, so there is no need to
+    // serializerManager.wrapStream() on it. Meaning if it was originally encrypted, then
+    // it will stay encrypted when being written out to the file here.
+    val channel = Channels.newChannel(new FileOutputStream(fileTmp))
 
     new StreamCallbackWithID {
 

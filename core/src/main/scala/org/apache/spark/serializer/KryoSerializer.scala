@@ -66,15 +66,21 @@ class KryoSerializer(conf: SparkConf)
   private val bufferSizeKb = conf.get(KRYO_SERIALIZER_BUFFER_SIZE)
 
   if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
-    throw new IllegalArgumentException(s"${KRYO_SERIALIZER_BUFFER_SIZE.key} must be less than " +
-      s"2048 MiB, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} MiB.")
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_KRYO_SERIALIZER_BUFFER_SIZE",
+      messageParameters = Map(
+        "bufferSizeConfKey" -> KRYO_SERIALIZER_BUFFER_SIZE.key,
+        "bufferSizeConfValue" -> ByteUnit.KiB.toMiB(bufferSizeKb).toString))
   }
   private val bufferSize = ByteUnit.KiB.toBytes(bufferSizeKb).toInt
 
   val maxBufferSizeMb = conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE).toInt
   if (maxBufferSizeMb >= ByteUnit.GiB.toMiB(2)) {
-    throw new IllegalArgumentException(s"${KRYO_SERIALIZER_MAX_BUFFER_SIZE.key} must be less " +
-      s"than 2048 MiB, got: $maxBufferSizeMb MiB.")
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_KRYO_SERIALIZER_BUFFER_SIZE",
+      messageParameters = Map(
+        "bufferSizeConfKey" -> KRYO_SERIALIZER_MAX_BUFFER_SIZE.key,
+        "bufferSizeConfValue" -> maxBufferSizeMb.toString))
   }
   private val maxBufferSize = ByteUnit.MiB.toBytes(maxBufferSizeMb).toInt
 
@@ -183,7 +189,10 @@ class KryoSerializer(conf: SparkConf)
           .foreach { reg => reg.registerClasses(kryo) }
       } catch {
         case e: Exception =>
-          throw new SparkException(s"Failed to register classes with Kryo", e)
+          throw new SparkException(
+            errorClass = "FAILED_REGISTER_CLASS_WITH_KRYO",
+            messageParameters = Map.empty,
+            cause = e)
       }
     }
 
@@ -442,8 +451,12 @@ private[spark] class KryoSerializerInstance(
       kryo.writeClassAndObject(output, t)
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
-        throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          s"increase ${KRYO_SERIALIZER_MAX_BUFFER_SIZE.key} value.", e)
+        throw new SparkException(
+          errorClass = "KRYO_BUFFER_OVERFLOW",
+          messageParameters = Map(
+            "exceptionMsg" -> e.getMessage,
+            "bufferSizeConfKey" -> KRYO_SERIALIZER_MAX_BUFFER_SIZE.key),
+          cause = e)
     } finally {
       releaseKryo(kryo)
     }

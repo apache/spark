@@ -39,12 +39,15 @@ from pyspark.sql.streaming.listener import (
     QueryTerminatedEvent,
     QueryIdleEvent,
 )
+from pyspark.worker_util import check_python_version
 
 pickle_ser = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
 def main(infile: IO, outfile: IO) -> None:
+    check_python_version(infile)
+
     connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
     session_id = utf8_deserializer.loads(infile)
 
@@ -89,7 +92,9 @@ if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    (sock_file, sock) = local_connect_and_auth(java_port, auth_secret)
+    # There could be a long time between each listener event.
+    sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

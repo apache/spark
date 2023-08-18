@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -228,7 +228,42 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
-            planWithNewChildren.rewriteAttrs(attrMap)
+            def rewriteAttrs[T <: Expression](
+                exprs: Seq[T],
+                attrMap: Map[Attribute, Attribute]): Seq[T] = {
+              exprs.map { expr =>
+                expr.transformWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+                  case a: AttributeReference => attrMap.getOrElse(a, a)
+                }.asInstanceOf[T]
+              }
+            }
+
+            planWithNewChildren match {
+              // TODO (SPARK-44754): we should handle all special cases here.
+              case c: CoGroup =>
+                // SPARK-43781: CoGroup is a special case, `rewriteAttrs` will incorrectly update
+                // some fields that do not need to be updated. We need to update the output
+                // attributes of CoGroup manually.
+                val leftAttrMap = attrMap.filter(a => c.left.output.contains(a._2))
+                val rightAttrMap = attrMap.filter(a => c.right.output.contains(a._2))
+                val newLeftAttr = rewriteAttrs(c.leftAttr, leftAttrMap)
+                val newRightAttr = rewriteAttrs(c.rightAttr, rightAttrMap)
+                val newLeftGroup = rewriteAttrs(c.leftGroup, leftAttrMap)
+                val newRightGroup = rewriteAttrs(c.rightGroup, rightAttrMap)
+                val newLeftOrder = rewriteAttrs(c.leftOrder, leftAttrMap)
+                val newRightOrder = rewriteAttrs(c.rightOrder, rightAttrMap)
+                val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newLeftGroup)
+                val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newLeftAttr)
+                val newRightDes = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
+                  .copy(inputAttributes = newRightAttr)
+                c.copy(keyDeserializer = newKeyDes, leftDeserializer = newLeftDes,
+                  rightDeserializer = newRightDes, leftGroup = newLeftGroup,
+                  rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
+                  leftOrder = newLeftOrder, rightOrder = newRightOrder)
+              case _ => planWithNewChildren.rewriteAttrs(attrMap)
+            }
           }
         } else {
           planWithNewSubquery.withNewChildren(newChildren.toSeq)

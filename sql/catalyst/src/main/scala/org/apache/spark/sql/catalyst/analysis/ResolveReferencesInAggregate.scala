@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expres
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[Aggregate]]. It's only used by the real
@@ -46,8 +47,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REF
  * 5. Resolves the columns to outer references with the outer plan if we are resolving subquery
  *    expressions.
  */
-object ResolveReferencesInAggregate extends SQLConfHelper
+class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends SQLConfHelper
   with ColumnResolutionHelper with AliasHelper {
+
   def apply(a: Aggregate): Aggregate = {
     val planForResolve = a.child match {
       // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of

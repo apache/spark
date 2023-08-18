@@ -195,10 +195,13 @@ class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
       withNamespaceAndTable("ns", "tbl") { t =>
         (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
         sql(s"CREATE TABLE $t $defaultUsing LOCATION '${tempDir.toURI}'")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t")
-        }.getMessage
-        assert(errMsg.contains("Operation not allowed: TRUNCATE TABLE on external tables"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $t")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1266",
+          parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`")
+        )
       }
     }
   }

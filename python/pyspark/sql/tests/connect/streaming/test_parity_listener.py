@@ -60,6 +60,10 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
         try:
             self.spark.streams.addListener(test_listener)
 
+            # This ensures the read socket on the server won't crash (i.e. because of timeout)
+            # when there hasn't been a new event for a long time
+            time.sleep(30)
+
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.format("noop").queryName("test").start()
 
@@ -74,6 +78,9 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             self.check_start_event(start_event)
 
         finally:
+            self.spark.streams.removeListener(test_listener)
+
+            # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
 
 

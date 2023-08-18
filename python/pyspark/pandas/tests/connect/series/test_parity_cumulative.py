@@ -24,7 +24,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class SeriesParityCumulativeTests(
     SeriesCumulativeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-
     pass
 
 

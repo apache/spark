@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.UUID
+
 import scala.util.matching.Regex
 
 import org.mockito.Mockito._
@@ -46,8 +48,8 @@ class ExecuteEventsManagerSuite
 """
   val DEFAULT_USER_ID = "1"
   val DEFAULT_USER_NAME = "userName"
-  val DEFAULT_SESSION_ID = "2"
-  val DEFAULT_QUERY_ID = "3"
+  val DEFAULT_SESSION_ID = UUID.randomUUID.toString
+  val DEFAULT_QUERY_ID = UUID.randomUUID.toString
   val DEFAULT_CLIENT_TYPE = "clientType"
 
   test("SPARK-43923: post started") {
@@ -307,10 +309,11 @@ class ExecuteEventsManagerSuite
           .setUserId(DEFAULT_USER_ID)
           .setUserName(DEFAULT_USER_NAME))
       .setSessionId(DEFAULT_SESSION_ID)
+      .setOperationId(DEFAULT_QUERY_ID)
       .setClientType(DEFAULT_CLIENT_TYPE)
       .build()
 
-    val executeHolder = new ExecuteHolder(executePlanRequest, DEFAULT_QUERY_ID, sessionHolder)
+    val executeHolder = new ExecuteHolder(executePlanRequest, sessionHolder)
 
     val eventsManager = ExecuteEventsManager(executeHolder, DEFAULT_CLOCK)
     eventsManager.status_(executeStatus)

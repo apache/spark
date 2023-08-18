@@ -53,11 +53,7 @@ class FrameIndexingMixin:
         with option_context("compute.ordered_head", True):
             self.assert_eq(psdf.head(), pdf.head())
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43559): Enable DataFrameSlowTests.test_iteritems for pandas 2.0.0.",
-    )
-    def test_iteritems(self):
+    def test_items(self):
         pdf = pd.DataFrame(
             {"species": ["bear", "bear", "marsupial"], "population": [1864, 22000, 80000]},
             index=["panda", "polar", "koala"],
@@ -65,7 +61,7 @@ class FrameIndexingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        for (p_name, p_items), (k_name, k_items) in zip(pdf.iteritems(), psdf.iteritems()):
+        for (p_name, p_items), (k_name, k_items) in zip(pdf.items(), psdf.items()):
             self.assert_eq(p_name, k_name)
             self.assert_eq(p_items, k_items)
 

@@ -26,6 +26,7 @@ import org.apache.spark.internal.config.Status.{ASYNC_TRACKING_ENABLED, LIVE_ENT
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_UI_SESSION_LIMIT, CONNECT_UI_STATEMENT_LIMIT}
 import org.apache.spark.sql.connect.service._
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
@@ -35,6 +36,8 @@ class SparkConnectServerListenerSuite
     with SharedSparkContext {
 
   private var kvstore: ElementTrackingStore = _
+
+  private val jobTag = ExecuteJobTag("sessionId", "userId", "operationId")
 
   after {
     if (kvstore != null) {
@@ -47,12 +50,11 @@ class SparkConnectServerListenerSuite
     test(s"listener events should store successfully (live = $live)") {
       val (statusStore: SparkConnectServerAppStatusStore, listener: SparkConnectServerListener) =
         createAppStatusStore(live)
-
       listener.onOtherEvent(
         SparkListenerConnectSessionStarted("sessionId", "user", System.currentTimeMillis()))
       listener.onOtherEvent(
         SparkListenerConnectOperationStarted(
-          ExecuteJobTag("sessionId", "userId", "operationId"),
+          jobTag,
           "operationId",
           System.currentTimeMillis(),
           "sessionId",
@@ -62,22 +64,24 @@ class SparkConnectServerListenerSuite
           None,
           Set()))
       listener.onOtherEvent(
-        SparkListenerConnectOperationAnalyzed(
-          ExecuteJobTag("sessionId", "userId", "operationId"),
-          "operationId",
-          System.currentTimeMillis()))
+        SparkListenerConnectOperationAnalyzed(jobTag, "operationId", System.currentTimeMillis()))
+      listener.onOtherEvent(
+        SparkListenerSQLExecutionStart(
+          0,
+          None,
+          null,
+          null,
+          null,
+          null,
+          System.currentTimeMillis(),
+          null,
+          Set(jobTag)))
       listener.onJobStart(
         SparkListenerJobStart(0, System.currentTimeMillis(), Nil, createProperties))
       listener.onOtherEvent(
-        SparkListenerConnectOperationFinished(
-          ExecuteJobTag("sessionId", "userId", "operationId"),
-          "sessionId",
-          System.currentTimeMillis()))
+        SparkListenerConnectOperationFinished(jobTag, "sessionId", System.currentTimeMillis()))
       listener.onOtherEvent(
-        SparkListenerConnectOperationClosed(
-          ExecuteJobTag("sessionId", "userId", "operationId"),
-          "sessionId",
-          System.currentTimeMillis()))
+        SparkListenerConnectOperationClosed(jobTag, "sessionId", System.currentTimeMillis()))
 
       if (live) {
         assert(statusStore.getOnlineSessionNum === 1)
@@ -95,10 +99,11 @@ class SparkConnectServerListenerSuite
 
       val storeExecData = statusStore.getExecutionList.head
 
-      assert(storeExecData.jobTag === ExecuteJobTag("sessionId", "userId", "operationId"))
+      assert(storeExecData.jobTag === jobTag)
       assert(storeExecData.sessionId === "sessionId")
       assert(storeExecData.statement === "dummy query")
       assert(storeExecData.jobId === Seq("0"))
+      assert(storeExecData.sqlExecId === Set("0"))
       assert(listener.noLiveData())
     }
   }
@@ -132,15 +137,16 @@ class SparkConnectServerListenerSuite
     }
   }
 
-  test("update execution info when jobstart event come after execution end event") {
+  test(
+    "update execution info when event reordering causes job and sql" +
+      " start to come after operation closed") {
     val (statusStore: SparkConnectServerAppStatusStore, listener: SparkConnectServerListener) =
       createAppStatusStore(true)
-
     listener.onOtherEvent(
       SparkListenerConnectSessionStarted("sessionId", "userId", System.currentTimeMillis()))
     listener.onOtherEvent(
       SparkListenerConnectOperationStarted(
-        ExecuteJobTag("sessionId", "userId", "operationId"),
+        jobTag,
         "operationId",
         System.currentTimeMillis(),
         "sessionId",
@@ -150,21 +156,22 @@ class SparkConnectServerListenerSuite
         None,
         Set()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationAnalyzed(
-        ExecuteJobTag("sessionId", "userId", "operationId"),
-        "operationId",
-        System.currentTimeMillis()))
+      SparkListenerConnectOperationAnalyzed(jobTag, "operationId", System.currentTimeMillis()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationFinished(
-        ExecuteJobTag("sessionId", "userId", "operationId"),
-        "operationId",
-        System.currentTimeMillis()))
+      SparkListenerConnectOperationFinished(jobTag, "operationId", System.currentTimeMillis()))
     listener.onOtherEvent(
-      SparkListenerConnectOperationClosed(
-        ExecuteJobTag("sessionId", "userId", "operationId"),
-        "operationId",
-        System.currentTimeMillis()))
-
+      SparkListenerConnectOperationClosed(jobTag, "operationId", System.currentTimeMillis()))
+    listener.onOtherEvent(
+      SparkListenerSQLExecutionStart(
+        0,
+        None,
+        null,
+        null,
+        null,
+        null,
+        System.currentTimeMillis(),
+        null,
+        Set(jobTag)))
     listener.onJobStart(
       SparkListenerJobStart(0, System.currentTimeMillis(), Nil, createProperties))
     listener.onOtherEvent(
@@ -172,6 +179,7 @@ class SparkConnectServerListenerSuite
     val exec = statusStore.getExecution(ExecuteJobTag("sessionId", "userId", "operationId"))
     assert(exec.isDefined)
     assert(exec.get.jobId === Seq("0"))
+    assert(exec.get.sqlExecId === Set("0"))
     assert(listener.noLiveData())
   }
 
@@ -207,9 +215,7 @@ class SparkConnectServerListenerSuite
 
   private def createProperties: Properties = {
     val properties = new Properties()
-    properties.setProperty(
-      SparkContext.SPARK_JOB_TAGS,
-      ExecuteJobTag("sessionId", "userId", "operationId"))
+    properties.setProperty(SparkContext.SPARK_JOB_TAGS, jobTag)
     properties
   }
 

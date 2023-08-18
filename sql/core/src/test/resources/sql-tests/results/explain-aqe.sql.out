@@ -398,7 +398,7 @@ AdaptiveSparkPlan (3)
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
-PushedFilters: [IsNotNull(key), IsNotNull(val), GreaterThan(val,3)]
+PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(key,ScalarSubquery#x), GreaterThan(val,3)]
 ReadSchema: struct<key:int,val:int>
 
 (2) Filter
@@ -425,7 +425,7 @@ AdaptiveSparkPlan (10)
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp2]
-PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(val,2)]
+PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(key,ScalarSubquery#x), EqualTo(val,2)]
 ReadSchema: struct<key:int,val:int>
 
 (5) Filter

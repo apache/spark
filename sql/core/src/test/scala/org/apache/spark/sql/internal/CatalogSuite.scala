@@ -709,10 +709,15 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
 
   test("SPARK-34301: recover partitions of views is not supported") {
     createTempTable("my_temp_table")
-    val errMsg = intercept[AnalysisException] {
-      spark.catalog.recoverPartitions("my_temp_table")
-    }.getMessage
-    assert(errMsg.contains("my_temp_table is a temp view. 'recoverPartitions()' expects a table"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.catalog.recoverPartitions("my_temp_table")
+      },
+      errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+      parameters = Map(
+        "tempViewName" -> "`my_temp_table`",
+        "operation" -> "recoverPartitions()")
+    )
   }
 
   test("qualified name with catalog - create managed table") {

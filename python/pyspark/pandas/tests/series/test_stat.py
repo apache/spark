@@ -53,10 +53,6 @@ class SeriesStatMixin:
         self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
         self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43464): Enable SeriesTests.test_value_counts for pandas 2.0.0.",
-    )
     def test_value_counts(self):
         # this is also containing test for Index & MultiIndex
         pser = pd.Series(
@@ -523,41 +519,6 @@ class SeriesStatMixin:
         self.assert_eq(pser.floordiv(0), psser.floordiv(0))
         self.assert_eq(pser // 0, psser // 0)
         self.assert_eq(pser.floordiv(np.nan), psser.floordiv(np.nan))
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43468): Enable SeriesTests.test_mad for pandas 2.0.0.",
-    )
-    def test_mad(self):
-        pser = pd.Series([1, 2, 3, 4], name="Koalas")
-        psser = ps.from_pandas(pser)
-
-        self.assert_eq(pser.mad(), psser.mad())
-
-        pser = pd.Series([None, -2, 5, 10, 50, np.nan, -20], name="Koalas")
-        psser = ps.from_pandas(pser)
-
-        self.assert_eq(pser.mad(), psser.mad())
-
-        pmidx = pd.MultiIndex.from_tuples(
-            [("a", "1"), ("a", "2"), ("b", "1"), ("b", "2"), ("c", "1")]
-        )
-        pser = pd.Series([1, 2, 3, 4, 5], name="Koalas")
-        pser.index = pmidx
-        psser = ps.from_pandas(pser)
-
-        self.assert_eq(pser.mad(), psser.mad())
-
-        pmidx = pd.MultiIndex.from_tuples(
-            [("a", "1"), ("a", "2"), ("b", "1"), ("b", "2"), ("c", "1")]
-        )
-        pser = pd.Series([None, -2, 5, 50, np.nan], name="Koalas")
-        pser.index = pmidx
-        psser = ps.from_pandas(pser)
-
-        # Mark almost as True to avoid precision issue like:
-        # "21.555555555555554 != 21.555555555555557"
-        self.assert_eq(pser.mad(), psser.mad(), almost=True)
 
     @unittest.skipIf(
         LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),

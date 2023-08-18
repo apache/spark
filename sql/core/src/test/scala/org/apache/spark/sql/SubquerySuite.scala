@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -2731,6 +2731,30 @@ class SubquerySuite extends QueryTest
           "SELECT * FROM t1 WHERE c1 < (SELECT min(c2) FROM t2)",
           Row(1) :: Row(2) :: Row(3) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-44562: Add OptimizeOneRowRelationSubquery in batch of Subquery") {
+    withTempView("v1", "v2") {
+      sql(
+        """
+          |CREATE temporary VIEW v1
+          |AS
+          |SELECT id, 'foo' AS kind FROM (SELECT 1 AS id) t
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE temporary VIEW v2
+          |AS
+          |SELECT * FROM v1 WHERE kind = (SELECT kind FROM v1 WHERE kind = 'foo')
+          |""".stripMargin)
+      val df = sql("SELECT * FROM v1 JOIN v2 ON v1.id = v2.id")
+      val filter = df.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }
+      assert(filter.isEmpty,
+        "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
+      checkAnswer(df, Row(1, "foo", 1, "foo"))
     }
   }
 }

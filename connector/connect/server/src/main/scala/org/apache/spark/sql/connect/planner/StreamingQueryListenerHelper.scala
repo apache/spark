@@ -24,7 +24,7 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 /**
  * A helper class for handling StreamingQueryListener related functionality in Spark Connect. Each
  * instance of this class starts a python process, inside which has the python handling logic.
- * When new a event is received, it is serialized to json, and passed to the python process.
+ * When a new event is received, it is serialized to json, and passed to the python process.
  */
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
@@ -32,12 +32,15 @@ class PythonStreamingQueryListener(
     pythonExec: String)
     extends StreamingQueryListener {
 
-  val port = SparkConnectService.localPort
-  val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-  val runner = StreamingPythonRunner(listener, connectUrl)
+  private val port = SparkConnectService.localPort
+  private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+  private val runner = StreamingPythonRunner(
+    listener,
+    connectUrl,
+    sessionHolder.sessionId,
+    "pyspark.sql.connect.streaming.worker.listener_worker")
 
-  val (dataOut, _) =
-    runner.init(sessionHolder.sessionId, "pyspark.sql.connect.streaming.worker.listener_worker")
+  val (dataOut, _) = runner.init()
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     PythonRDD.writeUTF(event.json, dataOut)
@@ -63,7 +66,7 @@ class PythonStreamingQueryListener(
     dataOut.flush()
   }
 
-  // TODO(SPARK-44433)(SPARK-44516): Improve termination of Processes.
-  // Similar to foreachBatch when we need to exit the process when the query ends.
-  // In listener semantics, we need to exit the process when removeListener is called.
+  private[spark] def stopListenerProcess(): Unit = {
+    runner.stop()
+  }
 }

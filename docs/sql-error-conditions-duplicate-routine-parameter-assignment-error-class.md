@@ -27,10 +27,10 @@ This error class has the following derived error classes:
 
 ## BOTH_POSITIONAL_AND_NAMED
 
-A positional argument and named argument both referred to the same parameter.
+A positional argument and named argument both referred to the same parameter. Please remove the named argument referring to this parameter.
 
 ## DOUBLE_NAMED_ARGUMENT_REFERENCE
 
-More than one named argument referred to the same parameter.
+More than one named argument referred to the same parameter. Please assign a value only once.
 
 
