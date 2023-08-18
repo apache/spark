@@ -98,8 +98,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       int newCapacity =
           hugeVectorThreshold < 0 || requiredCapacity < hugeVectorThreshold ?
               (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L) :
-              (int) Math.min(MAX_CAPACITY, (requiredCapacity - hugeVectorThreshold) *
-                  hugeVectorReserveRatio + hugeVectorThreshold * 2L);
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeVectorReserveRatio);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
