@@ -16,15 +16,14 @@
  */
 package org.apache.spark.sql.connect.client.util
 
-import java.io.{BufferedOutputStream, File}
+import java.io.{File, OutputStream}
+import java.lang.ProcessBuilder
+import java.lang.ProcessBuilder.Redirect
 import java.util.concurrent.TimeUnit
-
-import scala.io.Source
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfterAll, Tag}
-import sys.process._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -55,33 +54,38 @@ object SparkConnectServerUtils {
 
   @volatile private var stopped = false
 
-  private var consoleOut: BufferedOutputStream = _
+  private var consoleOut: OutputStream = _
   private val serverStopCommand = "q"
 
-  private lazy val sparkConnect: Process = {
+  private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
     val connectJar = findJar(
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
 
-    val builder = Process(
-      Seq(
-        "bin/spark-submit",
-        "--driver-class-path",
-        connectJar,
-        "--conf",
-        s"spark.connect.grpc.binding.port=$port") ++ testConfigs ++ debugConfigs ++ Seq(
-        "--class",
-        "org.apache.spark.sql.connect.SimpleSparkConnectService",
-        connectJar),
-      new File(sparkHome))
+    val command = Seq.newBuilder[String]
+    command += "bin/spark-submit"
+    command += "--driver-class-path"
+    command += connectJar
+    command += "--conf" += s"spark.connect.grpc.binding.port=$port"
+    command ++= testConfigs
+    command ++= debugConfigs
+    command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
+    command += connectJar
+    val builder = new ProcessBuilder(command.result(): _*)
+    builder.directory(new File(sparkHome))
+    val environment = builder.environment()
+    // Remove this env variable to make sure the server classpath
+    // is fully isolated from the client classpath.
+    environment.remove("SPARK_DIST_CLASSPATH")
+    if (isDebug) {
+      builder.redirectError(Redirect.INHERIT)
+      builder.redirectOutput(Redirect.INHERIT)
+    }
 
-    val io = new ProcessIO(
-      in => consoleOut = new BufferedOutputStream(in),
-      out => Source.fromInputStream(out).getLines.foreach(debug),
-      err => Source.fromInputStream(err).getLines.foreach(debug))
-    val process = builder.run(io)
+    val process = builder.start()
+    consoleOut = process.getOutputStream
 
     // Adding JVM shutdown hook
     sys.addShutdownHook(stop())
@@ -162,15 +166,18 @@ object SparkConnectServerUtils {
       consoleOut.write(serverStopCommand.getBytes)
       consoleOut.flush()
       consoleOut.close()
+      if (!sparkConnect.waitFor(2, TimeUnit.SECONDS)) {
+        sparkConnect.destroyForcibly()
+      }
+      val code = sparkConnect.exitValue()
+      debug(s"Spark Connect Server is stopped with exit code: $code")
+      code
     } catch {
       case e: Throwable =>
         debug(e)
-        sparkConnect.destroy()
+        sparkConnect.destroyForcibly()
+        throw e
     }
-
-    val code = sparkConnect.exitValue()
-    debug(s"Spark Connect Server is stopped with exit code: $code")
-    code
   }
 }
 
@@ -186,7 +193,7 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
       SparkConnectServerUtils.start()
       spark = SparkSession
         .builder()
-        .client(SparkConnectClient.builder().port(serverPort).build())
+        .client(SparkConnectClient.builder().userId("test").port(serverPort).build())
         .create()
 
       // Retry and wait for the server to start
@@ -211,6 +218,11 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
             Thread.sleep(sleepInternalMs)
             sleepInternalMs *= 2
         }
+      }
+
+      // Auto sync if successful
+      if (success) {
+        AutoDependencyUploader.sync(spark)
       }
 
       // Throw error if failed

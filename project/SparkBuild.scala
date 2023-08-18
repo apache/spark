@@ -17,7 +17,7 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.io.Source
@@ -860,7 +860,6 @@ object SparkConnectClient {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
-
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
@@ -873,7 +872,6 @@ object SparkConnectClient {
 
     buildTestDeps := {
       (LocalProject("assembly") / Compile / Keys.`package`).value
-      (LocalProject("catalyst") / Test / Keys.`package`).value
     },
 
     // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
@@ -882,6 +880,26 @@ object SparkConnectClient {
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (Compile / resourceGenerators) += Def.task {
+      // Write the classpath to /target/extra-resources/
+      val extraResources = baseDirectory.value / "target" / "extra-resources"
+      val clientClasspathDesc = extraResources / "classpath"
+      Files.createDirectories(extraResources.toPath)
+      val writer = Files.newBufferedWriter(
+        clientClasspathDesc.toPath,
+        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+      var insertSeparator = false
+      (Compile / dependencyClasspath).value.files.foreach { file =>
+        if (insertSeparator) {
+          writer.append(File.pathSeparator)
+        }
+        writer.append(file.getName)
+        insertSeparator = true
+      }
+      writer.close()
+      Seq(clientClasspathDesc)
+    }.taskValue,
 
     (assembly / test) := { },
 
