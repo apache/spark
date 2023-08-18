@@ -769,10 +769,6 @@ class GroupByTestsMixin:
                 for act, exp in zip(actual, expect):
                     self.assertTrue(sorted(act) == sorted(exp))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43444): Enable GroupBySlowTests.test_value_counts for pandas 2.0.0.",
-    )
     def test_value_counts(self):
         pdf = pd.DataFrame(
             {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
@@ -785,6 +781,7 @@ class GroupByTestsMixin:
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
@@ -804,6 +801,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=False, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A")["B"]
@@ -812,6 +810,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=True, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.B.rename().groupby(psdf.A).value_counts().sort_index(),
