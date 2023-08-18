@@ -2104,7 +2104,7 @@ class BaseUDTFTestsMixin:
                 # Make sure that the rows arrive in the expected order.
                 if self._last is not None and self._last > row["input"]:
                     raise Exception(
-                        f"self._last was {self._last} but the row " + f"value was {row['input']}"
+                        f"self._last was {self._last} but the row value was {row['input']}"
                     )
                 self._count += 1
                 self._last = row["input"]
