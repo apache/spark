@@ -35,11 +35,11 @@ if TYPE_CHECKING:
 
 
 def from_protobuf(
-        data: "ColumnOrName",
-        messageName: str,
-        descFilePath: Optional[str] = None,
-        options: Optional[Dict[str, str]] = None,
-        binaryDescriptorSet: Optional[bytes] = None,
+    data: "ColumnOrName",
+    messageName: str,
+    descFilePath: Optional[str] = None,
+    options: Optional[Dict[str, str]] = None,
+    binaryDescriptorSet: Optional[bytes] = None,
 ) -> Column:
     binary_proto = None
     if binaryDescriptorSet is not None:
@@ -50,10 +50,7 @@ def from_protobuf(
     if binary_proto is not None:
         if options is None:
             return _invoke_function(
-                "from_protobuf",
-                _to_col(data),
-                lit(messageName),
-                lit(binary_proto)
+                "from_protobuf", _to_col(data), lit(messageName), lit(binary_proto)
             )
         else:
             return _invoke_function(
@@ -61,17 +58,14 @@ def from_protobuf(
                 _to_col(data),
                 lit(messageName),
                 lit(binary_proto),
-                _options_to_col(options)
+                _options_to_col(options),
             )
     else:
         if options is None:
             return _invoke_function("from_protobuf", _to_col(data), lit(messageName))
         else:
             return _invoke_function(
-                "from_protobuf",
-                _to_col(data),
-                lit(messageName),
-                _options_to_col(options)
+                "from_protobuf", _to_col(data), lit(messageName), _options_to_col(options)
             )
 
 
@@ -94,10 +88,7 @@ def to_protobuf(
     if binary_proto is not None:
         if options is None:
             return _invoke_function(
-                "to_protobuf",
-                _to_col(data),
-                lit(messageName),
-                lit(binary_proto)
+                "to_protobuf", _to_col(data), lit(messageName), lit(binary_proto)
             )
         else:
             return _invoke_function(
@@ -105,17 +96,14 @@ def to_protobuf(
                 _to_col(data),
                 lit(messageName),
                 lit(binary_proto),
-                _options_to_col(options)
+                _options_to_col(options),
             )
     else:
         if options is None:
             return _invoke_function("to_protobuf", _to_col(data), lit(messageName))
         else:
             return _invoke_function(
-                "to_protobuf",
-                _to_col(data),
-                lit(messageName),
-                _options_to_col(options)
+                "to_protobuf", _to_col(data), lit(messageName), _options_to_col(options)
             )
 
 
@@ -154,16 +142,16 @@ def _test() -> None:
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.protobuf.functions tests")
-            .remote("local[2]")
-            .getOrCreate()
+        .remote("local[2]")
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.protobuf.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS
-                    | doctest.NORMALIZE_WHITESPACE
-                    | doctest.IGNORE_EXCEPTION_DETAIL,
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
     )
 
     globs["spark"].stop()
