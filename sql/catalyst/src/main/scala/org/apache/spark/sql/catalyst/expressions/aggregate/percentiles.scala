@@ -223,6 +223,7 @@ abstract class PercentileBase
     }
 
     if (discrete) {
+      // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toDoubleValue(lowerKey)
     } else {
       // Linear interpolation to get the exact percentile
@@ -230,12 +231,14 @@ abstract class PercentileBase
     }
   }
 
+  // `percentile_disc(p)` returns the value with the smallest `cume_dist()` value given that is
+  // greater than or equal to `p` so `position` here is `p` adjusted by `maxPosition`.
   private def getPercentileDisc(
       accumulatedCounts: Seq[(AnyRef, Long)],
       position: Double): Double = {
     val higher = position.ceil.toLong
 
-    // Use binary search to find the the higher position.
+    // Use binary search to find the higher position.
     val countsArray = accumulatedCounts.map(_._2).toArray[Long]
     val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher)
     val higherKey = accumulatedCounts(higherIndex)._1
