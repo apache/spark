@@ -394,7 +394,7 @@ def choose_jira_assignee(issue, asf_jira):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                assign_issue(issue.key, assignee.name)
+                assign_issue(asf_jira, issue.key, assignee.name)
                 return assignee
         except KeyboardInterrupt:
             raise
