@@ -233,23 +233,12 @@ abstract class PercentileBase
   private def getPercentileDisc(
       accumulatedCounts: Seq[(AnyRef, Long)],
       position: Double): Double = {
-    val lower = position.floor.toLong
     val higher = position.ceil.toLong
 
-    // Use binary search to find the lower and the higher position.
+    // Use binary search to find the the higher position.
     val countsArray = accumulatedCounts.map(_._2).toArray[Long]
-
-    val lowerIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, lower)
-    val lowerKey = accumulatedCounts(lowerIndex)._1
-    if (higher == lower) {
-      return toDoubleValue(lowerKey)
-    }
-
     val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher)
     val higherKey = accumulatedCounts(higherIndex)._1
-    if (higherKey == lowerKey) {
-      return toDoubleValue(lowerKey)
-    }
 
     toDoubleValue(higherKey)
   }
