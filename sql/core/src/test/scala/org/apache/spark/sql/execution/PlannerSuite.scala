@@ -1372,6 +1372,28 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numOutputPartitioning.size == 8)
     }
   }
+
+  test("SPARK-44804: SortMergeJoin should respect the streamed side ordering") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(
+        "JOIN" -> 2, // left.a.asc, left.b.asc
+        "LEFT JOIN" -> 2, // left.a.asc, left.b.asc
+        "RIGHT JOIN" -> 1, // right.a.asc
+        "FULL OUTER JOIN" -> 0,
+      ).map { case (joinType, orderNum) =>
+        val df = sql(
+          s"""SELECT *
+            |FROM (SELECT *, row_number() over(partition by a order by b) rn FROM testData2) l
+            |$joinType testData2 r
+            |ON l.a = r.a
+        """.stripMargin)
+        val sortMergeJoin = collect(df.queryExecution.executedPlan) {
+          case smj: SortMergeJoinExec => smj
+        }.head
+        assert(sortMergeJoin.outputOrdering.length == orderNum)
+      }
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements

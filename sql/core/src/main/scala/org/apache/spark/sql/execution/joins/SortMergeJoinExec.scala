@@ -76,23 +76,20 @@ case class SortMergeJoinExec(
    * Returns the required ordering for left or right child if childOutputOrdering does not
    * satisfy the required ordering; otherwise, which means the child does not need to be sorted
    * again, returns the required ordering for this child with extra "sameOrderExpressions" from
-   * the child's outputOrdering.
+   * the child's outputOrdering. When "isKeepRemainingOrder" is true, the childOutputOrdering will
+   * be remained.
    */
   private def getKeyOrdering(
       keys: Seq[Expression],
       childOutputOrdering: Seq[SortOrder],
-      isStreamSide: Boolean = true) : Seq[SortOrder] = {
+      isKeepRemainingOrder: Boolean = true) : Seq[SortOrder] = {
     val requiredOrdering = requiredOrders(keys)
     if (SortOrder.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
-      val newRequiredOrdering =
-        keys.zip(childOutputOrdering).map { case (key, childOrder) =>
-          val sameOrderExpressionsSet = ExpressionSet(childOrder.children) - key
-          SortOrder(key, Ascending, sameOrderExpressionsSet.toSeq)
-        }
-      if (isStreamSide) {
-        newRequiredOrdering ++ childOutputOrdering.drop(requiredOrdering.size)
-      } else {
-        newRequiredOrdering
+      keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+        val sameOrderExpressionsSet = ExpressionSet(childOrder.children) - key
+        SortOrder(key, Ascending, sameOrderExpressionsSet.toSeq)
+      } ++ {
+        if (isKeepRemainingOrder) childOutputOrdering.drop(requiredOrdering.size) else Nil
       }
     } else {
       requiredOrdering
