@@ -3793,6 +3793,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Example 2: Combining two DataFrames with different schemas
 
         >>> from pyspark.sql.functions import lit
+        >>> old_value = spark.conf.get("spark.sql.ansi.enabled")
+        >>> spark.conf.set("spark.sql.ansi.enabled", "false")
         >>> df1 = spark.createDataFrame([("Alice", 1), ("Bob", 2)], ["name", "id"])
         >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], ["id", "name"])
         >>> df1 = df1.withColumn("age", lit(30))
@@ -3807,6 +3809,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    3|Charlie| 40|
         |    4|   Dave| 40|
         +-----+-------+---+
+        >>> spark.conf.set("spark.sql.ansi.enabled", old_value)
 
         Example 3: Combining two DataFrames with mismatched columns
 
