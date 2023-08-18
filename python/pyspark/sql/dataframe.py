@@ -857,21 +857,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         Example 1: Checking if an empty DataFrame is empty
+
         >>> df_empty = spark.createDataFrame([], 'a STRING')
         >>> df_empty.isEmpty()
         True
 
         Example 2: Checking if a non-empty DataFrame is empty
+
         >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_non_empty.isEmpty()
         False
 
         Example 3: Checking if a DataFrame with null values is empty
+
         >>> df_nulls = spark.createDataFrame([(None, None)], 'a STRING, b INT')
         >>> df_nulls.isEmpty()
         False
 
         Example 4: Checking if a DataFrame with no rows but with columns is empty
+
         >>> df_no_rows = spark.createDataFrame([], 'id INT, value STRING')
         >>> df_no_rows.isEmpty()
         True
