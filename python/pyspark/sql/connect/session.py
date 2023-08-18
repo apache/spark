@@ -215,8 +215,7 @@ class SparkSession:
                     session = SparkSession._default_session
                     if session is None:
                         session = self.create()
-                else:
-                    self._apply_options(session)
+                self._apply_options(session)
                 return session
 
     _client: SparkConnectClient
