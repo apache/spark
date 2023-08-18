@@ -63,6 +63,7 @@ case class StreamingRelationV2(
       this
     }
   }
+
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(conf.defaultSizeInBytes)
   )
