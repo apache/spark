@@ -975,8 +975,7 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingTasksPerResourceProfile(rpId: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
-      attempts.map(attempt => getPendingTaskSum(attempt)).sum
-      + pendingTasksFromOtherStagesOfTheJob
+      attempts.map(attempt => getPendingTaskSum(attempt)).sum + pendingTasksFromOtherStagesOfTheJob
     }
 
     def hasPendingRegularTasks: Boolean = {
