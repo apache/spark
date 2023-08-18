@@ -72,7 +72,7 @@ def _create_py_udf(
     else:
         is_arrow_enabled = useArrow
 
-    eva_type: int = PythonEvalType.SQL_BATCHED_UDF
+    eval_type: int = PythonEvalType.SQL_BATCHED_UDF
 
     if is_arrow_enabled:
         try:
@@ -80,14 +80,14 @@ def _create_py_udf(
         except TypeError:
             is_func_with_args = False
         if is_func_with_args:
-            eva_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
                 "Arrow optimization for Python UDFs cannot be enabled.",
                 UserWarning,
             )
 
-    return _create_udf(f, returnType, eva_type)
+    return _create_udf(f, returnType, eval_type)
 
 
 def _create_udf(
