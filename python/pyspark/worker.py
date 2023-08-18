@@ -599,12 +599,12 @@ def read_udtf(pickleSer, infile, eval_type):
             create_udtf: function
                 Function to create a new instance of the UDTF to be invoked.
             partition_child_indexes: list
-                List of integers identifying zero-based indexes of the columns of the input table that
-                contain projected partitioning expressions. This class will inspect these values for
-                each pair of consecutive input rows. When they change, this indicates the boundary
-                between two partitions, and we will invoke the 'terminate' method on the UDTF class
-                instance and then destroy it and create a new one to implement the desired partitioning
-                semantics.
+                List of integers identifying zero-based indexes of the columns of the input table
+                that contain projected partitioning expressions. This class will inspect these
+                values for each pair of consecutive input rows. When they change, this indicates
+                the boundary between two partitions, and we will invoke the 'terminate' method on
+                the UDTF class instance and then destroy it and create a new one to implement the
+                desired partitioning semantics.
             """
             self._create_udtf = create_udtf
             self._udtf = create_udtf()
