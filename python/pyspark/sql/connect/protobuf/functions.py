@@ -47,6 +47,7 @@ def from_protobuf(
     elif descFilePath is not None:
         binary_proto = _read_descriptor_set_file(descFilePath)
 
+    # TODO: simplify the code when _invoke_function() supports None as input.
     if binary_proto is not None:
         if options is None:
             return _invoke_function(
@@ -85,6 +86,7 @@ def to_protobuf(
     elif descFilePath is not None:
         binary_proto = _read_descriptor_set_file(descFilePath)
 
+    # TODO: simplify the code when _invoke_function() supports None as input.
     if binary_proto is not None:
         if options is None:
             return _invoke_function(
