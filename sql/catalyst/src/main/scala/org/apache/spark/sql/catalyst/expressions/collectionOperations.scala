@@ -4682,7 +4682,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
        [1,2,3,4,5]
-      > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
+      > SELECT _FUNC_(array(5, 3, 2, 1), -4, 4);
        [5,4,3,2,1]
   """,
   group = "array_funcs",
@@ -4788,7 +4788,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         // place the new item at start of array, place the current array contents at the end
         // and fill the newly created array elements inbetween with a null
 
-        val newArrayLength = -posInt + 1
+        val newArrayLength = -posInt
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4798,7 +4798,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
         baseArr.foreach(elementType, (i, v) => {
           // current position, offset by new item + new null array elements
-          val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+          val elementPosition = i + math.abs(posInt + baseArr.numElements())
           newArray(elementPosition) = v
         })
 
@@ -4807,7 +4807,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         new GenericArrayData(newArray)
       } else {
         if (posInt < 0) {
-          posInt = posInt + baseArr.numElements()
+          posInt = posInt + baseArr.numElements() + 1
         } else if (posInt > 0) {
           posInt = posInt - 1
         }
@@ -4895,21 +4895,21 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
            |
            |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
            |
-           |  $resLength = java.lang.Math.abs($pos) + 1;
+           |  $resLength = java.lang.Math.abs($pos);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
            |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
            |  }
            |
            |  $allocation
            |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-           |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
+           |    $adjustedAllocIdx = $i + java.lang.Math.abs($pos + $arr.numElements());
            |    $assignment
            |  }
            |  ${CodeGenerator.setArrayElement(
              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
            |
-           |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
-           |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
+           |  for (int $j = 1 + $pos + $arr.numElements(); $j < 0; $j ++) {
+           |    $values.setNullAt($j + java.lang.Math.abs($pos + $arr.numElements()));
            |  }
            |
            |  ${ev.value} = $values;
@@ -4917,7 +4917,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
            |
            |  $itemInsertionIndex = 0;
            |  if ($pos < 0) {
-           |    $itemInsertionIndex = $pos + $arr.numElements();
+           |    $itemInsertionIndex = $pos + $arr.numElements() + 1;
            |  } else if ($pos > 0) {
            |    $itemInsertionIndex = $pos - 1;
            |  }

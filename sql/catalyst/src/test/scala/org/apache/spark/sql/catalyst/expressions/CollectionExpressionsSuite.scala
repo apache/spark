@@ -2314,16 +2314,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
     checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
     checkEvaluation(ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
-    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(-3), Literal(3)), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, null, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 2, 3, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-3), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-5), Literal(3)), Seq(3, null, 1, 2, 4))
     checkEvaluation(
       ArrayInsert(a1, Literal(10), Literal(3)),
       Seq(1, 2, 4, null, null, null, null, null, null, 3)
     )
     checkEvaluation(
       ArrayInsert(a1, Literal(-10), Literal(3)),
-      Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
+      Seq(3, null, null, null, null, null, null, 1, 2, 4)
     )
 
     // null handling
