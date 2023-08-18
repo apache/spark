@@ -606,10 +606,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 the UDTF class instance and then destroy it and create a new one to implement the
                 desired partitioning semantics.
             """
-            self._create_udtf = create_udtf
+            self._create_udtf: Callable = create_udtf
             self._udtf = create_udtf()
-            self._prev_arguments = list()
-            self._partition_child_indexes = partition_child_indexes
+            self._prev_arguments: list = list()
+            self._partition_child_indexes: list = partition_child_indexes
 
         def eval(self, *args, **kwargs) -> Iterator:
             changed_partitions = self._check_partition_boundaries(
