@@ -196,7 +196,7 @@ class OrcFileFormat
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
         if (enableVectorizedReader) {
-          val batchReader = new OrcColumnarBatchReader(capacity, readerOptions.getOrcTail)
+          val batchReader = new OrcColumnarBatchReader(capacity)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.
@@ -205,7 +205,7 @@ class OrcFileFormat
           val requestedDataColIds = requestedColIds ++ Array.fill(partitionSchema.length)(-1)
           val requestedPartitionColIds =
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
-          batchReader.initialize(fileSplit, taskAttemptContext)
+          batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail)
           batchReader.initBatch(
             TypeDescription.fromString(resultSchemaString),
             resultSchema.fields,

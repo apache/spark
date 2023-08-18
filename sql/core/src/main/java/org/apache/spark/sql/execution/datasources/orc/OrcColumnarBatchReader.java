@@ -50,7 +50,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   // The capacity of vectorized batch.
   private int capacity;
-  private OrcTail orcTail;
 
   // Vectorized ORC Row Batch wrap.
   private VectorizedRowBatchWrap wrap;
@@ -79,12 +78,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
   public OrcColumnarBatchReader(int capacity) {
-    this(capacity, null);
-  }
-
-  public OrcColumnarBatchReader(int capacity, OrcTail orcTail) {
     this.capacity = capacity;
-    this.orcTail = orcTail;
   }
 
 
@@ -127,6 +121,13 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   @Override
   public void initialize(
       InputSplit inputSplit, TaskAttemptContext taskAttemptContext) throws IOException {
+    initialize(inputSplit, taskAttemptContext, null);
+  }
+
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      OrcTail orcTail) throws IOException {
     FileSplit fileSplit = (FileSplit)inputSplit;
     Configuration conf = taskAttemptContext.getConfiguration();
     Reader reader = OrcFile.createReader(

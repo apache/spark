@@ -150,8 +150,8 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val batchReader = new OrcColumnarBatchReader(capacity, readerOptions.getOrcTail)
-      batchReader.initialize(fileSplit, taskAttemptContext)
+      val batchReader = new OrcColumnarBatchReader(capacity)
+      batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
 
