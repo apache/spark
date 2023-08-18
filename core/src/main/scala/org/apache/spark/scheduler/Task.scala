@@ -228,7 +228,6 @@ private[spark] abstract class Task[T](
     if (context != null) {
       context.markInterrupted(reason)
     }
-
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
