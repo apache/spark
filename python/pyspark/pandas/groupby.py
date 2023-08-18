@@ -4165,6 +4165,7 @@ class SeriesGroupBy(GroupBy[Series]):
 
         Examples
         --------
+        >>> import numpy as np
         >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, np.nan]},
         ...                   columns=['A', 'B'])
@@ -4183,7 +4184,7 @@ class SeriesGroupBy(GroupBy[Series]):
         2  1.0    1
            2.0    1
         3  3.0    2
-        Name: B, dtype: int64
+        Name: count, dtype: int64
 
         Don't include counts of NaN when dropna is False.
 
@@ -4195,7 +4196,7 @@ class SeriesGroupBy(GroupBy[Series]):
            2.0    1
         3  3.0    2
            NaN    1
-        Name: B, dtype: int64
+        Name: count, dtype: int64
         """
         warnings.warn(
             "The resulting Series will have a fixed name of 'count' from 4.0.0.",
@@ -4232,7 +4233,7 @@ class SeriesGroupBy(GroupBy[Series]):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(groupkeys, groupkey_names)
             ],
-            column_labels=[self._agg_columns[0]._column_label],
+            column_labels=[("count",)],
             data_spark_columns=[scol_for(sdf, agg_column)],
         )
         return first_series(DataFrame(internal))

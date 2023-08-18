@@ -44,6 +44,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     // and we want to retain them inside the aggregate functions.
     case m: CollectMetrics => m
 
+    // Skip PythonUDTF as it will be planned as its own dedicated logical and physical node.
+    case g @ Generate(_: PythonUDTF, _, _, _, _, _) => g
+
     // todo: It's hard to write a general rule to pull out nondeterministic expressions
     // from LogicalPlan, currently we only do it for UnaryNode which has same output
     // schema with its child.
