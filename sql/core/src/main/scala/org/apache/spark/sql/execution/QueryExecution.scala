@@ -68,6 +68,9 @@ class QueryExecution(
       analyzed
     } catch {
       case e: AnalysisException =>
+        // Because we do eager analysis for Dataframe, there will be no execution created after
+        // AnalysisException occurs. So we need to explicitly create a new execution to post
+        // start/end events to notify the listener and UI components.
         SQLExecution.withNewExecutionId(this, Some("analyze"))(throw e)
     }
   }
