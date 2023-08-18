@@ -93,10 +93,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"c")($"c")
         .analyze
       val expected = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as "c")
+        .select($"a", $"b", ($"a" + $"b") as "_groupingexpression")
+        .groupBy($"_groupingexpression")($"_groupingexpression" as "c")
         .analyze
       val optimized = Optimize.execute(query)
-      comparePlans(optimized, PullOutGroupingExpressions.apply(expected))
+      comparePlans(optimized, expected)
     }
   }
 
