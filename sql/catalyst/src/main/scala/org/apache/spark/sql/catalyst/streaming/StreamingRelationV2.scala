@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableProvider}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsMetadataColumns, Table, TableProvider}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // We have to pack in the V1 data source as a shim, for the case when a source implements
@@ -39,7 +40,7 @@ case class StreamingRelationV2(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan])
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override lazy val resolved = v1Relation.forall(_.resolved)
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
