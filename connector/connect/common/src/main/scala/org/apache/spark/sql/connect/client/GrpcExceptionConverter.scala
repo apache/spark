@@ -75,12 +75,17 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     val classes =
       mapper.readValue(info.getMetadataOrDefault("classes", "[]"), classOf[Array[String]])
 
-    classes
-      .find(errorFactory.contains)
-      .map { cls =>
+    if (classes.isEmpty) {
+      return None
+    }
+
+    classes.find(errorFactory.contains) match {
+      case Some(cls) =>
         val constructor = errorFactory.get(cls).get
-        constructor(message, null)
-      }
+        Some(constructor(message, null))
+      case None =>
+        Some(new SparkException(s"Exception from server ${classes.head}: ${message}"))
+    }
   }
 
   private def toThrowable(ex: StatusRuntimeException): Throwable = {

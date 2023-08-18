@@ -270,9 +270,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(result.length == 10)
       } finally {
         // clean up
-        assertThrows[SparkException] {
+        val exception = intercept[SparkException] {
           spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
         }
+        assert(exception.getMessage.contains(
+          "Exception from server java.sql.SQLNonTransientConnectionException:"))
       }
     }
   }
