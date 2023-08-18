@@ -559,10 +559,8 @@ def read_udtf(pickleSer, infile, eval_type):
             kwargs_offsets[name] = offset
         else:
             args_offsets.append(offset)
-    '''
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
-    '''
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -576,7 +574,6 @@ def read_udtf(pickleSer, infile, eval_type):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
-    '''
     class UDTFWithPartitions:
         """
         This implements the logic of a UDTF that accepts an input TABLE argument with one or more
@@ -652,17 +649,13 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
-    '''
 
     # Instantiate the UDTF class.
     try:
-        '''
         if len(partition_child_indexes) > 0:
             udtf = UDTFWithPartitions(handler, partition_child_indexes)
         else:
             udtf = handler()
-        '''
-        udtf = handler()
     except Exception as e:
         raise PySparkRuntimeError(
             error_class="UDTF_EXEC_ERROR",
