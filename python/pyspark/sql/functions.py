@@ -15375,6 +15375,9 @@ def udf(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     f : function
@@ -15407,6 +15410,20 @@ def udf(
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
+
+    UDF can use keyword arguments:
+
+    >>> @udf(returnType=IntegerType())
+    ... def calc(a, b):
+    ...     return a + 10 * b
+    ...
+    >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+    +-----------------------------+
+    |calc(b => (id * 10), a => id)|
+    +-----------------------------+
+    |                            0|
+    |                          101|
+    +-----------------------------+
 
     Notes
     -----

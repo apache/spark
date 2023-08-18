@@ -1947,7 +1947,7 @@ class BaseUDTFTestsMixin:
                 TestUDTF(a=lit(10)),
             ]
         ):
-            with self.subTest(query_no=i):
+            with self.subTest(with_b=False, query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b=100)])
 
         # with "b"
@@ -1961,7 +1961,7 @@ class BaseUDTFTestsMixin:
                 TestUDTF(b=lit("z"), a=lit(10)),
             ]
         ):
-            with self.subTest(query_no=i):
+            with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b="z")])
 
     def test_udtf_with_table_argument_and_partition_by(self):

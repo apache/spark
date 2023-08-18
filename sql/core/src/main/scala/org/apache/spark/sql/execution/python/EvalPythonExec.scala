@@ -22,6 +22,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
 
+object EvalPythonExec {
+  /**
+   * Metadata for arguments of Python UDTF.
+   *
+   * @param offset the offset of the argument
+   * @param name the name of the argument if it's a `NamedArgumentExpression`
+   */
+  case class ArgumentMetadata(offset: Int, name: Option[String])
+}
+
 /**
  * A physical plan that evaluates a [[PythonUDF]], one partition of tuples at a time.
  *
