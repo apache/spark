@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -291,7 +291,6 @@ object UserDefinedPythonTableFunction {
       // Receive the list of requested ordering columns, if any.
       val orderBy = ArrayBuffer.empty[SortOrder]
       val numOrderByItems = dataIn.readInt()
-      /*
       for (_ <- 0 until numOrderByItems) {
         val length = dataIn.readInt()
         val obj = new Array[Byte](length)
@@ -300,7 +299,6 @@ object UserDefinedPythonTableFunction {
         val ascending = if (dataIn.readInt() == 1) Ascending else Descending
         SortOrder(UnresolvedAttribute(columnName), ascending)
       }
-       */
 
       PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
       Option(func.accumulator).foreach(_.merge(maybeAccumulator.get))

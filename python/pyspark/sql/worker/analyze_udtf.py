@@ -149,11 +149,9 @@ def main(infile: IO, outfile: IO) -> None:
             write_with_length(col.name.encode("utf-8"), outfile)
         # Return the requested input table ordering, if any.
         write_int(len(result.order_by), outfile)
-        '''
         for col in result.order_by:
             write_with_length(col.name.encode("utf-8"), outfile)
             write_int(1 if col.ascending else 0, outfile)
-        '''
 
     except BaseException as e:
         try:
