@@ -873,7 +873,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * The default number of rows that can be stored in this column.
    */
-  protected int defaultCapacity;
+  protected final int defaultCapacity;
 
   /**
    * Upper limit for the maximum capacity for this column.

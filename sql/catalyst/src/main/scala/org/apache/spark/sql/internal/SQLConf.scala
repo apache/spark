@@ -504,7 +504,7 @@ object SQLConf {
         "optimization.")
       .version("3.5.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(-1)
+      .createWithDefault(1)
 
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")

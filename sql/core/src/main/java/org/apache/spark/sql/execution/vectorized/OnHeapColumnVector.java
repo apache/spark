@@ -80,28 +80,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     reset();
   }
 
-  @Override
-  public void reset() {
-    super.reset();
-    if (!isConstant && hugeVectorThreshold > 0 &&
-        capacity > hugeVectorThreshold) {
-      capacity = defaultCapacity;
-      nulls = null;
-      byteData = null;
-      shortData = null;
-      intData = null;
-      longData = null;
-      floatData = null;
-      doubleData = null;
-      arrayLengths = null;
-      arrayOffsets = null;
-      reserveInternal(capacity);
-    }
-  }
-
-  @Override
-  public void close() {
-    super.close();
+  private void releaseMemory() {
     nulls = null;
     byteData = null;
     shortData = null;
@@ -111,6 +90,23 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     doubleData = null;
     arrayLengths = null;
     arrayOffsets = null;
+  }
+
+  @Override
+  public void reset() {
+    super.reset();
+    if (!isConstant && hugeVectorThreshold > 0 &&
+        capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
+      releaseMemory();
+      reserveInternal(capacity);
+    }
+  }
+
+  @Override
+  public void close() {
+    super.close();
+    releaseMemory();
   }
 
   //
