@@ -460,10 +460,7 @@ def read_csv(
             for col in psdf.columns:
                 psdf[col] = psdf[col].astype(dtype)
 
-    if len(psdf.columns) == 1:
-        return first_series(psdf)
-    else:
-        return psdf
+    return psdf
 
 
 def read_json(
@@ -1218,11 +1215,7 @@ def read_excel(
                 .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
             )
 
-            psdf = DataFrame(psdf._internal.with_new_sdf(sdf))
-            if len(psdf.columns) == 1:
-                return first_series(psdf)
-            else:
-                return psdf
+            return DataFrame(psdf._internal.with_new_sdf(sdf))
 
         if isinstance(pdf_or_psers, dict):
             return {

@@ -16,9 +16,6 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
-
-import pandas as pd
 
 from pyspark.sql.tests.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
