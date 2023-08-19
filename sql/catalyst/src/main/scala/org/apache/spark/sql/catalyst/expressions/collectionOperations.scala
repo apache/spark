@@ -4674,7 +4674,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 @ExpressionDescription(
   usage = """
     _FUNC_(x, pos, val) - Places val into index pos of array x.
-      Array indices start at 1, or start from the end if index is negative.
+      Array indices start at 1. The maximum negative index is -1 for which the function inserts
+      new element after the current last element.
       Index above array size appends the array, or prepends the array if index is negative,
       with 'null' elements.
   """,
@@ -4682,6 +4683,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
        [1,2,3,4,5]
+      > SELECT _FUNC_(array(5, 4, 3, 2), -1, 1);
+       [5,4,3,2,1]
       > SELECT _FUNC_(array(5, 3, 2, 1), -4, 4);
        [5,4,3,2,1]
   """,
