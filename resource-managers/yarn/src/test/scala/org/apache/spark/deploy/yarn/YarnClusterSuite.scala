@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
@@ -342,13 +343,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testExecutorEnv(false)
   }
 
-  test("SPARK-XXXXX: Respect Yarn AM failure validity interval") {
+  test("SPARK-22876: Respect Yarn AM failure validity interval") {
     val result = File.createTempFile("result", null, tempDir)
+    val output = File.createTempFile("output", null, tempDir)
     val finalState = runSpark(false, mainClassName(YarnAMFailureValidityIntervalApp.getClass),
-      appArgs = Seq(result.getAbsolutePath()))
-    println(finalState)
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = Map(AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key -> "20s"))
+    assert(finalState === SparkAppHandle.State.FAILED)
+
     val resultString = Files.toString(result, StandardCharsets.UTF_8)
-    println(resultString)
+    val finalAttemptId = ApplicationAttemptId.fromString(resultString)
+    assert(finalAttemptId.getAttemptId() === 3)
   }
 
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
@@ -818,9 +823,12 @@ private object YarnAMFailureValidityIntervalApp {
 
     val sc = new SparkContext(new SparkConf())
     val attemptId = YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
-    println(attemptId)
-    Files.append(attemptId.toString, result, StandardCharsets.UTF_8)
+    Files.write(attemptId.toString, result, StandardCharsets.UTF_8)
+    if (attemptId.getAttemptId() == 2) {
+      // Sleep on the second attempt to age out the first failure
+      Thread.sleep(30000)
+    }
     sc.stop()
-    System.exit(1)
+    System.exit(-1)
   }
 }
