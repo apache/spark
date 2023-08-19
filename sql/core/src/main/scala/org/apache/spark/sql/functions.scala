@@ -3195,14 +3195,6 @@ object functions {
   def current_user(): Column = withExpr { CurrentUser() }
 
   /**
-   * Returns the connected user name.
-   *
-   * @group misc_funcs
-   * @since 4.0.0
-   */
-  def session_user(): Column = withExpr { SessionUser() }
-
-  /**
    * Calculates the MD5 digest of a binary column and returns the value
    * as a 32 character hex string.
    *
