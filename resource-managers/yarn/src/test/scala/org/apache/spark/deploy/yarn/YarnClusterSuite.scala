@@ -342,6 +342,15 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testExecutorEnv(false)
   }
 
+  test("SPARK-XXXXX: Respect Yarn AM failure validity interval") {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false, mainClassName(YarnAMFailureValidityIntervalApp.getClass),
+      appArgs = Seq(result.getAbsolutePath()))
+    println(finalState)
+    val resultString = Files.toString(result, StandardCharsets.UTF_8)
+    println(resultString)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -800,4 +809,18 @@ private object ExecutorEnvTestApp {
     sc.stop()
   }
 
+}
+
+private object YarnAMFailureValidityIntervalApp {
+
+  def main(args: Array[String]): Unit = {
+    val result = new File(args(0))
+
+    val sc = new SparkContext(new SparkConf())
+    val attemptId = YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
+    println(attemptId)
+    Files.append(attemptId.toString, result, StandardCharsets.UTF_8)
+    sc.stop()
+    System.exit(1)
+  }
 }
