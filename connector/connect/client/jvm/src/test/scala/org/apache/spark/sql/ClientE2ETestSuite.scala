@@ -275,7 +275,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         }
         assert(
           exception.getMessage.contains(
-            "Exception from server java.sql.SQLNonTransientConnectionException:"))
+            "Exception in server java.sql.SQLNonTransientConnectionException:"))
       }
     }
   }

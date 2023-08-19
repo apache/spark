@@ -84,7 +84,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
         val constructor = errorFactory.get(cls).get
         Some(constructor(message, null))
       case None =>
-        Some(new SparkException(s"Exception from server ${classes.head}: ${message}"))
+        Some(new SparkException(s"Exception in server ${classes.head}: ${message}"))
     }
   }
 
