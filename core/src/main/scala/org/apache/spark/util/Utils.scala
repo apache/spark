@@ -2169,14 +2169,20 @@ private[spark] object Utils
   }
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
-    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
-      monitors.get(frame) match {
-        case Some(monitor) =>
-          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-        case None =>
-          frame.toString
-      }
+    val threadState = threadInfo.getThreadState
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackDepth -> m).toMap
+    val stackTrace = StackTrace(threadInfo.getStackTrace.zipWithIndex.map { case (frame, idx) =>
+      val locked = if (idx == 0 && threadInfo.getLockInfo != null) {
+        threadState match {
+          case Thread.State.BLOCKED =>
+            s"\t-  blocked on ${threadInfo.getLockInfo}"
+          case Thread.State.WAITING | Thread.State.TIMED_WAITING =>
+            s"\t-  waiting on ${threadInfo.getLockInfo}"
+          case _ => ""
+        }
+      } else ""
+      val locking = monitors.get(idx).map(mi => s"\t-  locked $mi")
+      frame.toString + locked + locking
     })
 
     // use a set to dedup re-entrant locks that are held at multiple places
@@ -2184,14 +2190,17 @@ private[spark] object Utils
       (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
 
     ThreadStackTrace(
-      threadId = threadInfo.getThreadId,
-      threadName = threadInfo.getThreadName,
-      threadState = threadInfo.getThreadState,
-      stackTrace = stackTrace,
-      blockedByThreadId =
-        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      holdingLocks = heldLocks.toSeq)
+      threadInfo.getThreadId,
+      threadInfo.getThreadName,
+      threadState,
+      stackTrace,
+      if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      heldLocks.toSeq,
+      Option(threadInfo.getLockName),
+      Option(threadInfo.getLockOwnerName),
+      threadInfo.isSuspended,
+      threadInfo.isInNative)
   }
 
   /**

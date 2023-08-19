@@ -73,6 +73,9 @@ private[ui] class ExecutorThreadDumpPage(
           <p><a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">
             Collapse All
           </a></p>
+          <p><a href={"data:text/plain;charset=utf-8," + threadDump.mkString("\n")} download={executorId + ".threaddump"}>
+            Download
+          </a></p>
           <div class="form-inline">
             <div class="bs-example" data-example-id="simple-form-inline">
               <div class="form-group">

@@ -527,13 +527,30 @@ case class StackTrace(elems: Seq[String]) {
 }
 
 case class ThreadStackTrace(
-    val threadId: Long,
-    val threadName: String,
-    val threadState: Thread.State,
-    val stackTrace: StackTrace,
-    val blockedByThreadId: Option[Long],
-    val blockedByLock: String,
-    val holdingLocks: Seq[String])
+    threadId: Long,
+    threadName: String,
+    threadState: Thread.State,
+    stackTrace: StackTrace,
+    blockedByThreadId: Option[Long],
+    blockedByLock: String,
+    holdingLocks: Seq[String],
+    lockName: Option[String],
+    lockOwnerName: Option[String],
+    suspended: Boolean,
+    inNative: Boolean) {
+
+  override def toString: String = {
+    val sb = new StringBuilder(s"\"$threadName\" Id=$threadName $threadState")
+    lockName.foreach(lock => sb.append(s" on $lock"))
+    lockOwnerName.foreach(owner => sb.append(s" owned by \"$owner\""))
+    blockedByThreadId.foreach(id => s" Id=${id}")
+    if (suspended) sb.append(" (suspended)")
+    if (inNative) sb.append(" (in native)")
+    sb.append('\n')
+
+    sb.toString
+  }
+}
 
 class ProcessSummary private[spark](
      val id: String,
