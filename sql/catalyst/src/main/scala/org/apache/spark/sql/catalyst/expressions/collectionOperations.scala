@@ -1418,7 +1418,7 @@ case class ArrayContains(left: Expression, right: Expression)
 case class ArrayPrepend(left: Expression, right: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 
-  override lazy val replacement: Expression = ArrayInsert(left, Literal(1), right)
+  override lazy val replacement: Expression = new ArrayInsert(left, Literal(1), right)
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
@@ -4687,9 +4687,17 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   """,
   group = "array_funcs",
   since = "3.4.0")
-case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
+case class ArrayInsert(
+    srcArrayExpr: Expression,
+    posExpr: Expression,
+    itemExpr: Expression,
+    legacyNegativeIndex: Boolean)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
     with QueryErrorsBase with SupportQueryContext {
+
+  def this(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression) = {
+    this(srcArrayExpr, posExpr, itemExpr, SQLConf.get.legacyNegativeIndexInArrayInsert)
+  }
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
