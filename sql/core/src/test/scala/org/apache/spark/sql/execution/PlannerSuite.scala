@@ -673,6 +673,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       shouldHaveSort = true)
   }
 
+  test("SPARK-44804: SortMergeJoin should respect the streamed side ordering") {
+    val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB),
+      outputPartitioning = HashPartitioning(exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB, orderingC, orderingA),
+      outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+
+    Seq(Inner -> 2,
+      LeftOuter -> 2,
+      RightOuter -> 3,
+      FullOuter -> 0).foreach { case (joinType, orderNum) =>
+      val smj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, joinType, None, plan1, plan2)
+      assert(smj.outputOrdering.length == orderNum)
+    }
+  }
+
   test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
     val df = spark.range(10)
     val rangeExec = df.queryExecution.executedPlan.collect {
@@ -1370,28 +1385,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         }
       }.get
       assert(numOutputPartitioning.size == 8)
-    }
-  }
-
-  test("SPARK-44804: SortMergeJoin should respect the streamed side ordering") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      Seq(
-        "JOIN" -> 2, // left.a.asc, left.b.asc
-        "LEFT JOIN" -> 2, // left.a.asc, left.b.asc
-        "RIGHT JOIN" -> 1, // right.a.asc
-        "FULL OUTER JOIN" -> 0,
-      ).map { case (joinType, orderNum) =>
-        val df = sql(
-          s"""SELECT *
-            |FROM (SELECT *, row_number() over(partition by a order by b) rn FROM testData2) l
-            |$joinType testData2 r
-            |ON l.a = r.a
-        """.stripMargin)
-        val sortMergeJoin = collect(df.queryExecution.executedPlan) {
-          case smj: SortMergeJoinExec => smj
-        }.head
-        assert(sortMergeJoin.outputOrdering.length == orderNum)
-      }
     }
   }
 }
