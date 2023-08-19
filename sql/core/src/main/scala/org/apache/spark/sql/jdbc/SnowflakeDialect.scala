@@ -19,7 +19,6 @@ package org.apache.spark.sql.jdbc
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, DataType}
 

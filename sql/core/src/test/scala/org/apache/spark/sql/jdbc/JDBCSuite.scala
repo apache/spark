@@ -2062,6 +2062,4 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
     assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
   }
-
-
 }
