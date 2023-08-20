@@ -1127,7 +1127,7 @@ def read_excel(
     """
 
     def pd_read_excel(
-        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None], sq: bool
+        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None]
     ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
