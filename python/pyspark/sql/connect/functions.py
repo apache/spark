@@ -2653,13 +2653,6 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
-def chr(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("chr", col)
-
-
-chr.__doc__ = pysparkfuncs.chr.__doc__
-
-
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("contains", left, right)
 
@@ -3695,13 +3688,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function_over_columns("uuid")
-
-
-uuid.__doc__ = pysparkfuncs.uuid.__doc__
-
-
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
@@ -3809,18 +3795,6 @@ def stack(*cols: "ColumnOrName") -> Column:
 
 
 stack.__doc__ = pysparkfuncs.stack.__doc__
-
-
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
-
-
-random.__doc__ = pysparkfuncs.random.__doc__
 
 
 def bitmap_bit_position(col: "ColumnOrName") -> Column:
