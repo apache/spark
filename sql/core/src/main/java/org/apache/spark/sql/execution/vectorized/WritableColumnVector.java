@@ -849,7 +849,14 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Marks this column as being constant.
    */
-  public final void setIsConstant() { isConstant = true; }
+  public final void setIsConstant() {
+    if (childColumns != null) {
+      for (WritableColumnVector c : childColumns) {
+        c.setIsConstant();
+      }
+    }
+    isConstant = true;
+  }
 
   /**
    * Marks this column only contains null values.
