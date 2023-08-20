@@ -4795,11 +4795,12 @@ case class ArrayInsert(
       val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
 
       if (newPosExtendsArrayLeft) {
+        val baseOffset = if (legacyNegativeIndex) 1 else 0
         // special case- if the new position is negative but larger than the current array size
         // place the new item at start of array, place the current array contents at the end
         // and fill the newly created array elements inbetween with a null
 
-        val newArrayLength = -posInt
+        val newArrayLength = -posInt + baseOffset
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4809,7 +4810,7 @@ case class ArrayInsert(
 
         baseArr.foreach(elementType, (i, v) => {
           // current position, offset by new item + new null array elements
-          val elementPosition = i + math.abs(posInt + baseArr.numElements())
+          val elementPosition = i + baseOffset + math.abs(posInt + baseArr.numElements())
           newArray(elementPosition) = v
         })
 
@@ -4818,7 +4819,7 @@ case class ArrayInsert(
         new GenericArrayData(newArray)
       } else {
         if (posInt < 0) {
-          posInt = posInt + baseArr.numElements() + 1
+          posInt = posInt + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
         } else if (posInt > 0) {
           posInt = posInt - 1
         }
@@ -4894,6 +4895,7 @@ case class ArrayInsert(
            |""".stripMargin
       } else {
         val pos = posExpr.value
+        val baseOffset = if (legacyNegativeIndex) 1 else 0
         s"""
            |int $itemInsertionIndex = 0;
            |int $resLength = 0;
@@ -4906,21 +4908,21 @@ case class ArrayInsert(
            |
            |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
            |
-           |  $resLength = java.lang.Math.abs($pos);
+           |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
            |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
            |  }
            |
            |  $allocation
            |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-           |    $adjustedAllocIdx = $i + java.lang.Math.abs($pos + $arr.numElements());
+           |    $adjustedAllocIdx = $i + $baseOffset + java.lang.Math.abs($pos + $arr.numElements());
            |    $assignment
            |  }
            |  ${CodeGenerator.setArrayElement(
              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
            |
-           |  for (int $j = 1 + $pos + $arr.numElements(); $j < 0; $j ++) {
-           |    $values.setNullAt($j + java.lang.Math.abs($pos + $arr.numElements()));
+           |  for (int $j = ${if (legacyNegativeIndex) 0 else 1} + $pos + $arr.numElements(); $j < 0; $j ++) {
+           |    $values.setNullAt($j + $baseOffset + java.lang.Math.abs($pos + $arr.numElements()));
            |  }
            |
            |  ${ev.value} = $values;
@@ -4928,7 +4930,7 @@ case class ArrayInsert(
            |
            |  $itemInsertionIndex = 0;
            |  if ($pos < 0) {
-           |    $itemInsertionIndex = $pos + $arr.numElements() + 1;
+           |    $itemInsertionIndex = $pos + $arr.numElements() + ${if (legacyNegativeIndex) 0 else 1};
            |  } else if ($pos > 0) {
            |    $itemInsertionIndex = $pos - 1;
            |  }
