@@ -206,7 +206,6 @@ public class RetryingBlockTransferor {
     });
 
     currentListener = new RetryingBlockTransferListener();
-
   }
 
   /**
