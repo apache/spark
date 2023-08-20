@@ -48,7 +48,9 @@ private[ui] class ExecutorThreadDumpPage(
             </div>
           case None => Text("")
         }
-        val heldLocks = thread.holdingLocks.mkString(", ")
+        val synchronizers = thread.synchronizers.map(l => s"Lock($l)")
+        val monitors = thread.monitors.map(m => s"Monitor($m)")
+        val heldLocks = (synchronizers ++ monitors).mkString(", ")
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId, false)"}
@@ -73,7 +75,7 @@ private[ui] class ExecutorThreadDumpPage(
           <p><a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">
             Collapse All
           </a></p>
-          <p><a href={"data:text/plain;charset=utf-8," + threadDump.mkString("\n")} download={executorId + ".threaddump"}>
+          <p><a href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={executorId + ".txt"}>
             Download
           </a></p>
           <div class="form-inline">

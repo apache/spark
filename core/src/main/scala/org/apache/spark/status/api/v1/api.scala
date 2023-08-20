@@ -533,21 +533,42 @@ case class ThreadStackTrace(
     stackTrace: StackTrace,
     blockedByThreadId: Option[Long],
     blockedByLock: String,
-    holdingLocks: Seq[String],
+    synchronizers: Seq[String],
+    monitors: Seq[String],
     lockName: Option[String],
     lockOwnerName: Option[String],
     suspended: Boolean,
     inNative: Boolean) {
 
+  /**
+   * Returns a string representation of this thread stack trace
+   * w.r.t java.lang.management.ThreadInfo(JDK 8)'s toString.
+   *
+   * TODO(Kent Yao): Considering 'daemon', 'priority' from higher JDKs
+   *
+   * TODO(Kent Yao): Also considering adding information os_prio, cpu, elapsed, tid, nid, etc.,
+   *   from the jstack tool
+   */
   override def toString: String = {
-    val sb = new StringBuilder(s"\"$threadName\" Id=$threadName $threadState")
+    val sb = new StringBuilder()
+    val basic = "\"" + threadName + "\" Id=" + threadId + " "  + threadState
+    sb.append(basic)
     lockName.foreach(lock => sb.append(s" on $lock"))
-    lockOwnerName.foreach(owner => sb.append(s" owned by \"$owner\""))
-    blockedByThreadId.foreach(id => s" Id=${id}")
+    lockOwnerName.foreach {
+      owner => sb.append(s"""owned by "$owner"""")
+    }
+    blockedByThreadId.foreach(id => s" Id=$id")
     if (suspended) sb.append(" (suspended)")
     if (inNative) sb.append(" (in native)")
     sb.append('\n')
 
+    sb.append(stackTrace.elems.map(e => s"\tat $e").mkString)
+
+    if (synchronizers.nonEmpty) {
+      sb.append(s"\n\tNumber of locked synchronizers = ${synchronizers.length}\n")
+      synchronizers.foreach(sync => sb.append(s"\t- $sync\n"))
+    }
+    sb.append('\n')
     sb.toString
   }
 }
