@@ -195,7 +195,6 @@ public class RetryingBlockTransferor {
       saslRetryCount += 1;
     }
     retryCount += 1;
-    currentListener = new RetryingBlockTransferListener();
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
       listener.getTransferType(), retryCount, maxRetries, outstandingBlocksIds.size(),
@@ -205,6 +204,9 @@ public class RetryingBlockTransferor {
       Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
       transferAllOutstanding();
     });
+
+    currentListener = new RetryingBlockTransferListener();
+
   }
 
   /**
