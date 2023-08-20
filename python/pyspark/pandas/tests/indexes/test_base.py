@@ -1577,10 +1577,6 @@ class IndexesTestsMixin:
         psmidx = ps.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("a", "c")])
         self.assertRaises(NotImplementedError, lambda: psmidx.asof(("a", "b")))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43608): Enable IndexesTests.test_union for pandas 2.0.0.",
-    )
     def test_union(self):
         # Index
         pidx1 = pd.Index([1, 2, 3, 4])
@@ -1593,13 +1589,6 @@ class IndexesTestsMixin:
         self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
         self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
         self.assert_eq(psidx1.union(psidx3), pidx1.union(pidx3))
-        # Deprecated case, but adding to track if pandas stop supporting union
-        # as a set operation. It should work fine until stop supporting anyway.
-        # No longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(psidx1 | psidx2, ps.Index([3, 4], dtype="int64"))
-        else:
-            self.assert_eq(pidx1 | pidx2, psidx1 | psidx2)
 
         self.assert_eq(psidx1.union([3, 4, 5, 6]), pidx1.union([3, 4, 5, 6]), almost=True)
         self.assert_eq(psidx2.union([1, 2, 3, 4]), pidx2.union([1, 2, 3, 4]), almost=True)
@@ -1904,10 +1893,6 @@ class IndexesTestsMixin:
         psmidx = ps.Index([("a", 1), ("b", 2)])
         self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43607): Enable IndexesTests.test_intersection for pandas 2.0.0.",
-    )
     def test_intersection(self):
         pidx = pd.Index([1, 2, 3, 4], name="Koalas")
         psidx = ps.from_pandas(pidx)
@@ -1919,15 +1904,6 @@ class IndexesTestsMixin:
         self.assert_eq(
             (pidx + 1).intersection(pidx_other), (psidx + 1).intersection(psidx_other).sort_values()
         )
-        # Deprecated case, but adding to track if pandas stop supporting intersection
-        # as a set operation. It should work fine until stop supporting anyway.
-        # No longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                (psidx & psidx_other).sort_values(), ps.Index([3, 1, 7, 1], dtype="int64")
-            )
-        else:
-            self.assert_eq(pidx & pidx_other, (psidx & psidx_other).sort_values())
 
         pidx_other_different_name = pd.Index([3, 4, 5, 6], name="Databricks")
         psidx_other_different_name = ps.from_pandas(pidx_other_different_name)

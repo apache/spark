@@ -1038,10 +1038,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
-          expr.failAnalysis(
-            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-              "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            messageParameters = Map("treeNode" -> planToString(plan)))
+          cleanQueryInScalarSubquery(join.right.plan) match {
+            // Python UDTFs are by default non-deterministic. They are constructed as a
+            // OneRowRelation subquery and can be rewritten by the optimizer without
+            // any decorrelation.
+            case Generate(_: PythonUDTF, _, _, _, _, _: OneRowRelation)
+              if SQLConf.get.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY) =>  // Ok
+            case _ =>
+              expr.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                  "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+                messageParameters = Map("treeNode" -> planToString(plan)))
+          }
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
@@ -1173,6 +1181,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
       case _: Project => usingDecorrelateInnerQueryFramework
+      case _: Join => usingDecorrelateInnerQueryFramework
       case _ => false
     }
 

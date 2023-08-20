@@ -15547,6 +15547,12 @@ def udtf(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.0.0
+        Supports Python side analysis.
+
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     cls : class
@@ -15623,6 +15629,38 @@ def udtf(
     |  1|  x|
     +---+---+
 
+    UDTF can use keyword arguments:
+
+    >>> @udtf
+    ... class TestUDTFWithKwargs:
+    ...     @staticmethod
+    ...     def analyze(
+    ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
+    ...     ) -> AnalyzeResult:
+    ...         return AnalyzeResult(
+    ...             StructType().add("a", a.data_type)
+    ...                 .add("b", b.data_type)
+    ...                 .add("x", kwargs["x"].data_type)
+    ...         )
+    ...
+    ...     def eval(self, a, b, **kwargs):
+    ...         yield a, b, kwargs["x"]
+    ...
+    >>> TestUDTFWithKwargs(lit(1), x=lit("x"), b=lit("b")).show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
+
+    >>> _ = spark.udtf.register("test_udtf", TestUDTFWithKwargs)
+    >>> spark.sql("SELECT * FROM test_udtf(1, x => 'x', b => 'b')").show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
+
     Arrow optimization can be explicitly enabled when creating UDTFs:
 
     >>> @udtf(returnType="c1: int, c2: int", useArrow=True)
@@ -15639,14 +15677,13 @@ def udtf(
 
     Notes
     -----
-    User-defined table functions (UDTFs) are considered deterministic by default.
-    Use `asNondeterministic()` to mark a function as non-deterministic. E.g.:
+    User-defined table functions (UDTFs) are considered non-deterministic by default.
+    Use `asDeterministic()` to mark a function as deterministic. E.g.:
 
-    >>> import random
-    >>> class RandomUDTF:
+    >>> class PlusOne:
     ...     def eval(self, a: int):
-    ...         yield a * int(random.random() * 100),
-    >>> random_udtf = udtf(RandomUDTF, returnType="r: int").asNondeterministic()
+    ...         yield a + 1,
+    >>> plus_one = udtf(PlusOne, returnType="r: int").asDeterministic()
 
     Use "yield" to produce one row for the UDTF result relation as many times
     as needed. In the context of a lateral join, each such result row will be

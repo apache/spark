@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import sbt._
-import sbt.Classpaths.publishTask
+import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
@@ -324,8 +324,10 @@ object SparkBuild extends PomBuild {
         .withLogging(ivyLoggingLevel.value),
     (MavenCompile / publishMavenStyle) := true,
     (SbtCompile / publishMavenStyle) := false,
-    (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
-    (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
+    (MavenCompile / publishLocal) := publishOrSkip((MavenCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
+    (SbtCompile / publishLocal) := publishOrSkip((SbtCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
@@ -774,7 +776,6 @@ object SparkConnect {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -840,14 +841,7 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkConnectClient {
@@ -924,14 +918,7 @@ object SparkConnectClient {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkProtobuf {
