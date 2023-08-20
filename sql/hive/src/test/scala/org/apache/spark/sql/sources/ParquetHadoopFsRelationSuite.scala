@@ -246,4 +246,25 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+
+  test("SPARK-43149: create a table with exception, location should not exist") {
+    withTempPath { dir =>
+      withTable("test") {
+        val path = dir
+        intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE test
+               |USING parquet
+               |OPTIONS (
+               |  path '${path.toURI}'
+               |) AS
+               |SELECT make_dt_interval(0, 1)
+         """.stripMargin)
+        }
+
+        assert(!path.exists())
+      }
+    }
+  }
 }

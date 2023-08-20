@@ -179,10 +179,9 @@ case class CreateDataSourceTableAsSelectCommand(
       } else {
         table.storage.locationUri
       }
-      val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
+      val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
       val tableSchema = CharVarcharUtils.getRawSchema(
-        removeInternalMetadata(result.schema), sessionState.conf)
+        removeInternalMetadata(outputColumns.toStructType), sparkSession.sessionState.conf)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -191,6 +190,8 @@ case class CreateDataSourceTableAsSelectCommand(
         schema = tableSchema)
       // Table location is already validated. No need to check it again during table creation.
       sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
+      val result = saveDataIntoTable(
+        sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
