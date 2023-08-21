@@ -4374,7 +4374,7 @@ object SQLConf {
       "incorrectly mapped the requested percentile to the sorted range of values in some cases " +
       "and so returned incorrect results. Also, the new implementation is faster as it doesn't " +
       "contain the interpolation logic that the old percentile_cont based one did.")
-    .version("4.0.0")
+    .version("3.3.4")
     .booleanConf
     .createWithDefault(false)
 
