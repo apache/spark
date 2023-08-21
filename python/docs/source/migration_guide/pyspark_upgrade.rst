@@ -37,6 +37,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
 * In Spark 4.0, ``sort_columns`` parameter from ``DataFrame.plot`` and `Series.plot`` has been removed from pandas API on Spark.
 * In Spark 4.0, the default value of ``regex`` parameter for ``Series.str.replace`` has been changed from ``True`` to ``False`` from pandas API on Spark. Additionally, a single character ``pat`` with ``regex=True`` is now treated as a regular expression instead of a string literal.
+* In Spark 4.0, the resulting name from ``value_counts`` for all objects sets to ``'count'`` (or ``'propotion'`` if ``nomalize=True`` was passed) from pandas API on Spark, and the index will be named after the original object.
 
 
 Upgrading from PySpark 3.3 to 3.4
