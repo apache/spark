@@ -487,8 +487,10 @@ class StreamingQueryProgress:
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],
             observedMetrics={
-                k: Row(row)
-                if isinstance(row, str)
+                # in test_parity_listener, observed metrics is serialized into string,
+                # this won't happen in production.
+                k: Row(row)  # for test only,
+                if isinstance(row, str)  # for test only,
                 else Row(*row.keys())(*row.values())  # Assume no nested rows
                 for k, row in j["observedMetrics"].items()
             }
