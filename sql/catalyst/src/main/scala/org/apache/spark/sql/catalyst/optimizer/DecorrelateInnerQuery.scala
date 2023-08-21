@@ -478,7 +478,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // parentOuterReferences: a set of parent outer references. As we recurse down we collect the
     // set of outer references that are part of the Domain, and use it to construct the DomainJoins
     // and join conditions.
-    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated.
+    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated
+    // (or used as an input for a window function)
     // underSetOp: a boolean flag indicating whether a set operator (e.g. UNION) is a parent of the
     // inner plan.
     //
