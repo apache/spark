@@ -118,8 +118,6 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
         Literal.create(currentCatalog, StringType)
       case CurrentUser() =>
         Literal.create(currentUser, StringType)
-      case SessionUser() =>
-        Literal.create(currentUser, StringType)
     }
   }
 }

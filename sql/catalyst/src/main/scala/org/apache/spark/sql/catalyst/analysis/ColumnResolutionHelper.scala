@@ -101,7 +101,7 @@ trait ColumnResolutionHelper extends Logging {
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     ("user", () => CurrentUser(), toPrettySQL),
-    (SessionUser().prettyName, () => SessionUser(), toPrettySQL),
+    ("session_user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 

@@ -3371,6 +3371,14 @@ object functions {
   def user(): Column = withExpr { CurrentUser() }
 
   /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def session_user(): Column = withExpr { CurrentUser() }
+
+  /**
    * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
    * UUID 36-character string.
    *

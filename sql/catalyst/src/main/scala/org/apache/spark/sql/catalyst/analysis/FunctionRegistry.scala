@@ -741,7 +741,7 @@ object FunctionRegistry {
     expression[CurrentCatalog]("current_catalog"),
     expression[CurrentUser]("current_user"),
     expression[CurrentUser]("user", setAlias = true),
-    expression[SessionUser]("session_user"),
+    expression[CurrentUser]("session_user", setAlias = true),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),

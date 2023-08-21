@@ -81,9 +81,6 @@ trait SQLQueryTestHelper extends Logging {
       case expr: CurrentUser =>
         deterministic = false
         expr
-      case expr: SessionUser =>
-        deterministic = false
-        expr
       case expr: Literal if expr.dataType == DateType || expr.dataType == TimestampType =>
         deterministic = false
         expr

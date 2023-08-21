@@ -3347,6 +3347,14 @@ object functions {
   def user(): Column = Column.fn("user")
 
   /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def session_user(): Column = Column.fn("session_user")
+
+  /**
    * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
    * UUID 36-character string.
    *
