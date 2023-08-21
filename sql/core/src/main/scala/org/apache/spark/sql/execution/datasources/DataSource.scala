@@ -32,7 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -789,6 +789,39 @@ object DataSource extends Logging {
     val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
       locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
+  }
+
+  /**
+   * Use location and SerdeInfo to create a CatalogStorageFormat.
+   */
+  def toStorageFormat(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo]): Option[CatalogStorageFormat] = {
+    if (maybeSerdeInfo.isEmpty) {
+      Some(CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI)))
+    } else {
+      val serdeInfo = maybeSerdeInfo.get
+      if (serdeInfo.storedAs.isEmpty) {
+        Some(CatalogStorageFormat.empty.copy(
+          locationUri = location.map(CatalogUtils.stringToURI),
+          inputFormat = serdeInfo.formatClasses.map(_.input),
+          outputFormat = serdeInfo.formatClasses.map(_.output),
+          serde = serdeInfo.serde,
+          properties = serdeInfo.serdeProperties))
+      } else {
+        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
+          case Some(hiveSerde) =>
+            Some(CatalogStorageFormat.empty.copy(
+              locationUri = location.map(CatalogUtils.stringToURI),
+              inputFormat = hiveSerde.inputFormat,
+              outputFormat = hiveSerde.outputFormat,
+              serde = serdeInfo.serde.orElse(hiveSerde.serde),
+              properties = serdeInfo.serdeProperties))
+          case _ =>
+            None
+        }
+      }
+    }
   }
 
   /**

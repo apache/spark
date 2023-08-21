@@ -331,6 +331,57 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CREATE TABLE LIKE: basic behavior") {
+    val sourceTable = "testcat.t1"
+    val targetTable = "testcat.t2"
+    withTable(sourceTable, targetTable) {
+
+      sql(s"CREATE TABLE $sourceTable (id BIGINT, data STRING COMMENT 'hello') USING foo")
+      spark.sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+
+      val source = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t1"))
+      val target = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+
+      assert(target.name == targetTable)
+      assert(target.partitioning.isEmpty)
+      assert(target.properties == source.properties())
+      assert(source.columns() sameElements target.columns())
+    }
+  }
+
+  test("CREATE TABLE LIKE: custom location") {
+    val sourceTable = "testcat.t1"
+    val targetTable = "testcat.t2"
+    withTable(sourceTable, targetTable) {
+      sql(s"CREATE TABLE $sourceTable (id BIGINT, data STRING) USING foo PARTITIONED BY (id)")
+      val source = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t1"))
+
+      sql(s"CREATE TABLE $targetTable LIKE $sourceTable LOCATION '/tmp/testcat/t2'")
+      val target = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+      assert(source.schema === target.schema)
+      assert(source.partitioning === target.partitioning)
+      val expectedProperties = source.properties.asScala + ("location" -> "file:/tmp/testcat/t2")
+      assert(expectedProperties === target.properties.asScala)
+    }
+  }
+
+  test("CREATE TABLE LIKE: custom provider") {
+    val sourceTable = "testcat.t1"
+    val targetTable = "testcat.t2"
+    withTable(sourceTable, targetTable) {
+      sql(s"CREATE TABLE $sourceTable (id BIGINT, data STRING) USING foo PARTITIONED BY (id)")
+      val source = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t1"))
+
+      sql(s"CREATE TABLE $targetTable LIKE $sourceTable USING parquet")
+
+      val target = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+      assert(source.schema === target.schema)
+      assert(source.partitioning === target.partitioning)
+      val expectedProperties = source.properties.asScala + ("provider" -> "parquet")
+      assert(expectedProperties === target.properties.asScala)
+    }
+  }
+
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog

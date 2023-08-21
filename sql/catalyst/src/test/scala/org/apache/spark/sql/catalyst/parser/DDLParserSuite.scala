@@ -2364,6 +2364,50 @@ class DDLParserSuite extends AnalysisTest {
       UncacheTable(UnresolvedRelation(Seq("a", "b", "c")), ifExists = true))
   }
 
+  test("CREATE TABLE LIKE") {
+    comparePlans(
+      parsePlan("CREATE TABLE table1 LIKE table2"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false),
+        false))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS table1 LIKE table2"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false),
+        true))
+
+    comparePlans(
+      parsePlan("CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), Some("/spark/warehouse"),
+          None, None, false), false))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), Some("/spark/warehouse"),
+          None, None, false), true))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, Some("parquet"), OptionList(Seq.empty), None, None, None,
+          false), true))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"),
+      CreateTableLike(UnresolvedIdentifier(Seq("table1")),
+        UnresolvedTableOrView(Seq("table2"), "CREATE TABLE LIKE", true), List.empty,
+        UnresolvedTableSpec(Map.empty, Some("ORC"), OptionList(Seq.empty), None, None, None, false),
+        true))
+  }
+
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),

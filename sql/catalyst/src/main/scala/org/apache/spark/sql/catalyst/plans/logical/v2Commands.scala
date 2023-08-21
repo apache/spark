@@ -468,6 +468,39 @@ case class CreateTable(
   }
 }
 
+
+/**
+ * Create a new table from source table schema with a v2 catalog.
+ */
+case class CreateTableLike(
+    name: LogicalPlan,
+    sourceTable: LogicalPlan,
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ignoreIfExists: Boolean,
+    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand with V2CreateTablePlan {
+  override def tableSchema: StructType = sourceTable.schema
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan =
+    this.copy(partitioning = rewritten)
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, sourceTable)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan =
+    copy(isAnalyzed = true)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newName, newQuery) =>
+        copy(name = newName, sourceTable = newQuery)
+      case others =>
+        throw new IllegalArgumentException("Must be 2 children: " + others)
+    }
+  }
+}
+
 /**
  * Create a new table from a select query with a v2 catalog.
  */

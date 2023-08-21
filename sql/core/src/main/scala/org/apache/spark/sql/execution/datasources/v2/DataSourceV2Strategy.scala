@@ -194,6 +194,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
             qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
+    case CreateTableLike(ResolvedIdentifier(catalog, ident),
+    ResolvedTable(_, _, sourceTable, _), _, tableSpec: TableSpec, ifNotExists, true) =>
+      val finalTableSpec = if (tableSpec.provider.isEmpty
+        && sourceTable.properties().containsKey("provider")) {
+        tableSpec.copy(provider = Some(sourceTable.properties().get("provider")))
+      } else {
+        tableSpec
+      }
+      CreateTableExec(catalog.asTableCatalog, ident,
+        sourceTable.columns(),
+        sourceTable.partitioning(),
+        qualifyLocInTableSpec(finalTableSpec), ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil

@@ -39,6 +39,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: CreateTableAsSelect =>
         resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
+      case t: CreateTableLike =>
+        resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: ReplaceTable =>
         resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: ReplaceTableAsSelect =>
