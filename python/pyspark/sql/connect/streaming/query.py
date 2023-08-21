@@ -17,6 +17,7 @@
 
 import json
 import sys
+import pickle
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException, PySparkValueError
@@ -32,6 +33,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
+from pyspark.errors import PySparkRuntimeError
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
@@ -237,7 +239,13 @@ class StreamingQueryManager:
         listener._init_listener_id()
         cmd = pb2.StreamingQueryManagerCommand()
         expr = proto.PythonUDF()
-        expr.command = CloudPickleSerializer().dumps(listener)
+        try:
+            expr.command = CloudPickleSerializer().dumps(listener)
+        except pickle.PicklingError:
+            raise PySparkRuntimeError(
+                error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                message_parameters={"name": "addListener"},
+            )
         expr.python_ver = get_python_ver()
         cmd.add_listener.python_listener_payload.CopyFrom(expr)
         cmd.add_listener.id = listener._id

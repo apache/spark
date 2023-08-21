@@ -19,6 +19,7 @@ import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreachBatch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.errors import PySparkRuntimeError
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -29,6 +30,35 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     @unittest.skip("This seems specific to py4j and pinned threads. The intention is unclear")
     def test_streaming_foreachBatch_graceful_stop(self):
         super().test_streaming_foreachBatch_graceful_stop()
+
+    # class StreamingForeachBatchParityTests(ReusedConnectTestCase):
+    def test_accessing_spark_session(self):
+        spark = self.spark
+
+        def func(df, _):
+            spark.createDataFrame([("do", "not"), ("serialize", "spark")]).collect()
+
+        error_thrown = False
+        try:
+            self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
+        except PySparkRuntimeError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
+
+    def test_accessing_spark_session_through_df(self):
+        dataframe = self.spark.createDataFrame([("do", "not"), ("serialize", "dataframe")])
+
+        def func(df, _):
+            dataframe.collect()
+
+        error_thrown = False
+        try:
+            self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
+        except PySparkRuntimeError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@
 import unittest
 import time
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener, QueryStartedEvent
 from pyspark.sql.types import StructType, StructField, StringType
@@ -82,6 +83,54 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
             # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
+
+    def test_accessing_spark_session(self):
+        spark = self.spark
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                spark.createDataFrame([("do", "not"), ("serialize", "spark")]).collect()
+
+            def onQueryProgress(self, event):
+                pass
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        error_thrown = False
+        try:
+            self.spark.streams.addListener(TestListener())
+        except PySparkRuntimeError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
+
+    def test_accessing_spark_session_through_df(self):
+        dataframe = self.spark.createDataFrame([("do", "not"), ("serialize", "dataframe")])
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                dataframe.collect()
+
+            def onQueryProgress(self, event):
+                pass
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        error_thrown = False
+        try:
+            self.spark.streams.addListener(TestListener())
+        except PySparkRuntimeError as e:
+            self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
+            error_thrown = True
+        self.assertTrue(error_thrown)
 
 
 if __name__ == "__main__":
