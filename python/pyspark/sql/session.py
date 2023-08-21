@@ -1255,7 +1255,7 @@ class SparkSession(SparkConversionMixin):
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
-            column names, default is None.  The data type string format equals to
+            column names, default is None. The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
 
@@ -1292,34 +1292,31 @@ class SparkSession(SparkConversionMixin):
         --------
         Create a DataFrame from a list of tuples.
 
-        >>> spark.createDataFrame([('Alice', 1)]).collect()
-        [Row(_1='Alice', _2=1)]
-        >>> spark.createDataFrame([('Alice', 1)], ['name', 'age']).collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)]).show()
+        +-----+---+
+        |   _1| _2|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
-        Create a DataFrame from a list of dictionaries
+        Create a DataFrame from a list of dictionaries.
 
         >>> d = [{'name': 'Alice', 'age': 1}]
-        >>> spark.createDataFrame(d).collect()
-        [Row(age=1, name='Alice')]
+        >>> spark.createDataFrame(d).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  1|Alice|
+        +---+-----+
 
-        Create a DataFrame from an RDD.
+        Create a DataFrame with column names specified.
 
-        >>> rdd = spark.sparkContext.parallelize([('Alice', 1)])
-        >>> spark.createDataFrame(rdd).collect()
-        [Row(_1='Alice', _2=1)]
-        >>> df = spark.createDataFrame(rdd, ['name', 'age'])
-        >>> df.collect()
-        [Row(name='Alice', age=1)]
-
-        Create a DataFrame from Row instances.
-
-        >>> from pyspark.sql import Row
-        >>> Person = Row('name', 'age')
-        >>> person = rdd.map(lambda r: Person(*r))
-        >>> df2 = spark.createDataFrame(person)
-        >>> df2.collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)], ['name', 'age']).show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
         Create a DataFrame with the explicit schema specified.
 
@@ -1327,31 +1324,58 @@ class SparkSession(SparkConversionMixin):
         >>> schema = StructType([
         ...    StructField("name", StringType(), True),
         ...    StructField("age", IntegerType(), True)])
-        >>> df3 = spark.createDataFrame(rdd, schema)
-        >>> df3.collect()
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame([('Alice', 1)], schema).show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
+
+        Create a DataFrame with the schema in DDL formatted string.
+
+        >>> spark.createDataFrame([('Alice', 1)], "name: string, age: int").show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
+
+        Create an empty DataFrame.
+        When initializing an empty DataFrame in PySpark, it's mandatory to specify its schema,
+        as the DataFrame lacks data from which the schema can be inferred.
+
+        >>> spark.createDataFrame([], "name: string, age: int").show()
+        +----+---+
+        |name|age|
+        +----+---+
+        +----+---+
+
+        Create a DataFrame from Row objects.
+
+        >>> from pyspark.sql import Row
+        >>> Person = Row('name', 'age')
+        >>> df = spark.createDataFrame([Person("Alice", 1)])
+        >>> df.show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
 
         Create a DataFrame from a pandas DataFrame.
 
-        >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name='Alice', age=1)]
+        >>> spark.createDataFrame(df.toPandas()).show()  # doctest: +SKIP
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
         >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
-        [Row(0=1, 1=2)]
-
-        Create  a DataFrame from an RDD with the schema in DDL formatted string.
-
-        >>> spark.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a='Alice', b=1)]
-        >>> rdd = rdd.map(lambda row: row[1])
-        >>> spark.createDataFrame(rdd, "int").collect()
-        [Row(value=1)]
-
-        When the type is unmatched, it throws an exception.
-
-        >>> spark.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
+        +---+---+
+        |  0|  1|
+        +---+---+
+        |  1|  2|
+        +---+---+
         """
         SparkSession._activeSession = self
         assert self._jvm is not None
