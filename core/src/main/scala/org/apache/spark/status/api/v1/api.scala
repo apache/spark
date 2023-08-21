@@ -533,6 +533,8 @@ case class ThreadStackTrace(
     stackTrace: StackTrace,
     blockedByThreadId: Option[Long],
     blockedByLock: String,
+    @deprecated("using synchronizers and monitors instead", "4.0.0")
+    holdingLocks: Seq[String],
     synchronizers: Seq[String],
     monitors: Seq[String],
     lockName: Option[String],

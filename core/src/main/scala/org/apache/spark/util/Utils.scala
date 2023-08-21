@@ -2186,6 +2186,7 @@ private[spark] object Utils
     })
 
     val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
+    val monitorStrs = monitors.values.toSeq
     ThreadStackTrace(
       threadInfo.getThreadId,
       threadInfo.getThreadName,
@@ -2193,8 +2194,9 @@ private[spark] object Utils
       stackTrace,
       if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
       Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      synchronizers ++ monitorStrs,
       synchronizers,
-      monitors.values.toSeq,
+      monitorStrs,
       Option(threadInfo.getLockName),
       Option(threadInfo.getLockOwnerName),
       threadInfo.isSuspended,
