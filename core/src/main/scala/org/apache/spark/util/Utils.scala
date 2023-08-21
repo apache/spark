@@ -2109,9 +2109,9 @@ private[spark] object Utils
     def lockString: String = {
       lock match {
         case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Monitor(${lock.getClassName}@${monitor.getIdentityHashCode})"
         case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode})"
       }
     }
   }
@@ -2883,34 +2883,6 @@ private[spark] object Utils
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
-  }
-
-  /**
-   * Returns true if and only if the underlying class is a member class.
-   *
-   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
-   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
-   * we can remove this helper method safely if we drop the support of jdk8u.
-   */
-  def isMemberClass(cls: Class[_]): Boolean = {
-    try {
-      cls.isMemberClass
-    } catch {
-      case _: InternalError =>
-        // We emulate jdk8u `Class.isMemberClass` below:
-        //   public boolean isMemberClass() {
-        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
-        //   }
-        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
-        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
-        // if a given class is not a local or an anonymous class, so we replace it with
-        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
-        // only in either case (JVM Spec 4.8.6).
-        //
-        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
-        // we reorder the conditions to follow it.
-        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
-    }
   }
 
   /**

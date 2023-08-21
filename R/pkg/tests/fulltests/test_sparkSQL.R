@@ -2808,6 +2808,12 @@ test_that("test hint", {
     explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
   )
   expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+
+  a <- column("id")
+  rebalance_plan_hint <- capture.output(
+      explain(hint(df, "rebalance", as.integer(2), a), TRUE)
+  )
+  expect_true(any(grepl("RebalancePartitions", rebalance_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
@@ -4193,8 +4199,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
-                     "'recoverPartitions()' expects a table"), fixed = TRUE)
+               "[UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION]*`cars`*")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

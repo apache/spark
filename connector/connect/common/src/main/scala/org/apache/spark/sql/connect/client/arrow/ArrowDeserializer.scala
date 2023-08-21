@@ -288,17 +288,25 @@ object ArrowDeserializers {
           throw unsupportedCollectionType(tag.runtimeClass)
         }
 
-      case (ProductEncoder(tag, fields), StructVectors(struct, vectors)) =>
+      case (ProductEncoder(tag, fields, outerPointerGetter), StructVectors(struct, vectors)) =>
+        val outer = outerPointerGetter.map(_()).toSeq
         // We should try to make this work with MethodHandles.
         val Some(constructor) =
-          ScalaReflection.findConstructor(tag.runtimeClass, fields.map(_.enc.clsTag.runtimeClass))
+          ScalaReflection.findConstructor(
+            tag.runtimeClass,
+            outer.map(_.getClass) ++ fields.map(_.enc.clsTag.runtimeClass))
         val deserializers = if (isTuple(tag.runtimeClass)) {
           fields.zip(vectors).map { case (field, vector) =>
             deserializerFor(field.enc, vector, timeZoneId)
           }
         } else {
+          val outerDeserializer = outer.map { value =>
+            new Deserializer[Any] {
+              override def get(i: Int): Any = value
+            }
+          }
           val lookup = createFieldLookup(vectors)
-          fields.map { field =>
+          outerDeserializer ++ fields.map { field =>
             deserializerFor(field.enc, lookup(field.name), timeZoneId)
           }
         }

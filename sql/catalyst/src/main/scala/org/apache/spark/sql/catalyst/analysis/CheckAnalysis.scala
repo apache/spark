@@ -1038,10 +1038,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
-          expr.failAnalysis(
-            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-              "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            messageParameters = Map("treeNode" -> planToString(plan)))
+          cleanQueryInScalarSubquery(join.right.plan) match {
+            // Python UDTFs are by default non-deterministic. They are constructed as a
+            // OneRowRelation subquery and can be rewritten by the optimizer without
+            // any decorrelation.
+            case Generate(_: PythonUDTF, _, _, _, _, _: OneRowRelation)
+              if SQLConf.get.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY) =>  // Ok
+            case _ =>
+              expr.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                  "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+                messageParameters = Map("treeNode" -> planToString(plan)))
+          }
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
@@ -1113,9 +1121,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
-          case (left: Alias, right: Attribute) =>
-            left.child.semanticEquals(right) && right.name == left.name
+        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
+          case (Alias(attr: AttributeReference, _), index) =>
+            // The input plan of this method is already canonicalized. The attribute id becomes the
+            // ordinal of this attribute in the child outputs. So an alias-only Project means the
+            // the id of the aliased attribute is the same as its index in the project list.
+            attr.exprId.id == index
           case _ => false
         }
         if (assignExprIdOnly) {
@@ -1170,6 +1181,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
       case _: Project => usingDecorrelateInnerQueryFramework
+      case _: Join => usingDecorrelateInnerQueryFramework
       case _ => false
     }
 

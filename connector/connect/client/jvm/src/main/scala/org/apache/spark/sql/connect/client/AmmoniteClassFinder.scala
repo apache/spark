@@ -14,52 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.connect.client
 
 import java.net.URL
-import java.nio.file.{Files, LinkOption, Path, Paths}
-
-import scala.collection.JavaConverters._
+import java.nio.file.Paths
 
 import ammonite.repl.api.Session
 import ammonite.runtime.SpecialClassLoader
 
-import org.apache.spark.sql.connect.client.Artifact.{InMemory, LocalFile}
-
-trait ClassFinder {
-  def findClasses(): Iterator[Artifact]
-}
-
-/**
- * A generic [[ClassFinder]] implementation that traverses a specific REPL output directory.
- * @param _rootDir
- */
-class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
-  private val rootDir = Paths.get(_rootDir)
-  require(rootDir.isAbsolute)
-  require(Files.isDirectory(rootDir))
-
-  override def findClasses(): Iterator[Artifact] = {
-    Files
-      .walk(rootDir)
-      // Ignore symbolic links
-      .filter(path => Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && isClass(path))
-      .map[Artifact](path => toArtifact(path))
-      .iterator()
-      .asScala
-  }
-
-  private def toArtifact(path: Path): Artifact = {
-    // Persist the relative path of the classfile
-    Artifact.newClassArtifact(rootDir.relativize(path), new LocalFile(path))
-  }
-
-  private def isClass(path: Path): Boolean = path.toString.endsWith(".class")
-}
-
 /**
  * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
+ *
  * @param session
  */
 class AmmoniteClassFinder(session: Session) extends ClassFinder {
@@ -73,7 +38,7 @@ class AmmoniteClassFinder(session: Session) extends ClassFinder {
         parts(parts.length - 1) += ".class"
         val path = Paths.get(parts.head, parts.tail: _*)
         val bytes = classloader.newFileDict(name)
-        Artifact.newClassArtifact(path, new InMemory(bytes))
+        Artifact.newClassArtifact(path, new Artifact.InMemory(bytes))
       }
     }
   }

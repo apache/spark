@@ -271,19 +271,6 @@ sql_kafka = Module(
     ],
 )
 
-connect = Module(
-    name="connect",
-    dependencies=[hive, avro],
-    source_file_regexes=[
-        "connector/connect",
-    ],
-    build_profile_flags=["-Pconnect"],
-    sbt_test_goals=[
-        "connect/test",
-        "connect-client-jvm/test",
-    ],
-)
-
 protobuf = Module(
     name="protobuf",
     dependencies=[sql],
@@ -292,6 +279,19 @@ protobuf = Module(
     ],
     sbt_test_goals=[
         "protobuf/test",
+    ],
+)
+
+connect = Module(
+    name="connect",
+    dependencies=[hive, avro, protobuf],
+    source_file_regexes=[
+        "connector/connect",
+    ],
+    build_profile_flags=["-Pconnect"],
+    sbt_test_goals=[
+        "connect/test",
+        "connect-client-jvm/test",
     ],
 )
 
@@ -832,6 +832,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.avro.functions",
+        "pyspark.sql.connect.protobuf.functions",
         "pyspark.sql.connect.streaming.readwriter",
         "pyspark.sql.connect.streaming.query",
         # sql unittests
@@ -840,6 +841,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
         "pyspark.sql.tests.connect.test_parity_arrow",
+        "pyspark.sql.tests.connect.test_parity_arrow_python_udf",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
         "pyspark.sql.tests.connect.test_parity_catalog",

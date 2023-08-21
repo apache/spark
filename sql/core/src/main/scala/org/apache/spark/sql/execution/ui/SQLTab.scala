@@ -35,6 +35,8 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   parent.attachTab(this)
 
   parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+
+  override def displayOrder: Int = 0
 }
 
 object SQLTab {

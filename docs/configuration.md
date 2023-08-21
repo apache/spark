@@ -3020,8 +3020,11 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires <code>spark.shuffle.service.enabled</code> or
-    <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be set.
+    This requires one of the following conditions: 
+    1) enabling external shuffle service through <code>spark.shuffle.service.enabled</code>, or
+    2) enabling shuffle tracking through <code>spark.dynamicAllocation.shuffleTracking.enabled</code>, or
+    3) enabling shuffle blocks decommission through <code>spark.decommission.enabled</code> and <code>spark.storage.decommission.shuffleBlocks.enabled</code>, or
+    4) (Experimental) configuring <code>spark.shuffle.sort.io.plugin.class</code> to use a custom <code>ShuffleDataIO</code> who's <code>ShuffleDriverComponents</code> supports reliable storage.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and

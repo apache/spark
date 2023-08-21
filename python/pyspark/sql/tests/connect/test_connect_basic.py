@@ -1900,7 +1900,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="INVALID_ITEM_FOR_CONTAINER",
             message_parameters={
                 "arg_name": "parameters",
-                "allowed_types": "str, list, float, int",
+                "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
             },
         )
@@ -3372,6 +3372,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3387,6 +3389,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3403,6 +3407,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3419,6 +3425,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3435,6 +3443,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3451,6 +3461,8 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=1,
                 max_backoff=10,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3527,6 +3539,21 @@ class ChannelBuilderTests(unittest.TestCase):
         id = str(uuid.uuid4())
         chan = ChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
+
+        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        md = chan.metadata()
+        for kv in md:
+            self.assertNotIn(
+                kv[0],
+                [
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
+                ],
+                "Metadata must not contain fixed params",
+            )
 
         with self.assertRaises(ValueError) as ve:
             chan = ChannelBuilder("sc://host/;session_id=abcd")
