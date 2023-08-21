@@ -53,6 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 public abstract class WritableColumnVector extends ColumnVector {
   private final byte[] byte8 = new byte[8];
 
+  protected abstract void releaseMemory();
+
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
@@ -68,6 +70,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (numNulls > 0) {
       putNotNulls(0, capacity);
       numNulls = 0;
+    }
+
+    if (hugeVectorThreshold > 0 && capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
+      releaseMemory();
+      reserveInternal(capacity);
     }
   }
 
@@ -85,6 +93,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+    releaseMemory();
   }
 
   public void reserveAdditional(int additionalCapacity) {

@@ -84,7 +84,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return data;
   }
 
-  private void releaseMemory() {
+  protected void releaseMemory() {
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
@@ -93,23 +93,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     data = 0;
     lengthData = 0;
     offsetData = 0;
-  }
-
-  @Override
-  public void reset() {
-    super.reset();
-    if (!isConstant && hugeVectorThreshold > 0 &&
-        capacity > hugeVectorThreshold) {
-      capacity = defaultCapacity;
-      releaseMemory();
-      reserveInternal(capacity);
-    }
-  }
-
-  @Override
-  public void close() {
-    super.close();
-    releaseMemory();
   }
 
   //
