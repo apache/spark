@@ -595,7 +595,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     if (tableDefinition.tableType == VIEW) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
-      client.alterTable(tableDefinition.copy(properties = newTableProps))
+      val newTable = tableDefinition.copy(properties = newTableProps)
+      try {
+        client.alterTable(newTable)
+      } catch {
+        case NonFatal(e) =>
+          // If for some reason we fail to store the schema we store it as empty there
+          // since we already store the real schema in the table properties. This try-catch
+          // should only be necessary for Spark views which are incompatible with Hive
+          client.alterTable(newTable.copy(schema = EMPTY_DATA_SCHEMA))
+      }
     } else {
       val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
 

@@ -32,7 +32,6 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
-    BinaryType,
     DataType,
     StringType,
     StructType,
@@ -131,58 +130,24 @@ def _create_py_udf(
     else:
         is_arrow_enabled = useArrow
 
-    regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
-    try:
-        is_func_with_args = len(getfullargspec(f).args) > 0
-    except TypeError:
-        is_func_with_args = False
+    eval_type: int = PythonEvalType.SQL_BATCHED_UDF
+
     if is_arrow_enabled:
+        try:
+            is_func_with_args = len(getfullargspec(f).args) > 0
+        except TypeError:
+            is_func_with_args = False
         if is_func_with_args:
-            return _create_arrow_py_udf(regular_udf)
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
                 "Arrow optimization for Python UDFs cannot be enabled.",
                 UserWarning,
             )
-            return regular_udf
-    else:
-        return regular_udf
 
-
-def _create_arrow_py_udf(regular_udf):  # type: ignore
-    """Create an Arrow-optimized Python UDF out of a regular Python UDF."""
-    require_minimum_pandas_version()
-    require_minimum_pyarrow_version()
-
-    import pandas as pd
-    from pyspark.sql.pandas.functions import _create_pandas_udf
-
-    f = regular_udf.func
-    return_type = regular_udf.returnType
-
-    # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
-    # optimization.
-    # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
-    # string or bytes dtype, got ..." whereas a non-Arrow-optimized Python UDF returns
-    # successfully.
-    result_func = lambda pdf: pdf  # noqa: E731
-    if type(return_type) == StringType:
-        result_func = lambda r: str(r) if r is not None else r  # noqa: E731
-    elif type(return_type) == BinaryType:
-        result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
-
-    def vectorized_udf(*args: pd.Series) -> pd.Series:
-        return pd.Series(result_func(f(*a)) for a in zip(*args))
-
-    # Regular UDFs can take callable instances too.
-    vectorized_udf.__name__ = f.__name__ if hasattr(f, "__name__") else f.__class__.__name__
-    vectorized_udf.__module__ = f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
-    vectorized_udf.__doc__ = f.__doc__
-    pudf = _create_pandas_udf(vectorized_udf, return_type, PythonEvalType.SQL_ARROW_BATCHED_UDF)
-    # Keep the attributes as if this is a regular Python UDF.
-    pudf.func = f
-    pudf.returnType = return_type
-    return pudf
+    return _create_udf(f, returnType, eval_type)
 
 
 class UserDefinedFunction:
@@ -637,10 +602,7 @@ class UDFRegistration:
                 evalType=f.evalType,
                 deterministic=f.deterministic,
             )
-            if f.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-                register_udf = _create_arrow_py_udf(source_udf)._unwrapped
-            else:
-                register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
+            register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
             return_udf = register_udf
         else:
             if returnType is None:
