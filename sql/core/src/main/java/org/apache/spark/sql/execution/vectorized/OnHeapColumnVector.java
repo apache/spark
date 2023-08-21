@@ -92,6 +92,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     arrayOffsets = null;
   }
 
+  @Override
+  public void close() {
+    super.close();
+  }
+
   //
   // APIs dealing with nulls
   //

@@ -95,6 +95,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     offsetData = 0;
   }
 
+  @Override
+  public void close() {
+    super.close();
+  }
+
   //
   // APIs dealing with nulls
   //
