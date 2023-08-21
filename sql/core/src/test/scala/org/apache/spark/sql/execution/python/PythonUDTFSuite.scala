@@ -43,7 +43,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonScriptWithSinglePartition: String =
     """
-      |from pyspark.sql.types import Row
+      |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+      |from pyspark.sql.types import IntegerType, Row, StructType
       |class UDTFWithSinglePartition:
       |    def __init__(self):
       |        print(f'@@@ __init__, id = {id(self)}')
@@ -83,22 +84,19 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
-  private val returnTypePythonUDTFWithSinglePartition: StructType =
-    StructType.fromDDL("count int, total int, last int")
-
   private val pythonUDTF: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
+    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, Some(returnType))
 
   private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
       "UDTFWithSinglePartition", pythonScriptWithSinglePartition,
-      returnTypePythonUDTFWithSinglePartition)
+      None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
       "SimpleUDTF",
       pythonScript,
-      returnType,
+      Some(returnType),
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
   test("Simple PythonUDTF") {

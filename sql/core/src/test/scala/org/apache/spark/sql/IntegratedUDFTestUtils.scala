@@ -397,7 +397,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def createUserDefinedPythonTableFunction(
       name: String,
       pythonScript: String,
-      returnType: StructType,
+      returnType: Option[StructType],
       evalType: Int = PythonEvalType.SQL_TABLE_UDF,
       deterministic: Boolean = false): UserDefinedPythonTableFunction = {
     UserDefinedPythonTableFunction(
@@ -410,7 +410,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
-      returnType = Some(returnType),
+      returnType = returnType,
       pythonEvalType = evalType,
       udfDeterministic = deterministic)
   }
@@ -432,7 +432,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udtf = createUserDefinedPythonTableFunction(
       name = "TestUDTF",
       pythonScript = pythonScript,
-      returnType = StructType.fromDDL("x int, y int")
+      returnType = Some(StructType.fromDDL("x int, y int"))
     )
 
     def apply(session: SparkSession, exprs: Column*): DataFrame =

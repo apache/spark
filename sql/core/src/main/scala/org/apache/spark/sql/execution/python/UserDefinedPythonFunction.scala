@@ -30,6 +30,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
@@ -83,7 +84,7 @@ case class UserDefinedPythonTableFunction(
     func: PythonFunction,
     returnType: Option[StructType],
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean) extends Logging {
 
   def this(
       name: String,
@@ -112,6 +113,7 @@ case class UserDefinedPythonTableFunction(
 
     val udtf = returnType match {
       case Some(rt) =>
+        logWarning(s"@@@ builder")
         PythonUDTF(
           name = name,
           func = func,
@@ -152,7 +154,7 @@ case class UserDefinedPythonTableFunction(
   }
 }
 
-object UserDefinedPythonTableFunction {
+object UserDefinedPythonTableFunction extends Logging {
 
   private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
 
@@ -310,6 +312,11 @@ object UserDefinedPythonTableFunction {
           env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
       releasedOrClosed = true
+
+      logWarning(s"@@@@@@ analyzeInPython, schema = $schema, " +
+        s"withSinglePartition = $withSinglePartition, " +
+        s"partitionByExpressions = $partitionByColumns, " +
+        s"orderByExpressions = $orderBy, ")
 
       PythonUDTFAnalyzeResult(
         schema = schema,
