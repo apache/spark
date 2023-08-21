@@ -489,22 +489,23 @@ object SQLConf {
 
   val VECTORIZED_HUGE_VECTOR_RESERVE_RATIO =
     buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio")
-      .doc("spark will reserve requiredCapacity * this ratio memory next time. This is only " +
-        "effective when spark.sql.inMemoryColumnarStorage.hugeVectorThreshold > 0 and required " +
-        "memory larger than that threshold.")
+      .doc("When spark.sql.inMemoryColumnarStorage.hugeVectorThreshold <= 0 or the required " +
+        "memory is smaller than spark.sql.inMemoryColumnarStorage.hugeVectorThreshold, spark " +
+        "reserves required memory * 2 memory; otherwise, spark reserves " +
+        "required memory * this ratio memory, and will release this column vector memory before " +
+        "reading the next batch rows.")
       .version("3.5.0")
       .doubleConf
       .createWithDefault(1.2)
 
   val VECTORIZED_HUGE_VECTOR_THRESHOLD =
     buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorThreshold")
-      .doc("When the in memory column vector is larger than this, spark will reserve " +
-        s"requiredCapacity * ${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and " +
-        "free this column vector before reading next batch data. -1 means disabling the " +
-        "optimization.")
+      .doc("When the required memory is larger than this, spark reserves required memory * " +
+        s"${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and release this column " +
+        s"vector memory before reading the next batch rows. -1 means disabling the optimization.")
       .version("3.5.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(1)
+      .createWithDefault(-1)
 
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
