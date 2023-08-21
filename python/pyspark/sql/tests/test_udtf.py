@@ -2133,7 +2133,6 @@ class BaseUDTFTestsMixin:
             [Row(count=40, total=60, last=2)],
         )
 
-
     def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
         @udtf
         class TestUDTF:
@@ -2186,9 +2185,6 @@ class BaseUDTFTestsMixin:
                 Row(count=40, total=60, last=2),
                 ],
         )
-
-
-
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
