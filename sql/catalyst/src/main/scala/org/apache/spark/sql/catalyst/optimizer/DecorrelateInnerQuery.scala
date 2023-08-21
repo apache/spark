@@ -667,7 +667,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
             val newPartitionSpec = replaceOuterReferences(partitionSpec, outerReferenceMap)
             val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
-            val referencesToAdd = AttributeSet(joinCond.flatMap(_.references))
+            val referencesToAdd = missingReferences(newProjectList, joinCond)
 
             val newWindow = Window(newProjectList ++ referencesToAdd,
               partitionSpec = newPartitionSpec ++ referencesToAdd,
