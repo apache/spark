@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CONNECT_SCALA_UDF_STUB_PREFIXES
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
@@ -162,18 +162,34 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def classloader: ClassLoader = {
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
-    val loader = if (SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES).nonEmpty) {
-      val stubClassLoader =
-        StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
-      new ChildFirstURLClassLoader(
-        urls.toArray,
-        stubClassLoader,
-        Utils.getContextOrSparkClassLoader)
+    val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
+    val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val loader = if (prefixes.nonEmpty) {
+      // A classloader needs to be able to fully define a class. If we want stubbing to work for a
+      // classloader the StubClassloader it needs to be the last classloader to load a class.
+      //
+      // Classes are loaded lazily. If a class contains something we can styb
+      if (userClasspathFirst) {
+        // USER -> SYSTEM -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+      } else {
+        // SYSTEM -> USER -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(null, prefixes),
+          Utils.getContextOrSparkClassLoader)
+      }
     } else {
-      new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      if (userClasspathFirst) {
+        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      } else {
+        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      }
     }
 
-    logDebug(s"Using class loader: $loader, containing urls: $urls")
+    logInfo(s"Using class loader: $loader, containing urls: $urls")
     loader
   }
 

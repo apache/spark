@@ -26,7 +26,7 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
 
 class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 

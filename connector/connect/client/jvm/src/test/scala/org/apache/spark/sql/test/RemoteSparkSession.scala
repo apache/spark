@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client.util
+package org.apache.spark.sql.test
 
-import java.io.{File, OutputStream}
+import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder
 import java.lang.ProcessBuilder.Redirect
+import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -27,8 +28,8 @@ import org.scalatest.{BeforeAndAfterAll, Tag}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.test.IntegrationTestUtils._
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -43,8 +44,9 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * }}}
  *
  * Set system property `spark.test.home` or env variable `SPARK_HOME` if the test is not executed
- * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` to
- * print the server process output in the console to debug server start stop problems.
+ * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` or
+ * environment variable `SPARK_DEBUG_SC_JVM_CLIENT=true` to print the server process output in the
+ * console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
 
@@ -66,18 +68,14 @@ object SparkConnectServerUtils {
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
-    command += "--driver-class-path"
-    command += connectJar
+    command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
     command ++= debugConfigs
-    command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += connectJar
     val builder = new ProcessBuilder(command.result(): _*)
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
-    // Remove this env variable to make sure the server classpath
-    // is fully isolated from the client classpath.
     environment.remove("SPARK_DIST_CLASSPATH")
     if (isDebug) {
       builder.redirectError(Redirect.INHERIT)
@@ -100,58 +98,37 @@ object SparkConnectServerUtils {
     // To find InMemoryTableCatalog for V2 writer tests
     val catalystTestJar =
       tryFindJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
-        .map(clientTestJar => Seq(clientTestJar.getCanonicalPath))
-        .getOrElse(Seq.empty)
+        .map(clientTestJar => clientTestJar.getCanonicalPath)
+        .get
 
-    // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
-    val connectClientTestJar = tryFindJar(
-      "connector/connect/client/jvm",
-      // SBT passes the client & test jars to the server process automatically.
-      // So we skip building or finding this jar for SBT.
-      "sbt-tests-do-not-need-this-jar",
-      "spark-connect-client-jvm",
-      test = true)
-      .map(clientTestJar => Seq(clientTestJar.getCanonicalPath))
-      .getOrElse(Seq.empty)
-
-    val allJars = catalystTestJar ++ connectClientTestJar
-    val jarsConfigs = Seq("--jars", allJars.mkString(","))
-
-    // Use InMemoryTableCatalog for V2 writer tests
-    val writerV2Configs = Seq(
-      "--conf",
-      "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
-
-    // Run tests using hive
-    val hiveTestConfigs = {
-      val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
-        "hive"
-      } else {
-        // scalastyle:off println
-        println(
-          "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
-            "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
-            "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
-            "2. Test with sbt: run test with `-Phive` profile")
-        // scalastyle:on println
-        // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
-        // module to avoid unexpected loading of `DataSourceRegister` in hive module during
-        // testing without `-Phive` profile.
-        IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
-        "in-memory"
-      }
-      Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
+    val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
+      "hive"
+    } else {
+      // scalastyle:off println
+      println(
+        "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
+          "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
+          "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
+          "2. Test with sbt: run test with `-Phive` profile")
+      // scalastyle:on println
+      // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
+      // module to avoid unexpected loading of `DataSourceRegister` in hive module during
+      // testing without `-Phive` profile.
+      IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
+      "in-memory"
     }
-
-    // Make the server terminate reattachable streams every 1 second and 123 bytes,
-    // to make the tests exercise reattach.
-    val reattachExecuteConfigs = Seq(
-      "--conf",
+    val confs = Seq(
+      // Use InMemoryTableCatalog for V2 writer tests
+      "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
+      // Try to use the hive catalog, fallback to in-memory if it is not there.
+      "spark.sql.catalogImplementation=" + catalogImplementation,
+      // Make the server terminate reattachable streams every 1 second and 123 bytes,
+      // to make the tests exercise reattach.
       "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
-      "--conf",
-      "spark.connect.execute.reattachable.senderMaxStreamSize=123")
-
-    jarsConfigs ++ writerV2Configs ++ hiveTestConfigs ++ reattachExecuteConfigs
+      "spark.connect.execute.reattachable.senderMaxStreamSize=123",
+      // Disable UI
+      "spark.ui.enabled=false")
+    Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)
   }
 
   def start(): Unit = {
@@ -173,11 +150,28 @@ object SparkConnectServerUtils {
       debug(s"Spark Connect Server is stopped with exit code: $code")
       code
     } catch {
+      case e: IOException if e.getMessage.contains("Stream closed") =>
+        -1
       case e: Throwable =>
         debug(e)
         sparkConnect.destroyForcibly()
         throw e
     }
+  }
+
+  def syncTestDependencies(spark: SparkSession): Unit = {
+    // Both SBT & Maven pass the test-classes as a directory instead of a jar.
+    val testClassesPath = Paths.get(IntegrationTestUtils.connectClientTestClassDir)
+    spark.client.artifactManager.addClassDir(testClassesPath)
+
+    // We need scalatest & scalactic on the classpath to make the tests work.
+    val jars = System
+      .getProperty("java.class.path")
+      .split(File.pathSeparatorChar)
+      .filter(_.endsWith(".jar"))
+      .filter(e => e.contains("scalatest") || e.contains("scalactic"))
+      .map(e => Paths.get(e).toUri)
+    spark.client.artifactManager.addArtifacts(jars)
   }
 }
 
@@ -222,7 +216,7 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
 
       // Auto sync if successful
       if (success) {
-        AutoDependencyUploader.sync(spark)
+        SparkConnectServerUtils.syncTestDependencies(spark)
       }
 
       // Throw error if failed
