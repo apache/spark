@@ -17,6 +17,9 @@
 
 import unittest
 import time
+import uuid
+import json
+from typing import Any, Dict, Union
 
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import (
@@ -25,6 +28,10 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryIdleEvent,
     QueryTerminatedEvent,
+    StateOperatorProgress,
+    StreamingQueryProgress,
+    SourceProgress,
+    SinkProgress,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -35,8 +42,49 @@ from pyspark.sql.types import (
     FloatType,
     MapType,
 )
+from pyspark.sql import Row
 from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
+
+
+def listener_event_as_dict(
+    e: Union[QueryStartedEvent, QueryProgressEvent, QueryIdleEvent, QueryTerminatedEvent]
+) -> Dict[str, Any]:
+    if isinstance(e, QueryProgressEvent):
+        return {"progress": streaming_query_progress_as_dict(e.progress)}
+    else:
+
+        def conv(obj: Any) -> Any:
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            else:
+                return obj
+
+        return {k[1:]: conv(v) for k, v in e.__dict__.items()}
+
+
+def streaming_query_progress_as_dict(e: StreamingQueryProgress) -> Dict[str, Any]:
+    def conv(obj: Any) -> Any:
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        elif isinstance(obj, (SourceProgress, SinkProgress, StateOperatorProgress)):
+            return other_progress_as_dict(obj)
+        elif isinstance(obj, Row):
+            return json.dumps(obj.asDict())  # Assume no nested row in observed metrics
+        elif isinstance(obj, list):
+            return [conv(o) for o in obj]
+        elif isinstance(obj, dict):
+            return dict((k, conv(v)) for k, v in obj.items())
+        else:
+            return obj
+
+    return {k[1:]: conv(v) for k, v in e.__dict__.items() if k not in ["_jprogress", "_jdict"]}
+
+
+def other_progress_as_dict(
+    e: Union[StateOperatorProgress, SourceProgress, SinkProgress]
+) -> Dict[str, Any]:
+    return {k[1:]: v for k, v in e.__dict__.items() if k not in ["_jprogress", "_jdict"]}
 
 
 def get_start_event_schema():
@@ -147,14 +195,14 @@ def get_progress_event_schema():
 class TestListener(StreamingQueryListener):
     def onQueryStarted(self, event):
         df = self.spark.createDataFrame(
-            data=[(event.asDict())],
+            data=[listener_event_as_dict(event)],
             schema=get_start_event_schema(),
         )
-        df.write.saveAsTable("listener_start_events")
+        df.write.mode("append").saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
         df = self.spark.createDataFrame(
-            data=[event.asDict()],
+            data=[listener_event_as_dict(event)],
             schema=get_progress_event_schema(),
         )
         df.write.mode("append").saveAsTable("listener_progress_events")
@@ -164,10 +212,10 @@ class TestListener(StreamingQueryListener):
 
     def onQueryTerminated(self, event):
         df = self.spark.createDataFrame(
-            data=[event.asDict()],
+            data=[listener_event_as_dict(event)],
             schema=get_terminated_event_schema(),
         )
-        df.write.saveAsTable("listener_terminated_events")
+        df.write.mode("append").saveAsTable("listener_terminated_events")
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
