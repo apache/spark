@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, PYTHON_UDF, TreePattern, UNRESOLVED_PYTHON_UDTF}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -206,6 +206,8 @@ case class UnresolvedPolymorphicPythonUDTF(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnresolvedPolymorphicPythonUDTF =
     copy(children = newChildren)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR, UNRESOLVED_PYTHON_UDTF)
 }
 
 /**

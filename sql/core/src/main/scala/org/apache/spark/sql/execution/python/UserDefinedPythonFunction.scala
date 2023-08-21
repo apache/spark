@@ -113,7 +113,6 @@ case class UserDefinedPythonTableFunction(
 
     val udtf = returnType match {
       case Some(rt) =>
-        logWarning(s"@@@ builder")
         PythonUDTF(
           name = name,
           func = func,
@@ -312,11 +311,6 @@ object UserDefinedPythonTableFunction extends Logging {
           env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
       releasedOrClosed = true
-
-      logWarning(s"@@@@@@ analyzeInPython, schema = $schema, " +
-        s"withSinglePartition = $withSinglePartition, " +
-        s"partitionByExpressions = $partitionByColumns, " +
-        s"orderByExpressions = $orderBy, ")
 
       PythonUDTFAnalyzeResult(
         schema = schema,

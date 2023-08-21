@@ -2082,26 +2082,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }.getOrElse(u.copy(possibleQualifiedName = Some(fullName)))
         }
 
-      // Resolve polymorphic Python UDTF calls.
-      case q: LogicalPlan if q.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR) =>
-        q.transformExpressionsWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
-          ruleId) {
-          case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
-            logWarning(s"@@@ unresolved polymorphic ptyhon udtf = $u")
-            val analyzeResult: PythonUDTFAnalyzeResult =
-              u.resolveElementMetadata(u.func, u.children)
-            PythonUDTF(u.name, u.func, analyzeResult.schema, u.children,
-              u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes,
-              analyzeResult = Some(analyzeResult))
-          }
-        }
-
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+            val resolvedTvf = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
@@ -2111,7 +2096,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   catalog, "table-valued functions")
               }
             }
-
+            // Resolve Python UDTF calls if needed.
+            val resolvedFunc = resolvedTvf match {
+              case g @ Generate(u: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                val analyzeResult: PythonUDTFAnalyzeResult =
+                  u.resolveElementMetadata(u.func, u.children)
+                g.copy(generator =
+                  PythonUDTF(u.name, u.func, analyzeResult.schema, u.children,
+                    u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes,
+                    analyzeResult = Some(analyzeResult)))
+              case other =>
+                other
+            }
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
             val functionTableSubqueryArgs =
               mutable.ArrayBuffer.empty[FunctionTableSubqueryArgumentExpression]
@@ -2135,11 +2131,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // call did not include any explicit PARTITION BY and/or ORDER BY clauses for the
                 // corresponding TABLE argument, and then update the TABLE argument representation
                 // to apply the requested partitioning and/or ordering.
-                logWarning(s"@@@ analyzer in function table subquery arg expr = $t")
                 pythonUDTF.foreach { p =>
-                  logWarning(s"@@@     pythonUDTF = $pythonUDTF")
                   p.analyzeResult.foreach { a =>
-                    logWarning(s"@@@     analyzeResult = $a")
                     if (a.hasRepartitioning && t.hasRepartitioning) {
                       throw QueryCompilationErrors
                         .tableValuedFunctionRequiredMetadataIncompatibleWithCall(

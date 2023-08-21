@@ -87,7 +87,6 @@ class QueryExecution(
       sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
     }
     tracker.setAnalyzed(plan)
-    logWarning(s"@@@@@@ analyzed = $plan")
     plan
   }
 

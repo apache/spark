@@ -2138,14 +2138,12 @@ class BaseUDTFTestsMixin:
         @udtf
         class TestUDTF:
             def __init__(self):
-                print(f'@@@ __init__, id = {id(self)}')
                 self._count = 0
                 self._sum = 0
                 self._last = None
 
             @staticmethod
             def analyze(self):
-                print(f'@@@ analyze, id = {id(self)}')
                 return AnalyzeResult(
                     schema=StructType()
                         .add("count", IntegerType())
@@ -2157,7 +2155,6 @@ class BaseUDTFTestsMixin:
                         OrderingColumn("partition_col")])
 
             def eval(self, row: Row):
-                print(f'@@@ eval, id = {id(self)}, row = {row}')
                 # Make sure that the rows arrive in the expected order.
                 if self._last is not None and self._last > row["input"]:
                     raise Exception(
@@ -2168,8 +2165,6 @@ class BaseUDTFTestsMixin:
                 self._sum += row["input"]
 
             def terminate(self):
-                print(f'@@@ terminate, id = {id(self)}, ' +
-                    'count/sum/last = {self._count}, {self._sum}, {self._last}')
                 yield self._count, self._sum, self._last
 
         self.spark.udtf.register("test_udtf", TestUDTF)
