@@ -1192,9 +1192,7 @@ def read_excel(
             )
 
             def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                pdf = pd.concat(
-                    [pd_read_excel(bin, sn=sn, sq=False) for bin in pdf[pdf.columns[0]]]
-                )
+                pdf = pd.concat([pd_read_excel(bin, sn=sn) for bin in pdf[pdf.columns[0]]])
 
                 reset_index = pdf.reset_index()
                 for name, col in reset_index.items():
