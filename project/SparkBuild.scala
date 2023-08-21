@@ -17,7 +17,7 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, StandardOpenOption}
+import java.nio.file.Files
 import java.util.Locale
 
 import scala.io.Source
@@ -881,26 +881,6 @@ object SparkConnectClient {
     test := ((Test / test) dependsOn (buildTestDeps)).value,
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
-
-    (Compile / resourceGenerators) += Def.task {
-      // Write the classpath to /target/extra-resources/
-      val extraResources = baseDirectory.value / "target" / "extra-resources"
-      val clientClasspathDesc = extraResources / "classpath"
-      Files.createDirectories(extraResources.toPath)
-      val writer = Files.newBufferedWriter(
-        clientClasspathDesc.toPath,
-        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-      var insertSeparator = false
-      (Compile / dependencyClasspath).value.files.foreach { file =>
-        if (insertSeparator) {
-          writer.append(File.pathSeparator)
-        }
-        writer.append(file.getName)
-        insertSeparator = true
-      }
-      writer.close()
-      Seq(clientClasspathDesc)
-    }.taskValue,
 
     (assembly / test) := { },
 

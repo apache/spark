@@ -34,5 +34,3 @@ class StubbingTestSuite extends RemoteSparkSession {
     result.close()
   }
 }
-
-class ActualStub(sparkSession: SparkSession) {}

@@ -165,10 +165,16 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
     val loader = if (prefixes.nonEmpty) {
-      // A classloader needs to be able to fully define a class. If we want stubbing to work for a
-      // classloader the StubClassloader it needs to be the last classloader to load a class.
-      //
-      // Classes are loaded lazily. If a class contains something we can styb
+      // Two things you need to know about classloader for all of this to make sense:
+      // 1. A classloader needs to be able to fully define a class.
+      // 2. Classes are loaded lazily. Only when a class is used the classes it references are
+      //    loaded.
+      // This makes stubbing a bit more complicated then you'd expect. We cannot put the stubbing
+      // classloader as a fallback at the end of the loading process, because then classes that
+      // have been found in one of the parent classloaders and that contain a reference to a
+      // missing, to-be-stubbed missing class will still fail with classloading errors later on.
+      // The way we currently fix this is by making the stubbing class loader the last classloader
+      // it delegates to.
       if (userClasspathFirst) {
         // USER -> SYSTEM -> STUB
         new ChildFirstURLClassLoader(
@@ -189,7 +195,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
       }
     }
 
-    logInfo(s"Using class loader: $loader, containing urls: $urls")
+    logDebug(s"Using class loader: $loader, containing urls: $urls")
     loader
   }
 
