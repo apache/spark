@@ -10332,28 +10332,6 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
-@try_remote_functions
-def chr(col: "ColumnOrName") -> Column:
-    """
-    Returns the ASCII character having the binary equivalent to `col`.
-    If col is larger than 256 the result is equivalent to chr(col % 256)
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        Input column or strings.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(65,)], ['a'])
-    >>> df.select(chr(df.a).alias('r')).collect()
-    [Row(r='A')]
-    """
-    return _invoke_function_over_columns("chr", col)
-
-
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -14813,27 +14791,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 @try_remote_functions
-def uuid() -> Column:
-    """
-    Returns an universally unique identifier (UUID) string. The value is returned as a canonical
-    UUID 36-character string.
-
-    .. versionadded:: 3.5.0
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(uuid()).show(truncate=False) # doctest: +SKIP
-    +------------------------------------+
-    |uuid()                              |
-    +------------------------------------+
-    |3dcc5174-9da9-41ca-815f-34c05c6d3926|
-    +------------------------------------+
-    """
-    return _invoke_function_over_columns("uuid")
-
-
-@try_remote_functions
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
@@ -15245,44 +15202,6 @@ def stack(*cols: "ColumnOrName") -> Column:
     +----+----+
     """
     return _invoke_function_over_seq_of_columns("stack", cols)
-
-
-@try_remote_functions
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    """
-    Returns a random value with independent and identically distributed (i.i.d.) uniformly
-    distributed values in [0, 1).
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        The seed for the random generator.
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(random()).show(truncate=False) # doctest: +SKIP
-    +--------------------+
-    |rand()              |
-    +--------------------+
-    |0.026810514415005593|
-    +--------------------+
-
-    >>> df.select(random(lit(1))).show(truncate=False) # doctest: +SKIP
-    +------------------+
-    |rand(1)           |
-    +------------------+
-    |0.4836508543933039|
-    +------------------+
-    """
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
 
 
 @try_remote_functions
