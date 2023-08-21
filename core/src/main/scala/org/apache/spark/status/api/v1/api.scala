@@ -527,20 +527,20 @@ case class StackTrace(elems: Seq[String]) {
 }
 
 case class ThreadStackTrace(
-    threadId: Long,
-    threadName: String,
-    threadState: Thread.State,
-    stackTrace: StackTrace,
-    blockedByThreadId: Option[Long],
-    blockedByLock: String,
+    val threadId: Long,
+    val threadName: String,
+    val threadState: Thread.State,
+    val stackTrace: StackTrace,
+    val blockedByThreadId: Option[Long],
+    val blockedByLock: String,
     @deprecated("using synchronizers and monitors instead", "4.0.0")
-    holdingLocks: Seq[String],
-    synchronizers: Seq[String],
-    monitors: Seq[String],
-    lockName: Option[String],
-    lockOwnerName: Option[String],
-    suspended: Boolean,
-    inNative: Boolean) {
+    val holdingLocks: Seq[String],
+    val synchronizers: Seq[String],
+    val monitors: Seq[String],
+    val lockName: Option[String],
+    val lockOwnerName: Option[String],
+    val suspended: Boolean,
+    val inNative: Boolean) {
 
   /**
    * Returns a string representation of this thread stack trace
