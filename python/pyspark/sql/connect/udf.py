@@ -54,8 +54,6 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
-    from pyspark.sql.udf import _create_arrow_py_udf
-
     if useArrow is None:
         is_arrow_enabled = False
         try:
@@ -74,22 +72,22 @@ def _create_py_udf(
     else:
         is_arrow_enabled = useArrow
 
-    regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
-    try:
-        is_func_with_args = len(getfullargspec(f).args) > 0
-    except TypeError:
-        is_func_with_args = False
+    eval_type: int = PythonEvalType.SQL_BATCHED_UDF
+
     if is_arrow_enabled:
+        try:
+            is_func_with_args = len(getfullargspec(f).args) > 0
+        except TypeError:
+            is_func_with_args = False
         if is_func_with_args:
-            return _create_arrow_py_udf(regular_udf)
+            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
                 "Arrow optimization for Python UDFs cannot be enabled.",
                 UserWarning,
             )
-            return regular_udf
-    else:
-        return regular_udf
+
+    return _create_udf(f, returnType, eval_type)
 
 
 def _create_udf(
