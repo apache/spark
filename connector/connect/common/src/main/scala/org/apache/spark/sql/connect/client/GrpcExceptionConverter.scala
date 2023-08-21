@@ -25,6 +25,7 @@ import io.grpc.protobuf.StatusProto
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.util.JsonUtils
@@ -62,14 +63,20 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   private def errorConstructor[T <: Throwable: ClassTag](
-      throwableCtr: (String, Throwable) => T): (String, (String, Throwable) => Throwable) = {
+      throwableCtr: (String, Option[Throwable]) => T)
+      : (String, (String, Option[Throwable]) => Throwable) = {
     val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
     (className, throwableCtr)
   }
 
   private val errorFactory = Map(
     errorConstructor((message, _) => new ParseException(None, message, Origin(), Origin())),
-    errorConstructor((message, cause) => new AnalysisException(message, cause = Option(cause))))
+    errorConstructor((message, cause) => new AnalysisException(message, cause = cause)),
+    errorConstructor((message, _) => new NamespaceAlreadyExistsException(message)),
+    errorConstructor((message, cause) => new TableAlreadyExistsException(message, cause)),
+    errorConstructor((message, cause) => new TempTableAlreadyExistsException(message, cause)),
+    errorConstructor((message, cause) => new NoSuchDatabaseException(message, cause)),
+    errorConstructor((message, cause) => new NoSuchTableException(message, cause)))
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =
@@ -79,7 +86,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
       .find(errorFactory.contains)
       .map { cls =>
         val constructor = errorFactory.get(cls).get
-        constructor(message, null)
+        constructor(message, None)
       }
   }
 
