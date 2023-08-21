@@ -654,19 +654,19 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
 
-          case w@Window(projectList, partitionSpec, orderSpec, child) =>
+          case w @ Window(projectList, partitionSpec, orderSpec, child) =>
             val outerReferences = collectOuterReferences(w.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
               s"function: $w")
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
+            // For now these are no-op, as we don't allow correlated references in the window
+            // function itself.
             val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
             val newPartitionSpec = replaceOuterReferences(partitionSpec, outerReferenceMap)
             val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
-            val referencesToAdd = missingReferences(
-              newPartitionSpec.asInstanceOf[Seq[NamedExpression]],
-              joinCond)
+            val referencesToAdd = AttributeSet(joinCond.flatMap(_.references))
 
             val newWindow = Window(newProjectList ++ referencesToAdd,
               partitionSpec = newPartitionSpec ++ referencesToAdd,
