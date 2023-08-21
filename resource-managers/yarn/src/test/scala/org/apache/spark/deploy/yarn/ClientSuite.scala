@@ -671,7 +671,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
     ("files URI match test3", "file://host/file1", "file://host/file2"),
     ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
-    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1"),
     ("hdfs URI match test", "hdfs://localhost:8080", "hdfs://127.0.0.1:8080")
   )
 
