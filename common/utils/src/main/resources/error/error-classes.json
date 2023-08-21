@@ -332,6 +332,16 @@
     ],
     "sqlState" : "22003"
   },
+  "CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG" : {
+    "message" : [
+      "CLUSTER BY is not allowed for the session catalog."
+    ]
+  },
+  "CLUSTER_BY_NOT_ALLOWED_FOR_V1_TABLES" : {
+    "message" : [
+      "CLUSTER BY is not allowed for V1 tables."
+    ]
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
@@ -2620,6 +2630,18 @@
     "message" : [
       "Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime."
     ]
+  },
+  "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
   },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [

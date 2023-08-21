@@ -298,6 +298,10 @@ replaceTableHeader
     : (CREATE OR)? REPLACE TABLE identifierReference
     ;
 
+clusterBySpec
+    : CLUSTER BY LEFT_PAREN multipartIdentifierList RIGHT_PAREN
+    ;
+
 bucketSpec
     : CLUSTERED BY identifierList
       (SORTED BY orderedIdentifierList)?
@@ -383,6 +387,7 @@ createTableClauses
     :((OPTIONS options=expressionPropertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
+     clusterBySpec |
      bucketSpec |
      rowFormat |
      createFileFormat |

@@ -3736,4 +3736,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "supported" -> "constant expressions"),
       cause = cause)
   }
+
+  def clusterByNotAllowedForV1Tables(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "CLUSTER_BY_NOT_ALLOWED_FOR_V1_TABLES", messageParameters = Map.empty
+    )
+  }
+
+  def clusterByNotAllowedForSessionCatalog(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG", messageParameters = Map.empty
+    )
+  }
 }

@@ -535,7 +535,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
-    val (partitionColumns, maybeBucketSpec) = partitioning.convertTransforms
+    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitioning.convertTransforms
+    if (maybeClusterBySpec.isDefined) {
+      throw QueryCompilationErrors.clusterByNotAllowedForV1Tables()
+    }
 
     CatalogTable(
       identifier = table,
