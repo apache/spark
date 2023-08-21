@@ -4312,9 +4312,22 @@ def monotonically_increasing_id() -> Column:
 
     Examples
     --------
-    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
-    >>> df0.select(monotonically_increasing_id().alias('id')).collect()
-    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 10, 1, 2).select(F.monotonically_increasing_id()).show()
+    +-----------------------------+
+    |monotonically_increasing_id()|
+    +-----------------------------+
+    |                            0|
+    |                            1|
+    |                            2|
+    |                            3|
+    |                            4|
+    |                   8589934592|
+    |                   8589934593|
+    |                   8589934594|
+    |                   8589934595|
+    |                   8589934596|
+    +-----------------------------+
     """
     return _invoke_function("monotonically_increasing_id")
 
