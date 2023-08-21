@@ -563,6 +563,50 @@ DropFunctionCommand myDoubleAvg, false, true
 
 
 -- !query
+DECLARE var = 'sometable'
+-- !query analysis
+CreateVariable defaultvalueexpression(sometable, 'sometable'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var
+
+
+-- !query
+CREATE TABLE IDENTIFIER(var)(c1 INT) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`sometable`, false
+
+
+-- !query
+SET VAR var = 'c1'
+-- !query analysis
+SetVariable [variablereference(system.session.var='sometable')]
++- Project [c1 AS var#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT IDENTIFIER(var) FROM VALUES(1) AS T(c1)
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias T
+   +- LocalRelation [c1#x]
+
+
+-- !query
+SET VAR var = 'some'
+-- !query analysis
+SetVariable [variablereference(system.session.var='c1')]
++- Project [some AS var#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP TABLE IDENTIFIER(var || 'table')
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.sometable
+
+
+-- !query
 SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException

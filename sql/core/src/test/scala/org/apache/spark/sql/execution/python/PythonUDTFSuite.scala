@@ -22,6 +22,7 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTes
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -40,19 +41,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val arrowPythonScript: String =
-    """
-      |import pandas as pd
-      |class VectorizedUDTF:
-      |    def eval(self, a: pd.Series, b: pd.Series):
-      |        data = [
-      |            [a, b, a + b],
-      |            [a, b, a - b],
-      |            [a, b, b - a],
-      |        ]
-      |        yield pd.DataFrame(data)
-      |""".stripMargin
-
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
@@ -60,8 +48,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "VectorizedUDTF",
-      arrowPythonScript,
+      "SimpleUDTF",
+      pythonScript,
       returnType,
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
@@ -107,6 +95,18 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SELECT t.*, f.c FROM t, LATERAL testUDTF(a, b) f"),
         sql("SELECT * FROM t, LATERAL explode(array(a + b, a - b, b - a)) t(c)"))
+    }
+  }
+
+  test("non-deterministic UDTF should pass check analysis") {
+    assume(shouldTestPythonUDFs)
+    withSQLConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key -> "true") {
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
+      withTempView("t") {
+        Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
+        val df = sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f")
+        df.queryExecution.assertAnalyzed()
+      }
     }
   }
 

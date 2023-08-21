@@ -614,9 +614,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Parameters
         ----------
-        numeric_only : bool, default False
+        numeric_only : bool, default True
             Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data.
+            everything, then use only numeric data. False is not supported.
+            This parameter is mainly for pandas compatibility.
 
             .. versionadded:: 3.4.0
 
@@ -646,11 +647,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -920,7 +916,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
     # TODO: sync the doc.
-    def var(self, ddof: int = 1) -> FrameLike:
+    def var(self, ddof: int = 1, numeric_only: Optional[bool] = True) -> FrameLike:
         """
         Compute variance of groups, excluding missing values.
 
@@ -934,6 +930,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             .. versionchanged:: 3.4.0
                Supported including arbitary integers.
+
+        numeric_only : bool, default True
+             Include only float, int, boolean columns. If None, will attempt to use
+             everything, then use only numeric data. False is not supported.
+             This parameter is mainly for pandas compatibility.
+
+             .. versionadded:: 4.0.0
 
         Examples
         --------
@@ -961,6 +964,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             var,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
+            numeric_only=numeric_only,
         )
 
     def skew(self) -> FrameLike:
@@ -4183,7 +4187,7 @@ class SeriesGroupBy(GroupBy[Series]):
         2  1.0    1
            2.0    1
         3  3.0    2
-        Name: B, dtype: int64
+        Name: count, dtype: int64
 
         Don't include counts of NaN when dropna is False.
 
@@ -4195,7 +4199,7 @@ class SeriesGroupBy(GroupBy[Series]):
            2.0    1
         3  3.0    2
            NaN    1
-        Name: B, dtype: int64
+        Name: count, dtype: int64
         """
         warnings.warn(
             "The resulting Series will have a fixed name of 'count' from 4.0.0.",
@@ -4232,7 +4236,7 @@ class SeriesGroupBy(GroupBy[Series]):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(groupkeys, groupkey_names)
             ],
-            column_labels=[self._agg_columns[0]._column_label],
+            column_labels=[("count",)],
             data_spark_columns=[scol_for(sdf, agg_column)],
         )
         return first_series(DataFrame(internal))

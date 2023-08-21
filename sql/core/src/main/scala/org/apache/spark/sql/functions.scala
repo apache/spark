@@ -4405,9 +4405,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_char(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
-  }
+  def to_char(e: Column, format: Column): Column = call_function("to_char", e, format)
 
   /**
    * Convert `e` to a string based on the `format`.
@@ -4433,9 +4431,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_varchar(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
-  }
+  def to_varchar(e: Column, format: Column): Column = to_char(e, format)
 
   /**
    * Convert string 'e' to a number based on the string format 'format'.

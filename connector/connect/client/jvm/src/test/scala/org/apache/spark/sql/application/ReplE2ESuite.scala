@@ -83,6 +83,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     semaphore.drainPermits()
+    if (ammoniteOut != null) {
+      ammoniteOut.reset()
+    }
   }
 
   def runCommandsInShell(input: String): String = {
@@ -280,12 +283,57 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("""String = "[MyTestClass(1), MyTestClass(3)]"""", output)
   }
 
+  test("REPL class in encoder") {
+    val input = """
+        |case class MyTestClass(value: Int)
+        |spark.range(3).
+        |  select(col("id").cast("int").as("value")).
+        |  as[MyTestClass].
+        |  map(mtc => mtc.value).
+        |  collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(0, 1, 2)", output)
+  }
+
   test("REPL class in UDF") {
     val input = """
         |case class MyTestClass(value: Int)
-        |spark.range(2).map(i => MyTestClass(i.toInt)).collect()
+        |spark.range(2).
+        |  map(i => MyTestClass(i.toInt)).
+        |  collect().
+        |  map(mtc => s"MyTestClass(${mtc.value})").
+        |  mkString("[", ", ", "]")
       """.stripMargin
     val output = runCommandsInShell(input)
-    assertContains("Array[MyTestClass] = Array(MyTestClass(0), MyTestClass(1))", output)
+    assertContains("""String = "[MyTestClass(0), MyTestClass(1)]"""", output)
+  }
+
+  test("streaming works with REPL generated code") {
+    val input =
+      """
+        |val add1 = udf((i: Long) => i + 1)
+        |val query = {
+        |  spark.readStream
+        |      .format("rate")
+        |      .option("rowsPerSecond", "10")
+        |      .option("numPartitions", "1")
+        |      .load()
+        |      .withColumn("value", add1($"value"))
+        |      .writeStream
+        |      .format("memory")
+        |      .queryName("my_sink")
+        |      .start()
+        |}
+        |var progress = query.lastProgress
+        |while (query.isActive && (progress == null || progress.numInputRows == 0)) {
+        |  query.awaitTermination(100)
+        |  progress = query.lastProgress
+        |}
+        |val noException = query.exception.isEmpty
+        |query.stop()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("noException: Boolean = true", output)
   }
 }

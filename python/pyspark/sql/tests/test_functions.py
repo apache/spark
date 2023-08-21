@@ -63,6 +63,9 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "random",  # namespace conflict with python built-in module
+            "uuid",  # namespace conflict with python built-in module
+            "chr",  # namespace conflict with python built-in function
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
