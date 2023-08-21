@@ -128,6 +128,7 @@ object ExprUtils extends QueryErrorsBase {
    */
   def checkXmlSchema(schema: DataType): TypeCheckResult = {
     val isInvalid = schema.existsRecursively {
+      // XML field names must be StringType
       case MapType(keyType, _, _) if keyType != StringType => true
       case _ => false
     }

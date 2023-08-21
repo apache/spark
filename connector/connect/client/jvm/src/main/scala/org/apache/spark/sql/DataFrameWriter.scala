@@ -481,7 +481,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
    * `ArrayType` would have an additional nested field for the element. For example, the
    * `DataFrame` having a field below,
    *
-   * {@code fieldA [[data1, data2]]}
+   * {@code fieldA [[data1], [data2]]}
    *
    * would produce a XML file below. { @code <fieldA> <item>data1</item> </fieldA> <fieldA>
    * <item>data2</item> </fieldA>}

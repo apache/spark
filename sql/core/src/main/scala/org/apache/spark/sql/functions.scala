@@ -7317,7 +7317,7 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * Parses a column containing a XML string into a `StructType` with the specified schema.
+   * Parses a column containing a XML string into the data type corresponding to the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e       a string column containing XML data.
@@ -7333,28 +7333,6 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
-  }
-
-  // scalastyle:off line.size.limit
-
-  /**
-   * Parses a column containing a XML string into a `StructType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
-   *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema to use when parsing the json string
-   * @param options options to control how the json is parsed. accepts the same options and the
-   *                XML data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
-   * @group collection_funcs
-   * @since
-   */
-  // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
     XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
   }
 
@@ -7381,7 +7359,8 @@ object functions {
   }
 
   /**
-   * Parses a column containing a XML string into a `StructType` with the specified schema.
+   * Parses a column containing a XML string into the data type
+   * corresponding to the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e       a string column containing XML data.
@@ -7391,18 +7370,6 @@ object functions {
    * @since
    */
   def from_xml(e: Column, schema: StructType): Column =
-    from_xml(e, schema, Map.empty[String, String])
-
-  /**
-   * Parses a column containing a XML string into a `StructType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
-   *
-   * @param e      a string column containing XML data.
-   * @param schema the schema to use when parsing the XML string
-   * @group collection_funcs
-   * @since
-   */
-  def from_xml(e: Column, schema: DataType): Column =
     from_xml(e, schema, Map.empty[String, String])
 
   /**

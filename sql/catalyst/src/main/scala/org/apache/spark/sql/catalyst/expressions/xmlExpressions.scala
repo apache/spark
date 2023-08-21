@@ -69,7 +69,6 @@ case class XmlToStructs(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: MapType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
@@ -119,9 +118,11 @@ case class XmlToStructs(
       converter(parser.parse(str))
   }
 
-  override def inputTypes: Seq[DataType] = schema match {
-    case _: StructType => Seq(StringType)
-    case ArrayType(_: StructType, _) => Seq(ArrayType(StringType))
+  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def sql: String = schema match {
+    case _: MapType => "entries"
+    case _ => super.sql
   }
 
   override def prettyName: String = "from_xml"

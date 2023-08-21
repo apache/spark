@@ -1203,10 +1203,11 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
 
+  /*
   test("from_xml array basic test") {
-    val xmlData = Seq(
+    val xmlData =
       """<parent><pid>12345</pid><name>dave guy</name></parent>
-        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin)
+        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin
     val df = Seq((8, xmlData)).toDF("number", "payload")
     val xmlSchema = ArrayType(
       StructType(
@@ -1220,6 +1221,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     // assert(result.selectExpr("decoded[0].pid").head().getInt(0) === 12345)
     // assert(result.selectExpr("decoded[1].pid").head().getInt(1) === 67890)
   }
+  */
 
   test("from_xml error test") {
     // XML contains error
