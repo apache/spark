@@ -3901,9 +3901,6 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.functions.__dict__.copy()
 
-    # Spark Connect does not support Spark Context but the test depends on that.
-    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
         .remote("local[4]")
