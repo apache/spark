@@ -67,6 +67,7 @@ from pyspark.sql.types import (
     Row,
     StructType,
     TimestampType,
+    NullType,
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
@@ -4024,7 +4025,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
-                if isinstance(spark_type, (BooleanType, NumericType)):
+                if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
                     raise TypeError(
@@ -4059,7 +4060,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
+            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
+            False is not supported. This parameter is mainly for pandas compatibility.
 
         Returns
         -------
@@ -4127,18 +4129,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
-            return ps.Series([], dtype="float64", name=self.name)
+            raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
             return self._rank(method, ascending).spark.analyzed
 
@@ -6718,14 +6712,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
-    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
-    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
         end_time: Union[datetime.time, str],
-        include_start: bool = True,
-        include_end: bool = True,
+        inclusive: str = "both",
         axis: Axis = 0,
     ) -> "Series":
         """
@@ -6740,15 +6731,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Initial time as a time filter limit.
         end_time : datetime.time or str
             End time as a time filter limit.
-        include_start : bool, default True
-            Whether the start time needs to be included in the result.
+        inclusive : {"both", "neither", "left", "right"}, default "both"
+            Include boundaries; whether to set each bound as closed or open.
 
-            .. deprecated:: 3.4.0
-
-        include_end : bool, default True
-            Whether the end time needs to be included in the result.
-
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
@@ -6787,7 +6773,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         return first_series(
-            self.to_frame().between_time(start_time, end_time, include_start, include_end, axis)
+            self.to_frame().between_time(start_time, end_time, inclusive, axis)
         ).rename(self.name)
 
     def at_time(

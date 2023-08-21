@@ -23,7 +23,7 @@ import sys
 import time
 from inspect import getfullargspec
 import json
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 import traceback
 import faulthandler
@@ -53,7 +53,7 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StructType, _parse_datatype_json_string
+from pyspark.sql.types import BinaryType, StringType, StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
@@ -117,6 +117,54 @@ def wrap_scalar_pandas_udf(f, return_type):
 
     return lambda *a: (
         verify_result_length(verify_result_type(f(*a)), len(a[0])),
+        arrow_return_type,
+    )
+
+
+def wrap_arrow_batch_udf(f, return_type):
+    import pandas as pd
+
+    arrow_return_type = to_arrow_type(return_type)
+
+    # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
+    # optimization.
+    # Otherwise, an Arrow-optimized Python UDF raises "pyarrow.lib.ArrowTypeError: Expected a
+    # string or bytes dtype, got ..." whereas a non-Arrow-optimized Python UDF returns
+    # successfully.
+    result_func = lambda pdf: pdf  # noqa: E731
+    if type(return_type) == StringType:
+        result_func = lambda r: str(r) if r is not None else r  # noqa: E731
+    elif type(return_type) == BinaryType:
+        result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
+
+    def evaluate(*args: pd.Series) -> pd.Series:
+        return pd.Series(result_func(f(*a)) for a in zip(*args))
+
+    def verify_result_type(result):
+        if not hasattr(result, "__len__"):
+            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
+            raise PySparkTypeError(
+                error_class="UDF_RETURN_TYPE",
+                message_parameters={
+                    "expected": pd_type,
+                    "actual": type(result).__name__,
+                },
+            )
+        return result
+
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                error_class="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                message_parameters={
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
+
+    return lambda *a: (
+        verify_result_length(verify_result_type(evaluate(*a)), len(a[0])),
         arrow_return_type,
     )
 
@@ -486,8 +534,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         func = fail_on_stopiteration(chained_func)
 
     # the last returnType will be the return type of UDF
-    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+        return arg_offsets, wrap_arrow_batch_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
@@ -550,7 +600,16 @@ def read_udtf(pickleSer, infile, eval_type):
 
     # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
-    arg_offsets = [read_int(infile) for _ in range(num_arg)]
+    args_offsets = []
+    kwargs_offsets = {}
+    for _ in range(num_arg):
+        offset = read_int(infile)
+        if read_bool(infile):
+            name = utf8_deserializer.loads(infile)
+            kwargs_offsets[name] = offset
+        else:
+            args_offsets.append(offset)
+
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -584,12 +643,12 @@ def read_udtf(pickleSer, infile, eval_type):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
         def wrap_arrow_udtf(f, return_type):
+            import pandas as pd
+
             arrow_return_type = to_arrow_type(return_type)
             return_type_size = len(return_type)
 
             def verify_result(result):
-                import pandas as pd
-
                 if not isinstance(result, pd.DataFrame):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
@@ -619,7 +678,40 @@ def read_udtf(pickleSer, infile, eval_type):
                 )
                 return result
 
-            return lambda *a: map(lambda res: (res, arrow_return_type), map(verify_result, f(*a)))
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            def func(*a: Any, **kw: Any) -> Any:
+                try:
+                    return f(*a, **kw)
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
+            def evaluate(*args: pd.Series, **kwargs: pd.Series):
+                if len(args) == 0 and len(kwargs) == 0:
+                    yield verify_result(pd.DataFrame(func())), arrow_return_type
+                else:
+                    # Create tuples from the input pandas Series, each tuple
+                    # represents a row across all Series.
+                    keys = list(kwargs.keys())
+                    len_args = len(args)
+                    row_tuples = zip(*args, *[kwargs[key] for key in keys])
+                    for row in row_tuples:
+                        res = func(
+                            *row[:len_args],
+                            **{key: row[len_args + i] for i, key in enumerate(keys)},
+                        )
+                        if res is not None and not isinstance(res, Iterable):
+                            raise PySparkRuntimeError(
+                                error_class="UDTF_RETURN_NOT_ITERABLE",
+                                message_parameters={
+                                    "type": type(res).__name__,
+                                },
+                            )
+                        yield verify_result(pd.DataFrame(res)), arrow_return_type
+
+            return evaluate
 
         eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
 
@@ -633,7 +725,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    yield from eval(*[a[o] for o in arg_offsets])
+                    yield from eval(
+                        *[a[o] for o in args_offsets],
+                        **{k: a[o] for k, o in kwargs_offsets.items()},
+                    )
             finally:
                 if terminate is not None:
                     yield from terminate()
@@ -667,9 +762,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
-            def evaluate(*a) -> tuple:
+            def evaluate(*a, **kw) -> tuple:
                 try:
-                    res = f(*a)
+                    res = f(*a, **kw)
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -705,7 +800,10 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    yield eval(*[a[o] for o in arg_offsets])
+                    yield eval(
+                        *[a[o] for o in args_offsets],
+                        **{k: a[o] for k, o in kwargs_offsets.items()},
+                    )
             finally:
                 if terminate is not None:
                     yield terminate()

@@ -20,7 +20,7 @@ package org.apache.spark.network.util;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
 
@@ -322,6 +322,35 @@ public class TransportConf {
    */
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
+  }
+
+  /**
+   * Percentage of io.serverThreads used by netty to process FinalizeShuffleMerge. When the config
+   * `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set, shuffle server will use a
+   * separate EventLoopGroup to process FinalizeShuffleMerge messages, which are I/O intensive and
+   * could take long time to process due to disk contentions. The number of threads used for
+   * handling finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it
+   * is a percentage of 2 * #cores.
+   */
+  public int finalizeShuffleMergeHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+        "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
+    int finalizeShuffleMergeThreadsPercent =
+        Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));
+    int threads =
+        this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (finalizeShuffleMergeThreadsPercent / 100.0));
+  }
+
+  /**
+   * Whether to use a separate EventLoopGroup to process FinalizeShuffleMerge messages, it is
+   * decided by the config `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set or not.
+   */
+  public boolean separateFinalizeShuffleMerge() {
+    return conf.getInt("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", 0) > 0;
   }
 
   /**

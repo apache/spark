@@ -66,5 +66,5 @@ torchvision
 torcheval
 
 # DeepspeedTorchDistributor dependencies
-deepspeed
+deepspeed; sys_platform != 'darwin'
 

@@ -16,13 +16,19 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_resample import ResampleTestsMixin
+from pyspark.pandas.tests.test_resample import ResampleTestsMixin, ResampleWithTimezoneMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class ResampleTestsParityMixin(
+class ResampleParityTests(
     ResampleTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+):
+    pass
+
+
+class ResampleWithTimezoneTests(
+    ResampleWithTimezoneMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
     pass
 

@@ -163,9 +163,6 @@ object CheckConnectJvmClientCompatibility {
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 
-      // DataFrameStatFunctions
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
-
       // Dataset
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.Dataset$" // private[sql]
@@ -181,11 +178,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
@@ -225,13 +219,7 @@ object CheckConnectJvmClientCompatibility {
 
       // SparkSession#Builder
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.appName"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.config"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.master"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.enableHiveSupport"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.withExtensions"),
 
@@ -241,9 +229,6 @@ object CheckConnectJvmClientCompatibility {
       // DataStreamWriter
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.DataStreamWriter$"),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
-      ),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
@@ -334,8 +319,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.plan"
       ), // developer API
-      ProblemFilters.exclude[IncompatibleResultTypeProblem](
-        "org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.collectResult"),
 

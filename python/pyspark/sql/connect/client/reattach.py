@@ -135,7 +135,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         if not attempt.is_first_try():
                             # on retry, the iterator is borked, so we need a new one
                             self._iterator = iter(
-                                self._stub.ReattachExecute(self._create_reattach_execute_request())
+                                self._stub.ReattachExecute(
+                                    self._create_reattach_execute_request(), metadata=self._metadata
+                                )
                             )
 
                         if self._current is None:
@@ -154,7 +156,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                             while not has_next:
                                 self._iterator = iter(
                                     self._stub.ReattachExecute(
-                                        self._create_reattach_execute_request()
+                                        self._create_reattach_execute_request(),
+                                        metadata=self._metadata,
                                     )
                                 )
                                 # shouldn't change
@@ -192,7 +195,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        self._stub.ReleaseExecute(request)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
@@ -220,7 +223,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        self._stub.ReleaseExecute(request)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 

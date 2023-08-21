@@ -562,14 +562,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
@@ -582,14 +584,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
@@ -604,14 +608,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+        "ASSIGNMENT_ARITY_MISMATCH",
+        Map("numExpr" -> "5", "numTarget" -> "4")
+      )
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
@@ -753,9 +759,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-matching column alias") {
-    assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
-      Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
-        "2; number of columns: 1."))
+    assertAnalysisErrorClass(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "2", "numTarget" -> "1"),
+      Array(ExpectedContext("t(x, y) AS (SELECT 1)", 5, 25))
+    )
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
@@ -1648,6 +1656,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           Seq())
         .where($"x" === 1)
       plan.join(plan).analyze
+    }
+  }
+
+  test("IDENTIFIER with alias and RuntimeReplaceable") {
+    val name = Literal("a").as("name")
+    val replaceable = new Nvl(Literal("a"), Literal("b"))
+    withClue("IDENTIFIER as column") {
+      val ident = ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident), testRelation.select($"a").analyze)
+      val ident2 = ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
+    }
+    withClue("IDENTIFIER as table") {
+      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
+      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
   }
 }

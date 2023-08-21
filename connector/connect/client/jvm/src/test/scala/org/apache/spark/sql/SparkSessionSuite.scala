@@ -171,42 +171,74 @@ class SparkSessionSuite extends ConnectFunSuite {
 
     try {
       val script1 = execute { phaser =>
+        // Step 0 - check initial state
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.contains(session1))
         assert(SparkSession.getActiveSession.contains(session2))
 
+        // Step 1 - new active session in script 2
+        phaser.arriveAndAwaitAdvance()
+
+        // Step2 - script 1 is unchanged, script 2 has new active session
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.contains(session1))
         assert(SparkSession.getActiveSession.contains(session2))
+
+        // Step 3 - close session 1, no more default session in both scripts
+        phaser.arriveAndAwaitAdvance()
         session1.close()
 
+        // Step 4 - no default session, same active session.
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.isEmpty)
         assert(SparkSession.getActiveSession.contains(session2))
+
+        // Step 5 - clear active session in script 1
+        phaser.arriveAndAwaitAdvance()
         SparkSession.clearActiveSession()
 
+        // Step 6 - no default/no active session in script 1, script2 unchanged.
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.isEmpty)
         assert(SparkSession.getActiveSession.isEmpty)
+
+        // Step 7 - close active session in script2
+        phaser.arriveAndAwaitAdvance()
       }
       val script2 = execute { phaser =>
+        // Step 0 - check initial state
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.contains(session1))
         assert(SparkSession.getActiveSession.contains(session2))
+
+        // Step 1 - new active session in script 2
+        phaser.arriveAndAwaitAdvance()
         SparkSession.clearActiveSession()
         val internalSession = SparkSession.builder().remote(connectionString3).getOrCreate()
 
+        // Step2 - script 1 is unchanged, script 2 has new active session
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.contains(session1))
         assert(SparkSession.getActiveSession.contains(internalSession))
 
+        // Step 3 - close session 1, no more default session in both scripts
+        phaser.arriveAndAwaitAdvance()
+
+        // Step 4 - no default session, same active session.
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.isEmpty)
         assert(SparkSession.getActiveSession.contains(internalSession))
 
+        // Step 5 - clear active session in script 1
+        phaser.arriveAndAwaitAdvance()
+
+        // Step 6 - no default/no active session in script 1, script2 unchanged.
         phaser.arriveAndAwaitAdvance()
         assert(SparkSession.getDefaultSession.isEmpty)
         assert(SparkSession.getActiveSession.contains(internalSession))
+
+        // Step 7 - close active session in script2
+        phaser.arriveAndAwaitAdvance()
         internalSession.close()
         assert(SparkSession.getActiveSession.isEmpty)
       }
@@ -218,5 +250,15 @@ class SparkSessionSuite extends ConnectFunSuite {
     } finally {
       executor.shutdown()
     }
+  }
+
+  test("deprecated methods") {
+    SparkSession
+      .builder()
+      .master("yayay")
+      .appName("bob")
+      .enableHiveSupport()
+      .create()
+      .close()
   }
 }

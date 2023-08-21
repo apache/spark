@@ -23,6 +23,7 @@ import random
 import shutil
 import string
 import tempfile
+import uuid
 from collections import defaultdict
 
 from pyspark.errors import (
@@ -76,7 +77,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client.core import Retrying
+    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -1899,7 +1900,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="INVALID_ITEM_FOR_CONTAINER",
             message_parameters={
                 "arg_name": "parameters",
-                "allowed_types": "str, list, float, int",
+                "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
             },
         )
@@ -3371,6 +3372,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3386,6 +3389,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3402,6 +3407,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3418,6 +3425,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3434,6 +3443,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3450,6 +3461,8 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=1,
                 max_backoff=10,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3521,6 +3534,36 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
+
+    def test_metadata(self):
+        id = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        self.assertEqual(id, chan.session_id)
+
+        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        md = chan.metadata()
+        for kv in md:
+            self.assertNotIn(
+                kv[0],
+                [
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
+                ],
+                "Metadata must not contain fixed params",
+            )
+
+        with self.assertRaises(ValueError) as ve:
+            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            SparkConnectClient(chan)
+        self.assertIn(
+            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
+        )
+
+        chan = ChannelBuilder("sc://host/")
+        self.assertIsNone(chan.session_id)
 
 
 if __name__ == "__main__":
