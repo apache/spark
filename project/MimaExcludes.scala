@@ -80,7 +80,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
     // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
     //[SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*")
   )
