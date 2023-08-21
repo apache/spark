@@ -196,6 +196,7 @@ object LogicalPlan {
   //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
+  private[spark] val IS_METADATA_COL = TreeNodeTag[Boolean]("is_metadata_col")
 }
 
 /**

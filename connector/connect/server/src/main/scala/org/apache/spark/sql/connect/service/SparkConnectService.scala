@@ -278,7 +278,7 @@ object SparkConnectService extends Logging {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
-  private[connect] val executionManager = new SparkConnectExecutionManager()
+  private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache()
@@ -347,6 +347,12 @@ object SparkConnectService extends Logging {
     }
     userSessionMapping.get((userId, sessionId), default)
   }
+
+  /**
+   * If there are no executions, return Left with System.currentTimeMillis of last active
+   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
+   */
+  def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionManager.listActiveExecutions
 
   /**
    * Used for testing

@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
-import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
@@ -181,12 +182,13 @@ case class TryToNumber(left: Expression, right: Expression)
 }
 
 /**
- * A function that converts decimal values to strings, returning NULL if the decimal value fails to
+ * A function that converts decimal/datetime values to strings, returning NULL if the value fails to
  * match the format string.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
+    _FUNC_(expr, format) - Convert `expr` to a string based on the `format`.
       Throws an exception if the conversion fails. The format can consist of the following
       characters, case insensitive:
         '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
@@ -206,6 +208,7 @@ case class TryToNumber(left: Expression, right: Expression)
         'PR': Only allowed at the end of the format string; specifies that the result string will be
           wrapped by angle brackets if the input value is negative.
           ('<1>').
+      If `expr` is a datetime, `format` shall be a valid datetime pattern, see <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
   """,
   examples = """
     Examples:
@@ -219,9 +222,27 @@ case class TryToNumber(left: Expression, right: Expression)
        $78.12
       > SELECT _FUNC_(-12454.8, '99G999D9S');
        12,454.8-
+      > SELECT _FUNC_(date'2016-04-08', 'y');
+       2016
   """,
   since = "3.4.0",
   group = "string_funcs")
+// scalastyle:on line.size.limit
+object ToCharacterBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (expressions.length == 2) {
+      val inputExpr = expressions.head
+      inputExpr.dataType match {
+        case _: DatetimeType => DateFormatClass(inputExpr, expressions(1))
+        case _ => ToCharacter(inputExpr, expressions(1))
+      }
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+  }
+}
+
 case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   private lazy val numberFormatter = {
