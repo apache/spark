@@ -986,8 +986,4 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns = null;
     }
   }
-
-  public int getCapacity() {
-    return capacity;
-  }
 }

@@ -601,16 +601,16 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
         try {
           // The new capacity of small vector = request capacity * 2 and will not be reset
           vector.appendBytes(100, 0)
-          assert(vector.getCapacity == 200)
+          assert(vector.capacity == 200)
           vector.reset()
-          assert(vector.getCapacity == 200)
+          assert(vector.capacity == 200)
 
           // The new capacity of huge vector = (request capacity - HUGE_VECTOR_THRESHOLD) * 1.2 +
           // HUGE_VECTOR_THRESHOLD * 2 = 300 * 1.2 and will be reset.
           vector.appendBytes(300, 0)
-          assert(vector.getCapacity == 360)
+          assert(vector.capacity == 360)
           vector.reset()
-          assert(vector.getCapacity == 80)
+          assert(vector.capacity == 80)
         } finally {
           vector.close()
         }
