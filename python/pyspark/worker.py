@@ -666,6 +666,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 list(args) + list(kwargs.values())
             )
             if changed_partitions:
+                print('@@@ change partitions, id = {id(self)}')
                 if self._udtf.terminate is not None:
                     result = self._udtf.terminate()
                     if result is not None:

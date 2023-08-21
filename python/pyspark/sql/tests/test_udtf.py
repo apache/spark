@@ -2133,26 +2133,31 @@ class BaseUDTFTestsMixin:
             [Row(count=40, total=60, last=2)],
         )
 
+
     def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
+        @udtf
         class TestUDTF:
             def __init__(self):
+                print(f'@@@ __init__, id = {id(self)}')
                 self._count = 0
                 self._sum = 0
                 self._last = None
 
             @staticmethod
             def analyze(self):
+                print(f'@@@ analyze, id = {id(self)}')
                 return AnalyzeResult(
                     schema=StructType()
                         .add("count", IntegerType())
                         .add("total", IntegerType())
-                        .add("laste", IntegerType()),
+                        .add("last", IntegerType()),
                     with_single_partition=True,
                     order_by=[
                         OrderingColumn("input"),
                         OrderingColumn("partition_col")])
 
             def eval(self, row: Row):
+                print(f'@@@ eval, id = {id(self)}, row = {row}')
                 # Make sure that the rows arrive in the expected order.
                 if self._last is not None and self._last > row["input"]:
                     raise Exception(
@@ -2163,9 +2168,12 @@ class BaseUDTFTestsMixin:
                 self._sum += row["input"]
 
             def terminate(self):
+                print(f'@@@ terminate, id = {id(self)}, ' +
+                    'count/sum/last = {self._count}, {self._sum}, {self._last}')
                 yield self._count, self._sum, self._last
 
         self.spark.udtf.register("test_udtf", TestUDTF)
+
         self.assertEqual(
             self.spark.sql(
                 """
@@ -2179,8 +2187,12 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(count=40, total=60, last=2)],
+            [
+                Row(count=40, total=60, last=2),
+                ],
         )
+
+
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

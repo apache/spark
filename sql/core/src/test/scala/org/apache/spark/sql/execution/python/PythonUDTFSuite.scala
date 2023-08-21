@@ -41,10 +41,58 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
+  private val pythonScriptWithSinglePartition: String =
+    """
+      |from pyspark.sql.types import Row
+      |class UDTFWithSinglePartition:
+      |    def __init__(self):
+      |        print(f'@@@ __init__, id = {id(self)}')
+      |        self._count = 0
+      |        self._sum = 0
+      |        self._last = None
+      |
+      |    @staticmethod
+      |    def analyze(self):
+      |        print(f'@@@ analyze, id = {id(self)}')
+      |        return AnalyzeResult(
+      |            schema=StructType()
+      |                .add("count", IntegerType())
+      |                .add("total", IntegerType())
+      |                .add("last", IntegerType()),
+      |            with_single_partition=True,
+      |            order_by=[
+      |                OrderingColumn("input"),
+      |                OrderingColumn("partition_col")])
+      |
+      |    def eval(self, row: Row):
+      |        print(f'@@@ eval, id = {id(self)}, row = {row}')
+      |        # Make sure that the rows arrive in the expected order.
+      |        if self._last is not None and self._last > row["input"]:
+      |            raise Exception(
+      |                f"self._last was {self._last} but the row value was {row['input']}"
+      |            )
+      |        self._count += 1
+      |        self._last = row["input"]
+      |        self._sum += row["input"]
+      |
+      |    def terminate(self):
+      |        print(f'@@@ terminate, id = {id(self)}, ' +
+      |            'count/sum/last = {self._count}, {self._sum}, {self._last}')
+      |        yield self._count, self._sum, self._last
+      |""".stripMargin
+
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
+
+  private val returnTypePythonUDTFWithSinglePartition: StructType =
+    StructType.fromDDL("count int, total int, last int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
+
+  private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "UDTFWithSinglePartition", pythonScriptWithSinglePartition,
+      returnTypePythonUDTFWithSinglePartition)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -189,6 +237,20 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           start = 14,
           stop = 30))
     }
+
+    spark.udtf.registerPython("UDTFWithSinglePartition", pythonUDTFWithSinglePartition)
+    comparePlans(
+      sql("""
+        |WITH t AS (
+        |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+        |    UNION ALL
+        |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+        |)
+        |SELECT count, total, last
+        |FROM UDTFWithSinglePartition(TABLE(t))
+        |ORDER BY 1, 2
+        |""".stripMargin).queryExecution.analyzed,
+      OneRowRelation())
   }
 
   test("SPARK-44503: Compute partition child indexes for various UDTF argument lists") {
