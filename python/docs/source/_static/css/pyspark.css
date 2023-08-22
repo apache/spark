@@ -103,7 +103,8 @@ u.bd-sidebar .nav>li>ul>.active:hover>a,.bd-sidebar .nav>li>ul>.active>a {
 }
 
 #version_switcher {
-  height: 300px;
+  height: auto;
+  max-height: 300px;
   width: 165px;
   overflow-y: auto;
 }
