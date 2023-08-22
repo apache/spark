@@ -6155,7 +6155,7 @@ object functions {
    * @since 3.4.0
    */
   def array_insert(arr: Column, pos: Column, value: Column): Column = withExpr {
-    ArrayInsert(arr.expr, pos.expr, value.expr)
+    new ArrayInsert(arr.expr, pos.expr, value.expr)
   }
 
   /**
