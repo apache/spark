@@ -4605,7 +4605,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 @ExpressionDescription(
   usage = """
     _FUNC_(x, pos, val) - Places val into index pos of array x.
-      Array indices start at 1, or start from the end if index is negative.
+      Array indices start at 1. The maximum negative index is -1 for which the function inserts
+      new element after the current last element.
       Index above array size appends the array, or prepends the array if index is negative,
       with 'null' elements.
   """,
@@ -4613,14 +4614,24 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
        [1,2,3,4,5]
-      > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
+      > SELECT _FUNC_(array(5, 4, 3, 2), -1, 1);
+       [5,4,3,2,1]
+      > SELECT _FUNC_(array(5, 3, 2, 1), -4, 4);
        [5,4,3,2,1]
   """,
   group = "array_funcs",
   since = "3.4.0")
-case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
+case class ArrayInsert(
+    srcArrayExpr: Expression,
+    posExpr: Expression,
+    itemExpr: Expression,
+    legacyNegativeIndex: Boolean)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
     with QueryErrorsBase with SupportQueryContext {
+
+  def this(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression) = {
+    this(srcArrayExpr, posExpr, itemExpr, SQLConf.get.legacyNegativeIndexInArrayInsert)
+  }
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
@@ -4683,11 +4694,12 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
 
     if (newPosExtendsArrayLeft) {
+      val baseOffset = if (legacyNegativeIndex) 1 else 0
       // special case- if the new position is negative but larger than the current array size
       // place the new item at start of array, place the current array contents at the end
       // and fill the newly created array elements inbetween with a null
 
-      val newArrayLength = -posInt + 1
+      val newArrayLength = -posInt + baseOffset
 
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4697,7 +4709,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       baseArr.foreach(arrayElementType, (i, v) => {
         // current position, offset by new item + new null array elements
-        val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+        val elementPosition = i + baseOffset + math.abs(posInt + baseArr.numElements())
         newArray(elementPosition) = v
       })
 
@@ -4706,7 +4718,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       return new GenericArrayData(newArray)
     } else {
       if (posInt < 0) {
-        posInt = posInt + baseArr.numElements()
+        posInt = posInt + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
       } else if (posInt > 0) {
         posInt = posInt - 1
       }
@@ -4738,6 +4750,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val arr = arrExpr.value
       val pos = posExpr.value
       val item = itemExpr.value
+      val baseOffset = if (legacyNegativeIndex) 1 else 0
 
       val itemInsertionIndex = ctx.freshName("itemInsertionIndex")
       val adjustedAllocIdx = ctx.freshName("adjustedAllocIdx")
@@ -4765,21 +4778,21 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |
          |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
          |
-         |  $resLength = java.lang.Math.abs($pos) + 1;
+         |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
          |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
          |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
          |  }
          |
          |  $allocation
          |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
+         |    $adjustedAllocIdx = $i + $baseOffset + java.lang.Math.abs($pos + $arr.numElements());
          |    $assignment
          |  }
          |  ${CodeGenerator.setArrayElement(
               values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
          |
-         |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
-         |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
+         |  for (int $j = ${if (legacyNegativeIndex) 0 else 1} + $pos + $arr.numElements(); $j < 0; $j ++) {
+         |    $values.setNullAt($j + $baseOffset + java.lang.Math.abs($pos + $arr.numElements()));
          |  }
          |
          |  ${ev.value} = $values;
@@ -4787,7 +4800,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |
          |  $itemInsertionIndex = 0;
          |  if ($pos < 0) {
-         |    $itemInsertionIndex = $pos + $arr.numElements();
+         |    $itemInsertionIndex = $pos + $arr.numElements() + ${if (legacyNegativeIndex) 0 else 1};
          |  } else if ($pos > 0) {
          |    $itemInsertionIndex = $pos - 1;
          |  }
