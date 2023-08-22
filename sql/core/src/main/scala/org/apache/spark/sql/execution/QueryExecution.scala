@@ -63,17 +63,7 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = {
-    try {
-      analyzed
-    } catch {
-      case e: AnalysisException =>
-        // Because we do eager analysis for Dataframe, there will be no execution created after
-        // AnalysisException occurs. So we need to explicitly create a new execution to post
-        // start/end events to notify the listener and UI components.
-        SQLExecution.withNewExecutionId(this, Some("analyze"))(throw e)
-    }
-  }
+  def assertAnalyzed(): Unit = analyzed
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
