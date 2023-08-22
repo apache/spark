@@ -166,7 +166,6 @@ abstract class PercentileBase
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
 
-
     percentages.map(getPercentile(accumulatedCounts, _))
   }
 

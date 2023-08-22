@@ -24,6 +24,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -100,6 +101,13 @@ private[spark] class SparkUI private (
     attachTab(stagesTab)
     attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
+    if (sc.map(_.conf.get(DRIVER_LOG_LOCAL_DIR).nonEmpty).getOrElse(false)) {
+      val driverLogTab = new DriverLogTab(this)
+      attachTab(driverLogTab)
+      attachHandler(createServletHandler("/log",
+        (request: HttpServletRequest) => driverLogTab.getPage.renderLog(request),
+        sc.get.conf))
+    }
     attachTab(new ExecutorsTab(this))
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))

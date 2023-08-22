@@ -175,14 +175,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(sql("SELECT q.`a`, q.b FROM v"), Row("a", 1) :: Nil)
-
-      checkError(
-        exception = intercept[SparkException] {
-          spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-        },
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
-      )
     }
   }
 

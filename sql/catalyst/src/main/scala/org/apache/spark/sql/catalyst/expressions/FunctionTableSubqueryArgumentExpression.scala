@@ -163,21 +163,3 @@ case class FunctionTableSubqueryArgumentExpression(
 
   private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap
 }
-
-object FunctionTableSubqueryArgumentExpression {
-  /**
-   * Returns a sequence of zero-based integer indexes identifying the values of a Python UDTF's
-   * 'eval' method's *args list that correspond to partitioning columns of the input TABLE argument.
-   */
-  def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] = {
-    udtfArguments.zipWithIndex.flatMap { case (expr, index) =>
-      expr match {
-        case f: FunctionTableSubqueryArgumentExpression =>
-          f.partitioningExpressionIndexes.map(_ + index)
-        case _ =>
-          Seq()
-      }
-    }
-  }
-}
-

@@ -4312,9 +4312,22 @@ def monotonically_increasing_id() -> Column:
 
     Examples
     --------
-    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
-    >>> df0.select(monotonically_increasing_id().alias('id')).collect()
-    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 10, 1, 2).select(F.monotonically_increasing_id()).show()
+    +-----------------------------+
+    |monotonically_increasing_id()|
+    +-----------------------------+
+    |                            0|
+    |                            1|
+    |                            2|
+    |                            3|
+    |                            4|
+    |                   8589934592|
+    |                   8589934593|
+    |                   8589934594|
+    |                   8589934595|
+    |                   8589934596|
+    +-----------------------------+
     """
     return _invoke_function("monotonically_increasing_id")
 
@@ -4511,10 +4524,11 @@ def approx_percentile(
     of `col` values is less than the value or equal to that value.
 
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    Notes
+    -----
+    Supports Spark Connect.
 
     Parameters
     ----------
@@ -4603,13 +4617,13 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('rand', rand(seed=42) * 3).show() # doctest: +SKIP
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', F.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
     +---+------------------+
-    |  0|1.4385751892400076|
-    |  1|1.7082186019706387|
+    |  0|1.8575681106759028|
+    |  1|1.5288056527339444|
     +---+------------------+
     """
     if seed is not None:
@@ -4644,14 +4658,14 @@ def randn(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('randn', randn(seed=42)).show() # doctest: +SKIP
-    +---+--------------------+
-    | id|               randn|
-    +---+--------------------+
-    |  0|-0.04167221574820542|
-    |  1| 0.15241403986452778|
-    +---+--------------------+
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', F.randn(seed=42)).show()
+    +---+------------------+
+    | id|             randn|
+    +---+------------------+
+    |  0| 2.384479054241165|
+    |  1|0.1920934041293524|
+    +---+------------------+
     """
     if seed is not None:
         return _invoke_function("randn", seed)
@@ -5146,26 +5160,27 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
-    >>> df = spark.createDataFrame([10, 100, 1000], "INT")
-    >>> df.select(log(10.0, df.value).alias('ten')).show() # doctest: +SKIP
-    +---+
-    |ten|
-    +---+
-    |1.0|
-    |2.0|
-    |3.0|
-    +---+
+    >>> from pyspark.sql import functions as F
+    >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
+    >>> df.select(F.log(2.0, df.value).alias('log2_value')).show()
+    +----------+
+    |log2_value|
+    +----------+
+    |       0.0|
+    |       1.0|
+    |       2.0|
+    +----------+
 
     And Natural logarithm
 
-    >>> df.select(log(df.value)).show() # doctest: +SKIP
-    +-----------------+
-    |        ln(value)|
-    +-----------------+
-    |2.302585092994046|
-    |4.605170185988092|
-    |4.605170185988092|
-    +-----------------+
+    >>> df.select(F.log(df.value).alias('ln_value')).show()
+    +------------------+
+    |          ln_value|
+    +------------------+
+    |               0.0|
+    |0.6931471805599453|
+    |1.3862943611198906|
+    +------------------+
     """
     if arg2 is None:
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
@@ -10332,28 +10347,6 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
-@try_remote_functions
-def chr(col: "ColumnOrName") -> Column:
-    """
-    Returns the ASCII character having the binary equivalent to `col`.
-    If col is larger than 256 the result is equivalent to chr(col % 256)
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        Input column or strings.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(65,)], ['a'])
-    >>> df.select(chr(df.a).alias('r')).collect()
-    [Row(r='A')]
-    """
-    return _invoke_function_over_columns("chr", col)
-
-
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -14813,27 +14806,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 @try_remote_functions
-def uuid() -> Column:
-    """
-    Returns an universally unique identifier (UUID) string. The value is returned as a canonical
-    UUID 36-character string.
-
-    .. versionadded:: 3.5.0
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(uuid()).show(truncate=False) # doctest: +SKIP
-    +------------------------------------+
-    |uuid()                              |
-    +------------------------------------+
-    |3dcc5174-9da9-41ca-815f-34c05c6d3926|
-    +------------------------------------+
-    """
-    return _invoke_function_over_columns("uuid")
-
-
-@try_remote_functions
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
@@ -15245,44 +15217,6 @@ def stack(*cols: "ColumnOrName") -> Column:
     +----+----+
     """
     return _invoke_function_over_seq_of_columns("stack", cols)
-
-
-@try_remote_functions
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    """
-    Returns a random value with independent and identically distributed (i.i.d.) uniformly
-    distributed values in [0, 1).
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        The seed for the random generator.
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(random()).show(truncate=False) # doctest: +SKIP
-    +--------------------+
-    |rand()              |
-    +--------------------+
-    |0.026810514415005593|
-    +--------------------+
-
-    >>> df.select(random(lit(1))).show(truncate=False) # doctest: +SKIP
-    +------------------+
-    |rand(1)           |
-    +------------------+
-    |0.4836508543933039|
-    +------------------+
-    """
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
 
 
 @try_remote_functions
