@@ -702,6 +702,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         try {
           $termPattern = $classNamePattern.compile($termLastRegex.toString());
         } catch (java.util.regex.PatternSyntaxException e) {
+          $termLastRegex = null;
           throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
         }
       }
