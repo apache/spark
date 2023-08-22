@@ -2116,42 +2116,43 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
                 var pythonUDTF = Option.empty[PythonUDTF]
+                var pythonUDTFAnalyzeResult = Option.empty[PythonUDTFAnalyzeResult]
                 resolvedFunc match {
                   case Generate(p: PythonUDTF, _, _, _, _, _) =>
                     pythonUDTF = Some(p)
+                    pythonUDTFAnalyzeResult = p.analyzeResult
                   case _ =>
                     assert(!t.hasRepartitioning,
                       "Cannot evaluate the table-valued function call because it included the " +
                         "PARTITION BY clause, but only Python table functions support this clause")
                 }
-                var subplan: LogicalPlan = t.evaluable
                 // Check if this is a call to a Python user-defined table function whose polymorphic
                 // 'analyze' method returned metadata indicated requested partitioning and/or
                 // ordering properties of the input relation. In that event, make sure that the UDTF
                 // call did not include any explicit PARTITION BY and/or ORDER BY clauses for the
                 // corresponding TABLE argument, and then update the TABLE argument representation
                 // to apply the requested partitioning and/or ordering.
-                pythonUDTF.foreach { p =>
-                  p.analyzeResult.foreach { a =>
-                    if (a.hasRepartitioning && t.hasRepartitioning) {
-                      throw QueryCompilationErrors
-                        .tableValuedFunctionRequiredMetadataIncompatibleWithCall(
-                          functionName = p.name,
-                          requestedMetadata =
-                            "specified its own required partitioning of the input table",
-                          invalidFunctionCallProperty =
-                            "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
-                              "please remove these clauses and retry the query again.")
-                    }
-                    subplan = t.copy(
-                      withSinglePartition = a.withSinglePartition,
-                      partitionByExpressions = a.partitionByExpressions,
-                      orderByExpressions = a.orderByExpressions)
-                      .evaluable
+                pythonUDTFAnalyzeResult.map { a =>
+                  if (a.hasRepartitioning && t.hasRepartitioning) {
+                    throw QueryCompilationErrors
+                      .tableValuedFunctionRequiredMetadataIncompatibleWithCall(
+                        functionName = pythonUDTF.get.name,
+                        requestedMetadata =
+                          "specified its own required partitioning of the input table",
+                        invalidFunctionCallProperty =
+                          "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
+                            "please remove these clauses and retry the query again.")
                   }
+                  val newTableArgument = t.copy(
+                    withSinglePartition = a.withSinglePartition,
+                    partitionByExpressions = a.partitionByExpressions,
+                    orderByExpressions = a.orderByExpressions)
+                  tableArgs.append(SubqueryAlias(alias, newTableArgument.evaluable))
+                  functionTableSubqueryArgs.append(newTableArgument)
+                }.getOrElse {
+                  tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                  functionTableSubqueryArgs.append(t)
                 }
-                tableArgs.append(SubqueryAlias(alias, subplan))
-                functionTableSubqueryArgs.append(t)
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
