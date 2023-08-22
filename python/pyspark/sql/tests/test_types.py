@@ -1204,6 +1204,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
