@@ -3350,7 +3350,9 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 class SparkConnectSessionWithOptionsTest(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
-            PySparkSession.builder.config("spark.sql.adaptive.enabled", False)
+            PySparkSession.builder.config("string", "foo")
+            .config("integer", 1)
+            .config("boolean", False)
             .appName(self.__class__.__name__)
             .remote("local[4]")
             .getOrCreate()
@@ -3361,7 +3363,10 @@ class SparkConnectSessionWithOptionsTest(ReusedConnectTestCase):
 
     def test_config(self):
         # Config
-        self.assertEqual(self.spark.conf.get("spark.sql.adaptive.enabled"), "false")
+        self.assertEqual(self.spark.conf.get("string"), "foo")
+        self.assertEqual(self.spark.conf.get("boolean"), "false")
+        self.assertEqual(self.spark.conf.get("integer"), "1")
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
