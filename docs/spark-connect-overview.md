@@ -113,7 +113,7 @@ Now Spark server is running and ready to accept Spark Connect sessions from clie
 applications. In the next section we will walk through how to use Spark Connect
 when writing client applications.
 
-## Use Spark Connect for Interactive Analysis
+## Use a Spark Connect Client
 <div class="codetabs">
 
 <div data-lang="python" markdown="1">
