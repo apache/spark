@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParserUtils, XmlOptions}
 
 final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
