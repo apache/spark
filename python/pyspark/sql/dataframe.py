@@ -1288,7 +1288,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        This method should only be used if the resulting list is expected to be small, 
+        This method should only be used if the resulting list is expected to be small,
         as all the data is loaded into the driver's memory.
 
         Examples
