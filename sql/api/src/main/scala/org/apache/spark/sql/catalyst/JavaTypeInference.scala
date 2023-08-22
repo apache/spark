@@ -21,6 +21,7 @@ import java.lang.reflect.{ParameterizedType, Type, TypeVariable}
 import java.util.{List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -130,10 +131,11 @@ object JavaTypeInference {
       // TODO: we should only collect properties that have getter and setter. However, some tests
       //   pass in scala case class as java bean class which doesn't have getter and setter.
       val properties = getJavaBeanReadableProperties(c)
+      val classTV = getClassHierarchyTypeArguments(c, typeVariables)
       // Note that the fields are ordered by name.
       val fields = properties.map { property =>
         val readMethod = property.getReadMethod
-        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, typeVariables)
+        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, classTV)
         // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
         val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
         EncoderField(
@@ -155,5 +157,18 @@ object JavaTypeInference {
     beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
       .filterNot(_.getName == "declaringClass")
       .filter(_.getReadMethod != null)
+  }
+
+  @tailrec
+  def getClassHierarchyTypeArguments(cls: Class[_],
+                                     typeVariables: Map[TypeVariable[_], Type])
+  : Map[TypeVariable[_], Type] = {
+    if (cls == null) {
+      return typeVariables;
+    }
+
+    getClassHierarchyTypeArguments(cls.getSuperclass, typeVariables ++
+      JavaTypeUtils.getTypeArguments(cls, classOf[Object]).asScala.toMap
+    )
   }
 }
