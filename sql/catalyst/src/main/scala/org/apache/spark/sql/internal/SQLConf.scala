@@ -4363,7 +4363,7 @@ object SQLConf {
       .internal()
       .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
         "predicates. This configuration is only effective when " +
-        "'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+        s"'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
