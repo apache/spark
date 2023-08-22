@@ -4526,6 +4526,10 @@ def approx_percentile(
 
     .. versionadded:: 3.5.0
 
+    Notes
+    -----
+    The function supports Spark Connect.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
