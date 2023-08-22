@@ -47,14 +47,12 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |from pyspark.sql.types import IntegerType, Row, StructType
       |class UDTFWithSinglePartition:
       |    def __init__(self):
-      |        print(f'@@@ __init__, id = {id(self)}')
       |        self._count = 0
       |        self._sum = 0
       |        self._last = None
       |
       |    @staticmethod
       |    def analyze(self):
-      |        print(f'@@@ analyze, id = {id(self)}')
       |        return AnalyzeResult(
       |            schema=StructType()
       |                .add("count", IntegerType())
@@ -66,7 +64,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |                OrderingColumn("partition_col")])
       |
       |    def eval(self, row: Row):
-      |        print(f'@@@ eval, id = {id(self)}, row = {row}')
       |        # Make sure that the rows arrive in the expected order.
       |        if self._last is not None and self._last > row["input"]:
       |            raise Exception(
@@ -77,8 +74,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        self._sum += row["input"]
       |
       |    def terminate(self):
-      |        print(f'@@@ terminate, id = {id(self)}, ' +
-      |            'count/sum/last = {self._count}, {self._sum}, {self._last}')
       |        yield self._count, self._sum, self._last
       |""".stripMargin
 
@@ -237,8 +232,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     }
 
     spark.udtf.registerPython("UDTFWithSinglePartition", pythonUDTFWithSinglePartition)
-    comparePlans(
-      sql("""
+    sql(
+      """
         |WITH t AS (
         |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
         |    UNION ALL
@@ -247,8 +242,12 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |SELECT count, total, last
         |FROM UDTFWithSinglePartition(TABLE(t))
         |ORDER BY 1, 2
-        |""".stripMargin).queryExecution.analyzed,
-      OneRowRelation())
+        |""".stripMargin).queryExecution.analyzed
+      .collectFirst { case r: Repartition => r }.get match {
+      case Repartition(1, true, _) =>
+      case other =>
+        failure(other)
+    }
   }
 
   test("SPARK-44503: Compute partition child indexes for various UDTF argument lists") {
