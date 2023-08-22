@@ -393,6 +393,46 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
     parse(csvDataset, ParseFormat.PARSE_FORMAT_CSV)
 
   /**
+   * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the other
+   * overloaded `xml()` method for more details.
+   *
+   * @since 4.0.0
+   */
+  def xml(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    xml(Seq(path): _*)
+  }
+
+  /**
+   * Loads XML files and returns the result as a `DataFrame`.
+   *
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using `schema`.
+   *
+   * You can find the XML-specific options for reading XML files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def xml(paths: String*): DataFrame = format("xml").load(paths: _*)
+
+  /**
+   * Loads an `Dataset[String]` storing XML object and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * @param xmlDataset
+   *   input Dataset with one XML object per record
+   * @since 4.0.0
+   */
+  def xml(xmlDataset: Dataset[String]): DataFrame =
+    parse(xmlDataset, ParseFormat.PARSE_FORMAT_UNSPECIFIED)
+
+  /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
    * other overloaded `parquet()` method for more details.
    *
