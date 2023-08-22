@@ -4524,10 +4524,11 @@ def approx_percentile(
     of `col` values is less than the value or equal to that value.
 
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    Notes
+    -----
+    Supports Spark Connect.
 
     Parameters
     ----------
