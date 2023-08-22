@@ -34,7 +34,7 @@ from pyspark.sql.streaming.readwriter import (
 )
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -494,7 +494,7 @@ class DataStreamWriter:
                 CloudPickleSerializer().dumps(command)
             )
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
                 message_parameters={"name": "foreach"},
             )
@@ -509,7 +509,7 @@ class DataStreamWriter:
                 func
             )
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
                 message_parameters={"name": "foreachBatch"},
             )

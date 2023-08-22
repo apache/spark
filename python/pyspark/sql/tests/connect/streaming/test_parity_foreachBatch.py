@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreachBatch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkPicklingError
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
@@ -41,7 +41,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         error_thrown = False
         try:
             self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        except PySparkRuntimeError as e:
+        except PySparkPicklingError as e:
             self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
             error_thrown = True
         self.assertTrue(error_thrown)
@@ -55,7 +55,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
         error_thrown = False
         try:
             self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        except PySparkRuntimeError as e:
+        except PySparkPicklingError as e:
             self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
             error_thrown = True
         self.assertTrue(error_thrown)

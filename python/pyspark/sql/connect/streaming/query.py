@@ -33,7 +33,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkPicklingError
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
@@ -242,7 +242,7 @@ class StreamingQueryManager:
         try:
             expr.command = CloudPickleSerializer().dumps(listener)
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
                 message_parameters={"name": "addListener"},
             )

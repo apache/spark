@@ -18,7 +18,7 @@
 import unittest
 import time
 
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener, QueryStartedEvent
 from pyspark.sql.types import StructType, StructField, StringType
@@ -103,7 +103,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
         error_thrown = False
         try:
             self.spark.streams.addListener(TestListener())
-        except PySparkRuntimeError as e:
+        except PySparkPicklingError as e:
             self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
             error_thrown = True
         self.assertTrue(error_thrown)
@@ -127,7 +127,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
         error_thrown = False
         try:
             self.spark.streams.addListener(TestListener())
-        except PySparkRuntimeError as e:
+        except PySparkPicklingError as e:
             self.assertEqual(e.getErrorClass(), "STREAMING_CONNECT_SERIALIZATION_ERROR")
             error_thrown = True
         self.assertTrue(error_thrown)
