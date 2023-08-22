@@ -39,6 +39,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.CreateDataFrameViewCommand
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -49,13 +50,18 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, Sessi
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
  * Testing Connect Service implementation.
  */
-class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with Logging {
+class SparkConnectServiceSuite
+    extends SharedSparkSession
+    with MockitoSugar
+    with Logging
+    with SparkConnectPlanTest {
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
   private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
@@ -190,7 +196,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             done = true
           }
         })
-      verifyEvents.onCompleted()
+      verifyEvents.onCompleted(Some(100))
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
@@ -235,6 +241,77 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
         reader.close()
       }
       allocator.close()
+    }
+  }
+
+  test("SPARK-44776: LocalTableScanExec") {
+    withEvents { verifyEvents =>
+      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      val instance = new SparkConnectService(false)
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+
+      val rows = (0L to 5L).map { i =>
+        new GenericInternalRow(Array(i, UTF8String.fromString("" + (i - 1 + 'a').toChar)))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+      val inputRows = rows.map { row =>
+        val proj = UnsafeProjection.create(schema)
+        proj(row).copy()
+      }
+
+      val localRelation = createLocalRelationProto(schema, inputRows)
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(localRelation)
+        .build()
+
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .setSessionId(UUID.randomUUID.toString())
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            responses += v
+            verifyEvents.onNext(v)
+          }
+
+          override def onError(throwable: Throwable): Unit = {
+            verifyEvents.onError(throwable)
+            throw throwable
+          }
+
+          override def onCompleted(): Unit = {
+            done = true
+          }
+        })
+      verifyEvents.onCompleted(Some(6))
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      // 1 Partitions + Metrics
+      assert(responses.size == 3)
+
+      // Make sure the first response is schema only
+      val head = responses.head
+      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+
+      // Make sure the last response is metrics only
+      val last = responses.last
+      assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
     }
   }
 
@@ -301,101 +378,123 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
 
   gridTest("SPARK-43923: commands send events")(
     Seq(
-      proto.Command
-        .newBuilder()
-        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("select 1").build()),
-      proto.Command
-        .newBuilder()
-        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("show tables").build()),
-      proto.Command
-        .newBuilder()
-        .setWriteOperation(
-          proto.WriteOperation
-            .newBuilder()
-            .setInput(
-              proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
-            .setPath(Utils.createTempDir().getAbsolutePath)
-            .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
-      proto.Command
-        .newBuilder()
-        .setWriteOperationV2(
-          proto.WriteOperationV2
-            .newBuilder()
-            .setInput(proto.Relation.newBuilder.setRange(
-              proto.Range.newBuilder().setStart(0).setEnd(2).setStep(1L)))
-            .setTableName("testcat.testtable")
-            .setMode(proto.WriteOperationV2.Mode.MODE_CREATE)),
-      proto.Command
-        .newBuilder()
-        .setCreateDataframeView(
-          CreateDataFrameViewCommand
-            .newBuilder()
-            .setName("testview")
-            .setInput(
-              proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))),
-      proto.Command
-        .newBuilder()
-        .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
-      proto.Command
-        .newBuilder()
-        .setExtension(
-          protobuf.Any.pack(
-            proto.ExamplePluginCommand
-              .newBuilder()
-              .setCustomField("SPARK-43923")
-              .build())),
-      proto.Command
-        .newBuilder()
-        .setWriteStreamOperationStart(
-          proto.WriteStreamOperationStart
-            .newBuilder()
-            .setInput(
-              proto.Relation
-                .newBuilder()
-                .setRead(proto.Read
-                  .newBuilder()
-                  .setIsStreaming(true)
-                  .setDataSource(proto.Read.DataSource.newBuilder().setFormat("rate").build())
-                  .build())
-                .build())
-            .setOutputMode("Append")
-            .setAvailableNow(true)
-            .setQueryName("test")
-            .setFormat("memory")
-            .putOptions("checkpointLocation", Utils.createTempDir().getAbsolutePath)
-            .setPath("test-path")
-            .build()),
-      proto.Command
-        .newBuilder()
-        .setStreamingQueryCommand(
-          proto.StreamingQueryCommand
-            .newBuilder()
-            .setQueryId(
-              proto.StreamingQueryInstanceId
-                .newBuilder()
-                .setId(DEFAULT_UUID.toString)
-                .setRunId(DEFAULT_UUID.toString)
-                .build())
-            .setStop(true)),
-      proto.Command
-        .newBuilder()
-        .setStreamingQueryManagerCommand(proto.StreamingQueryManagerCommand
+      (
+        proto.Command
           .newBuilder()
-          .setListListeners(true)),
-      proto.Command
-        .newBuilder()
-        .setRegisterFunction(
-          proto.CommonInlineUserDefinedFunction
-            .newBuilder()
-            .setFunctionName("function")
-            .setPythonUdf(
-              proto.PythonUDF
+          .setSqlCommand(proto.SqlCommand.newBuilder().setSql("select 1").build()),
+        Some(0L)),
+      (
+        proto.Command
+          .newBuilder()
+          .setSqlCommand(proto.SqlCommand.newBuilder().setSql("show databases").build()),
+        Some(1L)),
+      (
+        proto.Command
+          .newBuilder()
+          .setWriteOperation(
+            proto.WriteOperation
+              .newBuilder()
+              .setInput(
+                proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
+              .setPath(Utils.createTempDir().getAbsolutePath)
+              .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setWriteOperationV2(
+            proto.WriteOperationV2
+              .newBuilder()
+              .setInput(proto.Relation.newBuilder.setRange(
+                proto.Range.newBuilder().setStart(0).setEnd(2).setStep(1L)))
+              .setTableName("testcat.testtable")
+              .setMode(proto.WriteOperationV2.Mode.MODE_CREATE)),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setCreateDataframeView(
+            CreateDataFrameViewCommand
+              .newBuilder()
+              .setName("testview")
+              .setInput(
+                proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setExtension(
+            protobuf.Any.pack(
+              proto.ExamplePluginCommand
                 .newBuilder()
-                .setEvalType(100)
-                .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
-                .setCommand(ByteString.copyFrom("command".getBytes()))
-                .setPythonVer("3.10")
-                .build())))) { command =>
+                .setCustomField("SPARK-43923")
+                .build())),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setWriteStreamOperationStart(
+            proto.WriteStreamOperationStart
+              .newBuilder()
+              .setInput(
+                proto.Relation
+                  .newBuilder()
+                  .setRead(proto.Read
+                    .newBuilder()
+                    .setIsStreaming(true)
+                    .setDataSource(proto.Read.DataSource.newBuilder().setFormat("rate").build())
+                    .build())
+                  .build())
+              .setOutputMode("Append")
+              .setAvailableNow(true)
+              .setQueryName("test")
+              .setFormat("memory")
+              .putOptions("checkpointLocation", Utils.createTempDir().getAbsolutePath)
+              .setPath("test-path")
+              .build()),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setStreamingQueryCommand(
+            proto.StreamingQueryCommand
+              .newBuilder()
+              .setQueryId(
+                proto.StreamingQueryInstanceId
+                  .newBuilder()
+                  .setId(DEFAULT_UUID.toString)
+                  .setRunId(DEFAULT_UUID.toString)
+                  .build())
+              .setStop(true)),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setStreamingQueryManagerCommand(proto.StreamingQueryManagerCommand
+            .newBuilder()
+            .setListListeners(true)),
+        None),
+      (
+        proto.Command
+          .newBuilder()
+          .setRegisterFunction(
+            proto.CommonInlineUserDefinedFunction
+              .newBuilder()
+              .setFunctionName("function")
+              .setPythonUdf(
+                proto.PythonUDF
+                  .newBuilder()
+                  .setEvalType(100)
+                  .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
+                  .setCommand(ByteString.copyFrom("command".getBytes()))
+                  .setPythonVer("3.10")
+                  .build())),
+        None))) { case (command, producedNumRows) =>
     val sessionId = UUID.randomUUID.toString()
     withCommandTest(sessionId) { verifyEvents =>
       val instance = new SparkConnectService(false)
@@ -435,7 +534,7 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
             done = true
           }
         })
-      verifyEvents.onCompleted()
+      verifyEvents.onCompleted(producedNumRows)
       // The current implementation is expected to be blocking.
       // This is here to make sure it is.
       assert(done)
@@ -788,8 +887,9 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with
       assert(executeHolder.eventsManager.hasCanceled.isEmpty)
       assert(executeHolder.eventsManager.hasError.isDefined)
     }
-    def onCompleted(): Unit = {
+    def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
+      assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
     }
     def onCanceled(): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.contains(true))
