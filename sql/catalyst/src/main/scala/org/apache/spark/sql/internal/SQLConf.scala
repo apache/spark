@@ -1528,7 +1528,7 @@ object SQLConf {
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
