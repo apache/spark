@@ -28,13 +28,11 @@ import scala.io.{Codec, Source}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
-
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, SafeModeAction}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.security.AccessControlException
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -552,6 +550,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                   listing.delete(classOf[LogInfo], reader.rootPath.toString)
                   false
                 } else if (count < conf.get(UPDATE_BATCHSIZE)) {
+                  count = count + 1
                   handleNewLogFile(reader, newLastScanTime)
                 } else {
                   false
@@ -930,7 +929,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           mergeApplicationListing(reader, scanTime, true)
         }
       } catch {
-        case _: NoSuchElementException => None
+        case _: NoSuchElementException =>
       }
     }
   }
@@ -1192,8 +1191,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     listing.read(classOf[ApplicationInfoWrapper], appId)
   }
 
-  private def updateAppInfoFromXAttrs(info: LogInfo, reader: EventLogFileReader,
-                                      scanTime: Long): Unit = {
+  private def updateAppInfoFromXAttrs(
+    info: LogInfo, reader: EventLogFileReader, scanTime: Long): Unit = {
     var xAttrStatus: LogXAttrStatus.Value = info.logXAttrStatus
     var appStartInfo: Option[Map[String, String]] = None
     var envUpdateInfo: Option[String] = None
@@ -1241,8 +1240,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Check if status is updated
     if(xAttrStatus != info.logXAttrStatus) {
       val appListingFromXAttr = new AppListingEntryFromXAttr(reader, clock)
-      if (info.logXAttrStatus != LogXAttrStatus.XATTR_ENABLED && appId.isDefined &&
-        attemptId.isDefined) {
+      if (info.logXAttrStatus != LogXAttrStatus.XATTR_ENABLED && appId.isDefined) {
         val oldApp: Option[ApplicationInfoWrapper] = try {
           Some(listing.read(classOf[ApplicationInfoWrapper], appId.get))
         } catch {
@@ -1319,7 +1317,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       val valueMap = fs.getXAttrs(path, nameList.asJava)
       if(valueMap != null) {
-        Some(valueMap.asScala.toMap.map(value => value._1 -> new String(value._2)))
+        Some(valueMap.asScala.toMap.map(value => value._1 ->
+          new String(value._2, StandardCharsets.UTF_8)))
       } else {
         None
       }
@@ -1356,8 +1355,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def handleNewLogFile(reader: EventLogFileReader, scanTime: Long): Boolean = {
     var xAttrStatus = LogXAttrStatus.XATTR_DISABLED
     if(HISTORY_LOG_USE_XATTR) {
-      val isXAttrEnabled = getXAttr(reader.rootPath, EventLoggingListener.USER_XATTR_ENABLED)
-      if (isXAttrEnabled.isDefined && new String(isXAttrEnabled.get) == "true") {
+      val xAttrEnabled = getXAttr(reader.rootPath, EventLoggingListener.USER_XATTR_ENABLED)
+      if (xAttrEnabled.exists(data =>
+        new String(data.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8) == "true")) {
         xAttrStatus = LogXAttrStatus.XATTR_ENABLED
       }
     }
@@ -1647,6 +1647,14 @@ private[history] object LogType extends Enumeration {
   val DriverLogs, EventLogs = Value
 }
 
+/**
+ * Enum to store status of peristing extended attributes
+ * XATTR_DISABLED : Stores whether fetching of extended attributes is disabled for an application
+ * XATTR_ENABLED : Stores whether fetching of extended attributes is enabled for an application
+ * APP_STARTED : State reached when application start info is fetched from extended attributes
+ * APP_ENV_UPDATED : State reached when application environment info is fetched from extended attributes
+ * APP_END : State reached when application end info is fetched from extended attributes
+ */
 private[history] object LogXAttrStatus extends Enumeration {
   val XATTR_DISABLED, XATTR_ENABLED, APP_STARTED, APP_ENV_UPDATED, APP_END = Value
   type LogXAttrStatus = Value

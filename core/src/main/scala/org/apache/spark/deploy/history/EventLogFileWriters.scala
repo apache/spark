@@ -238,9 +238,9 @@ class SingleEventLogFileWriter(
       fileSystem.setXAttr(new Path(inProgressPath), attrName, attrValue.getBytes())
     } catch {
       case _: IOException =>
-        logWarning(s"Failed to set extended attribute ${attrName}")
+        logInfo(s"Failed to set extended attribute ${attrName}")
       case _: UnsupportedOperationException =>
-        logWarning("setXAttr not supported by filesystem")
+        logInfo("setXAttr not supported by filesystem")
     }
   }
 

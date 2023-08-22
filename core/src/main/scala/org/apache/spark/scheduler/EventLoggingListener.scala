@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.net.URI
-import java.util.Properties
+import java.util.{Date, Properties}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileWriter
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{EVENT_LOG_USEXATTR, _}
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
@@ -63,6 +63,10 @@ private[spark] class EventLoggingListener(
   private[scheduler] val logWriter: EventLogFileWriter =
     EventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf)
 
+  // Application summary information is written to extended attributes only if we
+  // have the flag enabled and if we are using SingleLogFileWriter
+  private[scheduler] var shouldUseXAttr = sparkConf.get(EVENT_LOG_USEXATTR) &&
+    !sparkConf.get(EVENT_LOG_ENABLE_ROLLING)
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new mutable.ArrayBuffer[String]
 
@@ -74,12 +78,15 @@ private[spark] class EventLoggingListener(
   private val liveStageExecutorMetrics =
     mutable.HashMap.empty[(Int, Int), mutable.HashMap[String, ExecutorMetrics]]
 
+  private var envUpdateXAttrFlushed = false
+
   /**
    * Creates the log file in the configured log directory.
    */
   def start(): Unit = {
     logWriter.start()
     initEventLog()
+    if (shouldUseXAttr) logWriter.writeToXAttr(USER_XATTR_ENABLED, "true")
   }
 
   private def initEventLog(): Unit = {
@@ -128,6 +135,16 @@ private[spark] class EventLoggingListener(
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(sparkConf, event))
+    if (shouldUseXAttr && !envUpdateXAttrFlushed) {
+      envUpdateXAttrFlushed = true
+      val allProperties = event.environmentDetails("Spark Properties").toMap
+      val aclsValueList = List(allProperties.get("spark.ui.view.acls").getOrElse("None"),
+        allProperties.get("spark.admin.acls").getOrElse("None"),
+        allProperties.get("spark.ui.view.acls.groups").getOrElse("None"),
+        allProperties.get("spark.admin.acls.groups").getOrElse("None"))
+        .mkString("|")
+      logWriter.writeToXAttr(USER_ATTEMPT_ACLS, aclsValueList)
+    }
   }
 
   // Events that trigger a flush
@@ -175,10 +192,21 @@ private[spark] class EventLoggingListener(
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     logEvent(event, flushLogger = true)
+    if (shouldUseXAttr) {
+      logWriter.writeToXAttr(USER_APP_ID, event.appId.getOrElse("None"))
+      logWriter.writeToXAttr(USER_APP_NAME, event.appName)
+      logWriter.writeToXAttr(USER_ATTEMPT_ID, event.appAttemptId.getOrElse("None"))
+      logWriter.writeToXAttr(USER_ATTEMPT_STARTTIME, new Date(event.time).getTime.toString)
+      logWriter.writeToXAttr(USER_ATTEMPT_SPARKUSER, event.sparkUser)
+      logWriter.writeToXAttr(USER_ATTEMPT_APPSPARKVERSION, SPARK_VERSION)
+    }
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
+    if (shouldUseXAttr) {
+      logWriter.writeToXAttr(USER_ATTEMPT_ENDTIME, new Date(event.time).getTime.toString)
+    }
   }
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
