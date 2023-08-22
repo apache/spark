@@ -4321,6 +4321,16 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
+    .internal()
+    .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
+      "incorrectly mapped the requested percentile to the sorted range of values in some cases " +
+      "and so returned incorrect results. Also, the new implementation is faster as it doesn't " +
+      "contain the interpolation logic that the old percentile_cont based one did.")
+    .version("3.3.4")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
