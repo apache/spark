@@ -35,7 +35,7 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
 
     # Define the UDTF class and implement the required `eval` method.
     class SquareNumbers:
-        def eval(self, start: int, end: int):  # type: ignore[no-untyped-def]
+        def eval(self, start: int, end: int):
             for num in range(start, end + 1):
                 yield (num, num * num)
 
@@ -45,7 +45,7 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
     square_num = udtf(SquareNumbers, returnType="num: int, squared: int")
 
     # Invoke the UDTF in PySpark.
-    square_num(lit(1), lit(3)).show()  # type: ignore
+    square_num(lit(1), lit(3)).show()
     # +---+------+
     # |num|squred|
     # +---+------+
@@ -60,14 +60,14 @@ def python_udtf_decorator_example(spark: SparkSession) -> None:
     from pyspark.sql.functions import lit, udtf
 
     # Define a UDTF using the `udtf` decorator directly on the class.
-    @udtf(returnType="num: int, squared: int")  # type: ignore
+    @udtf(returnType="num: int, squared: int")
     class SquareNumbers:
-        def eval(self, start: int, end: int):  # type: ignore[no-untyped-def]
+        def eval(self, start: int, end: int):
             for num in range(start, end + 1):
                 yield (num, num * num)
 
     # Invoke the UDTF in PySpark using the SquareNumbers class directly.
-    SquareNumbers(lit(1), lit(3)).show()  # type: ignore
+    SquareNumbers(lit(1), lit(3)).show()
     # +---+------+
     # |num|squred|
     # +---+------+
@@ -81,14 +81,14 @@ def python_udtf_registration(spark: SparkSession) -> None:
 
     from pyspark.sql.functions import udtf
 
-    @udtf(returnType="word: string")  # type: ignore
+    @udtf(returnType="word: string")
     class WordSplitter:
-        def eval(self, text: str):  # type: ignore[no-untyped-def]
+        def eval(self, text: str):
             for word in text.split(" "):
                 yield (word.strip(),)
 
     # Register the UDTF for use in Spark SQL.
-    spark.udtf.register("split_words", WordSplitter)  # type: ignore
+    spark.udtf.register("split_words", WordSplitter)
 
     # Example: Using the UDTF in SQL.
     spark.sql("SELECT * FROM split_words('hello world')").show()
@@ -120,9 +120,9 @@ def python_udtf_arrow_example(spark: SparkSession) -> None:
 
     from pyspark.sql.functions import udtf
 
-    @udtf(returnType="c1: int, c2: int", useArrow=True)  # type: ignore
+    @udtf(returnType="c1: int, c2: int", useArrow=True)
     class PlusOne:
-        def eval(self, x: int):  # type: ignore[no-untyped-def]
+        def eval(self, x: int):
             yield x, x + 1
 
 
@@ -131,16 +131,16 @@ def python_udtf_date_expander_example(spark: SparkSession) -> None:
     from datetime import datetime, timedelta
     from pyspark.sql.functions import lit, udtf
 
-    @udtf(returnType="date: string")  # type: ignore
+    @udtf(returnType="date: string")
     class DateExpander:
-        def eval(self, start_date: str, end_date: str):  # type: ignore[no-untyped-def]
+        def eval(self, start_date: str, end_date: str):
             current = datetime.strptime(start_date, '%Y-%m-%d')
             end = datetime.strptime(end_date, '%Y-%m-%d')
             while current <= end:
                 yield (current.strftime('%Y-%m-%d'),)
                 current += timedelta(days=1)
 
-    DateExpander(lit("2023-02-25"), lit("2023-03-01")).show()  # type: ignore
+    DateExpander(lit("2023-02-25"), lit("2023-03-01")).show()
     # +----------+
     # |      date|
     # +----------+
@@ -156,18 +156,18 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
 
     from pyspark.sql.functions import udtf
 
-    @udtf(returnType="cnt: int")  # type: ignore
+    @udtf(returnType="cnt: int")
     class CountUDTF:
-        def __init__(self):  # type: ignore[no-untyped-def]
+        def __init__(self):
             self.count = 0
 
-        def eval(self, x: int):  # type: ignore[no-untyped-def]
+        def eval(self, x: int):
             self.count += 1
 
-        def terminate(self):  # type: ignore[no-untyped-def]
+        def terminate(self):
             yield self.count,
 
-    spark.udtf.register("count_udtf", CountUDTF)  # type: ignore
+    spark.udtf.register("count_udtf", CountUDTF)
     spark.sql("SELECT * FROM range(0, 10, 1, 1), LATERAL count_udtf(id)").show()
     # +---+---+
     # | id|cnt|
@@ -181,13 +181,13 @@ def python_udtf_table_argument(spark: SparkSession) -> None:
     from pyspark.sql.functions import udtf
     from pyspark.sql.types import Row
 
-    @udtf(returnType="id: int")  # type: ignore
+    @udtf(returnType="id: int")
     class FilterUDTF:
-        def eval(self, row: Row):  # type: ignore[no-untyped-def]
+        def eval(self, row: Row):
             if row["id"] > 5:
                 yield row["id"],
 
-    spark.udtf.register("filter_udtf", FilterUDTF)  # type: ignore
+    spark.udtf.register("filter_udtf", FilterUDTF)
 
     spark.sql("SELECT * FROM filter_udtf(TABLE(SELECT * FROM range(10)))").show()
     # +---+
