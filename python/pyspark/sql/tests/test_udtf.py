@@ -2186,6 +2186,71 @@ class BaseUDTFTestsMixin:
                 ],
         )
 
+    def test_udtf_with_table_argument_with_partition_by_and_order_by_from_analyze(self):
+        @udtf
+        class TestUDTF:
+            def __init__(self):
+                self._partition_col = None
+                self._count = 0
+                self._sum = 0
+                self._last = None
+
+            @staticmethod
+            def analyze(self):
+                return AnalyzeResult(
+                    schema=StructType()
+                    .add("partition_col", IntegerType())
+                    .add("count", IntegerType())
+                    .add("total", IntegerType())
+                    .add("last", IntegerType()),
+                    partition_by=[
+                        PartitioningColumn("partition_col")
+                    ],
+                    order_by=[
+                        OrderingColumn("input")
+                    ])
+
+            def eval(self, row: Row):
+                # Make sure that all values of the partitioning column are the same
+                # for each row consumed by this method for this instance of the class.
+                if self._partition_col is not None and self._partition_col != row["partition_col"]:
+                    raise Exception(
+                        f"self._partition_col was {self._partition_col} but the row "
+                        + f"value was {row['partition_col']}"
+                    )
+                # Make sure that the rows arrive in the expected order.
+                if self._last is not None and self._last > row["input"]:
+                    raise Exception(
+                        f"self._last was {self._last} but the row value was {row['input']}"
+                    )
+                self._partition_col = row["partition_col"]
+                self._count += 1
+                self._last = row["input"]
+                self._sum += row["input"]
+
+            def terminate(self):
+                yield self._partition_col, self._count, self._sum, self._last
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+                  UNION ALL
+                  SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+                )
+                SELECT partition_col, count, total, last
+                FROM test_udtf(TABLE(t))
+                ORDER BY 1, 2
+                """
+            ).collect(),
+            [
+                Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)
+            ],
+        )
+
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):

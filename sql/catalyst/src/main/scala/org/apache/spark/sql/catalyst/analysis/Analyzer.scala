@@ -2261,6 +2261,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
             }
           }
+
+          case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
+            val elementSchema = u.resolveElementMetadata(u.func, u.children).schema
+            PythonUDTF(u.name, u.func, elementSchema, u.children,
+              u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes)
+          }
         }
     }
 

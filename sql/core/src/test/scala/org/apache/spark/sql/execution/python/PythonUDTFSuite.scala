@@ -77,6 +77,54 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield self._count, self._sum, self._last
       |""".stripMargin
 
+  private val pythonScriptPartitionByOrderBy: String =
+    """
+      |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+      |from pyspark.sql.types import IntegerType, Row, StructType
+      |class UDTFPartitionByOrderBy:
+      |    def __init__(self):
+      |        self._partition_col = None
+      |        self._count = 0
+      |        self._sum = 0
+      |        self._last = None
+      |
+      |    @staticmethod
+      |    def analyze(self):
+      |        return AnalyzeResult(
+      |            schema=StructType()
+      |            .add("partition_col", IntegerType())
+      |            .add("count", IntegerType())
+      |            .add("total", IntegerType())
+      |            .add("last", IntegerType()),
+      |            partition_by=[
+      |                PartitioningColumn("partition_col")
+      |            ],
+      |            order_by=[
+      |                OrderingColumn("input")
+      |            ])
+      |
+      |    def eval(self, row: Row):
+      |        # Make sure that all values of the partitioning column are the same
+      |        # for each row consumed by this method for this instance of the class.
+      |        if self._partition_col is not None and self._partition_col != row["partition_col"]:
+      |            raise Exception(
+      |                f"self._partition_col was {self._partition_col} but the row "
+      |                + f"value was {row['partition_col']}"
+      |            )
+      |        # Make sure that the rows arrive in the expected order.
+      |        if self._last is not None and self._last > row["input"]:
+      |            raise Exception(
+      |                f"self._last was {self._last} but the row value was {row['input']}"
+      |            )
+      |        self._partition_col = row["partition_col"]
+      |        self._count += 1
+      |        self._last = row["input"]
+      |        self._sum += row["input"]
+      |
+      |    def terminate(self):
+      |        yield self._partition_col, self._count, self._sum, self._last
+      |""".stripMargin
+
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
@@ -84,8 +132,11 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "UDTFWithSinglePartition", pythonScriptWithSinglePartition,
-      None)
+      "UDTFWithSinglePartition", pythonScriptWithSinglePartition, None)
+
+  private val pythonUDTFPartitionByOrderBy: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "UDTFPartitionByOrderBy", pythonScriptPartitionByOrderBy, None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -245,6 +296,24 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin).queryExecution.analyzed
       .collectFirst { case r: Repartition => r }.get match {
       case Repartition(1, true, _) =>
+      case other =>
+        failure(other)
+    }
+
+    spark.udtf.registerPython("UDTFPartitionByOrderBy", pythonUDTFPartitionByOrderBy)
+    sql(
+      """
+        |WITH t AS (
+        |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+        |    UNION ALL
+        |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+        |)
+        |SELECT partition_col, count, total, last
+        |FROM UDTFPartitionByOrderBy(TABLE(t))
+        |ORDER BY 1, 2
+        |""".stripMargin).queryExecution.analyzed
+      .collectFirst { case r: RepartitionByExpression => r }.get match {
+      case _: RepartitionByExpression =>
       case other =>
         failure(other)
     }
