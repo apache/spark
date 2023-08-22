@@ -22,6 +22,8 @@ import com.google.protobuf.MessageLite
 private[execution] case class CachedStreamResponse[T <: MessageLite](
     // the actual cached response
     response: T,
+    // the id of the response, an UUID.
+    responseId: String,
     // index of the response in the response stream.
     // responses produced in the stream are numbered consecutively starting from 1.
     streamIndex: Long) {

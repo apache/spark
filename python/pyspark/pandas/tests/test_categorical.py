@@ -65,21 +65,14 @@ class CategoricalTestsMixin:
         with self.assertRaisesRegex(ValueError, "Cannot call CategoricalAccessor on type int64"):
             ps.Series([1, 2, 3]).cat
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43566): Enable CategoricalTests.test_categories_setter for pandas 2.0.0.",
-    )
     def test_categories_setter(self):
         pdf, psdf = self.df_pair
 
         pser = pdf.a
         psser = psdf.a
 
-        pser.cat.categories = ["z", "y", "x"]
-        psser.cat.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
-            pser = pser.astype(CategoricalDtype(categories=["x", "y", "z"]))
+        pser = pser.cat.rename_categories(["z", "y", "x"])
+        psser = psser.cat.rename_categories(["z", "y", "x"])
 
         self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
@@ -103,10 +96,6 @@ class CategoricalTestsMixin:
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
         self.assertRaises(ValueError, lambda: psser.cat.add_categories([5, 5]))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43605): Enable CategoricalTests.test_remove_categories for pandas 2.0.0.",
-    )
     def test_remove_categories(self):
         pdf, psdf = self.df_pair
 
@@ -168,10 +157,6 @@ class CategoricalTestsMixin:
         self.assertRaises(TypeError, lambda: psser.cat.reorder_categories(1))
         self.assertRaises(TypeError, lambda: psdf.b.cat.reorder_categories("abcd"))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43565): Enable CategoricalTests.test_as_ordered_unordered for pandas 2.0.0.",
-    )
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
@@ -181,27 +166,8 @@ class CategoricalTestsMixin:
         # as_ordered
         self.assert_eq(pser.cat.as_ordered(), psser.cat.as_ordered())
 
-        pser.cat.as_ordered(inplace=True)
-        psser.cat.as_ordered(inplace=True)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
-            pser = pser.astype(CategoricalDtype(categories=[1, 2, 3], ordered=True))
-
-        self.assert_eq(pser, psser)
-        self.assert_eq(pdf, psdf)
-
         # as_unordered
         self.assert_eq(pser.cat.as_unordered(), psser.cat.as_unordered())
-
-        pser.cat.as_unordered(inplace=True)
-        psser.cat.as_unordered(inplace=True)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
-            pser = pser.astype(CategoricalDtype(categories=[1, 2, 3], ordered=False))
-            pdf.a = pser
-
-        self.assert_eq(pser, psser)
-        self.assert_eq(pdf, psdf)
 
     def test_astype(self):
         pser = pd.Series(["a", "b", "c"])
@@ -232,10 +198,6 @@ class CategoricalTestsMixin:
 
         self.assert_eq(pscser.astype(str), pcser.astype(str))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43564): Enable CategoricalTests.test_factorize for pandas 2.0.0.",
-    )
     def test_factorize(self):
         pser = pd.Series(["a", "b", "c", None], dtype=CategoricalDtype(["c", "a", "d", "b"]))
         psser = ps.from_pandas(pser)
@@ -246,8 +208,8 @@ class CategoricalTestsMixin:
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-        pcodes, puniques = pser.factorize(na_sentinel=-2)
-        kcodes, kuniques = psser.factorize(na_sentinel=-2)
+        pcodes, puniques = pser.factorize(use_na_sentinel=-2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
@@ -379,11 +341,6 @@ class CategoricalTestsMixin:
         #     psdf.groupby("a").apply(len).sort_index(), pdf.groupby("a").apply(len).sort_index(),
         # )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43813): Enable CategoricalTests.test_groupby_apply_without_shortcut "
-        "for pandas 2.0.0.",
-    )
     def test_groupby_apply_without_shortcut(self):
         with ps.option_context("compute.shortcut_limit", 0):
             self.test_groupby_apply()
@@ -394,8 +351,8 @@ class CategoricalTestsMixin:
             return df
 
         self.assert_eq(
-            psdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
-            pdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
+            psdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),
+            pdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),
         )
 
     def test_groupby_transform(self):

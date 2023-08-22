@@ -222,7 +222,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       .build()
   }
 
-  private class ExecutionThread extends Thread {
+  private class ExecutionThread
+      extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
     override def run(): Unit = {
       execute()
     }

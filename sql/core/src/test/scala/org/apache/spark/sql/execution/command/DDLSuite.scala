@@ -2064,22 +2064,38 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("alter table add columns -- not support temp view") {
     withTempView("tmp_v") {
       sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains(
-        "tmp_v is a temp view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
+        },
+        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        parameters = Map(
+          "tempViewName" -> "`tmp_v`",
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
+        context = ExpectedContext(
+          fragment = "tmp_v",
+          start = 12,
+          stop = 16)
+      )
     }
   }
 
   test("alter table add columns -- not support view") {
     withView("v1") {
       sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains(s"${SESSION_CATALOG_NAME}.default.v1 is a view. " +
-        "'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
+        },
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        parameters = Map(
+          "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+          "operation" -> "ALTER TABLE ... ADD COLUMNS"),
+        context = ExpectedContext(
+          fragment = "v1",
+          start = 12,
+          stop = 13)
+      )
     }
   }
 

@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import sbt._
-import sbt.Classpaths.publishTask
+import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
@@ -286,9 +286,7 @@ object SparkBuild extends PomBuild {
           // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
           // from the corresponding files when Scala 2.12 is no longer supported.
           "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
-          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-          "-Wconf:msg=Implicit definition should have explicit type:s"
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }
@@ -327,8 +325,10 @@ object SparkBuild extends PomBuild {
         .withLogging(ivyLoggingLevel.value),
     (MavenCompile / publishMavenStyle) := true,
     (SbtCompile / publishMavenStyle) := false,
-    (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
-    (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
+    (MavenCompile / publishLocal) := publishOrSkip((MavenCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
+    (SbtCompile / publishLocal) := publishOrSkip((SbtCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
@@ -452,7 +452,7 @@ object SparkBuild extends PomBuild {
   enable(Unidoc.settings)(spark)
 
   /* Sql-api ANTLR generation settings */
-  enable(Catalyst.settings)(sqlApi)
+  enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -777,7 +777,6 @@ object SparkConnect {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -843,14 +842,7 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkConnectClient {
@@ -927,14 +919,7 @@ object SparkConnectClient {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkProtobuf {
@@ -1172,7 +1157,7 @@ object OldDeps {
   )
 }
 
-object Catalyst {
+object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 

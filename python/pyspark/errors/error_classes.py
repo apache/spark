@@ -231,11 +231,6 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
-  "EXCEED_RETRY" : {
-    "message" : [
-      "Retries exceeded but no exception caught."
-    ]
-  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -617,6 +612,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
+  "NO_ACTIVE_OR_DEFAULT_SESSION" : {
+    "message" : [
+      "No active or default Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
@@ -738,6 +738,11 @@ ERROR_CLASSES_JSON = """
       "User defined table function encountered an error in the '<method_name>' method: <error>"
     ]
   },
+  "UDTF_INVALID_OUTPUT_ROW_TYPE" : {
+    "message" : [
+        "The type of an individual output row in the UDTF is invalid. Each row should be a tuple, list, or dict, but got '<type>'. Please make sure that the output rows are of the correct type."
+    ]
+  },
   "UDTF_RETURN_NOT_ITERABLE" : {
     "message" : [
       "The return value of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
@@ -751,6 +756,11 @@ ERROR_CLASSES_JSON = """
   "UDTF_RETURN_TYPE_MISMATCH" : {
     "message" : [
       "Mismatch in return type for the UDTF '<name>'. Expected a 'StructType', but got '<return_type>'. Please ensure the return type is a correctly formatted StructType."
+    ]
+  },
+  "UDTF_SERIALIZATION_ERROR" : {
+    "message" : [
+      "Cannot serialize the UDTF '<name>': <message>"
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
@@ -836,6 +846,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_ACCESSIBLE": {
     "message": [
       "Value `<value>` cannot be accessed inside tasks."
+    ]
+  },
+  "VALUE_NOT_ALLOWED" : {
+    "message" : [
+      "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
     ]
   },
   "VALUE_NOT_ANY_OR_ALL" : {

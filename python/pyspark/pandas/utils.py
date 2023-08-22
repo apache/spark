@@ -478,12 +478,7 @@ def is_testing() -> bool:
 
 
 def default_session() -> SparkSession:
-    if not is_remote():
-        spark = SparkSession.getActiveSession()
-    else:
-        from pyspark.sql.connect.session import _active_spark_session
-
-        spark = _active_spark_session  # type: ignore[assignment]
+    spark = SparkSession.getActiveSession()
     if spark is None:
         spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 

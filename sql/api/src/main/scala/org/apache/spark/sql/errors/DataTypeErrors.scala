@@ -192,15 +192,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      messageParameters = Map(
-        "value" -> value.toPlainString,
-        "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf("spark.sql.ansi.enabled")),
-      context = getQueryContext(context),
-      summary = getSummary(context))
+    numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -208,6 +200,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
+    numericValueOutOfRange(value, decimalPrecision, decimalScale, context)
+  }
+
+  private def numericValueOutOfRange(
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Map(

@@ -18,7 +18,6 @@
 package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
-import java.net.Socket
 
 import scala.collection.JavaConverters._
 
@@ -50,7 +49,8 @@ private[spark] class StreamingPythonRunner(
 
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[Socket] = None
+  private var pythonWorker: Option[PythonWorker] = None
+  private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
   /**
@@ -58,7 +58,7 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec")
+    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec)")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -66,17 +66,25 @@ private[spark] class StreamingPythonRunner(
 
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-    conf.set(PYTHON_USE_DAEMON, false)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val (worker, _) = env.createPythonWorker(
-      pythonExec, workerModule, envVars.asScala.toMap)
-    pythonWorker = Some(worker)
+    val prevConf = conf.get(PYTHON_USE_DAEMON)
+    conf.set(PYTHON_USE_DAEMON, false)
+    try {
+      val workerFactory =
+        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
+      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+      pythonWorker = Some(worker)
+      pythonWorkerFactory = Some(workerFactory)
+    } finally {
+      conf.set(PYTHON_USE_DAEMON, prevConf)
+    }
 
-    val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+    val stream = new BufferedOutputStream(
+      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
     val dataOut = new DataOutputStream(stream)
 
-    // TODO(SPARK-44461): verify python version
+    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     // Send sessionId
     PythonRDD.writeUTF(sessionId, dataOut)
@@ -87,10 +95,11 @@ private[spark] class StreamingPythonRunner(
     dataOut.write(command.toArray)
     dataOut.flush()
 
-    val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+    val dataIn = new DataInputStream(
+      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    logInfo(s"Runner initialization returned $resFromPython")
+    logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
@@ -100,7 +109,10 @@ private[spark] class StreamingPythonRunner(
    */
   def stop(): Unit = {
     pythonWorker.foreach { worker =>
-      SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      pythonWorkerFactory.foreach { factory =>
+        factory.stopWorker(worker)
+        factory.stop()
+      }
     }
   }
 }

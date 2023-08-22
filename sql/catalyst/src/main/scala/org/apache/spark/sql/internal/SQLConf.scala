@@ -513,10 +513,10 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
+        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
       .version("2.3.0")
-      .booleanConf
-      .createWithDefault(false)
+      .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -2942,7 +2942,19 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
+
+  val PYTHON_TABLE_UDF_ANALYZER_MEMORY =
+    buildConf("spark.sql.analyzer.pythonUDTF.analyzeInPython.memory")
+      .doc("The amount of memory to be allocated to PySpark for Python UDTF analyzer, in MiB " +
+        "unless otherwise specified. If set, PySpark memory for Python UDTF analyzer will be " +
+        "limited to this amount. If not set, Spark will not limit Python's " +
+        "memory use and it is up to the application to avoid exceeding the overhead memory space " +
+        "shared with other non-JVM processes.\nNote: Windows does not support resource limiting " +
+        "and actual resource is not limited on MacOS.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.MiB)
+      .createOptional
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -4276,18 +4288,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
-    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
-      .internal()
-      .doc("When set to false, if types in Avro are encoded in the same format, but " +
-        "the type in the Avro schema explicitly says that the data types are different, " +
-        "reject reading the data type in the format to avoid returning incorrect results. " +
-        "When set to true, it restores the legacy behavior of allow reading the data in the" +
-        " format, which may return incorrect results.")
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
@@ -4357,6 +4357,16 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
+
+  val DECORRELATE_JOIN_PREDICATE_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
+        "predicates. This configuration is only effective when " +
+        "'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4709,6 +4719,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
+  def codegenFactoryMode: String = getConf(CODEGEN_FACTORY_MODE)
+
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
@@ -5011,6 +5023,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkWorkerPythonExecutable: Option[String] =
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
+
+  def pythonUDTFAnalyzerMemory: Option[Long] = getConf(PYTHON_TABLE_UDF_ANALYZER_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

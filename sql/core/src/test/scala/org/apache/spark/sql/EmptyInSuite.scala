@@ -49,9 +49,8 @@ with SharedSparkSession {
         withSQLConf(
           SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules,
           SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> legacyNullInBehavior.toString) {
-          // We still get legacy behavior with disableOptimizeIn until execution is also fixed
           val expectedResultForNullInEmpty =
-            if (legacyNullInBehavior || disableOptimizeIn) null else false
+            if (legacyNullInBehavior) null else false
           val df = t.select(col("a"), col("a").isin(emptylist: _*))
           checkAnswer(
             df,

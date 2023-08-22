@@ -174,11 +174,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
-        // subquery expressions are filtered out because they can't be used to prune buckets
-        // as data filters, yet they would be executed
-        val normalizedFiltersWithoutSubqueries =
-          normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
-        genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
+        genBucketSet(normalizedFilters, bucketSpec.get)
       } else {
         None
       }

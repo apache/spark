@@ -1137,13 +1137,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
-  errorTest(
+  errorClassTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
-      "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `c`, `d`, `b`, `e`]"
-      :: Nil)
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`bad_column`",
+      "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorClassTest(
     "SPARK-39783: backticks in error message for candidate column with dots",

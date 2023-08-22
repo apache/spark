@@ -29,6 +29,10 @@ This error class has the following derived error classes:
 
 Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'
 
+## OPERATION_ABANDONED
+
+Operation was considered abandoned because of inactivity and removed.
+
 ## OPERATION_ALREADY_EXISTS
 
 Operation already exists.
