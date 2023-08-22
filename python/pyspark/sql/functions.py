@@ -3701,9 +3701,9 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     --------
     Example 1: Counting distinct values in a single column DataFrame representing integers
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql.functions import approx_count_distinct
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df.agg(F.approx_count_distinct("value").alias('distinct_values')).show()
+    >>> df.agg(approx_count_distinct("value").alias('distinct_values')).show()
     +---------------+
     |distinct_values|
     +---------------+
@@ -3712,9 +3712,9 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     Example 2: Counting distinct values in a single column DataFrame representing strings
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql.functions import approx_count_distinct
     >>> df = spark.createDataFrame(["apple", "orange", "apple", "banana"], "string").toDF("fruit")
-    >>> df.agg(F.approx_count_distinct("fruit").alias('distinct_fruits')).show()
+    >>> df.agg(approx_count_distinct("fruit").alias('distinct_fruits')).show()
     +---------------+
     |distinct_fruits|
     +---------------+
@@ -3723,13 +3723,13 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     Example 3: Counting distinct values in a DataFrame with multiple columns
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql.functions import approx_count_distinct, struct
     >>> df = spark.createDataFrame([("Alice", 1),
     ...                             ("Alice", 2),
     ...                             ("Bob", 3),
     ...                             ("Bob", 3)], ["name", "value"])
-    >>> df = df.withColumn("combined", F.struct("name", "value"))
-    >>> df.agg(F.approx_count_distinct(df["combined"]).alias('distinct_pairs')).show()
+    >>> df = df.withColumn("combined", struct("name", "value"))
+    >>> df.agg(approx_count_distinct(df["combined"]).alias('distinct_pairs')).show()
     +--------------+
     |distinct_pairs|
     +--------------+
@@ -3738,9 +3738,9 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     Example 4: Counting distinct values with a specified relative standard deviation
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql.functions import approx_count_distinct
     >>> df = spark.range(100000)
-    >>> df.agg(F.approx_count_distinct("id", 0.1).alias('distinct_values')).show()
+    >>> df.agg(approx_count_distinct("id", 0.1).alias('distinct_values')).show()
     +---------------+
     |distinct_values|
     +---------------+
