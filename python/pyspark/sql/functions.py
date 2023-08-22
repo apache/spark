@@ -4528,7 +4528,7 @@ def approx_percentile(
 
     Notes
     -----
-    The function supports Spark Connect.
+    Supports Spark Connect.
 
     Parameters
     ----------
