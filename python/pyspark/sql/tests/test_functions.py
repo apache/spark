@@ -88,7 +88,7 @@ class FunctionsTestsMixin:
             "schema_of_xml",
             # TODO: listagg functions will soon be added and removed from this list
             "listagg_distinct",
-            "listagg"
+            "listagg",
         }
 
         self.assertEqual(
