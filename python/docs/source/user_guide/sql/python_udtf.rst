@@ -20,9 +20,10 @@ Python User-defined Table Functions (UDTFs)
 ===========================================
 
 Spark 3.5 introduces Python user-defined table functions (UDTFs), a new type of user-defined function. 
-Unlike scalar functions that return a single result value, a UDTF is invoked in the FROM clause and returns 
-an entire relation as output. Each UDTF call can accept zero or more arguments. 
-These arguments can be scalar constant expressions or separate input relations.
+Unlike scalar functions that return a single result value for every input, UDTFs is invoked in the ``FROM``
+clause of a query and returns an entire relation as output.
+Each UDTF call can accept zero or more arguments.
+These arguments can either be scalar expressions or table arguments that represent entire input relations.
 
 Implementing a Python UDTF
 --------------------------
@@ -58,12 +59,12 @@ To implement a Python UDTF, you can define a class implementing the methods:
             Evaluate the function using the given input arguments.
 
             This method is required and must be implemented.
-            
-            The arguments provided to the UDTF call are mapped to the values in the
-            `*args` list sequentially. Each provided scalar expression maps to exactly
-            one value in this `*args` list. Each provided TABLE argument of N columns
-            maps to exactly N values in this `*args` list, in the order of the columns
-            as they appear in the table.
+
+            Argument Mapping:
+            - Each provided scalar expression maps to exactly one value in the
+              `*args` list.
+            - Each provided table argument maps to a pyspark.sql.Row object containing
+              the columns in the order they appear in the provided input relation.
 
             This method is called on every input row, and can produce zero or more
             output rows. Each element in the output tuple corresponds to one column
@@ -100,19 +101,13 @@ To implement a Python UDTF, you can define a class implementing the methods:
 
             This method is optional to implement and is useful for performing any
             cleanup or finalization operations after the UDTF has finished processing
-            all rows in a partition. It can also be used to yield additional rows if needed.
+            all rows. It can also be used to yield additional rows if needed.
 
             Yields
             ------
             tuple
                 A tuple representing a single row in the UDTF result relation.
                 Yield this if you want to return additional rows during termination.
-
-            Notes
-            -----
-            - The UDTF's processing here is based on the partitioning of input table,
-              meaning that all input rows are rows within a specific partition of
-              the input relation.
 
             Examples
             --------
@@ -131,28 +126,27 @@ Here is a simple example of a UDTF implementation:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 38-40
+    :lines: 36-40
     :dedent: 4
 
 
 **Instantiating the UDTF:**
 
-To make use of the UDTF, you'll first need to instantiate it using the `udtf` function:
+To make use of the UDTF, you'll first need to instantiate it using the :func:`udtf` function:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 42-51
+    :lines: 42-55
     :dedent: 4
 
-In this example, `SimpleUDTF` is instantiated with the return columns `c1` and `c2`, both of type `int`. 
 
 **Using `udtf` as a Decorator:**
 
-An alternative way for implementing a UDTF is to use `udtf` as a decorator:
+An alternative way for implementing a UDTF is to use :func:`udtf` as a decorator:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 56-68
+    :lines: 60-77
     :dedent: 4
 
 For more detailed usage, please see :func:`udtf`.
@@ -165,7 +159,7 @@ Python UDTFs can also be registered and used in SQL queries.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 72-98
+    :lines: 82-116
     :dedent: 4
 
 
@@ -175,11 +169,11 @@ Apache Arrow is an in-memory columnar data format used in Spark to efficiently t
 data between JVM and Python processes. Apache Arrow is disabled by default for Python UDTFs.
 
 To enable Arrow optimization, set ``spark.sql.execution.pythonUDTF.arrow.enabled`` to ``true``.
-Alternatively, you can specify the `useArrow` parameter when declaring the UDTF:
+Alternatively, you can specify the ``useArrow`` parameter when declaring the UDTF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 103-108
+    :lines: 121-126
     :dedent: 4
 
 
@@ -189,24 +183,24 @@ For more details, please see `Apache Arrow in PySpark <../arrow_pandas.rst>`_.
 More Examples
 -------------
 
-A Python UDTF with `__init__` and `terminate`:
+A Python UDTF that expands date ranges into individual dates:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 113-132
+    :lines: 131-152
     :dedent: 4
 
 
-A Python UDTF to generate a list of dates:
+A Python UDTF with ``__init__`` and ``terminate``:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 137-173
+    :lines: 157-176
     :dedent: 4
 
 
-Advanced Features
------------------
+Advanced Featuress
+------------------
 
 TABLE input argument
 ~~~~~~~~~~~~~~~~~~~~
@@ -218,5 +212,5 @@ you can enable this by setting ``spark.sql.tvf.allowMultipleTableArguments.enabl
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 178-197
+    :lines: 181-200
     :dedent: 4
