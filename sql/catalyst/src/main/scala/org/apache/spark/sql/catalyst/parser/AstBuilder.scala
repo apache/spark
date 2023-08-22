@@ -1146,7 +1146,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-
   /**
    * Create a [[CreateTableLike]] logical plan.
    *
