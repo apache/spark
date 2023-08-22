@@ -4523,12 +4523,7 @@ def approx_percentile(
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
     of `col` values is less than the value or equal to that value.
 
-
     .. versionadded:: 3.5.0
-
-    Notes
-    -----
-    Supports Spark Connect.
 
     Parameters
     ----------
