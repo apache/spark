@@ -613,9 +613,6 @@ def mode(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -625,6 +622,10 @@ def mode(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the most frequent value in a group.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -930,9 +931,6 @@ def median(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -942,6 +940,10 @@ def median(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the median of the values in a group.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -3372,9 +3374,6 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     dividend : str, :class:`~pyspark.sql.Column` or float
@@ -3386,6 +3385,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     -------
     :class:`~pyspark.sql.Column`
         positive value of dividend mod divisor.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -3673,9 +3676,6 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     of column `col`.
 
     .. versionadded:: 2.1.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
@@ -4523,11 +4523,7 @@ def approx_percentile(
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
     of `col` values is less than the value or equal to that value.
 
-
-    .. versionadded:: 3.1.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -4616,13 +4612,13 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('rand', rand(seed=42) * 3).show() # doctest: +SKIP
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', F.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
     +---+------------------+
-    |  0|1.4385751892400076|
-    |  1|1.7082186019706387|
+    |  0|1.8575681106759028|
+    |  1|1.5288056527339444|
     +---+------------------+
     """
     if seed is not None:
@@ -4657,14 +4653,14 @@ def randn(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('randn', randn(seed=42)).show() # doctest: +SKIP
-    +---+--------------------+
-    | id|               randn|
-    +---+--------------------+
-    |  0|-0.04167221574820542|
-    |  1| 0.15241403986452778|
-    +---+--------------------+
+    >>> from pyspark.sql import functions as F
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', F.randn(seed=42)).show()
+    +---+------------------+
+    | id|             randn|
+    +---+------------------+
+    |  0| 2.384479054241165|
+    |  1|0.1920934041293524|
+    +---+------------------+
     """
     if seed is not None:
         return _invoke_function("randn", seed)
@@ -5159,26 +5155,27 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
-    >>> df = spark.createDataFrame([10, 100, 1000], "INT")
-    >>> df.select(log(10.0, df.value).alias('ten')).show() # doctest: +SKIP
-    +---+
-    |ten|
-    +---+
-    |1.0|
-    |2.0|
-    |3.0|
-    +---+
+    >>> from pyspark.sql import functions as F
+    >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
+    >>> df.select(F.log(2.0, df.value).alias('log2_value')).show()
+    +----------+
+    |log2_value|
+    +----------+
+    |       0.0|
+    |       1.0|
+    |       2.0|
+    +----------+
 
     And Natural logarithm
 
-    >>> df.select(log(df.value)).show() # doctest: +SKIP
-    +-----------------+
-    |        ln(value)|
-    +-----------------+
-    |2.302585092994046|
-    |4.605170185988092|
-    |4.605170185988092|
-    +-----------------+
+    >>> df.select(F.log(df.value).alias('ln_value')).show()
+    +------------------+
+    |          ln_value|
+    +------------------+
+    |               0.0|
+    |0.6931471805599453|
+    |1.3862943611198906|
+    +------------------+
     """
     if arg2 is None:
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
@@ -7669,9 +7666,6 @@ def window_time(
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     windowColumn : :class:`~pyspark.sql.Column`
@@ -7681,6 +7675,10 @@ def window_time(
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11179,9 +11177,6 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11197,6 +11192,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     Notes
     -----
     The position is not 1 based, but 0 based index.
+    Supports Spark Connect.
 
     See Also
     --------
@@ -11345,9 +11341,6 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     arr : :class:`~pyspark.sql.Column` or str
@@ -11362,6 +11355,10 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     -------
     :class:`~pyspark.sql.Column`
         an array of values, including the new specified value
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11485,9 +11482,6 @@ def array_compact(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11497,6 +11491,10 @@ def array_compact(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         an array by excluding the null values.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11515,9 +11513,6 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11529,6 +11524,10 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         an array of values from first array along with the element.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11633,9 +11632,6 @@ def inline(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11649,6 +11645,10 @@ def inline(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`explode`
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11774,9 +11774,6 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11791,6 +11788,10 @@ def inline_outer(col: "ColumnOrName") -> Column:
     --------
     :meth:`explode_outer`
     :meth:`inline`
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -14471,8 +14472,9 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    Notes
+    -----
+    Supports Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
