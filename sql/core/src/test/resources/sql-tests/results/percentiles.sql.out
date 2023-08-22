@@ -730,3 +730,119 @@ struct<k:int,median(dt2):interval day to second,percentile(dt2, 0.5, 1):interval
 2	0 00:22:30.000000000	0 00:22:30.000000000	0 00:22:30.000000000
 3	0 01:00:00.000000000	0 01:00:00.000000000	0 01:00:00.000000000
 4	NULL	NULL	NULL
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	0.0	0.0	1.0	1.0	1.0	1.0	1.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	0.0	1.0	1.0	1.0	2.0	2.0	2.0	2.0
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2), (3), (4) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	1.0	1.0	2.0	2.0	3.0	3.0	4.0	4.0
+
+
+-- !query
+SET spark.sql.legacy.percentileDiscCalculation = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.percentileDiscCalculation	true
+
+
+-- !query
+SELECT
+  percentile_disc(0.0) WITHIN GROUP (ORDER BY a) as p0,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY a) as p1,
+  percentile_disc(0.2) WITHIN GROUP (ORDER BY a) as p2,
+  percentile_disc(0.3) WITHIN GROUP (ORDER BY a) as p3,
+  percentile_disc(0.4) WITHIN GROUP (ORDER BY a) as p4,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY a) as p5,
+  percentile_disc(0.6) WITHIN GROUP (ORDER BY a) as p6,
+  percentile_disc(0.7) WITHIN GROUP (ORDER BY a) as p7,
+  percentile_disc(0.8) WITHIN GROUP (ORDER BY a) as p8,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY a) as p9,
+  percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
+FROM VALUES (0), (1), (2), (3), (4) AS v(a)
+-- !query schema
+struct<p0:double,p1:double,p2:double,p3:double,p4:double,p5:double,p6:double,p7:double,p8:double,p9:double,p10:double>
+-- !query output
+0.0	0.0	0.0	1.0	1.0	2.0	2.0	2.0	3.0	3.0	4.0
+
+
+-- !query
+SET spark.sql.legacy.percentileDiscCalculation = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.percentileDiscCalculation	false
