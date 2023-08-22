@@ -2143,9 +2143,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
-    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
-      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
-      "get_json_object(jstring, $.f1)"
+    val expectedMsg = "[INVALID_HIVE_COLUMN_NAME] Cannot create the " +
+      s"table `$SESSION_CATALOG_NAME`.`default`.`t` having the " +
+      "column `get_json_object(jstring, $`.`f1)` " +
+      "whose name contains invalid characters ',' in Hive metastore."
 
     withTable("t") {
       val e = intercept[AnalysisException] {
