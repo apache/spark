@@ -222,7 +222,6 @@ def read_csv(
     names: Optional[Union[str, List[str]]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     usecols: Optional[Union[List[int], List[str], Callable[[str], bool]]] = None,
-    squeeze: bool = False,
     mangle_dupe_cols: bool = True,
     dtype: Optional[Union[str, Dtype, Dict[str, Union[str, Dtype]]]] = None,
     nrows: Optional[int] = None,
@@ -262,11 +261,6 @@ def read_csv(
         from the document header row(s).
         If callable, the callable function will be evaluated against the column names,
         returning names where the callable function evaluates to `True`.
-    squeeze : bool, default False
-        If the parsed data only contains one column then return a Series.
-
-        .. deprecated:: 3.4.0
-
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X0', 'X1', ... 'XN', rather
         than 'X' ... 'X'. Passing in False will cause data to be overwritten if
@@ -466,10 +460,7 @@ def read_csv(
             for col in psdf.columns:
                 psdf[col] = psdf[col].astype(dtype)
 
-    if squeeze and len(psdf.columns) == 1:
-        return first_series(psdf)
-    else:
-        return psdf
+    return psdf
 
 
 def read_json(
@@ -912,7 +903,6 @@ def read_excel(
     names: Optional[List] = None,
     index_col: Optional[List[int]] = None,
     usecols: Optional[Union[int, str, List[Union[int, str]], Callable[[str], bool]]] = None,
-    squeeze: bool = False,
     dtype: Optional[Dict[str, Union[str, Dtype]]] = None,
     engine: Optional[str] = None,
     converters: Optional[Dict] = None,
@@ -985,11 +975,6 @@ def read_excel(
         * If list of string, then indicates list of column names to be parsed.
         * If callable, then evaluate each column name against it and parse the
           column if the callable returns ``True``.
-    squeeze : bool, default False
-        If the parsed data only contains one column then return a Series.
-
-        .. deprecated:: 3.4.0
-
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32}
         Use `object` to preserve data as stored in Excel and not interpret dtype.
@@ -1142,7 +1127,7 @@ def read_excel(
     """
 
     def pd_read_excel(
-        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None], sq: bool
+        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None]
     ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
@@ -1151,7 +1136,6 @@ def read_excel(
             names=names,
             index_col=index_col,
             usecols=usecols,
-            squeeze=sq,
             dtype=dtype,
             engine=engine,
             converters=converters,
@@ -1181,7 +1165,7 @@ def read_excel(
         io_or_bin = io
         single_file = True
 
-    pdf_or_psers = pd_read_excel(io_or_bin, sn=sheet_name, sq=squeeze)
+    pdf_or_psers = pd_read_excel(io_or_bin, sn=sheet_name)
 
     if single_file:
         if isinstance(pdf_or_psers, dict):
@@ -1208,9 +1192,7 @@ def read_excel(
             )
 
             def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                pdf = pd.concat(
-                    [pd_read_excel(bin, sn=sn, sq=False) for bin in pdf[pdf.columns[0]]]
-                )
+                pdf = pd.concat([pd_read_excel(bin, sn=sn) for bin in pdf[pdf.columns[0]]])
 
                 reset_index = pdf.reset_index()
                 for name, col in reset_index.items():
@@ -1231,11 +1213,7 @@ def read_excel(
                 .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
             )
 
-            psdf = DataFrame(psdf._internal.with_new_sdf(sdf))
-            if squeeze and len(psdf.columns) == 1:
-                return first_series(psdf)
-            else:
-                return psdf
+            return DataFrame(psdf._internal.with_new_sdf(sdf))
 
         if isinstance(pdf_or_psers, dict):
             return {
