@@ -427,7 +427,7 @@ class DayTimeIntervalType(AtomicType):
 
     def toInternal(self, dt: datetime.timedelta) -> Optional[int]:
         if dt is not None:
-            return (math.floor(dt.total_seconds()) * 1000000) + dt.microseconds
+            return (((dt.days * 86400) + dt.seconds) * 1_000_000) + dt.microseconds
 
     def fromInternal(self, micros: int) -> Optional[datetime.timedelta]:
         if micros is not None:
