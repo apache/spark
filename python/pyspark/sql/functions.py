@@ -4526,7 +4526,7 @@ def approx_percentile(
 
     .. versionadded:: 3.1.0
 
-    .. versionchanged:: 3.4.0
+    .. versionchanged:: 3.5.0
         Supports Spark Connect.
 
     Parameters
