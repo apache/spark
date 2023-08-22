@@ -1569,7 +1569,6 @@ class PlanGenerationTestSuite
     fn.session_user()
   }
 
-
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
