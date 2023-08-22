@@ -24,8 +24,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils => SparkUIUtils, WebUIPage}
@@ -178,19 +176,6 @@ private[ui] class StreamingQueryPagedTable(
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
         streamingQuery.summary.runId)
 
-    def details(detail: Any): Seq[Node] = {
-      if (isActive) {
-        return Seq.empty[Node]
-      }
-      val detailString = detail.asInstanceOf[String]
-      val isMultiline = detailString.indexOf('\n') >= 0
-      val summary = StringEscapeUtils.escapeHtml4(
-        if (isMultiline) detailString.substring(0, detailString.indexOf('\n')) else detailString
-      )
-      val details = SparkUIUtils.detailsUINode(isMultiline, detailString)
-      <td>{summary}{details}</td>
-    }
-
     <tr>
       <td>{UIUtils.getQueryName(streamingQuery)}</td>
       <td>{UIUtils.getQueryStatus(streamingQuery)}</td>
@@ -201,7 +186,13 @@ private[ui] class StreamingQueryPagedTable(
       <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgInput)}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgProcess)}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
-      {details(streamingQuery.summary.exception.getOrElse("-"))}
+      {
+        if (isActive) {
+          Seq.empty[Node]
+        } else {
+          SparkUIUtils.errorMessageCell(streamingQuery.summary.exception.getOrElse("-"))
+        }
+      }
     </tr>
   }
 }
