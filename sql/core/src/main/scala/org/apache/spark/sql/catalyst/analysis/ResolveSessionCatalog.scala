@@ -186,7 +186,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case CreateTableLike(ResolvedV1Identifier(ident), ResolvedV1TableOrViewIdentifier(source), _,
-    tableSpec: TableSpec, ignoreIfExists, _) =>
+        tableSpec: TableSpec, ignoreIfExists, _) =>
       val storage = DataSource.toStorageFormat(tableSpec.location, tableSpec.serde)
       if (storage.isEmpty) {
         throw QueryCompilationErrors.invalidFileFormatForStoredAsError(tableSpec.serde.get)
