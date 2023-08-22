@@ -491,9 +491,9 @@ class CrossValidator(
                 validation = dataset.filter(
                     checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
                 )
-                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                if training.isEmpty():
                     raise ValueError("The training data at fold %s is empty." % i)
-                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                if validation.isEmpty() == 0:
                     raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
