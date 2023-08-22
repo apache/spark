@@ -2266,9 +2266,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         schema : :class:`StructType`
@@ -2296,6 +2293,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         * Fail if the nullability is not compatible. For example, the column and/or inner field
             is nullable but the specified schema requires them to be not nullable.
+
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3575,9 +3574,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list
@@ -3596,6 +3592,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Unpivoted DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3661,9 +3661,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list, optional
@@ -3686,6 +3683,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         DataFrame.unpivot
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
@@ -4263,9 +4264,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
          .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
          Parameters
          ----------
          subset : List of column names, optional
@@ -4275,6 +4273,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          -------
          :class:`DataFrame`
              DataFrame without duplicates.
+
+         Notes
+         -----
+         Supports Spark Connect.
 
          Examples
          --------
@@ -5241,9 +5243,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         colsMap : dict
@@ -5258,6 +5257,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         :meth:`withColumnRenamed`
+
+        Notes
+        -----
+        Support Spark Connect
 
         Examples
         --------
