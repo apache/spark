@@ -46,13 +46,13 @@ def python_udtf_simple_example(spark: SparkSession) -> None:
 
     # Invoke the UDTF in PySpark.
     square_num(lit(1), lit(3)).show()
-    # +---+------+
-    # |num|squred|
-    # +---+------+
-    # |  1|     1|
-    # |  2|     4|
-    # |  3|     9|
-    # +---+------+
+    # +---+-------+
+    # |num|squared|
+    # +---+-------+
+    # |  1|      1|
+    # |  2|      4|
+    # |  3|      9|
+    # +---+-------+
 
 
 def python_udtf_decorator_example(spark: SparkSession) -> None:
@@ -68,13 +68,13 @@ def python_udtf_decorator_example(spark: SparkSession) -> None:
 
     # Invoke the UDTF in PySpark using the SquareNumbers class directly.
     SquareNumbers(lit(1), lit(3)).show()
-    # +---+------+
-    # |num|squred|
-    # +---+------+
-    # |  1|     1|
-    # |  2|     4|
-    # |  3|     9|
-    # +---+------+
+    # +---+-------+
+    # |num|squared|
+    # +---+-------+
+    # |  1|      1|
+    # |  2|      4|
+    # |  3|      9|
+    # +---+-------+
 
 
 def python_udtf_registration(spark: SparkSession) -> None:
