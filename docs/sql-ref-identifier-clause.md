@@ -23,7 +23,7 @@ license: |
 
 Converts a constant `STRING` expression into a SQL object name.
 The purpose of this clause is to allow for templating of identifiers in SQL statements without opening up the risk of SQL injection attacks.
-Typically, this clause is used with a parameter marker as argument.
+Typically, this clause is used with a parameter marker or a variable as argument.
 
 ### Syntax
 
@@ -45,6 +45,8 @@ A (qualified) identifier which can be used as a:
 - qualified column or attribute reference
 
 ### Examples
+
+#### Scala examples
 
 These examples use named parameter markers to templatize queries.
 
@@ -98,6 +100,67 @@ spark.sql("SELECT IDENTIFIER(:col) FROM VALUES(1) AS T(c1)", args = Map("col" ->
 
 // Passing in a function name as a parameter
 spark.sql("SELECT IDENTIFIER(:func)(-1)", args = Map("func" -> "abs")).show();
++-------+
+|abs(-1)|
++-------+
+|      1|
++-------+
+```
+
+#### SQL examples
+
+These examples use SQL variables to templatize queries.
+
+```sql
+DECLARE mytab = 'tab1';
+
+-- Creation of a table using variable.
+CREATE TABLE IDENTIFIER(mytab)(c1 INT);
+
+DESCRIBE IDENTIFIER(mytab);
++--------+---------+-------+
+|col_name|data_type|comment|
++--------+---------+-------+
+|      c1|      int|   NULL|
++--------+---------+-------+
+
+-- Altering a table with a fixed schema and a parameterized table name. 
+ALTER TABLE IDENTIFIER('default.' || mytab) ADD COLUMN c2 INT;
+
+SET VAR mytab = '`default`.`tab1`';
+DESCRIBE IDENTIFIER(mytab);
++--------+---------+-------+
+|col_name|data_type|comment|
++--------+---------+-------+
+|      c1|      int|   NULL|
+|      c2|      int|   NULL|
++--------+---------+-------+
+
+-- A parameterized reference to a table in a query. This table name is qualified and uses back-ticks.
+SELECT * FROM IDENTIFIER(mytab);
++---+---+
+| c1| c2|
++---+---+
++---+---+
+
+
+-- Dropping a table with separate schema and table parameters.
+DECLARE myschema = 'default';
+SET VAR mytab = 'tab1';
+DROP TABLE IDENTIFIER(myschema || '.' || mytab);
+
+-- A parameterized column reference
+DECLARE col = 't.c1';
+SELECT IDENTIFIER(col) FROM VALUES(1) AS T(c1);
++---+
+| c1|
++---+
+|  1|
++---+
+
+-- Passing in a function name as a parameter
+DECLARE func = 'abs';
+SELECT IDENTIFIER(func)(-1);
 +-------+
 |abs(-1)|
 +-------+

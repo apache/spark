@@ -2109,9 +2109,9 @@ private[spark] object Utils
     def lockString: String = {
       lock match {
         case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Monitor(${lock.getClassName}@${monitor.getIdentityHashCode})"
         case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode})"
       }
     }
   }

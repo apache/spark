@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, toJArray
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -832,7 +832,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jdf.isStreaming()
 
     def isEmpty(self) -> bool:
-        """Returns ``True`` if this :class:`DataFrame` is empty.
+        """
+        Checks if the :class:`DataFrame` is empty and returns a boolean value.
 
         .. versionadded:: 3.3.0
 
@@ -842,16 +843,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         bool
-            Whether it's empty DataFrame or not.
+            Returns ``True`` if the DataFrame is empty, ``False`` otherwise.
+
+        See Also
+        --------
+        DataFrame.count : Counts the number of rows in DataFrame.
+
+        Notes
+        -----
+        - Unlike `count()`, this method does not trigger any computation.
+        - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
         --------
+        Example 1: Checking if an empty DataFrame is empty
+
         >>> df_empty = spark.createDataFrame([], 'a STRING')
-        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_empty.isEmpty()
         True
+
+        Example 2: Checking if a non-empty DataFrame is empty
+
+        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_non_empty.isEmpty()
         False
+
+        Example 3: Checking if a DataFrame with null values is empty
+
+        >>> df_nulls = spark.createDataFrame([(None, None)], 'a STRING, b INT')
+        >>> df_nulls.isEmpty()
+        False
+
+        Example 4: Checking if a DataFrame with no rows but with columns is empty
+
+        >>> df_no_rows = spark.createDataFrame([], 'id INT, value STRING')
+        >>> df_no_rows.isEmpty()
+        True
         """
         return self._jdf.isEmpty()
 
@@ -1117,7 +1144,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def hint(
-        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+        self, name: str, *parameters: Union["PrimitiveType", "Column", List["PrimitiveType"]]
     ) -> "DataFrame":
         """Specifies some hint on the current :class:`DataFrame`.
 
@@ -1165,20 +1192,54 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, float, int, Column, list)
+        allowed_primitive_types = (str, float, int)
+        allowed_types_repr = ", ".join(
+            [t.__name__ for t in allowed_types[:-1]]
+            + ["list[" + t.__name__ + "]" for t in allowed_primitive_types]
+        )
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
                     error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
-                        "arg_type": type(parameters).__name__,
-                        "allowed_types": ", ".join(map(lambda x: x.__name__, allowed_types)),
-                        "return_type": type(p).__name__,
+                        "allowed_types": allowed_types_repr,
+                        "item_type": type(p).__name__,
                     },
                 )
+            if isinstance(p, list):
+                if not all(isinstance(e, allowed_primitive_types) for e in p):
+                    raise PySparkTypeError(
+                        error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+                        message_parameters={
+                            "arg_name": "parameters",
+                            "allowed_types": allowed_types_repr,
+                            "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
+                        },
+                    )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters))
+        def _converter(parameter: Union[str, list, float, int, Column]) -> Any:
+            if isinstance(parameter, Column):
+                return _to_java_column(parameter)
+            elif isinstance(parameter, list):
+                # for list input, we are assuming only one element type exist in the list.
+                # for empty list, we are converting it into an empty long[] in the JVM side.
+                gateway = self._sc._gateway
+                assert gateway is not None
+                jclass = gateway.jvm.long
+                if len(parameter) >= 1:
+                    mapping = {
+                        str: gateway.jvm.java.lang.String,
+                        float: gateway.jvm.double,
+                        int: gateway.jvm.long,
+                    }
+                    jclass = mapping[type(parameter[0])]
+                return toJArray(gateway, jclass, parameter)
+            else:
+                return parameter
+
+        jdf = self._jdf.hint(name, self._jseq(parameters, _converter))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:
@@ -2084,7 +2145,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def columns(self) -> List[str]:
-        """Returns all column names as a list.
+        """
+        Retrieves the names of all columns in the :class:`DataFrame` as a list.
+
+        The order of the column names in the list reflects their order in the DataFrame.
 
         .. versionadded:: 1.3.0
 
@@ -2094,14 +2158,65 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         list
-            List of column names.
+            List of column names in the DataFrame.
 
         Examples
         --------
+        Example 1: Retrieve column names of a DataFrame
+
         >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        ...     [(14, "Tom", "CA"), (23, "Alice", "NY"), (16, "Bob", "TX")],
+        ...     ["age", "name", "state"]
+        ... )
         >>> df.columns
-        ['age', 'name']
+        ['age', 'name', 'state']
+
+        Example 2: Using column names to project specific columns
+
+        >>> selected_cols = [col for col in df.columns if col != "age"]
+        >>> df.select(selected_cols).show()
+        +-----+-----+
+        | name|state|
+        +-----+-----+
+        |  Tom|   CA|
+        |Alice|   NY|
+        |  Bob|   TX|
+        +-----+-----+
+
+        Example 3: Checking if a specific column exists in a DataFrame
+
+        >>> "state" in df.columns
+        True
+        >>> "salary" in df.columns
+        False
+
+        Example 4: Iterating over columns to apply a transformation
+
+        >>> import pyspark.sql.functions as f
+        >>> for col_name in df.columns:
+        ...     df = df.withColumn(col_name, f.upper(f.col(col_name)))
+        >>> df.show()
+        +---+-----+-----+
+        |age| name|state|
+        +---+-----+-----+
+        | 14|  TOM|   CA|
+        | 23|ALICE|   NY|
+        | 16|  BOB|   TX|
+        +---+-----+-----+
+
+        Example 5: Renaming columns and checking the updated column names
+
+        >>> df = df.withColumnRenamed("name", "first_name")
+        >>> df.columns
+        ['age', 'first_name', 'state']
+
+        Example 6: Using the `columns` property to ensure two DataFrames have the
+        same columns before a union
+
+        >>> df2 = spark.createDataFrame(
+        ...     [(30, "Eve", "FL"), (40, "Sam", "WA")], ["age", "name", "location"])
+        >>> df.columns == df2.columns
+        False
         """
         return [f.name for f in self.schema.fields]
 

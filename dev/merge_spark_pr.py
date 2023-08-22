@@ -365,13 +365,13 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 def choose_jira_assignee(issue, asf_jira):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
-    including the original reporter and all commentors
+    including the original reporter and all commentators
     """
     while True:
         try:
             reporter = issue.fields.reporter
-            commentors = list(map(lambda x: x.author, issue.fields.comment.comments))
-            candidates = set(commentors)
+            commentators = list(map(lambda x: x.author, issue.fields.comment.comments))
+            candidates = set(commentators)
             candidates.add(reporter)
             candidates = list(candidates)
             print("JIRA is unassigned, choose assignee")
@@ -379,8 +379,8 @@ def choose_jira_assignee(issue, asf_jira):
                 if author.key == "apachespark":
                     continue
                 annotations = ["Reporter"] if author == reporter else []
-                if author in commentors:
-                    annotations.append("Commentor")
+                if author in commentators:
+                    annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = input(
                 "Enter number of user, or userid, to assign to (blank to leave unassigned):"
@@ -394,13 +394,26 @@ def choose_jira_assignee(issue, asf_jira):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                asf_jira.assign_issue(issue.key, assignee.name)
+                assign_issue(asf_jira, issue.key, assignee.name)
                 return assignee
         except KeyboardInterrupt:
             raise
         except BaseException:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
+
+
+def assign_issue(client: jira.client.JIRA, issue: int, assignee: str) -> bool:
+    """
+    Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
+    The original one has an issue that it will search users again and only choose the assignee
+    from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
+    is already resolved.
+    """
+    url = getattr(client, "_get_latest_url")(f"issue/{issue}/assignee")
+    payload = {"name": assignee}
+    getattr(client, "_session").put(url, data=json.dumps(payload))
+    return True
 
 
 def resolve_jira_issues(title, merge_branches, comment):
