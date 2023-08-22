@@ -965,7 +965,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 SQLSTATE: none assigned
 
-Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 

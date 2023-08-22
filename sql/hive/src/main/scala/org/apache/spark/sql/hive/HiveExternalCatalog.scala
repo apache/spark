@@ -172,8 +172,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         f.dataType match {
           // Checks top-level column names
           case _ if f.name.contains(",") =>
-            throw new AnalysisException("Cannot create a table having a column whose name " +
-              s"contains commas in Hive metastore. Table: $tableName; Column: ${f.name}")
+            throw new AnalysisException(
+              errorClass = "INVALID_HIVE_COLUMN_NAME",
+              messageParameters = Map(
+                "invalidChars" -> "','",
+                "tableName" -> toSQLId(tableName.nameParts),
+                "columnName" -> toSQLId(f.name)
+              ))
           // Checks nested column names
           case st: StructType =>
             verifyNestedColumnNames(st)
