@@ -28,10 +28,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameCovMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43809): Enable DataFrameSlowTests.test_cov for pandas 2.0.0.",
-    )
     def test_cov(self):
         # SPARK-36396: Implement DataFrame.cov
 
@@ -66,12 +62,8 @@ class FrameCovMixin:
         self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
         # extension dtype
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "float"]
-            boolean_dtypes = ["boolean", "bool"]
-        else:
-            numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "float"]
-            boolean_dtypes = ["boolean", "bool"]
+        numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "float"]
+        boolean_dtypes = ["boolean", "bool"]
 
         sers = [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in numeric_dtypes]
         sers += [pd.Series([True, False, True, None], dtype=dtype) for dtype in boolean_dtypes]
@@ -81,34 +73,7 @@ class FrameCovMixin:
         pdf.columns = [dtype for dtype in numeric_dtypes + boolean_dtypes] + ["decimal"]
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
-            self.assert_eq(pdf.cov(min_periods=3), psdf.cov(min_periods=3), almost=True)
-            self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4))
-        else:
-            test_types = [
-                "Int8",
-                "Int16",
-                "Int32",
-                "Int64",
-                "float",
-                "boolean",
-                "bool",
-            ]
-            expected = pd.DataFrame(
-                data=[
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
-                ],
-                index=test_types,
-                columns=test_types,
-            )
-            self.assert_eq(expected, psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(numeric_only=True), psdf.cov(), almost=True)
 
         # string column
         pdf = pd.DataFrame(
@@ -116,9 +81,11 @@ class FrameCovMixin:
             columns=["a", "b", "c", "d"],
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
-        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
-        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
+        self.assert_eq(pdf.cov(numeric_only=True), psdf.cov(), almost=True)
+        self.assert_eq(
+            pdf.cov(numeric_only=True, min_periods=4), psdf.cov(min_periods=4), almost=True
+        )
+        self.assert_eq(pdf.cov(numeric_only=True, min_periods=5), psdf.cov(min_periods=5))
 
         # nan
         np.random.seed(42)
@@ -132,7 +99,7 @@ class FrameCovMixin:
         # return empty DataFrame
         pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.cov(), psdf.cov())
+        self.assert_eq(pdf.cov(numeric_only=True), psdf.cov())
 
 
 class FrameCovTests(FrameCovMixin, ComparisonTestBase, SQLTestUtils):

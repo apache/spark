@@ -26,9 +26,39 @@ import org.apache.spark.sql.connector.catalog.Identifier
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-case class NoSuchDatabaseException(db: String)
-  extends AnalysisException(errorClass = "SCHEMA_NOT_FOUND",
-    messageParameters = Map("schemaName" -> quoteIdentifier(db)))
+class NoSuchDatabaseException private(
+  message: String,
+  cause: Option[Throwable],
+  errorClass: Option[String],
+  messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = None,
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(db: String) = {
+    this(
+      errorClass = "SCHEMA_NOT_FOUND",
+      messageParameters = Map("schemaName" -> quoteIdentifier(db)))
+  }
+
+  def this(message: String, cause: Option[Throwable]) = {
+    this(
+      message = message,
+      cause = cause,
+      errorClass = Some("SCHEMA_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
+  }
+}
 
 // any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchNamespaceException private(

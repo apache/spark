@@ -75,6 +75,8 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private var canceled = Option.empty[Boolean]
 
+  private var producedRowCount = Option.empty[Long]
+
   /**
    * @return
    *   Last event posted by the Connect request
@@ -94,6 +96,13 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationFailed
    */
   private[connect] def hasError: Option[Boolean] = error
+
+  /**
+   * @return
+   *   How many rows the Connect request has produced @link
+   *   org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished
+   */
+  private[connect] def getProducedRowCount: Option[Long] = producedRowCount
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationStarted.
@@ -192,13 +201,23 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished.
+   * @param producedRowsCountOpt
+   *   Number of rows that are returned to the user. None is expected when the operation does not
+   *   return any rows.
    */
-  def postFinished(): Unit = {
+  def postFinished(producedRowsCountOpt: Option[Long] = None): Unit = {
     assertStatus(
       List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
       ExecuteStatus.Finished)
+    producedRowCount = producedRowsCountOpt
+
     listenerBus
-      .post(SparkListenerConnectOperationFinished(jobTag, operationId, clock.getTimeMillis()))
+      .post(
+        SparkListenerConnectOperationFinished(
+          jobTag,
+          operationId,
+          clock.getTimeMillis(),
+          producedRowCount))
   }
 
   /**
@@ -395,6 +414,9 @@ case class SparkListenerConnectOperationFailed(
  *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
+ * @param producedRowCount:
+ *   Number of rows that are returned to the user. None is expected when the operation does not
+ *   return any rows.
  * @param extraTags:
  *   Additional metadata during the request.
  */
@@ -402,6 +424,7 @@ case class SparkListenerConnectOperationFinished(
     jobTag: String,
     operationId: String,
     eventTime: Long,
+    producedRowCount: Option[Long] = None,
     extraTags: Map[String, String] = Map.empty)
     extends SparkListenerEvent
 

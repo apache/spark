@@ -67,6 +67,7 @@ from pyspark.sql.types import (
     Row,
     StructType,
     TimestampType,
+    NullType,
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
@@ -4024,7 +4025,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
-                if isinstance(spark_type, (BooleanType, NumericType)):
+                if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
                     raise TypeError(
@@ -4059,7 +4060,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
+            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
+            False is not supported. This parameter is mainly for pandas compatibility.
 
         Returns
         -------
@@ -4127,18 +4129,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
-            return ps.Series([], dtype="float64", name=self.name)
+            raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
             return self._rank(method, ascending).spark.analyzed
 
