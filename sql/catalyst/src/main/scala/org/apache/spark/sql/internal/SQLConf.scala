@@ -3499,6 +3499,16 @@ object SQLConf {
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
     .createWithDefault(Deflater.DEFAULT_COMPRESSION)
 
+  val AVRO_ALWAYS_CONVERT_UNION_TO_STRUCT =
+    buildConf("spark.sql.avro.alwaysConvertUnionToStructType")
+      .doc("If it is set to true, we always convert Avro union types to Spark StructType, " +
+        "regardless of how many primitive types there are in the union. By default, this " +
+        "configuration is set to false, and when the union only has one primitive type the " +
+        "converter will output a single primitive type instead of a StructType.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
     .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
@@ -5131,6 +5141,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
 
   def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
+
+  def avroAlwaysConvertUnionToStruct: Boolean = getConf(SQLConf.AVRO_ALWAYS_CONVERT_UNION_TO_STRUCT)
 
   def replaceDatabricksSparkAvroEnabled: Boolean =
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)

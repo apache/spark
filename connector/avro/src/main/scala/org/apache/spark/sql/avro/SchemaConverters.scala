@@ -28,6 +28,7 @@ import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -153,7 +154,24 @@ object SchemaConverters {
           }
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
-            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, avroOptions)
+            // If spark.sql.avro.alwaysConvertUnionToStructType is set to false (default),
+            // we convert Avro union with a single primitive type into a primitive Spark type
+            // instead of a StructType.
+            if (!SQLConf.get.avroAlwaysConvertUnionToStruct) {
+              toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, avroOptions)
+            } else {
+              val singleton = avroSchema.getTypes.get(0)
+              val schemaType = toSqlTypeHelper(singleton, existingRecordNames, avroOptions)
+              val fieldName = if (avroOptions.useStableIdForUnionType) {
+                s"member_${singleton.getName.toLowerCase(Locale.ROOT)}"
+              } else {
+                s"member0"
+              }
+              // All fields are nullable because only one of them is set at a time
+              val field = StructField(fieldName, schemaType.dataType, nullable = true)
+              val structType = StructType(Seq(field))
+              SchemaType(structType, nullable = false)
+            }
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
