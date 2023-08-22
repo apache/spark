@@ -277,11 +277,11 @@ object UserDefinedPythonTableFunction extends Logging {
           val msg = new String(obj, StandardCharsets.UTF_8)
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
-
-      // Receive the list of requested partitioning columns, if any.
+      // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1
-      val numPartitionByColumns = dataIn.readInt()
+      // Receive the list of requested partitioning columns, if any.
       val partitionByColumns = ArrayBuffer.empty[Expression]
+      val numPartitionByColumns = dataIn.readInt()
       for (_ <- 0 until numPartitionByColumns) {
         val length = dataIn.readInt()
         val obj = new Array[Byte](length)
@@ -298,7 +298,7 @@ object UserDefinedPythonTableFunction extends Logging {
         dataIn.readFully(obj)
         val columnName = new String(obj, StandardCharsets.UTF_8)
         val ascending = if (dataIn.readInt() == 1) Ascending else Descending
-        SortOrder(UnresolvedAttribute(columnName), ascending)
+        orderBy.append(SortOrder(UnresolvedAttribute(columnName), ascending))
       }
 
       PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
