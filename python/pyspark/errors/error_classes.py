@@ -708,11 +708,6 @@ ERROR_CLASSES_JSON = """
       "State is either not defined or has already been removed."
     ]
   },
-  "STREAMING_CONNECT_SERIALIZATION_ERROR" : {
-    "message" : [
-      "Cannot serialize the function `<name>`. If you accessed the spark session, or a dataframe defined outside of the function, please be aware that they are not allowed in Spark Connect. For foreachBatch, please access the spark session using `df.sparkSession`, where `df` is the first parameter in your foreachBatch function. For StreamingQueryListener, please access the spark session using `self.spark`. For details please check out the PySpark doc for foreachBatch and StreamingQueryListener."
-    ]
-  },
   "STOP_ITERATION_OCCURRED" : {
     "message" : [
       "Caught StopIteration thrown from user's code; failing the task: <exc>"
@@ -721,6 +716,11 @@ ERROR_CLASSES_JSON = """
   "STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
       "pandas iterator UDF should exhaust the input iterator."
+    ]
+  },
+  "STREAMING_CONNECT_SERIALIZATION_ERROR" : {
+    "message" : [
+      "Cannot serialize the function `<name>`. If you accessed the spark session, or a dataframe defined outside of the function, please be aware that they are not allowed in Spark Connect. For foreachBatch, please access the spark session using `df.sparkSession`, where `df` is the first parameter in your foreachBatch function. For StreamingQueryListener, please access the spark session using `self.spark`. For details please check out the PySpark doc for foreachBatch and StreamingQueryListener."
     ]
   },
   "TOO_MANY_VALUES" : {
