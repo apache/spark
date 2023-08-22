@@ -511,8 +511,15 @@ trait ColumnResolutionHelper extends Logging {
     }
     val plan = planOpt.get
 
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).contains(true)
     try {
-      plan.resolve(u.nameParts, conf.resolver)
+      if (!isMetadataAccess) {
+        plan.resolve(u.nameParts, conf.resolver)
+      } else if (u.nameParts.size == 1) {
+        plan.getMetadataAttributeByNameOpt(u.nameParts.head)
+      } else {
+        None
+      }
     } catch {
       case e: AnalysisException =>
         logDebug(s"Fail to resolve $u with $plan due to $e")
