@@ -42,7 +42,7 @@ from pyspark.sql.functions import (
     AnalyzeArgument,
     AnalyzeResult,
     OrderingColumn,
-    PartitioningColumn
+    PartitioningColumn,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -2145,13 +2145,12 @@ class BaseUDTFTestsMixin:
             def analyze(self):
                 return AnalyzeResult(
                     schema=StructType()
-                        .add("count", IntegerType())
-                        .add("total", IntegerType())
-                        .add("last", IntegerType()),
+                    .add("count", IntegerType())
+                    .add("total", IntegerType())
+                    .add("last", IntegerType()),
                     with_single_partition=True,
-                    order_by=[
-                        OrderingColumn("input"),
-                        OrderingColumn("partition_col")])
+                    order_by=[OrderingColumn("input"), OrderingColumn("partition_col")],
+                )
 
             def eval(self, row: Row):
                 # Make sure that the rows arrive in the expected order.
@@ -2183,7 +2182,7 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [
                 Row(count=40, total=60, last=2),
-                ],
+            ],
         )
 
     def test_udtf_with_table_argument_with_partition_by_and_order_by_from_analyze(self):
@@ -2203,12 +2202,9 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partition_by=[
-                        PartitioningColumn("partition_col")
-                    ],
-                    order_by=[
-                        OrderingColumn("input")
-                    ])
+                    partition_by=[PartitioningColumn("partition_col")],
+                    order_by=[OrderingColumn("input")],
+                )
 
             def eval(self, row: Row):
                 # Make sure that all values of the partitioning column are the same
@@ -2246,10 +2242,9 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [
-                Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)
-            ],
+            [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)],
         )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

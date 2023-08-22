@@ -66,6 +66,7 @@ class PartitioningColumn:
     """
     Represents a UDTF column for purposes of returning metadata from the 'analyze' method.
     """
+
     name: str
 
 
@@ -75,6 +76,7 @@ class OrderingColumn:
     Represents a single ordering column name for purposes of returning metadata from the 'analyze'
     method.
     """
+
     name: str
     ascending: bool = True
 
@@ -102,6 +104,7 @@ class AnalyzeResult:
         sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
         in this case.
     """
+
     schema: StructType
     with_single_partition: bool = False
     partition_by: Sequence[PartitioningColumn] = ()
