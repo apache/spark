@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -270,6 +271,8 @@ object SerializerSupport {
  *                       non-null value.
  * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
  *                        will not apply certain optimizations such as constant folding.
+ * @param scalarFunction the [[ScalarFunction]] object if this is calling the magic method of the
+ *                       [[ScalarFunction]] otherwise is unset.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -279,7 +282,8 @@ case class StaticInvoke(
     inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
-    isDeterministic: Boolean = true) extends InvokeLike {
+    isDeterministic: Boolean = true,
+    scalarFunction: Option[ScalarFunction[_]] = None) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
