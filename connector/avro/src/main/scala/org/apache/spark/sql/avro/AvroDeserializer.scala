@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -292,7 +292,9 @@ private[sql] class AvroDeserializer(
         val nonNullTypes = nonNullUnionBranches(avroType)
         val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
-          if (nonNullTypes.length == 1) {
+          // If we convert Avro union with single type into Spark primitive type instead of
+          // StructType, create new writer with both reader and writer types as primitive types.
+          if (nonNullTypes.length == 1 && !SQLConf.get.avroAlwaysConvertUnionToStruct) {
             newWriter(nonNullTypes.head, catalystType, avroPath, catalystPath)
           } else {
             nonNullTypes.map(_.getType).toSeq match {

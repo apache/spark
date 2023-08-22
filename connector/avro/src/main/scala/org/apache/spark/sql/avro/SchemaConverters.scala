@@ -143,15 +143,10 @@ object SchemaConverters {
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
-          if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames, avroOptions)
-              .copy(nullable = true)
-          } else {
-            toSqlTypeHelper(
-              Schema.createUnion(remainingUnionTypes.asJava),
-              existingRecordNames,
-              avroOptions).copy(nullable = true)
-          }
+          toSqlTypeHelper(
+            Schema.createUnion(remainingUnionTypes.asJava),
+            existingRecordNames,
+            avroOptions).copy(nullable = true)
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
             // If spark.sql.avro.alwaysConvertUnionToStructType is set to false (default),

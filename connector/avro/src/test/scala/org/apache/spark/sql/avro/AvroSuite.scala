@@ -296,25 +296,49 @@ abstract class AvroSuite
   }
 
   test("Union of a single type") {
-    withTempPath { dir =>
-      val UnionOfOne = Schema.createUnion(List(Schema.create(Type.INT)).asJava)
-      val fields = Seq(new Field("field1", UnionOfOne, "doc", null.asInstanceOf[AnyVal])).asJava
-      val schema = Schema.createRecord("name", "docs", "namespace", false)
-      schema.setFields(fields)
+    // Test both union of a single type AND union of a single primitive type and a NULL type.
+    // Should give exactly the same results.
+    Seq(true, false).foreach { withNullType =>
+      // When "spark.sql.avro.alwaysConvertUnionToStructType" is false, union of a single type
+      // should be converted into a primitive Spark type.
+      // When "spark.sql.avro.alwaysConvertUnionToStructType" is true, union of a single type
+      // should be converted into a StructType containing the primitive type.
+      Seq(true, false).foreach { convertToStruct =>
+        withSQLConf(SQLConf.AVRO_ALWAYS_CONVERT_UNION_TO_STRUCT.key -> convertToStruct.toString) {
+          withTempPath { dir =>
+            val UnionOfOne = if (withNullType) {
+              Schema.createUnion(List(Schema.create(Type.INT), Schema.create(Type.NULL)).asJava)
+            } else {
+              Schema.createUnion(List(Schema.create(Type.INT)).asJava)
+            }
+            val fields = Seq(
+              new Field("field1", UnionOfOne, "doc", null.asInstanceOf[AnyVal])).asJava
+            val schema = Schema.createRecord("name", "docs", "namespace", false)
+            schema.setFields(fields)
 
-      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-      dataFileWriter.create(schema, new File(s"$dir.avro"))
-      val avroRec = new GenericData.Record(schema)
+            val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+            val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+            dataFileWriter.create(schema, new File(s"$dir.avro"))
+            val avroRec = new GenericData.Record(schema)
 
-      avroRec.put("field1", 8)
+            avroRec.put("field1", 8)
 
-      dataFileWriter.append(avroRec)
-      dataFileWriter.flush()
-      dataFileWriter.close()
+            dataFileWriter.append(avroRec)
+            dataFileWriter.flush()
+            dataFileWriter.close()
 
-      val df = spark.read.format("avro").load(s"$dir.avro")
-      assert(df.first() == Row(8))
+            val df = spark.read.format("avro").load(s"$dir.avro")
+
+            if (convertToStruct) {
+              assert(df.first() == Row(Row(8)))
+              assert(df.schema === StructType.fromDDL("field1 struct<member0: Integer>"))
+            } else {
+              assert(df.first() == Row(8))
+              assert(df.schema === StructType.fromDDL("field1 Integer"))
+            }
+          }
+        }
+      }
     }
   }
 
