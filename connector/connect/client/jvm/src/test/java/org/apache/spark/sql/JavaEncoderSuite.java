@@ -40,15 +40,7 @@ public class JavaEncoderSuite implements Serializable {
 
   @BeforeClass
   public static void setup() {
-    SparkConnectServerUtils.start();
-    spark = SparkSession
-        .builder()
-        .client(SparkConnectClient
-            .builder()
-            .port(SparkConnectServerUtils.port())
-            .build())
-        .create();
-    SparkConnectServerUtils.syncTestDependencies(spark);
+    spark = SparkConnectServerUtils.createSparkSession();
   }
 
   @AfterClass

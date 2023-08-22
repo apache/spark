@@ -22,11 +22,15 @@ import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration.FiniteDuration
+
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfterAll, Tag}
 
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryPolicy
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.IntegrationTestUtils._
@@ -68,6 +72,7 @@ object SparkConnectServerUtils {
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
+    command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
@@ -173,6 +178,32 @@ object SparkConnectServerUtils {
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars)
   }
+
+  def createSparkSession(): SparkSession = {
+    if (!SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      return null
+    }
+    SparkConnectServerUtils.start()
+
+    val spark = SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .userId("test")
+          .port(port)
+          .retryPolicy(RetryPolicy(maxRetries = 7, maxBackoff = FiniteDuration(10, "s")))
+          .build())
+      .create()
+
+    // Execute an RPC which will get retried until the server is up.
+    assert(spark.version == SparkBuildInfo.spark_version)
+
+    // Auto-sync dependencies.
+    SparkConnectServerUtils.syncTestDependencies(spark)
+
+    spark
+  }
 }
 
 trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
@@ -181,50 +212,8 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
-    // TODO(SPARK-44121) Remove this check condition
-    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
-      super.beforeAll()
-      SparkConnectServerUtils.start()
-      spark = SparkSession
-        .builder()
-        .client(SparkConnectClient.builder().userId("test").port(serverPort).build())
-        .create()
-
-      // Retry and wait for the server to start
-      val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
-      var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
-      var success = false
-      val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
-
-      while (!success && System.nanoTime() < stop) {
-        try {
-          // Run a simple query to verify the server is really up and ready
-          val result = spark
-            .sql("select val from (values ('Hello'), ('World')) as t(val)")
-            .collect()
-          assert(result.length == 2)
-          success = true
-          debug("Spark Connect Server is up.")
-        } catch {
-          // ignored the error
-          case e: Throwable =>
-            error.addSuppressed(e)
-            Thread.sleep(sleepInternalMs)
-            sleepInternalMs *= 2
-        }
-      }
-
-      // Auto sync if successful
-      if (success) {
-        SparkConnectServerUtils.syncTestDependencies(spark)
-      }
-
-      // Throw error if failed
-      if (!success) {
-        debug(error)
-        throw error
-      }
-    }
+    super.beforeAll()
+    spark = createSparkSession()
   }
 
   override def afterAll(): Unit = {
