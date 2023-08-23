@@ -177,10 +177,17 @@ autosummary_generate = True
 # a list of builtin themes.
 html_theme = 'pydata_sphinx_theme'
 
+html_context = {
+    "switcher_json_url": "_static/versions.json",
+    "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
+}
+
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#html_theme_options = {}
+html_theme_options = {
+    "navbar_end": ["version-switcher"]
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 #html_theme_path = []
