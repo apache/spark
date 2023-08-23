@@ -26,11 +26,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         super().test_help_command()
 
-    # Spark Connect throws NotImplementedError tests expects IllegalArgumentException
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_invalid_join_method(self):
-        super().test_invalid_join_method()
-
     # TODO(SPARK-41527): Implement DataFrame.observe
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_observe(self):
