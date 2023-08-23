@@ -97,8 +97,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
       CUSTOM_LABELS)
     assert(conf.annotations === CUSTOM_ANNOTATIONS.map {
-      case (k, v) =>
-        (k, Utils.substituteAppNExecIds(v, conf.appId, ""))
+      case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, ""))
     })
     assert(conf.secretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)
@@ -168,8 +167,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> DEFAULT_RESOURCE_PROFILE_ID.toString) ++ CUSTOM_LABELS)
     assert(conf.annotations === CUSTOM_ANNOTATIONS.map {
-      case (k, v) =>
-        (k, Utils.substituteAppNExecIds(v, conf.appId, EXECUTOR_ID))
+      case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, EXECUTOR_ID))
     })
     assert(conf.secretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)
