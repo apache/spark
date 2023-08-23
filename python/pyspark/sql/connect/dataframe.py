@@ -54,6 +54,7 @@ from pyspark.sql.dataframe import (
 )
 
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
@@ -1623,6 +1624,10 @@ class DataFrame:
             alias = self._get_alias()
             if self._plan is None:
                 raise SparkConnectException("Cannot analyze on empty plan.")
+
+            if "." not in item and "*" not in item and "`" not in item and item not in self.columns:
+                raise AnalysisException(f"Column {item} doesn't exist")
+
             return _to_col_with_plan_id(
                 col=alias if alias is not None else item,
                 plan_id=self._plan._plan_id,
