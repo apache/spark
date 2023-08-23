@@ -3729,7 +3729,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     ...                             ("Bob", 3),
     ...                             ("Bob", 3)], ["name", "value"])
     >>> df = df.withColumn("combined", struct("name", "value"))
-    >>> df.agg(approx_count_distinct(df["combined"]).alias('distinct_pairs')).show()
+    >>> df.agg(approx_count_distinct("combined").alias('distinct_pairs')).show()
     +--------------+
     |distinct_pairs|
     +--------------+
