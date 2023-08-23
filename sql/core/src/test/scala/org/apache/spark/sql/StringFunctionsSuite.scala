@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1170,5 +1171,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_to_number(a, '$99.99')"), Seq(Row(78.12)))
     checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
+  }
+
+  test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
+    val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
+    intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)
+    checkError(
+      exception = intercept[SparkRuntimeException](df.queryExecution.explainString(FormattedMode)),
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_replace"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
   }
 }
