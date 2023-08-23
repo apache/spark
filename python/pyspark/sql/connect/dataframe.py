@@ -550,7 +550,6 @@ class DataFrame:
 
     take.__doc__ = PySparkDataFrame.take.__doc__
 
-    # TODO: extend `on` to also be type List[Column].
     def join(
         self,
         other: "DataFrame",
