@@ -2577,11 +2577,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "newType"-> toSQLType(newColumn.dataType)))
   }
 
-  def alterTableChangeColumnNotSupportedForPartitionColumn(
+  def cannotAlterPartitionColumn(
       tableName: String,
       columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "ALTER_TABLE_CHANGE_COLUMN_NOT_SUPPORTED_FOR_PARTITION_COLUMN",
+      errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
       messageParameters =
         Map("tableName" -> tableName, "columnName" -> columnName)
     )

@@ -421,9 +421,7 @@ case class AlterTableChangeColumnCommand(
         case field if resolver(field.name, name) => field
     } match {
       case Some(_) =>
-        throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForPartitionColumn(
-          table.qualifiedName,
-          columnName)
+        throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
       case None =>
     }
   }
