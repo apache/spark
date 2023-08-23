@@ -115,9 +115,9 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    * maximum number of files to cache to be processed in subsequent batches
    */
   val maxCachedFiles: Int = parameters.get("maxCachedFiles").map { str =>
-    Try(str.toInt).filter(_ > 0).getOrElse {
+    Try(str.toInt).filter(_ >= 0).getOrElse {
       throw new IllegalArgumentException(
-        s"Invalid value '$str' for option 'maxCachedFiles', must be a positive integer")
+        s"Invalid value '$str' for option 'maxCachedFiles', must be an integer greater than or equal to 0")
     }
   }.getOrElse(10000)
 
