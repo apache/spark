@@ -7227,6 +7227,112 @@ object functions {
    */
   def to_csv(e: Column): Column = to_csv(e, Collections.emptyMap())
 
+  // scalastyle:off line.size.limit
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified
+   * schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   *
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column =
+    from_xml(e, lit(schema.toDDL), options.iterator)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a XML string into the data type corresponding to
+   * the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   *
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
+    from_xml(e, schema, options.asScala.iterator)
+
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified
+   * schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @group collection_funcs
+   *
+   * @since 4.0.0
+   */
+  def from_xml(e: Column, schema: StructType): Column =
+    from_xml(e, schema, Map.empty[String, String])
+
+  private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
+    fnWithOptions("from_xml", options, e, schema)
+  }
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml
+   *   a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml
+   *   a foldable string column containing a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a XML string and infers its schema in DDL format using options.
+   *
+   * @param xml
+   *   a foldable string column containing XML data.
+   * @param options
+   *   options to control how the xml is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @return
+   *   a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
+    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
+  }
+
   /**
    * Returns the total number of elements in the array. The function returns null for null input.
    *
@@ -8055,6 +8161,46 @@ object functions {
     ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
   // scalastyle:off line.size.limit
+
+  /**
+   * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
+   * the caller must specify the output data type, and there is no automatic input type coercion.
+   * By default the returned UDF is deterministic. To change it to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
+   *
+   * Note that, although the Scala closure can have primitive-type function argument, it doesn't
+   * work well with null values. Because the Scala closure is passed in as Any type, there is no
+   * type information for the function arguments. Without the type information, Spark may blindly
+   * pass null to the Scala closure with primitive-type argument, and the closure will see the
+   * default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`,
+   * the result is 0 for null input.
+   *
+   * @param f
+   *   A closure in Scala
+   * @param dataType
+   *   The output data type of the UDF
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @deprecated(
+    "Scala `udf` method with return type parameter is deprecated. " +
+      "Please use Scala `udf` method without return type parameter.",
+    "3.0.0")
+  def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
+    ScalarUserDefinedFunction(f, dataType)
+  }
+
+  /**
+   * Call an user-defined function.
+   *
+   * @group udf_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  @deprecated("Use call_udf")
+  def callUDF(udfName: String, cols: Column*): Column =
+    call_function(udfName, cols: _*)
 
   /**
    * Call an user-defined function. Example:

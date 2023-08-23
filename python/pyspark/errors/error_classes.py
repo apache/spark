@@ -231,11 +231,6 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
-  "EXCEED_RETRY" : {
-    "message" : [
-      "Retries exceeded but no exception caught."
-    ]
-  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -851,6 +846,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_ACCESSIBLE": {
     "message": [
       "Value `<value>` cannot be accessed inside tasks."
+    ]
+  },
+  "VALUE_NOT_ALLOWED" : {
+    "message" : [
+      "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
     ]
   },
   "VALUE_NOT_ANY_OR_ALL" : {

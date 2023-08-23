@@ -431,6 +431,14 @@ of the most common options to set are:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.driver.log.localDir</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies a local directory to write driver logs and enable Driver Log UI Tab.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.log.dfsDir</code></td>
   <td>(none)</td>
   <td>
@@ -460,7 +468,7 @@ of the most common options to set are:
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex</td>
   <td>
-    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
+    The layout for the driver logs that are synced to <code>spark.driver.log.localDir</code> and <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
     use the default layout.
   </td>
@@ -2398,6 +2406,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.network.timeoutInterval</code></td>
+  <td>60s</td>
+  <td>
+    Interval for the driver to check and expire dead executors.
+  </td>
+  <td>1.3.2</td>
+</tr>
+<tr>
   <td><code>spark.network.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
@@ -3012,8 +3028,11 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires <code>spark.shuffle.service.enabled</code> or
-    <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be set.
+    This requires one of the following conditions: 
+    1) enabling external shuffle service through <code>spark.shuffle.service.enabled</code>, or
+    2) enabling shuffle tracking through <code>spark.dynamicAllocation.shuffleTracking.enabled</code>, or
+    3) enabling shuffle blocks decommission through <code>spark.decommission.enabled</code> and <code>spark.storage.decommission.shuffleBlocks.enabled</code>, or
+    4) (Experimental) configuring <code>spark.shuffle.sort.io.plugin.class</code> to use a custom <code>ShuffleDataIO</code> who's <code>ShuffleDriverComponents</code> supports reliable storage.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and

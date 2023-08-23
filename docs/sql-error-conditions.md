@@ -79,6 +79,12 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 `<message>`.`<alternative>` If necessary set `<config>` to "false" to bypass this error.
 
+### ASSIGNMENT_ARITY_MISMATCH
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The number of columns or variables assigned or aliased: `<numTarget>` does not match the number of source expressions: `<numExpr>`.
+
 ### [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
 SQLSTATE: none assigned
@@ -86,18 +92,6 @@ SQLSTATE: none assigned
 Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
-
-### AVRO_INCORRECT_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
 
 ### BATCH_METADATA_NOT_FOUND
 
@@ -293,7 +287,7 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Fail to insert a value of `<sourceType>` type into the `<targetType>` type column `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
 ### CODEC_NOT_AVAILABLE
 
@@ -422,6 +416,13 @@ Decimal precision `<precision>` exceeds max precision `<maxPrecision>`.
 
 Default database `<defaultDatabase>` does not exist, please create it first or change default database to ``<defaultDatabase>``.
 
+### DEFAULT_PLACEMENT_INVALID
+
+[SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.
+For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed.
+
 ### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
 
 SQLSTATE: none assigned
@@ -451,6 +452,12 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 SQLSTATE: none assigned
 
 The metric name is not unique: `<metricName>`. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins).
+
+### DUPLICATE_ASSIGNMENTS
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The columns or variables `<nameList>` appear more than once as assignment targets.
 
 ### DUPLICATE_CLAUSES
 
@@ -774,6 +781,14 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 `<message>`
 
+### [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+An object in the metadata catalog has been corrupted:
+
+For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
 ### INTERNAL_ERROR_NETWORK
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -866,7 +881,7 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 
 SQLSTATE: none assigned
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -1610,6 +1625,12 @@ The function `<routineName>` cannot be found. Verify the spelling and correctnes
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
 
+### ROW_SUBQUERY_TOO_MANY_ROWS
+
+[SQLSTATE: 21000](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+More than one row returned by a subquery used as a row.
+
 ### RULE_ID_NOT_FOUND
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1868,7 +1889,7 @@ Cannot infer grouping columns for GROUP BY ALL based on the select clause. Pleas
 
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A column or function parameter with name `<objectName>` cannot be resolved.
+A column, variable, or function parameter with name `<objectName>` cannot be resolved.
 
 For more details see [UNRESOLVED_COLUMN](sql-error-conditions-unresolved-column-error-class.html)
 
@@ -1899,6 +1920,12 @@ Cannot resolve function `<routineName>` on search path `<searchPath>`.
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 USING column `<colName>` cannot be resolved on the `<side>` side of the join. The `<side>`-side columns: [`<suggestion>`].
+
+### UNRESOLVED_VARIABLE
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve variable `<variableName>` on search path `<searchPath>`.
 
 ### UNSET_NONEXISTENT_PROPERTIES
 
@@ -2041,11 +2068,35 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
+### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+### [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The temp view `<tempViewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
+
+### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The view `<viewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2056,12 +2107,33 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
 
+### VARIABLE_ALREADY_EXISTS
+
+[SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot create the variable `<variableName>` because it already exists.
+Choose a different name, or drop or replace the existing variable.
+
+### VARIABLE_NOT_FOUND
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
 ### VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot create view `<relationName>` because it already exists.
 Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects.
+
+### VIEW_EXCEED_MAX_NESTED_DEPTH
+
+SQLSTATE: none assigned
+
+The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 
@@ -2102,5 +2174,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

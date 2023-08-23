@@ -22,6 +22,7 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps
+from pyspark.errors import PySparkValueError
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -115,10 +116,6 @@ class FrameReindexingMixin:
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.at_time("0:15")
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43557): Enable DataFrameSlowTests.test_between_time for pandas 2.0.0.",
-    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pdf = pd.DataFrame({"A": [1, 2, 3, 4]}, index=idx)
@@ -167,6 +164,34 @@ class FrameReindexingMixin:
         psdf = ps.DataFrame({"A": [1, 2, 3, 4]})
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.between_time("0:15", "0:45")
+
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="neither").sort_index(),
+        )
+
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="left").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="left").sort_index(),
+        )
+
+        self.assert_eq(
+            pdf.between_time("0:15", "0:45", inclusive="right").sort_index(),
+            psdf.between_time("0:15", "0:45", inclusive="right").sort_index(),
+        )
+
+        with self.assertRaises(PySparkValueError) as ctx:
+            psdf.between_time("0:15", "0:45", inclusive="")
+
+        self.check_error(
+            exception=ctx.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "inclusive",
+                "allowed_values": str(["left", "right", "both", "neither"]),
+            },
+        )
 
     def test_drop(self):
         pdf = pd.DataFrame({"x": [1, 2], "y": [3, 4], "z": [5, 6]}, index=np.random.rand(2))

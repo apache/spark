@@ -59,6 +59,8 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset, to_offset
 
+from pyspark.errors import PySparkValueError
+
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
@@ -81,6 +83,7 @@ from pyspark.sql.types import (
     DecimalType,
     TimestampType,
     TimestampNTZType,
+    NullType,
 )
 from pyspark.sql.window import Window
 
@@ -795,7 +798,7 @@ class DataFrame(Frame, Generic[T]):
                     new_column_labels.append(label)
 
             if len(exprs) == 1:
-                return Series([])
+                return Series([], dtype="float64")
 
             sdf = self._internal.spark_frame.select(*exprs)
 
@@ -3501,14 +3504,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ).resolved_copy
             return DataFrame(internal)
 
-    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
-    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
         end_time: Union[datetime.time, str],
-        include_start: bool = True,
-        include_end: bool = True,
+        inclusive: str = "both",
         axis: Axis = 0,
     ) -> "DataFrame":
         """
@@ -3523,15 +3523,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Initial time as a time filter limit.
         end_time : datetime.time or str
             End time as a time filter limit.
-        include_start : bool, default True
-            Whether the start time needs to be included in the result.
+        inclusive : {"both", "neither", "left", "right"}, default "both"
+            Include boundaries; whether to set each bound as closed or open.
 
-            .. deprecated:: 3.4.0
-
-        include_end : bool, default True
-            Whether the end time needs to be included in the result.
-
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
@@ -3586,6 +3581,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
+        allowed_inclusive_values = ["left", "right", "both", "neither"]
+        if inclusive not in allowed_inclusive_values:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={
+                    "arg_name": "inclusive",
+                    "allowed_values": str(allowed_inclusive_values),
+                },
+            )
+
         psdf = self.copy()
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
@@ -3593,7 +3598,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         def pandas_between_time(  # type: ignore[no-untyped-def]
             pdf,
         ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
-            return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
+            return pdf.between_time(start_time, end_time, inclusive).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
         # default index, which will never be used. Use "distributed" index as a dummy to
@@ -12124,11 +12129,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0.50  3.0  7.0
         0.75  4.0  8.0
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
@@ -12151,7 +12151,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         def quantile(psser: "Series") -> PySparkColumn:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-            if isinstance(spark_type, (BooleanType, NumericType)):
+            if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), qq, accuracy)
             else:
                 raise TypeError(
@@ -13155,7 +13155,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if on is None and not isinstance(self.index, DatetimeIndex):
             raise NotImplementedError("resample currently works only for DatetimeIndex")
-        if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
+        if on is not None and not isinstance(
+            as_spark_type(on.dtype), (TimestampType, TimestampNTZType)
+        ):
             raise NotImplementedError("`on` currently works only for TimestampType")
 
         agg_columns: List[ps.Series] = []

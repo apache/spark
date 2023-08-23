@@ -391,11 +391,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
+   * `AUTO_BUCKETED_SCAN_ENABLED`.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
+   * `AUTO_BUCKETED_SCAN_ENABLED` and `ADAPTIVE_EXECUTION_ENABLED`.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
     if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
-      session
+      // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
+      // so we always do bucketed scan in a cached plan.
+      SparkSession.getOrCloneSessionWithConfigsOff(
+        session, SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
     } else {
       SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
     }

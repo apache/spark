@@ -30,33 +30,36 @@ class SparkConnectReleaseExecuteHandler(
   def handle(v: proto.ReleaseExecuteRequest): Unit = {
     val sessionHolder = SparkConnectService
       .getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_NOT_FOUND",
-        messageParameters = Map("handle" -> v.getOperationId))
-    }
-    if (!executeHolder.reattachable) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_CURSOR.NOT_REATTACHABLE",
-        messageParameters = Map.empty)
-    }
 
-    if (v.hasReleaseAll) {
-      executeHolder.close()
-    } else if (v.hasReleaseUntil) {
-      val responseId = v.getReleaseUntil.getResponseId
-      executeHolder.releaseUntilResponseId(responseId)
-    } else {
-      throw new UnsupportedOperationException(s"Unknown ReleaseExecute type!")
-    }
-
-    val response = proto.ReleaseExecuteResponse
+    val responseBuilder = proto.ReleaseExecuteResponse
       .newBuilder()
       .setSessionId(v.getSessionId)
-      .setOperationId(v.getOperationId)
-      .build()
 
-    responseObserver.onNext(response)
+    // ExecuteHolder may be concurrently released by SparkConnectExecutionManager if the
+    // ReleaseExecute arrived after it was abandoned and timed out.
+    // An asynchronous ReleastUntil operation may also arrive after ReleaseAll.
+    // Because of that, make it noop and not fail if the ExecuteHolder is no longer there.
+    val executeHolderOption =
+      sessionHolder.executeHolder(v.getOperationId).foreach { executeHolder =>
+        if (!executeHolder.reattachable) {
+          throw new SparkSQLException(
+            errorClass = "INVALID_CURSOR.NOT_REATTACHABLE",
+            messageParameters = Map.empty)
+        }
+
+        responseBuilder.setOperationId(executeHolder.operationId)
+
+        if (v.hasReleaseAll) {
+          SparkConnectService.executionManager.removeExecuteHolder(executeHolder.key)
+        } else if (v.hasReleaseUntil) {
+          val responseId = v.getReleaseUntil.getResponseId
+          executeHolder.releaseUntilResponseId(responseId)
+        } else {
+          throw new UnsupportedOperationException(s"Unknown ReleaseExecute type!")
+        }
+      }
+
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 }

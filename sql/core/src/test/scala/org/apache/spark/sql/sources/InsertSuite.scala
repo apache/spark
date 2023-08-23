@@ -1209,7 +1209,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values(false, default + 1)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
@@ -1220,7 +1220,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t select false, default + 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
