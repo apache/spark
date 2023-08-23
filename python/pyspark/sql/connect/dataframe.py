@@ -1625,7 +1625,7 @@ class DataFrame:
                 raise SparkConnectException("Cannot analyze on empty plan.")
 
             # validate the column name
-            if self._session is not None and self._session._client is not None:
+            if not self._session.is_stopped:
                 self.select(item).isLocal()
 
             return _to_col_with_plan_id(
