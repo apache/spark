@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.ByteArray
@@ -415,6 +417,26 @@ class ConstantFoldingSuite extends PlanTest {
       }
     }
   }
+
+  test("Fold deterministic ApplyFunctionExpression") {
+    val originalQuery =
+      testRelation
+        .select(
+          ApplyFunctionExpression(
+            CharLength,
+            Seq(Literal("Spark"))
+          ).as("c1"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal(5).as("c1"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
 
 case class SerializableBoxedInt(intVal: Int) {
@@ -424,4 +446,15 @@ case class SerializableBoxedInt(intVal: Int) {
 
 class NotSerializableBoxedInt(intVal: Int) {
   def addAsInt(other: Int): Int = intVal + other
+}
+
+case object CharLength extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "CHAR_LENGTH"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
 }
