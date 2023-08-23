@@ -4850,6 +4850,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -----
         Null values will be ignored in numerical columns before calculation.
         For columns only containing null values, an empty list is returned.
+
+        Examples
+        ________
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0, 0.5, 1], 0.05)
+        >>> quantiles
+        [1.0, 3.0, 5.0]
+
+        >>> data = [(1, 10), (2, 20), (3, 30), (4, 40), (5, 50)]
+        >>> df = spark.createDataFrame(data, ["col1", "col2"])
+        >>> quantiles = df.approxQuantile(["col1", "col2"], [0, 0.5, 1], 0.05)
+        >>> quantiles
+        [[1.0, 10.0], [3.0, 30.0], [5.0, 50.0]]
+
+        >>> data = [(1,), (None,), (3,), (4,), (None,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0, 0.5, 1], 0.05)
+        >>> quantiles
+        [1.0, 3.0, None]
+
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0, 0.5, 1], 0.2)
+        >>> quantiles
+        [1.0, 3.0, 5.0]  # (with a larger error bound)
         """
 
         if not isinstance(col, (str, list, tuple)):
