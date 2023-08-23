@@ -418,7 +418,7 @@ class ConstantFoldingSuite extends PlanTest {
     }
   }
 
-  test("Fold deterministic ApplyFunctionExpression") {
+  test("SPARK-44930: Fold deterministic ApplyFunctionExpression") {
     val originalQuery =
       testRelation
         .select(
