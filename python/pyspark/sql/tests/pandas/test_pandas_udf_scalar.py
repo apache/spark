@@ -1542,10 +1542,10 @@ class ScalarPandasUDFTestsMixin:
                 self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
             ]
         ):
-            with self.subTest(with_b=True, query_no=i):
+            with self.subTest(with_b=False, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(1)])
 
-        # without "b"
+        # with "b"
         for i, df in enumerate(
             [
                 self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
@@ -1556,7 +1556,7 @@ class ScalarPandasUDFTestsMixin:
                 self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
             ]
         ):
-            with self.subTest(with_b=False, query_no=i):
+            with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
 
 
