@@ -643,7 +643,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         pattern = Pattern.compile(lastRegex.toString)
       } catch {
         case e: PatternSyntaxException =>
-          lastRegex = null
           throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
       }
     }
