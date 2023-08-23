@@ -3908,33 +3908,33 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Example 2: Combining two DataFrames with different schemas
 
         >>> from pyspark.sql.functions import lit
-        >>> df1 = spark.createDataFrame([("Alice", 1), ("Bob", 2)], ["name", "id"])
-        >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], ["id", "name"])
+        >>> from pyspark.sql.types import StructType, StructField, StringType
+        >>> schema1 = StructType(
+        ...     [
+        ...         StructField("name", StringType(), True),
+        ...         StructField("id", StringType(), True),
+        ...     ]
+        ... )
+        >>> schema2 = StructType(
+        ...     [
+        ...         StructField("id", StringType(), True),
+        ...         StructField("name", StringType(), True),
+        ...     ]
+        ... )
+        >>> df1 = spark.createDataFrame([("Alice", 1), ("Bob", 2)], schema1)
+        >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], schema2)
         >>> df1 = df1.withColumn("age", lit(30))
         >>> df2 = df2.withColumn("age", lit(40))
-        >>> if spark.conf.get("spark.sql.ansi.enabled") == "false":
-        ...     from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-        ...     from pyspark.testing.utils import assertDataFrameEqual
-        ...     df3 = df1.union(df2)
-        ...     schema = StructType(
-        ...         [
-        ...             StructField("name", StringType(), True),
-        ...             StructField("id", StringType(), True),
-        ...             StructField("age", IntegerType(), False),
-        ...         ]
-        ...     )
-        ...     expected = spark.createDataFrame([
-        ...         ("Alice", 1, 30), ("Bob", 2, 30), (3, "Charlie", 40), (4, "Dave", 40)],
-        ...         schema
-        ...     )
-        ...     assertDataFrameEqual(df3, expected)
-        ... else:
-        ...     try:
-        ...         df3 = df1.union(df2)
-        ...         df3.show()
-        ...     except Exception as e:
-        ...         if "CAST_INVALID_INPUT" not in str(e):
-        ...             raise
+        >>> df3 = df1.union(df2)
+        >>> df3.show()
+        +-----+-------+---+
+        | name|     id|age|
+        +-----+-------+---+
+        |Alice|      1| 30|
+        |  Bob|      2| 30|
+        |    3|Charlie| 40|
+        |    4|   Dave| 40|
+        +-----+-------+---+
 
         Example 3: Combining two DataFrames with mismatched columns
 

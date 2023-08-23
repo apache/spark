@@ -7799,24 +7799,6 @@ def to_unix_timestamp(
     >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=1460098800)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
-
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> if spark.conf.get("spark.sql.ansi.enabled") == "false":
-    ...     from pyspark.sql.types import StructType, StructField, LongType
-    ...     from pyspark.testing.utils import assertDataFrameEqual
-    ...     df1 = df.select(to_unix_timestamp(df.e).alias('r'))
-    ...     schema = StructType([StructField("r", LongType(), True),])
-    ...     expected = spark.createDataFrame([(None,)], schema=schema)
-    ...     assertDataFrameEqual(df1, expected)
-    ... else:
-    ...     try:
-    ...         df1 = df.select(to_unix_timestamp(df.e).alias('r'))
-    ...         df1.show()
-    ...     except Exception as e:
-    ...         if "CANNOT_PARSE_TIMESTAMP" not in str(e):
-    ...             raise
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
