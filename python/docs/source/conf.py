@@ -38,6 +38,13 @@ shutil.rmtree(
 shutil.rmtree(
     "%s/reference/pyspark.pandas/api" % os.path.dirname(os.path.abspath(__file__)),
     ignore_errors=True)
+shutil.rmtree(
+    "%s/reference/pyspark.sql/api" % os.path.dirname(os.path.abspath(__file__)),
+    ignore_errors=True)
+shutil.rmtree(
+    "%s/reference/pyspark.ss/api" % os.path.dirname(os.path.abspath(__file__)),
+    ignore_errors=True)
+
 try:
     os.mkdir("%s/reference/api" % os.path.dirname(os.path.abspath(__file__)))
 except OSError as e:
@@ -45,6 +52,20 @@ except OSError as e:
         raise
 try:
     os.mkdir("%s/reference/pyspark.pandas/api" % os.path.dirname(
+        os.path.abspath(__file__)))
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+
+try:
+    os.mkdir("%s/reference/pyspark.sql/api" % os.path.dirname(
+        os.path.abspath(__file__)))
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
+
+try:
+    os.mkdir("%s/reference/pyspark.ss/api" % os.path.dirname(
         os.path.abspath(__file__)))
 except OSError as e:
     if e.errno != errno.EEXIST:
