@@ -1268,7 +1268,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return int(self._jdf.count())
 
     def collect(self) -> List[Row]:
-        """Returns all the records as a list of :class:`Row`.
+        """Returns all the records in the DataFrame as a list of :class:`Row`.
 
         .. versionadded:: 1.3.0
 
@@ -1278,14 +1278,59 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         list
-            List of rows.
+            A list of :class:`Row` objects, each representing a row in the DataFrame.
+
+        See Also
+        --------
+        DataFrame.take : Returns the first `n` rows.
+        DataFrame.head : Returns the first `n` rows.
+        DataFrame.toPandas : Returns the data as a pandas DataFrame.
+
+        Notes
+        -----
+        This method should only be used if the resulting list is expected to be small,
+        as all the data is loaded into the driver's memory.
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        Example: Collecting all rows of a DataFrame
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.collect()
         [Row(age=14, name='Tom'), Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after filtering
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.filter(df.age > 15).collect()
+        [Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after selecting specific columns
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select("name").collect()
+        [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
+
+        Example: Collecting all rows after applying a function to a column
+
+        >>> from pyspark.sql.functions import upper
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select(upper(df.name)).collect()
+        [Row(upper(name)='TOM'), Row(upper(name)='ALICE'), Row(upper(name)='BOB')]
+
+        Example: Collecting all rows from a DataFrame and converting a specific column to a list
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row["name"] for row in rows]
+        ['Tom', 'Alice', 'Bob']
+
+        Example: Collecting all rows from a DataFrame and converting to a list of dictionaries
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row.asDict() for row in rows]
+        [{'age': 14, 'name': 'Tom'}, {'age': 23, 'name': 'Alice'}, {'age': 16, 'name': 'Bob'}]
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
@@ -2268,9 +2313,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         schema : :class:`StructType`
@@ -2298,6 +2340,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         * Fail if the nullability is not compatible. For example, the column and/or inner field
             is nullable but the specified schema requires them to be not nullable.
+
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3577,9 +3621,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list
@@ -3598,6 +3639,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Unpivoted DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3663,9 +3708,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list, optional
@@ -3688,6 +3730,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         DataFrame.unpivot
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
@@ -4265,9 +4311,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
          .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
          Parameters
          ----------
          subset : List of column names, optional
@@ -4277,6 +4320,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          -------
          :class:`DataFrame`
              DataFrame without duplicates.
+
+         Notes
+         -----
+         Supports Spark Connect.
 
          Examples
          --------
@@ -5243,9 +5290,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         colsMap : dict
@@ -5260,6 +5304,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         :meth:`withColumnRenamed`
+
+        Notes
+        -----
+        Support Spark Connect
 
         Examples
         --------

@@ -246,6 +246,31 @@ class CrossValidatorTestsMixin:
             np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
             np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
 
+    def test_crossvalidator_with_fold_col(self):
+        sk_dataset = load_breast_cancer()
+
+        train_dataset = self.spark.createDataFrame(
+            zip(
+                sk_dataset.data.tolist(),
+                [int(t) for t in sk_dataset.target],
+                [int(i % 3) for i in range(len(sk_dataset.target))],
+            ),
+            schema="features: array<double>, label: long, fold: long",
+        )
+
+        lorv2 = LORV2(numTrainWorkers=2)
+
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
+        cv = CrossValidator(
+            estimator=lorv2,
+            estimatorParamMaps=grid2,
+            parallelism=2,
+            evaluator=BinaryClassificationEvaluator(),
+            foldCol="fold",
+            numFolds=3,
+        )
+        cv.fit(train_dataset)
+
 
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:

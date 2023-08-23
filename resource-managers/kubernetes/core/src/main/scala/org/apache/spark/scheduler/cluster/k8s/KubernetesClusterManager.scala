@@ -70,23 +70,18 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val wasSparkSubmittedInClusterMode = sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
     val (authConfPrefix,
       apiServerUri,
-      defaultServiceAccountToken,
       defaultServiceAccountCaCrt) = if (wasSparkSubmittedInClusterMode) {
       require(sc.conf.get(KUBERNETES_DRIVER_POD_NAME).isDefined,
         "If the application is deployed using spark-submit in cluster mode, the driver pod name " +
           "must be provided.")
-      val serviceAccountToken =
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)).filter(_.exists)
       val serviceAccountCaCrt =
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)).filter(_.exists)
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
         sc.conf.get(KUBERNETES_DRIVER_MASTER_URL),
-        serviceAccountToken,
         serviceAccountCaCrt)
     } else {
       (KUBERNETES_AUTH_CLIENT_MODE_PREFIX,
         KubernetesUtils.parseMasterUrl(masterURL),
-        None,
         None)
     }
 
@@ -107,7 +102,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       authConfPrefix,
       SparkKubernetesClientFactory.ClientType.Driver,
       sc.conf,
-      defaultServiceAccountToken,
       defaultServiceAccountCaCrt)
 
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
