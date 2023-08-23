@@ -487,8 +487,8 @@ class StreamingQueryProgress:
             inputRowsPerSecond=j["inputRowsPerSecond"],
             processedRowsPerSecond=j["processedRowsPerSecond"],
             observedMetrics={
-                Row(*row.keys())(*row.values())  # Assume no nested rows
-                for k, row in j["observedMetrics"].items()
+                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
+                for k, row_dict in j["observedMetrics"].items()
             }
             if "observedMetrics" in j
             else {},

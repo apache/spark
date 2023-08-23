@@ -17,33 +17,10 @@
 
 import unittest
 import time
-import uuid
-import json
-from typing import Any, Dict, Union
 
 import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import (
-    StreamingQueryListener,
-    QueryStartedEvent,
-    QueryProgressEvent,
-    QueryIdleEvent,
-    QueryTerminatedEvent,
-    StateOperatorProgress,
-    StreamingQueryProgress,
-    SourceProgress,
-    SinkProgress,
-)
-from pyspark.sql.types import (
-    ArrayType,
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
-    FloatType,
-    MapType,
-)
-from pyspark.sql import Row
+from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -51,18 +28,12 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class TestListener(StreamingQueryListener):
     def onQueryStarted(self, event):
         e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(
-            data=[(e,)],
-            schema=StructField("event", StringType(), False),
-        )
+        df = self.spark.createDataFrame(data=[(e,)])
         df.write.mode("append").saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
         e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(
-            data=[(e,)],
-            schema=StructField("event", StringType(), False),
-        )
+        df = self.spark.createDataFrame(data=[(e,)])
         df.write.mode("append").saveAsTable("listener_progress_events")
 
     def onQueryIdle(self, event):
@@ -70,10 +41,7 @@ class TestListener(StreamingQueryListener):
 
     def onQueryTerminated(self, event):
         e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(
-            data=[(e,)],
-            schema=StructField("event", StringType(), False),
-        )
+        df = self.spark.createDataFrame(data=[(e,)])
         df.write.mode("append").saveAsTable("listener_terminated_events")
 
 
