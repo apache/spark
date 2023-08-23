@@ -777,7 +777,7 @@ class TorchDistributor(Distributor):
             self.logger.warning(
                 "Start torch distributor log streaming server failed, "
                 "You cannot receive logs sent from distributor workers, ",
-                f"error: {repr(e)}."
+                f"error: {repr(e)}.",
             )
 
         try:
