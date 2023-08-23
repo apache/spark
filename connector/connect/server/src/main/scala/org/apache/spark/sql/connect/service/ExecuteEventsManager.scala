@@ -18,7 +18,11 @@
 package org.apache.spark.sql.connect.service
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.{JsonSerializer, SerializerProvider}
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.google.protobuf.Message
+import com.google.protobuf.util.JsonFormat
 
 import org.apache.spark.connect.proto
 import org.apache.spark.scheduler.SparkListenerEvent
@@ -27,6 +31,14 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
+private[sql] class ProtobufSerializer extends JsonSerializer[Message] {
+  override def serialize(
+      message: Message,
+      jsonGenerator: JsonGenerator,
+      serializerProvider: SerializerProvider): Unit = {
+    jsonGenerator.writeRawValue(JsonFormat.printer().print(message))
+  }
+}
 object ExecuteEventsManager {
   // TODO: Make this configurable
   val MAX_STATEMENT_TEXT_SIZE = 65535
@@ -305,6 +317,7 @@ case class SparkListenerConnectOperationStarted(
     userId: String,
     userName: String,
     statementText: String,
+    @JsonSerialize(using = classOf[ProtobufSerializer])
     planRequest: Option[proto.ExecutePlanRequest],
     sparkSessionTags: Set[String],
     extraTags: Map[String, String] = Map.empty)
