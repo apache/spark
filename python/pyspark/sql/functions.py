@@ -4312,8 +4312,8 @@ def monotonically_increasing_id() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 10, 1, 2).select(F.monotonically_increasing_id()).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 10, 1, 2).select(sf.monotonically_increasing_id()).show()
     +-----------------------------+
     |monotonically_increasing_id()|
     +-----------------------------+
@@ -4612,8 +4612,8 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', F.rand(seed=42) * 3).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
     +---+------------------+
@@ -4653,8 +4653,8 @@ def randn(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', F.randn(seed=42)).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
     +---+------------------+
     | id|             randn|
     +---+------------------+
@@ -5155,9 +5155,9 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
-    >>> df.select(F.log(2.0, df.value).alias('log2_value')).show()
+    >>> df.select(sf.log(2.0, df.value).alias('log2_value')).show()
     +----------+
     |log2_value|
     +----------+
@@ -5168,7 +5168,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     And Natural logarithm
 
-    >>> df.select(F.log(df.value).alias('ln_value')).show()
+    >>> df.select(sf.log(df.value).alias('ln_value')).show()
     +------------------+
     |          ln_value|
     +------------------+
@@ -11572,11 +11572,11 @@ def explode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    >>> edf = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> edf.select(explode(edf.intlist).alias("anInt")).collect()
     [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
 
-    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    >>> edf.select(explode(edf.mapfield).alias("key", "value")).show()
     +---+-----+
     |key|value|
     +---+-----+
@@ -11611,11 +11611,11 @@ def posexplode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(posexplode(eDF.intlist)).collect()
+    >>> edf = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> edf.select(posexplode(edf.intlist)).collect()
     [Row(pos=0, col=1), Row(pos=1, col=2), Row(pos=2, col=3)]
 
-    >>> eDF.select(posexplode(eDF.mapfield)).show()
+    >>> edf.select(posexplode(edf.mapfield)).show()
     +---+---+-----+
     |pos|key|value|
     +---+---+-----+
