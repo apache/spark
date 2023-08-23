@@ -1523,6 +1523,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               s"Failed to load class correctly due to $nsm. " +
                 "Make sure the artifact where the class is defined is installed by calling" +
                 " session.addArtifact.")
+          case cnf: ClassNotFoundException =>
+            throw new ClassNotFoundException(
+              s"Failed to load class: ${cnf.getMessage}. " +
+                "Make sure the artifact where the class is defined is installed by calling" +
+                " session.addArtifact.")
           case _ => throw t
         }
     }
