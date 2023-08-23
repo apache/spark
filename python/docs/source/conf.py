@@ -33,43 +33,16 @@ generate_supported_api(output_rst_file_path)
 
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
-shutil.rmtree(
-    "%s/reference/api" % os.path.dirname(os.path.abspath(__file__)), ignore_errors=True)
-shutil.rmtree(
-    "%s/reference/pyspark.pandas/api" % os.path.dirname(os.path.abspath(__file__)),
-    ignore_errors=True)
-shutil.rmtree(
-    "%s/reference/pyspark.sql/api" % os.path.dirname(os.path.abspath(__file__)),
-    ignore_errors=True)
-shutil.rmtree(
-    "%s/reference/pyspark.ss/api" % os.path.dirname(os.path.abspath(__file__)),
-    ignore_errors=True)
-
-try:
-    os.mkdir("%s/reference/api" % os.path.dirname(os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
-try:
-    os.mkdir("%s/reference/pyspark.pandas/api" % os.path.dirname(
-        os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
-
-try:
-    os.mkdir("%s/reference/pyspark.sql/api" % os.path.dirname(
-        os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
-
-try:
-    os.mkdir("%s/reference/pyspark.ss/api" % os.path.dirname(
-        os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
+gen_rst_dirs = ["reference/api", "reference/pyspark.pandas/api",
+    "reference/pyspark.sql/api", "reference/pyspark.ss/api"]
+for gen_rst_dir in gen_rst_dirs:
+    absolute_gen_rst_dir = "%s/%s" % (os.path.dirname(os.path.abspath(__file__)), gen_rst_dir)
+    shutil.rmtree(absolute_gen_rst_dir, ignore_errors=True)
+    try:
+        os.mkdir(absolute_gen_rst_dir)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
 # -- General configuration ------------------------------------------------
 
