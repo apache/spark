@@ -259,6 +259,8 @@ html_use_index = False
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'pysparkdoc'
 
+# The base URL which points to the root of the HTML documentation.
+html_baseurl = 'https://spark.apache.org/docs/latest/api/python'
 
 # -- Options for LaTeX output ---------------------------------------------
 

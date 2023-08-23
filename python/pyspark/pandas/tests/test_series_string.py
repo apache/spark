@@ -255,10 +255,9 @@ class SeriesStringTestsMixin:
         def repl(m):
             return m.group(0)[::-1]
 
-        regex_pat = re.compile(r"[a-z]+")
-        self.check_func(lambda x: x.str.replace(regex_pat, repl, regex=True))
+        self.check_func(lambda x: x.str.replace("[a-z]+", repl, regex=True))
         # compiled regex with flags
-        regex_pat = re.compile(r"WHITESPACE", flags=re.IGNORECASE)
+        regex_pat = re.compile("WHITESPACE", flags=re.IGNORECASE)
         self.check_func(lambda x: x.str.replace(regex_pat, "---", regex=True))
 
     def test_string_rfind(self):
@@ -294,10 +293,6 @@ class SeriesStringTestsMixin:
         self.check_func(lambda x: x.str.slice_replace(stop=2, repl="X"))
         self.check_func(lambda x: x.str.slice_replace(start=1, stop=3, repl="X"))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43478): Enable SeriesStringTests.test_string_split for pandas 2.0.0.",
-    )
     def test_string_split(self):
         self.check_func_on_series(lambda x: repr(x.str.split()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.split(r"p*")), self.pser[:-1])
@@ -308,10 +303,6 @@ class SeriesStringTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.split(expand=True))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43477): Enable SeriesStringTests.test_string_rsplit for pandas 2.0.0.",
-    )
     def test_string_rsplit(self):
         self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])

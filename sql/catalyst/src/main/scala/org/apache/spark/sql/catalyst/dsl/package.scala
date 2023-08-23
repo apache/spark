@@ -353,7 +353,7 @@ package object dsl {
       def struct(structType: StructType): AttributeReference = attrRef(structType)
 
       def struct(attrs: AttributeReference*): AttributeReference =
-        struct(StructType.fromAttributes(attrs))
+        struct(DataTypeUtils.fromAttributes(attrs))
 
       /** Creates a new AttributeReference of object type */
       def obj(cls: Class[_]): AttributeReference = attrRef(ObjectType(cls))
@@ -521,8 +521,9 @@ package object dsl {
         EliminateSubqueryAliases(analyzed)
       }
 
-      def hint(name: String, parameters: Any*): LogicalPlan =
+      def hint(name: String, parameters: Expression*): LogicalPlan = {
         UnresolvedHint(name, parameters, logicalPlan)
+      }
 
       def sample(
           lowerBound: Double,

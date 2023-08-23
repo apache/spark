@@ -271,7 +271,10 @@ case class ScalarSubquery(
     mayHaveCountBug: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
-    assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
+    if (!plan.schema.fields.nonEmpty) {
+      throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(plan.schema.fields.length,
+        origin)
+    }
     plan.schema.fields.head.dataType
   }
   override def nullable: Boolean = true

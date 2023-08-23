@@ -165,6 +165,36 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.select(aes_decrypt(unhex(col("input")), col("key"))))
   }
 
+  test("try_aes_decrypt") {
+    val df = Seq(("AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+      "abcdefghijklmnop12345678ABCDEFGH", "GCM", "DEFAULT", "This is an AAD mixed into the input"
+    )).toDF("input", "key", "mode", "padding", "aad")
+
+    checkAnswer(
+      df.selectExpr("try_aes_decrypt(unbase64(input), key, mode, padding, aad)"),
+      df.select(try_aes_decrypt(unbase64(col("input")), col("key"),
+        col("mode"), col("padding"), col("aad"))))
+
+    val df1 = Seq(("AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=",
+      "abcdefghijklmnop12345678ABCDEFGH", "CBC", "DEFAULT"
+    )).toDF("input", "key", "mode", "padding")
+
+    checkAnswer(
+      df1.selectExpr("try_aes_decrypt(unbase64(input), key, mode, padding)"),
+      df1.select(try_aes_decrypt(unbase64(col("input")), col("key"),
+        col("mode"), col("padding"))))
+
+     checkAnswer(
+      df1.selectExpr("try_aes_decrypt(unbase64(input), key, mode)"),
+      df1.select(try_aes_decrypt(unbase64(col("input")), col("key"), col("mode"))))
+
+    val df2 = Seq(("83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94",
+      "0000111122223333")).toDF("input", "key")
+     checkAnswer(
+      df2.selectExpr("try_aes_decrypt(unhex(input), key)"),
+      df2.select(try_aes_decrypt(unhex(col("input")), col("key"))))
+  }
+
   test("sha") {
     val df = Seq("Spark").toDF("a")
     checkAnswer(df.selectExpr("sha(a)"), df.select(sha(col("a"))))

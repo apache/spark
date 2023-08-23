@@ -128,7 +128,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-    checkQueryPlan(df, distribution, physical.SinglePartition)
+    // Has exactly one partition.
+    val partitionValues = Seq(31).map(v => InternalRow.fromSeq(Seq(v)))
+    checkQueryPlan(df, distribution,
+      physical.KeyGroupedPartitioning(distribution.clustering, 1, partitionValues))
   }
 
   test("non-clustered distribution: no V2 catalog") {
@@ -310,9 +313,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("partitioned join: only one side reports partitioning") {
     val customers_partitions = Array(bucket(4, "customer_id"))
-    val orders_partitions = Array(bucket(2, "customer_id"))
 
-    testWithCustomersAndOrders(customers_partitions, orders_partitions, 2)
+    testWithCustomersAndOrders(customers_partitions, Array.empty, 2)
   }
 
   private val items: String = "items"
@@ -1034,6 +1036,62 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                 "should contain shuffle when not pushing down partition values")
             }
           }
+      }
+    }
+  }
+
+  test("SPARK-44641: duplicated records when SPJ is not triggered") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, items_schema, items_partitions)
+    sql(s"""
+        INSERT INTO testcat.ns.$items VALUES
+        (1, 'aa', 40.0, cast('2020-01-01' as timestamp)),
+        (1, 'aa', 41.0, cast('2020-01-15' as timestamp)),
+        (2, 'bb', 10.0, cast('2020-01-01' as timestamp)),
+        (2, 'bb', 10.5, cast('2020-01-01' as timestamp)),
+        (3, 'cc', 15.5, cast('2020-02-01' as timestamp))""")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"""INSERT INTO testcat.ns.$purchases VALUES
+        (1, 42.0, cast('2020-01-01' as timestamp)),
+        (1, 44.0, cast('2020-01-15' as timestamp)),
+        (1, 45.0, cast('2020-01-15' as timestamp)),
+        (2, 11.0, cast('2020-01-01' as timestamp)),
+        (3, 19.5, cast('2020-02-01' as timestamp))""")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { partiallyClusteredEnabled =>
+        withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+              partiallyClusteredEnabled.toString) {
+
+          // join keys are not the same as the partition keys, therefore SPJ is not triggered.
+          val df = sql(
+            s"""
+               SELECT id, name, i.price as purchase_price, p.item_id, p.price as sale_price
+               FROM testcat.ns.$items i JOIN testcat.ns.$purchases p
+               ON i.arrive_time = p.time ORDER BY id, purchase_price, p.item_id, sale_price
+               """)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.nonEmpty, "shuffle should exist when SPJ is not used")
+
+          checkAnswer(df,
+            Seq(
+              Row(1, "aa", 40.0, 1, 42.0),
+              Row(1, "aa", 40.0, 2, 11.0),
+              Row(1, "aa", 41.0, 1, 44.0),
+              Row(1, "aa", 41.0, 1, 45.0),
+              Row(2, "bb", 10.0, 1, 42.0),
+              Row(2, "bb", 10.0, 2, 11.0),
+              Row(2, "bb", 10.5, 1, 42.0),
+              Row(2, "bb", 10.5, 2, 11.0),
+              Row(3, "cc", 15.5, 3, 19.5)
+            )
+          )
+        }
       }
     }
   }

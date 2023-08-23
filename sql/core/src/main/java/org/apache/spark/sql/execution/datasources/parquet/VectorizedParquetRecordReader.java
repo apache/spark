@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import scala.Option;
 import scala.collection.JavaConverters;
 
@@ -280,7 +281,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columnVectors.length; i++) {
       Object defaultValue = null;
       if (sparkRequestedSchema != null) {
-        defaultValue = sparkRequestedSchema.existenceDefaultValues()[i];
+        defaultValue = ResolveDefaultColumns.existenceDefaultValues(sparkRequestedSchema)[i];
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
         (WritableColumnVector) vectors[i], capacity, memMode, missingColumns, true, defaultValue);

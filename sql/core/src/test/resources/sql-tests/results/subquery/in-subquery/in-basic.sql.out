@@ -37,7 +37,7 @@ select 1 from tab_a where (a1, b1) not in (select (a2, b2) from tab_b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",

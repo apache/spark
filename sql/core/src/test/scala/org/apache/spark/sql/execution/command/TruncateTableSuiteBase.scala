@@ -177,27 +177,48 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       withView("v0") {
         sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v0")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE v0")
+          },
+          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          parameters = Map(
+            "viewName" -> "`spark_catalog`.`default`.`v0`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(
+            fragment = "v0",
+            start = 15,
+            stop = 16)
+        )
       }
 
       withTempView("v1") {
         sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v1")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE v1")
+          },
+          errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+          parameters = Map(
+            "tempViewName" -> "`v1`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = "v1", start = 15, stop = 16)
+        )
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $v2")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $v2")
+          },
+          errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+          parameters = Map(
+            "tempViewName" -> "`global_temp`.`v2`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = v2, start = 15, stop = 28)
+        )
       }
     }
   }

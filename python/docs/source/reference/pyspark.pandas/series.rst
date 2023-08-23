@@ -70,7 +70,6 @@ Indexing, iteration
    Series.keys
    Series.pop
    Series.items
-   Series.iteritems
    Series.item
    Series.xs
    Series.get
@@ -148,7 +147,6 @@ Computations / Descriptive Stats
    Series.ewm
    Series.filter
    Series.kurt
-   Series.mad
    Series.max
    Series.mean
    Series.min
@@ -247,7 +245,6 @@ Combining / joining / merging
 .. autosummary::
    :toctree: api/
 
-   Series.append
    Series.compare
    Series.replace
    Series.update

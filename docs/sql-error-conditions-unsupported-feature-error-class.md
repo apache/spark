@@ -65,9 +65,21 @@ Attach a comment to the namespace `<namespace>`.
 
 DESC TABLE COLUMN for a specific partition.
 
+## DROP_DATABASE
+
+Drop the default database `<database>`.
+
 ## DROP_NAMESPACE
 
 Drop the namespace `<namespace>`.
+
+## HIVE_TABLE_TYPE
+
+The `<tableName>` is hive `<tableType>`.
+
+## HIVE_WITH_ANSI_INTERVALS
+
+Hive table `<tableName>` with ANSI intervals.
 
 ## INSERT_PARTITION_SPEC_IF_NOT_EXISTS
 
@@ -80,6 +92,10 @@ Referencing a lateral column alias `<lca>` in the aggregate function `<aggFunc>`
 ## LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING
 
 Referencing lateral column alias `<lca>` in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list.
+
+## LATERAL_COLUMN_ALIAS_IN_GROUP_BY
+
+Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet.
 
 ## LATERAL_COLUMN_ALIAS_IN_WINDOW
 
@@ -125,6 +141,14 @@ PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a s
 
 Pivoting by the value '`<value>`' of the column data type `<type>`.
 
+## PURGE_PARTITION
+
+Partition purge.
+
+## PURGE_TABLE
+
+Purge table.
+
 ## PYTHON_UDF_IN_ON_CLAUSE
 
 Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause.
@@ -132,6 +156,10 @@ Python UDF in the ON clause of a `<joinType>` JOIN. In case of an INNNER JOIN co
 ## REMOVE_NAMESPACE_COMMENT
 
 Remove a comment from the namespace `<namespace>`.
+
+## REPLACE_NESTED_COLUMN
+
+The replace function does not support nested column `<colName>`.
 
 ## SET_NAMESPACE_PROPERTY
 
@@ -148,6 +176,10 @@ set PROPERTIES and DBPROPERTIES at the same time.
 ## SET_TABLE_PROPERTY
 
 `<property>` is a reserved table property, `<msg>`.
+
+## SET_VARIABLE_USING_SET
+
+`<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
 
 ## TABLE_OPERATION
 

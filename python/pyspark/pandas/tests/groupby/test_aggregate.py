@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -168,12 +169,8 @@ class GroupbyAggregateMixin:
         stats_psdf = psdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         stats_pdf = pdf.groupby(10).agg({20: ["min", "max"], 30: "sum"})
         self.assert_eq(
-            stats_psdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
-            stats_pdf.sort_values(by=[(20, "min"), (20, "max"), (30, "sum")]).reset_index(
-                drop=True
-            ),
+            stats_psdf.reset_index(drop=True),
+            stats_pdf.reset_index(drop=True),
         )
 
     def test_aggregate_func_str_list(self):

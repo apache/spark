@@ -235,11 +235,7 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
         }
       ],
       "columnDefs": [
-        { "type": "duration", "targets": 1 },
-        { "type": "duration", "targets": 2 },
-        { "type": "duration", "targets": 3 },
-        { "type": "duration", "targets": 4 },
-        { "type": "duration", "targets": 5 }
+        { "type": "duration", "targets": [1, 2, 3, 4, 5] }
       ],
       "paging": false,
       "info": false,
@@ -592,22 +588,16 @@ $(document).ready(function () {
                 // The targets: $id represents column id which comes from stagespage-template.html
                 // #summary-executor-table.If the relative position of the columns in the table
                 // #summary-executor-table has changed,please be careful to adjust the column index here
-                // Input Size / Records
-                {"type": "size", "targets": 9},
-                // Output Size / Records
-                {"type": "size", "targets": 10},
-                // Shuffle Read Size / Records
-                {"type": "size", "targets": 11},
-                // Shuffle Write Size / Records
-                {"type": "size", "targets": 12},
+                // Input Size / Records - 9
+                // Output Size / Records - 10
+                // Shuffle Read Size / Records - 11
+                // Shuffle Write Size / Records - 12
+                {"type": "size", "targets": [9, 10, 11, 12]},
                 // Peak JVM Memory OnHeap / OffHeap
-                {"visible": false, "targets": 15},
                 // Peak Execution Memory OnHeap / OffHeap
-                {"visible": false, "targets": 16},
                 // Peak Storage Memory OnHeap / OffHeap
-                {"visible": false, "targets": 17},
                 // Peak Pool Memory Direct / Mapped
-                {"visible": false, "targets": 18}
+                {"visible": false, "targets": executorOptionalColumns},
               ],
               "deferRender": true,
               "order": [[0, "asc"]],
@@ -1079,15 +1069,8 @@ $(document).ready(function () {
             }
           ],
           "columnDefs": [
-            { "visible": false, "targets": 11 },
-            { "visible": false, "targets": 12 },
-            { "visible": false, "targets": 13 },
-            { "visible": false, "targets": 14 },
-            { "visible": false, "targets": 15 },
-            { "visible": false, "targets": 16 },
-            { "visible": false, "targets": 17 },
-            { "visible": false, "targets": 18 },
-            { "visible": false, "targets": 21 }
+            { "visible": false, "targets": optionalColumns },
+            { "visible": false, "targets": 18 }, // accumulators
           ],
           "deferRender": true
         };

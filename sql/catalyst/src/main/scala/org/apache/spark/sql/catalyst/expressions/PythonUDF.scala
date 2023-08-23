@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
@@ -161,11 +162,11 @@ case class PythonUDTF(
     func: PythonFunction,
     elementSchema: StructType,
     children: Seq[Expression],
+    evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
-
-  override def evalType: Int = PythonEvalType.SQL_TABLE_UDF
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -174,6 +175,35 @@ case class PythonUDTF(
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
+    copy(children = newChildren)
+}
+
+/**
+ * Holds the indexes of the TABLE argument to a Python UDTF call, if applicable.
+ * @param partitionChildIndexes The indexes of the partitioning columns in each TABLE argument.
+ */
+case class PythonUDTFPartitionColumnIndexes(partitionChildIndexes: Seq[Int])
+
+/**
+ * A placeholder of a polymorphic Python table-valued function.
+ */
+case class UnresolvedPolymorphicPythonUDTF(
+    name: String,
+    func: PythonFunction,
+    children: Seq[Expression],
+    evalType: Int,
+    udfDeterministic: Boolean,
+    resolveElementSchema: (PythonFunction, Seq[Expression]) => StructType,
+    resultId: ExprId = NamedExpression.newExprId,
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+  extends UnevaluableGenerator with PythonFuncExpression {
+
+  override lazy val resolved = false
+
+  override def elementSchema: StructType = throw new UnresolvedException("elementSchema")
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedPolymorphicPythonUDTF =
     copy(children = newChildren)
 }
 

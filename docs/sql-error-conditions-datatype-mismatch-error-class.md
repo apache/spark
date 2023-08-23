@@ -64,13 +64,11 @@ cannot cast `<srcType>` to `<targetType>`.
 ## CAST_WITH_CONF_SUGGESTION
 
 cannot cast `<srcType>` to `<targetType>` with ANSI mode on.
-
 If you have to cast `<srcType>` to `<targetType>`, you can set `<config>` as `<configVal>`.
 
 ## CAST_WITH_FUNC_SUGGESTION
 
 cannot cast `<srcType>` to `<targetType>`.
-
 To convert values from `<srcType>` to `<targetType>`, you can use the functions `<functionNames>` instead.
 
 ## CREATE_MAP_KEY_DIFF_TYPES
@@ -125,6 +123,10 @@ The `<functionName>` does not support ordering on type `<dataType>`.
 
 `<errors>`
 
+## INVALID_XML_MAP_KEY_TYPE
+
+Input schema `<schema>` can only contain STRING as a key type for a MAP.
+
 ## IN_SUBQUERY_DATA_TYPE_MISMATCH
 
 The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [`<mismatchedColumns>`], left side: [`<leftType>`], right side: [`<rightType>`].
@@ -176,11 +178,8 @@ A range window frame cannot be used in an unordered window specification.
 ## SEQUENCE_WRONG_INPUT_TYPES
 
 `<functionName>` uses the wrong parameter type. The parameter type must conform to:
-
 1. The start and stop expressions must resolve to the same type.
-
 2. If start and stop expressions resolve to the `<startType>` type, then the step expression must resolve to the `<stepType>` type.
-
 3. Otherwise, if start and stop expressions resolve to the `<otherStartType>` type, then the step expression must resolve to the same type.
 
 ## SPECIFIED_WINDOW_FRAME_DIFF_TYPES
@@ -206,6 +205,10 @@ The lower bound of a window frame must be `<comparison>` to the upper bound.
 ## STACK_COLUMN_DIFF_TYPES
 
 The data type of the column (`<columnIndex>`) do not have the same type: `<leftType>` (`<leftParamIndex>`) <> `<rightType>` (`<rightParamIndex>`).
+
+## TYPE_CHECK_FAILURE_WITH_HINT
+
+`<msg>``<hint>`.
 
 ## UNEXPECTED_CLASS_TYPE
 
@@ -234,6 +237,10 @@ The input of `<functionName>` can't be `<dataType>` type data.
 ## VALUE_OUT_OF_RANGE
 
 The `<exprName>` must be between `<valueRange>` (current value = `<currentValue>`).
+
+## WRONG_NUM_ARG_TYPES
+
+The expression requires `<expectedNum>` argument types but the actual number is `<actualNum>`.
 
 ## WRONG_NUM_ENDPOINTS
 

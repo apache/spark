@@ -139,7 +139,7 @@ CreateViewCommand `INT8_TBL`, SELECT * FROM
 -- !query
 select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
@@ -159,7 +159,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {

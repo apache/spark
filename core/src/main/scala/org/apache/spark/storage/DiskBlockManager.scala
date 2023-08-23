@@ -27,7 +27,7 @@ import scala.collection.mutable.HashMap
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
@@ -139,15 +139,15 @@ private[spark] class DiskBlockManager(
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
         getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got $blockId")
+        throw SparkException.internalError(
+          s"Only merged block ID is supported, but got $blockId", category = "STORAGE")
     }
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
     if (!dirs.exists(_.nonEmpty)) {
-      throw new IllegalArgumentException(
-        s"Cannot read $filename because merged shuffle dirs is empty")
+      throw SparkException.internalError(
+        s"Cannot read $filename because merged shuffle dirs is empty", category = "STORAGE")
     }
     new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }

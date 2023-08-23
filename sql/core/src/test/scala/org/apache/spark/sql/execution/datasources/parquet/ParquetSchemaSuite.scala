@@ -27,7 +27,6 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
@@ -51,7 +50,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       nanosAsLong: Boolean = false): Unit = {
     testSchema(
       testName,
-      StructType.fromAttributes(ScalaReflection.attributesFor[T]),
+      schemaFor[T],
       messageType,
       binaryAsString,
       int96AsTimestamp,
@@ -224,8 +223,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[Long]]),
+        sparkType = schemaFor[Tuple1[Long]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -255,8 +253,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Boolean, Int, Long, Float, Double, Array[Byte])]),
+        sparkType = schemaFor[(Boolean, Int, Long, Float, Double, Array[Byte])],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -294,8 +291,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Byte, Short, Int, Long, java.sql.Date)]),
+        sparkType = schemaFor[(Byte, Short, Int, Long, java.sql.Date)],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -326,8 +322,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -350,8 +345,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,

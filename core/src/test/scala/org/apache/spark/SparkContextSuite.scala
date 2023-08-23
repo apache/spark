@@ -276,8 +276,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           sc.addJar(badURL)
         }
         assert(e2.getMessage.contains(badURL))
-        assert(sc.addedFiles.isEmpty)
-        assert(sc.addedJars.isEmpty)
+        assert(sc.allAddedFiles.isEmpty)
+        assert(sc.allAddedJars.isEmpty)
       }
     } finally {
       sc.stop()

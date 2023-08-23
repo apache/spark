@@ -16,7 +16,7 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
@@ -96,6 +96,32 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
+jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+  "executor-id-asc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(a) - parseFloat(b);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return -1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return 1;
+    } else {
+      return a.localeCompare(b);
+    }
+  },
+
+  "executor-id-desc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(b) - parseFloat(a);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return 1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return -1;
+    } else {
+      return b.localeCompare(a);
+    }
+  }
+});
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
   $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
@@ -147,7 +173,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 26];
 var execDataTable;
 var sumDataTable;
 
@@ -403,9 +429,8 @@ $(document).ready(function () {
           "data": response,
           "columns": [
             {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
-              }
+              data: "id",
+              type: "executor-id"
             },
             {data: 'hostPort'},
             {
@@ -568,19 +593,19 @@ $(document).ready(function () {
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],
           "columnDefs": [
-            {"visible": false, "targets": 5},
-            {"visible": false, "targets": 6},
-            {"visible": false, "targets": 7},
-            {"visible": false, "targets": 8},
-            {"visible": false, "targets": 9},
-            {"visible": false, "targets": 10},
-            {"visible": false, "targets": 13},
-            {"visible": false, "targets": 14},
-            {"visible": false, "targets": 26}
+            {"visible": false, "targets": execOptionalColumns}
           ],
           "deferRender": true
         };
@@ -712,10 +737,8 @@ $(document).ready(function () {
           "searching": false,
           "info": false,
           "columnDefs": [
-            {"visible": false, "targets": 3},
-            {"visible": false, "targets": 4}
+            {"visible": false, "targets": sumOptionalColumns}
           ]
-
         };
 
         sumDataTable = $(sumSelector).DataTable(sumConf);

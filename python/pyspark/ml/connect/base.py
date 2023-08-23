@@ -146,7 +146,9 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+    def transform(
+        self, dataset: Union[DataFrame, pd.DataFrame], params: Optional["ParamMap"] = None
+    ) -> Union[DataFrame, pd.DataFrame]:
         """
         Transforms the input dataset.
         The dataset can be either pandas dataframe or spark dataframe,
@@ -163,12 +165,24 @@ class Transformer(Params, metaclass=ABCMeta):
         dataset : :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
             input dataset.
 
+        params : dict, optional
+            an optional param map that overrides embedded params.
+
         Returns
         -------
         :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
             transformed dataset, the type of output dataframe is consistent with
             input dataframe.
         """
+        if params is None:
+            params = dict()
+        if isinstance(params, dict):
+            if params:
+                return self.copy(params)._transform(dataset)
+            else:
+                return self._transform(dataset)
+
+    def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         input_cols = self._input_columns()
         transform_fn = self._get_transform_fn()
         output_cols = self._output_columns()
@@ -249,7 +263,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         (True, default) or minimized (False).
         A given evaluator may support multiple metrics which may be maximized or minimized.
         """
-        return True
+        raise NotImplementedError()
 
 
 @inherit_doc

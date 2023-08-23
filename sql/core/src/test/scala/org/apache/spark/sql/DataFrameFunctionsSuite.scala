@@ -72,7 +72,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "countDistinct", "count_distinct", // equivalent to count(distinct foo)
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
-      "udaf", "udf" // create function statement in sql
+      "udaf", "udf", // create function statement in sql
+      "call_function" // moot in SQL as you just call the function directly
     )
 
     val excludedSqlFunctions = Set.empty[String]
@@ -81,7 +82,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k"
+      "collect_top_k",
+      // TODO: XML functions will soon be added to SQL Function registry and removed from this list
+      // https://issues.apache.org/jira/browse/SPARK-44787
+      "from_xml", "schema_of_xml"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
@@ -3398,7 +3402,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null))
     )
     checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
-    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, 3, 2, 5, 1, 2))))
+
+    withSQLConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT.key -> "true") {
+      checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    }
   }
 
   test("transform function - array for primitive type not containing null") {
@@ -5900,6 +5908,43 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df2, Seq(Row(Row(1, 2))))
     assert(df2.schema === expectedSchema)
+  }
+
+  test("CANNOT_INVOKE_IN_TRANSFORMATIONS - Dataset transformations and actions " +
+    "can only be invoked by the driver, not inside of other Dataset transformations") {
+    val df1 = Seq((1)).toDF("a")
+    val df2 = Seq((4, 5)).toDF("e", "f")
+    checkError(
+      exception = intercept[SparkException] {
+        df1.map(r => df2.count() * r.getInt(0)).collect()
+      }.getCause.asInstanceOf[SparkException],
+      errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
+      parameters = Map.empty
+    )
+  }
+
+  test("call_function") {
+    checkAnswer(testData2.select(call_function("avg", $"a")), testData2.selectExpr("avg(a)"))
+
+    withUserDefinedFunction("custom_func" -> true, "custom_sum" -> false) {
+      spark.udf.register("custom_func", (i: Int) => { i + 2 })
+      checkAnswer(
+        testData2.select(call_function("custom_func", $"a")),
+        Seq(Row(3), Row(3), Row(4), Row(4), Row(5), Row(5)))
+      spark.udf.register("default.custom_func", (i: Int) => { i + 2 })
+      checkAnswer(
+        testData2.select(call_function("`default.custom_func`", $"a")),
+        Seq(Row(3), Row(3), Row(4), Row(4), Row(5), Row(5)))
+
+      sql("CREATE FUNCTION custom_sum AS 'test.org.apache.spark.sql.MyDoubleSum'")
+      checkAnswer(
+        testData2.select(
+          call_function("custom_sum", $"a"),
+          call_function("default.custom_sum", $"a"),
+          call_function("spark_catalog.default.custom_sum", $"a")),
+        Row(12.0, 12.0, 12.0))
+    }
+
   }
 }
 

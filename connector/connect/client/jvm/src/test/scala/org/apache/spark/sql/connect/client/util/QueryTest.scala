@@ -22,7 +22,7 @@ import java.util.TimeZone
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.SparkStringUtils.sideBySide
 
 abstract class QueryTest extends RemoteSparkSession {
 
@@ -122,7 +122,7 @@ object QueryTest extends Assertions {
              |${df.analyze}
              |== Exception ==
              |$e
-             |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+             |${org.apache.spark.util.SparkErrorUtils.stackTraceToString(e)}
         """.stripMargin
           return Some(errorMessage)
       }

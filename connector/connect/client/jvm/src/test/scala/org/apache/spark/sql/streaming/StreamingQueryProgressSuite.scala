@@ -161,6 +161,7 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
         |  "name" : "myName",
         |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "batchId" : 2,
+        |  "batchDuration" : 0,
         |  "numInputRows" : 1467,
         |  "inputRowsPerSecond" : 22.0,
         |  "durationMs" : {

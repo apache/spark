@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetRowIndexUtil, ParquetWriteSupport}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -50,10 +50,7 @@ case class ParquetScan(
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
-    pushedAggregate.isEmpty &&
-      // SPARK-39634: Allow file splitting in combination with row index generation once
-      // the fix for PARQUET-2161 is available.
-      !ParquetRowIndexUtil.isNeededForSchema(readSchema)
+    pushedAggregate.isEmpty
   }
 
   override def readSchema(): StructType = {

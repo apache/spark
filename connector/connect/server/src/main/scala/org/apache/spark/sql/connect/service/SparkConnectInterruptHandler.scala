@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import scala.collection.JavaConverters._
+
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -30,16 +32,32 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
       SparkConnectService
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
 
-    v.getInterruptType match {
+    val interruptedIds = v.getInterruptType match {
       case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL =>
         sessionHolder.interruptAll()
+      case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG =>
+        if (!v.hasOperationTag) {
+          throw new IllegalArgumentException(
+            s"INTERRUPT_TYPE_TAG requested, but no operation_tag provided.")
+        }
+        sessionHolder.interruptTag(v.getOperationTag)
+      case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID =>
+        if (!v.hasOperationId) {
+          throw new IllegalArgumentException(
+            s"INTERRUPT_TYPE_OPERATION_ID requested, but no operation_id provided.")
+        }
+        sessionHolder.interruptOperation(v.getOperationId)
       case other =>
         throw new UnsupportedOperationException(s"Unknown InterruptType $other!")
     }
 
-    val builder = proto.InterruptResponse.newBuilder().setSessionId(v.getSessionId)
+    val response = proto.InterruptResponse
+      .newBuilder()
+      .setSessionId(v.getSessionId)
+      .addAllInterruptedIds(interruptedIds.asJava)
+      .build()
 
-    responseObserver.onNext(builder.build())
+    responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 }

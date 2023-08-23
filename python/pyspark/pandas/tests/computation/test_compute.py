@@ -78,40 +78,6 @@ class FrameComputeMixin:
         str_psdf = ps.DataFrame({"A": ["a", "b", "c"]}, index=np.random.rand(3))
         self.assert_eq(str_psdf.clip(1, 3), str_psdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43560): Enable DataFrameSlowTests.test_mad for pandas 2.0.0.",
-    )
-    def test_mad(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, None, 4, np.nan],
-                "B": [-0.1, 0.2, -0.3, np.nan, 0.5],
-                "C": ["a", "b", "c", "d", "e"],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        with self.assertRaises(ValueError):
-            psdf.mad(axis=2)
-
-        # MultiIndex columns
-        columns = pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "Z")])
-        pdf.columns = columns
-        psdf.columns = columns
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        pdf = pd.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
     def test_mode(self):
         pdf = pd.DataFrame(
             {
@@ -317,10 +283,6 @@ class FrameComputeMixin:
         self.assert_eq(psdf.nunique(), pdf.nunique())
         self.assert_eq(psdf.nunique(dropna=False), pdf.nunique(dropna=False))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43810): Enable DataFrameSlowTests.test_quantile for pandas 2.0.0.",
-    )
     def test_quantile(self):
         pdf, psdf = self.df_pair
 
@@ -366,59 +328,57 @@ class FrameComputeMixin:
         pdf = pd.DataFrame({"x": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
-        self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
+        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5, numeric_only=True))
+        self.assert_eq(
+            psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75], numeric_only=True)
+        )
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile(0.5, numeric_only=False)
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile([0.25, 0.5, 0.75], numeric_only=False)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43558): Enable DataFrameSlowTests.test_product for pandas 2.0.0.",
-    )
     def test_product(self):
         pdf = pd.DataFrame(
             {"A": [1, 2, 3, 4, 5], "B": [10, 20, 30, 40, 50], "C": ["a", "b", "c", "d", "e"]}
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index())
 
         # Named columns
         pdf.columns.name = "Koalas"
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index())
 
         # MultiIndex columns
         pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index())
 
         # Named MultiIndex columns
         pdf.columns.names = ["Hello", "Koalas"]
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index())
 
         # No numeric columns
         pdf = pd.DataFrame({"key": ["a", "b", "c"], "val": ["x", "y", "z"]})
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index())
 
         # No numeric named columns
         pdf.columns.name = "Koalas"
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), almost=True)
 
         # No numeric MultiIndex columns
         pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), almost=True)
 
         # No numeric named MultiIndex columns
         pdf.columns.names = ["Hello", "Koalas"]
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), almost=True)
 
         # All NaN columns
         pdf = pd.DataFrame(
@@ -429,22 +389,22 @@ class FrameComputeMixin:
             }
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), check_exact=False)
 
         # All NaN named columns
         pdf.columns.name = "Koalas"
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), check_exact=False)
 
         # All NaN MultiIndex columns
         pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), check_exact=False)
 
         # All NaN named MultiIndex columns
         pdf.columns.names = ["Hello", "Koalas"]
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+        self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), check_exact=False)
 
 
 class FrameComputeTests(FrameComputeMixin, ComparisonTestBase, SQLTestUtils):

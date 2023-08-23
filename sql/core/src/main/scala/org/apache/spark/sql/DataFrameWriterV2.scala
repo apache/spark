@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -191,7 +192,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
-    val qe = sparkSession.sessionState.executePlan(command)
+    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker)
     qe.assertCommandExecuted()
   }
 

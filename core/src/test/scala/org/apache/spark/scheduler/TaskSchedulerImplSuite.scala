@@ -2155,11 +2155,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       new WorkerOffer("executor1", "host1", 1))
     val task1 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 0
-    }, 1, Seq(TaskLocation("host0", "executor0")), JobArtifactSet(sc), new Properties, null)
+    }, 1, Seq(TaskLocation("host0", "executor0")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
 
     val task2 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 1
-    }, 1, Seq(TaskLocation("host1", "executor1")), JobArtifactSet(sc), new Properties, null)
+    }, 1, Seq(TaskLocation("host1", "executor1")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
 
     val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0, Some(0))
 

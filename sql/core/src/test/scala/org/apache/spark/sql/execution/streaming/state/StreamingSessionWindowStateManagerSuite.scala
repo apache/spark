@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
@@ -34,7 +35,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("value", LongType)
-  private val rowAttributes = rowSchema.toAttributes
+  private val rowAttributes = toAttributes(rowSchema)
 
   private val keysWithoutSessionAttributes = rowAttributes.filter { attr =>
     List("key1", "key2").contains(attr.name)

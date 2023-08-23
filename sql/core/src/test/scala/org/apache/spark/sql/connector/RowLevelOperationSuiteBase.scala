@@ -119,6 +119,20 @@ abstract class RowLevelOperationSuiteBase
     stripAQEPlan(executedPlan)
   }
 
+  protected def executeAndCheckScan(
+      query: String,
+      expectedScanSchema: String): Unit = {
+
+    val executedPlan = executeAndKeepPlan {
+      sql(query)
+    }
+
+    val scan = collect(executedPlan) {
+      case s: BatchScanExec => s
+    }.head
+    assert(DataTypeUtils.sameType(scan.schema, StructType.fromDDL(expectedScanSchema)))
+  }
+
   protected def executeAndCheckScans(
       query: String,
       primaryScanSchema: String,
