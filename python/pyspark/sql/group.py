@@ -430,7 +430,6 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
-    # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
