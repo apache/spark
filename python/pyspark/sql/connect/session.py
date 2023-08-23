@@ -14,10 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-from inspect import currentframe, getframeinfo
 
-from pyspark.errors.exceptions.connect import AnalysisException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -185,21 +182,8 @@ class SparkSession:
                 for k, v in self._options.items():
                     try:
                         session.conf.set(k, v)
-                    except AnalysisException as e:
-                        current = currentframe()
-                        lineno = getframeinfo(current).lineno + 1 if current is not None else 0
-                        print(
-                            warnings.formatwarning(
-                                """Failed to set spark runtime configuration: {0}={1}
-                                   Complete error message: {2}""".format(
-                                    k, v, e.message
-                                ),
-                                RuntimeWarning,
-                                __file__ if "__file__" in globals() else "",
-                                lineno,
-                            ),
-                            file=sys.stderr,
-                        )
+                    except Exception as e:
+                        warnings.warn(str(e))
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
