@@ -21,6 +21,9 @@ Functions
 =========
 .. currentmodule:: pyspark.sql.functions
 
+A collections of builtin functions available for DataFrame operations.
+From Apache Spark 3.5.0, all functions support Spark Connect.
+
 Normal Functions
 ----------------
 .. autosummary::

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.util
+package org.apache.spark.sql.catalyst.xml
 
 import java.nio.file.Paths
 import javax.xml.XMLConstants
@@ -27,7 +27,7 @@ import org.apache.spark.SparkFiles
 /**
  * Utilities for working with XSD validation.
  */
-private[xml] object ValidatorUtil {
+private[sql] object ValidatorUtil {
 
   // Parsing XSDs may be slow, so cache them by path:
 

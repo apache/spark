@@ -185,10 +185,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
-      RefreshTableCommand(ident)
-
-    case RefreshTable(ResolvedViewIdentifier(ident)) =>
+    case RefreshTable(ResolvedV1TableOrViewIdentifier(ident)) =>
       RefreshTableCommand(ident)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the

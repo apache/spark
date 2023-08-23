@@ -117,4 +117,27 @@ object ExprUtils extends QueryErrorsBase {
       TypeCheckSuccess
     }
   }
+
+  /**
+   * Check if the schema is valid for XML
+   *
+   * @param schema The schema to check.
+   * @return
+   * `TypeCheckSuccess` if the schema is valid
+   * `DataTypeMismatch` with an error error if the schema is not valid
+   */
+  def checkXmlSchema(schema: DataType): TypeCheckResult = {
+    val isInvalid = schema.existsRecursively {
+      // XML field names must be StringType
+      case MapType(keyType, _, _) if keyType != StringType => true
+      case _ => false
+    }
+    if (isInvalid) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_XML_MAP_KEY_TYPE",
+        messageParameters = Map("schema" -> toSQLType(schema)))
+    } else {
+      TypeCheckSuccess
+    }
+  }
 }

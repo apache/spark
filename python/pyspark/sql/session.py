@@ -851,12 +851,13 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
         Returns
         -------
         :class:`UDTFRegistration`
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         from pyspark.sql.udtf import UDTFRegistration
 
