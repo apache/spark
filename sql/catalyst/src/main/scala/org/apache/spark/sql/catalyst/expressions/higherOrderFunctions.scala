@@ -306,7 +306,7 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
       > SELECT _FUNC_(1, x -> x > 1);
        NULL
   """,
-  since = "3.5.0",
+  since = "4.0.0",
   group = "lambda_funcs")
 case class FilterValue(
     argument: Expression,
