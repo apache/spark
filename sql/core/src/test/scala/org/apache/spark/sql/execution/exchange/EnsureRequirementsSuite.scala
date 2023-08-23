@@ -1111,8 +1111,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test(s"SPARK-41471: shuffle right side when" +
-    s" spark.sql.sources.v2.bucketing.shuffle.enabled is true") {
+  test("SPARK-41471: shuffle right side when" +
+    " spark.sql.sources.v2.bucketing.shuffle.enabled is true") {
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
 
       val a1 = AttributeReference("a1", IntegerType)()
