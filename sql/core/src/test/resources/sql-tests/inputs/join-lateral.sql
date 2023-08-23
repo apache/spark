@@ -183,7 +183,7 @@ SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
 SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
 
--- Window func - unsupported
+-- Window func
 SELECT * FROM t1 JOIN LATERAL
   (SELECT sum(t2.c2) over (order by t2.c1)
   FROM   t2

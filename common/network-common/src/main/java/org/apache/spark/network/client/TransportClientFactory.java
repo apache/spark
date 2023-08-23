@@ -279,7 +279,7 @@ public class TransportClientFactory implements Closeable {
     ChannelFuture cf = bootstrap.connect(address);
 
     if (connCreateTimeout <= 0) {
-      cf.awaitUninterruptibly();
+      cf.await();
       assert cf.isDone();
       if (cf.isCancelled()) {
         throw new IOException(String.format("Connecting to %s cancelled", address));
