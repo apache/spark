@@ -3738,12 +3738,13 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     >>> from pyspark.sql.functions import approx_count_distinct
     >>> df = spark.range(100000)
-    >>> df.agg(approx_count_distinct("id", 0.1).alias('distinct_values')).show()
-    +---------------+
-    |distinct_values|
-    +---------------+
-    |         102065|
-    +---------------+
+    >>> df.agg(approx_count_distinct("id").alias('with_default_rsd'),
+    ...        approx_count_distinct("id", 0.1).alias('with_rsd_0.1')).show()
+    +----------------+------------+
+    |with_default_rsd|with_rsd_0.1|
+    +----------------+------------+
+    |           95546|      102065|
+    +----------------+------------+
     """
     if rsd is None:
         return _invoke_function_over_columns("approx_count_distinct", col)
