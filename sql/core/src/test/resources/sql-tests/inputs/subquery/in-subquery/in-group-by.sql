@@ -240,5 +240,8 @@ WHERE  t1c IN (SELECT Min(t2c)
 GROUP  BY t1a
 HAVING Min(t1b) IS NOT NULL;
 
-
-
+-- Window functions are not supported in IN subqueries yet
+select t1a
+from t1
+where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
+                             FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a);
