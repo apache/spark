@@ -159,9 +159,9 @@ object PythonUDFRunner {
   }
 
   def writeUDFs(
-    dataOut: DataOutputStream,
-    funcs: Seq[ChainedPythonFunctions],
-    argMetas: Array[Array[ArgumentMetadata]]): Unit = {
+      dataOut: DataOutputStream,
+      funcs: Seq[ChainedPythonFunctions],
+      argMetas: Array[Array[ArgumentMetadata]]): Unit = {
     dataOut.writeInt(funcs.length)
     funcs.zip(argMetas).foreach { case (chained, metas) =>
       dataOut.writeInt(metas.length)

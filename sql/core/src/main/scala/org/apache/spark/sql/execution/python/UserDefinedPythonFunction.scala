@@ -56,7 +56,7 @@ case class UserDefinedPythonFunction(
       /*
        * Check if the named arguments:
        * - don't have duplicated names
-       * - don't contain positional arguments
+       * - don't contain positional arguments after named arguments
        */
       NamedParametersSupport.splitAndCheckNamedArguments(e, name)
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
@@ -117,7 +117,7 @@ case class UserDefinedPythonTableFunction(
     /*
      * Check if the named arguments:
      * - don't have duplicated names
-     * - don't contain positional arguments
+     * - don't contain positional arguments after named arguments
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
 

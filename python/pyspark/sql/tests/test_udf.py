@@ -907,8 +907,10 @@ class BaseUDFTestsMixin(object):
 
         for i, df in enumerate(
             [
+                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
                 self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
                 self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
                 self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
                 self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
             ]
