@@ -21,6 +21,7 @@ import uuid
 import json
 from typing import Any, Dict, Union
 
+import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import (
     StreamingQueryListener,
@@ -47,163 +48,20 @@ from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-def listener_event_as_dict(
-    e: Union[QueryStartedEvent, QueryProgressEvent, QueryIdleEvent, QueryTerminatedEvent]
-) -> Dict[str, Any]:
-    if isinstance(e, QueryProgressEvent):
-        return {"progress": streaming_query_progress_as_dict(e.progress)}
-    else:
-
-        def conv(obj: Any) -> Any:
-            if isinstance(obj, uuid.UUID):
-                return str(obj)
-            else:
-                return obj
-
-        return {k[1:]: conv(v) for k, v in e.__dict__.items()}
-
-
-def streaming_query_progress_as_dict(e: StreamingQueryProgress) -> Dict[str, Any]:
-    def conv(obj: Any) -> Any:
-        if isinstance(obj, uuid.UUID):
-            return str(obj)
-        elif isinstance(obj, (SourceProgress, SinkProgress, StateOperatorProgress)):
-            return other_progress_as_dict(obj)
-        elif isinstance(obj, Row):
-            return json.dumps(obj.asDict())  # Assume no nested row in observed metrics
-        elif isinstance(obj, list):
-            return [conv(o) for o in obj]
-        elif isinstance(obj, dict):
-            return dict((k, conv(v)) for k, v in obj.items())
-        else:
-            return obj
-
-    return {k[1:]: conv(v) for k, v in e.__dict__.items() if k not in ["_jprogress", "_jdict"]}
-
-
-def other_progress_as_dict(
-    e: Union[StateOperatorProgress, SourceProgress, SinkProgress]
-) -> Dict[str, Any]:
-    return {k[1:]: v for k, v in e.__dict__.items() if k not in ["_jprogress", "_jdict"]}
-
-
-def get_start_event_schema():
-    return StructType(
-        [
-            StructField("id", StringType(), False),
-            StructField("runId", StringType(), False),
-            StructField("name", StringType(), True),
-            StructField("timestamp", StringType(), False),
-        ]
-    )
-
-
-def get_idle_event_schema():
-    return StructType(
-        [
-            StructField("id", StringType(), False),
-            StructField("runId", StringType(), False),
-            StructField("timestamp", StringType(), False),
-        ]
-    )
-
-
-def get_terminated_event_schema():
-    return StructType(
-        [
-            StructField("id", StringType(), False),
-            StructField("runId", StringType(), False),
-            StructField("exception", StringType(), True),
-            StructField("errorClassOnException", StringType(), True),
-        ]
-    )
-
-
-def get_state_operators_progress_schema():
-    return StructType(
-        [
-            StructField("operatorName", StringType(), False),
-            StructField("numRowsTotal", IntegerType(), False),
-            StructField("numRowsUpdated", IntegerType(), False),
-            StructField("numRowsRemoved", IntegerType(), False),
-            StructField("allUpdatesTimeMs", IntegerType(), False),
-            StructField("allRemovalsTimeMs", IntegerType(), False),
-            StructField("commitTimeMs", IntegerType(), False),
-            StructField("memoryUsedBytes", IntegerType(), False),
-            StructField("numRowsDroppedByWatermark", IntegerType(), False),
-            StructField("numShufflePartitions", IntegerType(), False),
-            StructField("numStateStoreInstances", IntegerType(), False),
-            StructField("customMetrics", MapType(StringType(), IntegerType(), True), True),
-        ]
-    )
-
-
-def get_source_progress_schema():
-    return StructType(
-        [
-            StructField("description", StringType(), False),
-            StructField("startOffset", StringType(), False),
-            StructField("endOffset", StringType(), False),
-            StructField("latestOffset", StringType(), False),
-            StructField("numInputRows", IntegerType(), False),
-            StructField("inputRowsPerSecond", FloatType(), False),
-            StructField("processedRowsPerSecond", FloatType(), False),
-            StructField("metrics", MapType(StringType(), StringType(), True), True),
-        ]
-    )
-
-
-def get_sink_progress_schema():
-    return StructType(
-        [
-            StructField("description", StringType(), False),
-            StructField("numOutputRows", IntegerType(), False),
-            StructField("metrics", MapType(StringType(), StringType(), True), True),
-        ]
-    )
-
-
-def get_streaming_query_progress_schema():
-    return StructType(
-        [
-            StructField("id", StringType(), False),
-            StructField("runId", StringType(), False),
-            StructField("name", StringType(), True),
-            StructField("timestamp", StringType(), False),
-            StructField("batchId", IntegerType(), False),
-            StructField("batchDuration", IntegerType(), False),
-            StructField("durationMs", MapType(StringType(), IntegerType(), True), True),
-            StructField("eventTime", MapType(StringType(), StringType(), True), True),
-            StructField("stateOperators", ArrayType(get_state_operators_progress_schema()), True),
-            StructField("sources", ArrayType(get_source_progress_schema()), True),
-            StructField("sink", get_sink_progress_schema(), True),
-            StructField("numInputRows", IntegerType(), False),
-            StructField("inputRowsPerSecond", FloatType(), False),
-            StructField("processedRowsPerSecond", FloatType(), False),
-            # it's difficult to get the schema of observed metrics.
-            # Just serialize the row to string for now.
-            # Things would be easier if there is a method to get the schema of Row in PySpark
-            StructField("observedMetrics", MapType(StringType(), StringType()), True),
-        ]
-    )
-
-
-def get_progress_event_schema():
-    return StructType([StructField("progress", get_streaming_query_progress_schema(), False)])
-
-
 class TestListener(StreamingQueryListener):
     def onQueryStarted(self, event):
+        e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(
-            data=[listener_event_as_dict(event)],
-            schema=get_start_event_schema(),
+            data=[(e,)],
+            schema=StructField("event", StringType(), False),
         )
         df.write.mode("append").saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
+        e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(
-            data=[listener_event_as_dict(event)],
-            schema=get_progress_event_schema(),
+            data=[(e,)],
+            schema=StructField("event", StringType(), False),
         )
         df.write.mode("append").saveAsTable("listener_progress_events")
 
@@ -211,9 +69,10 @@ class TestListener(StreamingQueryListener):
         pass
 
     def onQueryTerminated(self, event):
+        e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(
-            data=[listener_event_as_dict(event)],
-            schema=get_terminated_event_schema(),
+            data=[(e,)],
+            schema=StructField("event", StringType(), False),
         )
         df.write.mode("append").saveAsTable("listener_terminated_events")
 
@@ -245,16 +104,16 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             q.stop()
             self.assertFalse(q.isActive)
 
-            start_event = QueryStartedEvent.fromJson(
-                self.spark.read.table("listener_start_events").collect()[0].asDict()
+            start_event = pyspark.cloudpickle.loads(
+                self.spark.read.table("listener_start_events").collect()[0][0]
             )
 
-            progress_event = QueryProgressEvent.fromJson(
-                self.spark.read.table("listener_progress_events").collect()[0].asDict()
+            progress_event = pyspark.cloudpickle.loads(
+                self.spark.read.table("listener_progress_events").collect()[0][0]
             )
 
-            terminated_event = QueryTerminatedEvent.fromJson(
-                self.spark.read.table("listener_terminated_events").collect()[0].asDict()
+            terminated_event = pyspark.cloudpickle.loads(
+                self.spark.read.table("listener_terminated_events").collect()[0][0]
             )
 
             self.check_start_event(start_event)
