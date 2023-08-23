@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.4.0-SNAPSHOT</version>
+    <version>3.4.0-INX-1.0</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -45,4 +45,18 @@
       <version>1.0.10</version>
     </dependency>
   </dependencies>
+
+  <distributionManagement>
+    <repository>
+      <id>incortax-central</id>
+      <name>incortax-central-releases</name>
+      <url>${env.ARTIFACTORY_REPO_URL}</url>
+    </repository>
+    <snapshotRepository>
+      <id>incortax-snapshots</id>
+      <name>incortax-central-snapshots</name>
+      <url>${env.ARTIFACTORY_REPO_URL}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
 </project>
