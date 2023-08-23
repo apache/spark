@@ -378,7 +378,9 @@ case class AlterTableChangeColumnCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
     verifyNonPartitionColumn(table, columnName, resolver)
-    val originColumn = findDataColumnByName(table.dataSchema, columnName, resolver)
+    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
+      .getOrElse(
+        throw QueryCompilationErrors.cannotFindColumnError(columnName, table.schema.fieldNames))
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
@@ -415,24 +417,21 @@ case class AlterTableChangeColumnCommand(
     Seq.empty[Row]
   }
 
+  // Find the origin column from schema by column name
+  private def findColumnByName(
+      schema: StructType, name: String, resolver: Resolver): Option[StructField] = {
+    schema.fields.collectFirst {
+      case field if resolver(field.name, name) => field
+    }
+  }
+
   private def verifyNonPartitionColumn(
-      table: CatalogTable, name: String, resolver: Resolver): Unit = {
-    table.partitionSchema.fields.collectFirst {
-        case field if resolver(field.name, name) => field
-    } match {
+      table: CatalogTable, columnName: String, resolver: Resolver): Unit = {
+    findColumnByName(table.dataSchema, columnName, resolver) match {
       case Some(_) =>
         throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
       case None =>
     }
-  }
-
-  // Find the origin column from schema by column name, throw an AnalysisException if the column
-  // reference is invalid.
-  private def findDataColumnByName(
-      schema: StructType, name: String, resolver: Resolver): StructField = {
-    schema.fields.collectFirst {
-      case field if resolver(field.name, name) => field
-    }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
