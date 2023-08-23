@@ -6413,7 +6413,7 @@ object functions {
    *   col => predicate, the Boolean predicate to filter the input column
    *
    * @group normal_funcs
-   * @since 3.5.0
+   * @since 4.0.0
    */
   def filter_value(column: Column, f: Column => Column): Column =
     Column.fn("filter_value", column, createLambda(f))

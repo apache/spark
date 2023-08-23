@@ -18080,7 +18080,7 @@ def filter_value(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     """
     Returns the column if the predicate holds true, otherwise null.
 
-    .. versionadded:: 3.5.0
+    .. versionadded:: 4.0.0
 
     Parameters
     ----------
