@@ -125,7 +125,7 @@ def main(infile: IO, outfile: IO) -> None:
                 f"a pyspark.sql.udtf.AnalyzeResult but got: {type(result)}"
             )
 
-        def prefix():
+        def prefix() -> str:
             return "Output of `analyze` static method of Python UDTF is invalid: "
 
         if result.with_single_partition and len(result.partition_by) > 0:
@@ -150,13 +150,13 @@ def main(infile: IO, outfile: IO) -> None:
         write_int(1 if result.with_single_partition else 0, outfile)
         # Return the list of partitioning columns, if any.
         write_int(len(result.partition_by), outfile)
-        for col in result.partition_by:
-            write_with_length(col.name.encode("utf-8"), outfile)
+        for partitioning_col in result.partition_by:
+            write_with_length(partitioning_col.name.encode("utf-8"), outfile)
         # Return the requested input table ordering, if any.
         write_int(len(result.order_by), outfile)
-        for col in result.order_by:
-            write_with_length(col.name.encode("utf-8"), outfile)
-            write_int(1 if col.ascending else 0, outfile)
+        for ordering_col in result.order_by:
+            write_with_length(ordering_col.name.encode("utf-8"), outfile)
+            write_int(1 if ordering_col.ascending else 0, outfile)
 
     except BaseException as e:
         try:
