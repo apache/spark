@@ -48,13 +48,11 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       kubernetesAuthConfPrefix: String,
       clientType: ClientType.Value,
       sparkConf: SparkConf,
-      defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
-      .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     KubernetesUtils.requireNandDefined(
       oauthTokenFile,
