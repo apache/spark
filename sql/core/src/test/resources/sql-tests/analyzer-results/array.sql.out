@@ -447,28 +447,28 @@ Project [get(array(1, 2, 3), -1) AS get(array(1, 2, 3), -1)#x]
 -- !query
 select array_insert(array(1, 2, 3), 3, 4)
 -- !query analysis
-Project [array_insert(array(1, 2, 3), 3, 4) AS array_insert(array(1, 2, 3), 3, 4)#x]
+Project [array_insert(array(1, 2, 3), 3, 4, false) AS array_insert(array(1, 2, 3), 3, 4)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(2, 3, 4), 0, 1)
 -- !query analysis
-Project [array_insert(array(2, 3, 4), 0, 1) AS array_insert(array(2, 3, 4), 0, 1)#x]
+Project [array_insert(array(2, 3, 4), 0, 1, false) AS array_insert(array(2, 3, 4), 0, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(2, 3, 4), 1, 1)
 -- !query analysis
-Project [array_insert(array(2, 3, 4), 1, 1) AS array_insert(array(2, 3, 4), 1, 1)#x]
+Project [array_insert(array(2, 3, 4), 1, 1, false) AS array_insert(array(2, 3, 4), 1, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(1, 3, 4), -2, 2)
 -- !query analysis
-Project [array_insert(array(1, 3, 4), -2, 2) AS array_insert(array(1, 3, 4), -2, 2)#x]
+Project [array_insert(array(1, 3, 4), -2, 2, false) AS array_insert(array(1, 3, 4), -2, 2)#x]
 +- OneRowRelation
 
 
@@ -499,36 +499,62 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select array_insert(cast(NULL as ARRAY<INT>), 1, 1)
 -- !query analysis
-Project [array_insert(cast(null as array<int>), 1, 1) AS array_insert(NULL, 1, 1)#x]
+Project [array_insert(cast(null as array<int>), 1, 1, false) AS array_insert(NULL, 1, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4)
 -- !query analysis
-Project [array_insert(array(1, 2, 3, cast(null as int)), cast(null as int), 4) AS array_insert(array(1, 2, 3, NULL), CAST(NULL AS INT), 4)#x]
+Project [array_insert(array(1, 2, 3, cast(null as int)), cast(null as int), 4, false) AS array_insert(array(1, 2, 3, NULL), CAST(NULL AS INT), 4)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT))
 -- !query analysis
-Project [array_insert(array(1, 2, 3, cast(null as int)), 4, cast(null as int)) AS array_insert(array(1, 2, 3, NULL), 4, CAST(NULL AS INT))#x]
+Project [array_insert(array(1, 2, 3, cast(null as int)), 4, cast(null as int), false) AS array_insert(array(1, 2, 3, NULL), 4, CAST(NULL AS INT))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(2, 3, NULL, 4), 5, 5)
 -- !query analysis
-Project [array_insert(array(2, 3, cast(null as int), 4), 5, 5) AS array_insert(array(2, 3, NULL, 4), 5, 5)#x]
+Project [array_insert(array(2, 3, cast(null as int), 4), 5, 5, false) AS array_insert(array(2, 3, NULL, 4), 5, 5)#x]
 +- OneRowRelation
 
 
 -- !query
 select array_insert(array(2, 3, NULL, 4), -5, 1)
 -- !query analysis
-Project [array_insert(array(2, 3, cast(null as int), 4), -5, 1) AS array_insert(array(2, 3, NULL, 4), -5, 1)#x]
+Project [array_insert(array(2, 3, cast(null as int), 4), -5, 1, false) AS array_insert(array(2, 3, NULL, 4), -5, 1)#x]
 +- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.negativeIndexInArrayInsert=true
+-- !query analysis
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(true))
+
+
+-- !query
+select array_insert(array(1, 3, 4), -2, 2)
+-- !query analysis
+Project [array_insert(array(1, 3, 4), -2, 2, true) AS array_insert(array(1, 3, 4), -2, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select array_insert(array(2, 3, NULL, 4), -5, 1)
+-- !query analysis
+Project [array_insert(array(2, 3, cast(null as int), 4), -5, 1, true) AS array_insert(array(2, 3, NULL, 4), -5, 1)#x]
++- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.negativeIndexInArrayInsert=false
+-- !query analysis
+SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(false))
 
 
 -- !query

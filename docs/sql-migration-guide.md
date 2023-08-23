@@ -28,6 +28,8 @@ license: |
 - Since Spark 3.5, Spark thrift server will interrupt task when canceling a running statement. To restore the previous behavior, set `spark.sql.thriftServer.interruptOnCancel` to `false`.
 - Since Spark 3.5, Row's json and prettyJson methods are moved to `ToJsonUtil`.
 - Since Spark 3.5, the `plan` field is moved from `AnalysisException` to `EnhancedAnalysisException`.
+- Since Spark 3.5, `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` is enabled by default. To restore the previous behavior, set `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` to `false`.
+- Since Spark 3.5, the `array_insert` function is 1-based for negative indexes. It inserts new element at the end of input arrays for the index -1. To restore the previous behavior, set `spark.sql.legacy.negativeIndexInArrayInsert` to `true`.
 
 ## Upgrading from Spark SQL 3.3 to 3.4
 

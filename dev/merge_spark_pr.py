@@ -403,7 +403,7 @@ def choose_jira_assignee(issue, asf_jira):
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
-def assign_issue(client: jira.client.JIRA, issue: int, assignee: str) -> bool:
+def assign_issue(client, issue: int, assignee: str) -> bool:
     """
     Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
     The original one has an issue that it will search users again and only choose the assignee

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.parsers
+package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.namespace.QName
@@ -24,11 +24,9 @@ import javax.xml.stream.events._
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+private[sql] object StaxXmlParserUtils {
 
-private[xml] object StaxXmlParserUtils {
-
-  private[xml] val factory: XMLInputFactory = {
+  private[sql] val factory: XMLInputFactory = {
     val factory = XMLInputFactory.newInstance()
     factory.setProperty(XMLInputFactory.IS_NAMESPACE_AWARE, false)
     factory.setProperty(XMLInputFactory.IS_COALESCING, true)
@@ -112,7 +110,7 @@ private[xml] object StaxXmlParserUtils {
   def getName(name: QName, options: XmlOptions): String = {
     val localPart = name.getLocalPart
     // Ignore namespace prefix up to last : if configured
-     if (options.ignoreNamespace) {
+    if (options.ignoreNamespace) {
       localPart.split(":").last
     } else {
       localPart
@@ -131,8 +129,12 @@ private[xml] object StaxXmlParserUtils {
           xmlString.append('<').append(e.getName)
           e.getAttributes.asScala.foreach { a =>
             val att = a.asInstanceOf[Attribute]
-            xmlString.append(' ').append(att.getName).append("=\"").
-              append(att.getValue).append('"')
+            xmlString
+              .append(' ')
+              .append(att.getName)
+              .append("=\"")
+              .append(att.getValue)
+              .append('"')
           }
           xmlString.append('>')
           indent += 1

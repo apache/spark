@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, toJArray
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -832,7 +832,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jdf.isStreaming()
 
     def isEmpty(self) -> bool:
-        """Returns ``True`` if this :class:`DataFrame` is empty.
+        """
+        Checks if the :class:`DataFrame` is empty and returns a boolean value.
 
         .. versionadded:: 3.3.0
 
@@ -842,16 +843,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         bool
-            Whether it's empty DataFrame or not.
+            Returns ``True`` if the DataFrame is empty, ``False`` otherwise.
+
+        See Also
+        --------
+        DataFrame.count : Counts the number of rows in DataFrame.
+
+        Notes
+        -----
+        - Unlike `count()`, this method does not trigger any computation.
+        - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
         --------
+        Example 1: Checking if an empty DataFrame is empty
+
         >>> df_empty = spark.createDataFrame([], 'a STRING')
-        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_empty.isEmpty()
         True
+
+        Example 2: Checking if a non-empty DataFrame is empty
+
+        >>> df_non_empty = spark.createDataFrame(["a"], 'STRING')
         >>> df_non_empty.isEmpty()
         False
+
+        Example 3: Checking if a DataFrame with null values is empty
+
+        >>> df_nulls = spark.createDataFrame([(None, None)], 'a STRING, b INT')
+        >>> df_nulls.isEmpty()
+        False
+
+        Example 4: Checking if a DataFrame with no rows but with columns is empty
+
+        >>> df_no_rows = spark.createDataFrame([], 'id INT, value STRING')
+        >>> df_no_rows.isEmpty()
+        True
         """
         return self._jdf.isEmpty()
 
@@ -1117,7 +1144,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def hint(
-        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+        self, name: str, *parameters: Union["PrimitiveType", "Column", List["PrimitiveType"]]
     ) -> "DataFrame":
         """Specifies some hint on the current :class:`DataFrame`.
 
@@ -1165,20 +1192,54 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, float, int, Column, list)
+        allowed_primitive_types = (str, float, int)
+        allowed_types_repr = ", ".join(
+            [t.__name__ for t in allowed_types[:-1]]
+            + ["list[" + t.__name__ + "]" for t in allowed_primitive_types]
+        )
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
                     error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
-                        "arg_type": type(parameters).__name__,
-                        "allowed_types": ", ".join(map(lambda x: x.__name__, allowed_types)),
-                        "return_type": type(p).__name__,
+                        "allowed_types": allowed_types_repr,
+                        "item_type": type(p).__name__,
                     },
                 )
+            if isinstance(p, list):
+                if not all(isinstance(e, allowed_primitive_types) for e in p):
+                    raise PySparkTypeError(
+                        error_class="DISALLOWED_TYPE_FOR_CONTAINER",
+                        message_parameters={
+                            "arg_name": "parameters",
+                            "allowed_types": allowed_types_repr,
+                            "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
+                        },
+                    )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters))
+        def _converter(parameter: Union[str, list, float, int, Column]) -> Any:
+            if isinstance(parameter, Column):
+                return _to_java_column(parameter)
+            elif isinstance(parameter, list):
+                # for list input, we are assuming only one element type exist in the list.
+                # for empty list, we are converting it into an empty long[] in the JVM side.
+                gateway = self._sc._gateway
+                assert gateway is not None
+                jclass = gateway.jvm.long
+                if len(parameter) >= 1:
+                    mapping = {
+                        str: gateway.jvm.java.lang.String,
+                        float: gateway.jvm.double,
+                        int: gateway.jvm.long,
+                    }
+                    jclass = mapping[type(parameter[0])]
+                return toJArray(gateway, jclass, parameter)
+            else:
+                return parameter
+
+        jdf = self._jdf.hint(name, self._jseq(parameters, _converter))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:
@@ -1207,7 +1268,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return int(self._jdf.count())
 
     def collect(self) -> List[Row]:
-        """Returns all the records as a list of :class:`Row`.
+        """Returns all the records in the DataFrame as a list of :class:`Row`.
 
         .. versionadded:: 1.3.0
 
@@ -1217,14 +1278,59 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         list
-            List of rows.
+            A list of :class:`Row` objects, each representing a row in the DataFrame.
+
+        See Also
+        --------
+        DataFrame.take : Returns the first `n` rows.
+        DataFrame.head : Returns the first `n` rows.
+        DataFrame.toPandas : Returns the data as a pandas DataFrame.
+
+        Notes
+        -----
+        This method should only be used if the resulting list is expected to be small,
+        as all the data is loaded into the driver's memory.
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        Example: Collecting all rows of a DataFrame
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.collect()
         [Row(age=14, name='Tom'), Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after filtering
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.filter(df.age > 15).collect()
+        [Row(age=23, name='Alice'), Row(age=16, name='Bob')]
+
+        Example: Collecting all rows after selecting specific columns
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select("name").collect()
+        [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
+
+        Example: Collecting all rows after applying a function to a column
+
+        >>> from pyspark.sql.functions import upper
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.select(upper(df.name)).collect()
+        [Row(upper(name)='TOM'), Row(upper(name)='ALICE'), Row(upper(name)='BOB')]
+
+        Example: Collecting all rows from a DataFrame and converting a specific column to a list
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row["name"] for row in rows]
+        ['Tom', 'Alice', 'Bob']
+
+        Example: Collecting all rows from a DataFrame and converting to a list of dictionaries
+
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> rows = df.collect()
+        >>> [row.asDict() for row in rows]
+        [{'age': 14, 'name': 'Tom'}, {'age': 23, 'name': 'Alice'}, {'age': 16, 'name': 'Bob'}]
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
@@ -1482,7 +1588,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        InMemoryTableScan ...
+        AdaptiveSparkPlan isFinalPlan=false
+        +- InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1524,7 +1631,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        InMemoryTableScan ...
+        AdaptiveSparkPlan isFinalPlan=false
+        +- InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
@@ -2205,9 +2313,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         schema : :class:`StructType`
@@ -2235,6 +2340,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         * Fail if the nullability is not compatible. For example, the column and/or inner field
             is nullable but the specified schema requires them to be not nullable.
+
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3514,9 +3621,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list
@@ -3535,6 +3639,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Unpivoted DataFrame.
+
+        Notes
+        -----
+        Supports Spark Connect.
 
         Examples
         --------
@@ -3600,9 +3708,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         ids : str, Column, tuple, list, optional
@@ -3625,6 +3730,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         DataFrame.unpivot
+
+        Notes
+        -----
+        Supports Spark Connect.
         """
         return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
@@ -4202,9 +4311,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
          .. versionadded:: 3.5.0
 
-        .. versionchanged:: 3.5.0
-            Supports Spark Connect.
-
          Parameters
          ----------
          subset : List of column names, optional
@@ -4214,6 +4320,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          -------
          :class:`DataFrame`
              DataFrame without duplicates.
+
+         Notes
+         -----
+         Supports Spark Connect.
 
          Examples
          --------
@@ -5180,9 +5290,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         colsMap : dict
@@ -5197,6 +5304,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         :meth:`withColumnRenamed`
+
+        Notes
+        -----
+        Support Spark Connect
 
         Examples
         --------

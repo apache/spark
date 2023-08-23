@@ -16,9 +16,6 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
-
-import pandas as pd
 
 from pyspark.sql.tests.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -123,10 +120,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_duplicate_field_names(self):
         self.check_createDataFrame_duplicate_field_names(True)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43506): Enable ArrowTests.test_toPandas_empty_columns for pandas 2.0.0.",
-    )
     def test_toPandas_empty_columns(self):
         self.check_toPandas_empty_columns(True)
 

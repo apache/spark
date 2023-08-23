@@ -134,6 +134,14 @@ object PythonUDTFRunner {
             dataOut.writeBoolean(false)
         }
     }
+    udtf.pythonUDTFPartitionColumnIndexes match {
+      case Some(partitionColumnIndexes) =>
+        dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
+        assert(partitionColumnIndexes.partitionChildIndexes.nonEmpty)
+        partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+      case None =>
+        dataOut.writeInt(0)
+    }
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
