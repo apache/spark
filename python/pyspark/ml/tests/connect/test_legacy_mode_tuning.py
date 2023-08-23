@@ -258,7 +258,7 @@ class CrossValidatorTestsMixin:
             schema="features: array<double>, label: long, fold: long",
         )
 
-        lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
+        lorv2 = LORV2(numTrainWorkers=2)
 
         grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
         cv = CrossValidator(
