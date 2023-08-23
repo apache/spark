@@ -297,7 +297,7 @@ object PhysicalAggregation {
       // build a set of semantically distinct aggregate expressions and re-write expressions so
       // that they reference the single copy of the aggregate function which actually gets computed.
       // Non-deterministic aggregate expressions are not deduplicated.
-      val equivalentAggregateExpressions = new EquivalentExpressions
+      val equivalentAggregateExpressions = new EquivalentExpressions(allowLeafExpressions = true)
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.

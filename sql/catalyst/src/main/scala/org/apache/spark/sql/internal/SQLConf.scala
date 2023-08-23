@@ -905,6 +905,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUBEXPRESSION_ELIMINATION_MIM_EXPECTED_CONDITIONAL_EVALUATION_COUNT =
+    buildConf("spark.sql.subexpressionElimination.minExpectedConditionalEvaluationCount")
+      .internal()
+      .doc("Enables eliminating subexpressions that are surely evaluated only once but also " +
+        "expected to be conditionally evaluated more than this many times. Use -1 for disable " +
+        "subexpression elimination based on conditional evaluation.")
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(v => v == -1 || v >= 0, "The min conditional evaluation count must not be " +
+        "negative or use -1 to disable this feature")
+      .createWithDefault(0)
+
   val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -4925,6 +4937,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subexpressionEliminationSkipForShotcutExpr: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
+
+  def subexpressionEliminationMinExpectedConditionalEvaluationCount: Double =
+    getConf(SUBEXPRESSION_ELIMINATION_MIM_EXPECTED_CONDITIONAL_EVALUATION_COUNT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

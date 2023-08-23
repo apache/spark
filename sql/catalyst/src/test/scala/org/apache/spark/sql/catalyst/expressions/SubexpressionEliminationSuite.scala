@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, ObjectType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, ObjectType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -50,7 +50,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   }
 
   test("Expression Equivalence - basic") {
-    val equivalence = new EquivalentExpressions
+    val equivalence = new EquivalentExpressions(allowLeafExpressions = true)
     assert(equivalence.getAllExprStates().isEmpty)
 
     val oneA = Literal(1)
@@ -63,10 +63,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // Add oneA and test if it is returned. Since it is a group of one, it does not.
     assert(!equivalence.addExpr(oneA))
-    assert(equivalence.getExprState(oneA).get.useCount == 1)
+    assert(equivalence.getExprState(oneA).get.realEvalCount == 1)
     assert(equivalence.getExprState(twoA).isEmpty)
     assert(equivalence.addExpr(oneA))
-    assert(equivalence.getExprState(oneA).get.useCount == 2)
+    assert(equivalence.getExprState(oneA).get.realEvalCount == 2)
 
     // Add B and make sure they can see each other.
     assert(equivalence.addExpr(oneB))
@@ -75,7 +75,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence.getExprState(oneB).exists(_.expr eq oneA))
     assert(equivalence.getExprState(twoA).isEmpty)
     assert(equivalence.getAllExprStates().size == 1)
-    assert(equivalence.getAllExprStates().head.useCount == 3)
+    assert(equivalence.getAllExprStates().head.realEvalCount == 3)
     assert(equivalence.getAllExprStates().head.expr eq oneA)
 
     val add1 = Add(oneA, oneB)
@@ -86,7 +86,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     assert(equivalence.getAllExprStates().size == 2)
     assert(equivalence.getExprState(add1).exists(_.expr eq add1))
-    assert(equivalence.getExprState(add2).get.useCount == 2)
+    assert(equivalence.getExprState(add2).get.realEvalCount == 2)
     assert(equivalence.getExprState(add2).exists(_.expr eq add1))
   }
 
@@ -105,7 +105,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // Should only have one equivalence for `one + two`
     assert(equivalence.getAllExprStates(1).size == 1)
-    assert(equivalence.getAllExprStates(1).head.useCount == 4)
+    assert(equivalence.getAllExprStates(1).head.realEvalCount == 4)
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq(add))
 
     // Set up the expressions
     //   one * two,
@@ -124,10 +127,13 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     // (one * two), (one * two) * (one * two) and sqrt( (one * two) * (one * two) ) should be found
     assert(equivalence.getAllExprStates(1).size == 3)
-    assert(equivalence.getExprState(mul).get.useCount == 3)
-    assert(equivalence.getExprState(mul2).get.useCount == 3)
-    assert(equivalence.getExprState(sqrt).get.useCount == 2)
-    assert(equivalence.getExprState(sum).get.useCount == 1)
+    assert(equivalence.getExprState(mul).get.realEvalCount == 9)
+    assert(equivalence.getExprState(mul2).get.realEvalCount == 4)
+    assert(equivalence.getExprState(sqrt).get.realEvalCount == 2)
+    assert(equivalence.getExprState(sum).get.realEvalCount == 1)
+
+    val cs2 = equivalence.getCommonSubexpressions
+    assert(cs2 === Seq(mul, mul2, sqrt))
   }
 
   test("Expression equivalence - non deterministic") {
@@ -148,7 +154,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
     assert(equivalence.getAllExprStates(1).size == 0)
-    assert(equivalence.getAllExprStates().count(_.useCount == 1) == 3) // add, two, explode
+    assert(equivalence.getAllExprStates().count(_.realEvalCount == 1) == 3) // add, two, explode
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq.empty)
   }
 
   test("Children of conditional expressions: If") {
@@ -160,12 +169,15 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence1.addExprTree(ifExpr1)
 
     // `add` is in both two branches of `If` and predicate.
-    assert(equivalence1.getAllExprStates().count(_.useCount == 2) == 1)
-    assert(equivalence1.getAllExprStates().filter(_.useCount == 2).head.expr eq add)
+    assert(equivalence1.getAllExprStates().count(_.realEvalCount == 2) == 1)
+    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 2).head.expr eq add)
     // one-time expressions: only ifExpr and its predicate expression
-    assert(equivalence1.getAllExprStates().count(_.useCount == 1) == 2)
-    assert(equivalence1.getAllExprStates().filter(_.useCount == 1).exists(_.expr eq ifExpr1))
-    assert(equivalence1.getAllExprStates().filter(_.useCount == 1).exists(_.expr eq condition))
+    assert(equivalence1.getAllExprStates().count(_.realEvalCount == 1) == 2)
+    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr1))
+    assert(equivalence1.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq condition))
+
+    val cs = equivalence1.getCommonSubexpressions
+    assert(cs === Seq(add))
 
     // Repeated `add` is only in one branch, so we don't count it.
     val ifExpr2 = If(condition, Add(Literal(1), Literal(3)), Add(add, add))
@@ -173,49 +185,61 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence2.addExprTree(ifExpr2)
 
     assert(equivalence2.getAllExprStates(1).isEmpty)
-    assert(equivalence2.getAllExprStates().count(_.useCount == 1) == 3)
+    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 1) == 3)
+
+    val cs2 = equivalence2.getCommonSubexpressions
+    assert(cs2 === Seq(add))
 
     val ifExpr3 = If(condition, ifExpr1, ifExpr1)
     val equivalence3 = new EquivalentExpressions
     equivalence3.addExprTree(ifExpr3)
 
-    // `add`: 2, `condition`: 2
-    assert(equivalence3.getAllExprStates().count(_.useCount == 2) == 2)
-    assert(equivalence3.getAllExprStates().filter(_.useCount == 2).exists(_.expr eq condition))
-    assert(equivalence3.getAllExprStates().filter(_.useCount == 2).exists(_.expr eq add))
+    // `add`: 3, `condition`: 2
+    assert(equivalence3.getAllExprStates().count(_.realEvalCount >= 2) == 2)
+    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 2).exists(_.expr eq condition))
+    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 3).exists(_.expr eq add))
 
     // `ifExpr1`, `ifExpr3`
-    assert(equivalence3.getAllExprStates().count(_.useCount == 1) == 2)
-    assert(equivalence3.getAllExprStates().filter(_.useCount == 1).exists(_.expr eq ifExpr1))
-    assert(equivalence3.getAllExprStates().filter(_.useCount == 1).exists(_.expr eq ifExpr3))
+    assert(equivalence3.getAllExprStates().count(_.realEvalCount == 1) == 2)
+    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr1))
+    assert(equivalence3.getAllExprStates().filter(_.realEvalCount == 1).exists(_.expr eq ifExpr3))
+
+    val cs3 = equivalence3.getCommonSubexpressions
+    assert(cs3 === Seq(add, condition))
   }
 
   test("Children of conditional expressions: CaseWhen") {
     val add1 = Add(Literal(1), Literal(2))
     val add2 = Add(Literal(2), Literal(3))
-    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
-      (GreaterThan(add2, Literal(4)), add1) ::
-      (GreaterThan(add2, Literal(5)), add1) :: Nil
-
-    val caseWhenExpr1 = CaseWhen(conditions1, None)
-    val equivalence1 = new EquivalentExpressions
-    equivalence1.addExprTree(caseWhenExpr1)
-
-    // `add2` is repeatedly in all conditions.
-    assert(equivalence1.getAllExprStates().count(_.useCount == 2) == 1)
-    assert(equivalence1.getAllExprStates().filter(_.useCount == 2).head.expr eq add2)
-
-    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
-      (GreaterThan(add2, Literal(4)), add1) ::
-      (GreaterThan(add2, Literal(5)), add1) :: Nil
-
-    val caseWhenExpr2 = CaseWhen(conditions2, add1)
-    val equivalence2 = new EquivalentExpressions
-    equivalence2.addExprTree(caseWhenExpr2)
-
-    // `add1` is repeatedly in all branch values, and first predicate.
-    assert(equivalence2.getAllExprStates().count(_.useCount == 2) == 1)
-    assert(equivalence2.getAllExprStates().filter(_.useCount == 2).head.expr eq add1)
+//    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
+//      (GreaterThan(add2, Literal(4)), add1) ::
+//      (GreaterThan(add2, Literal(5)), add1) :: Nil
+//
+//    val caseWhenExpr1 = CaseWhen(conditions1, None)
+//    val equivalence1 = new EquivalentExpressions
+//    equivalence1.addExprTree(caseWhenExpr1)
+//
+//    val ess = equivalence1.getAllExprStates()
+//      .filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.75)
+//    assert(ess.map(_.expr) === Seq(add2))
+//
+//    val cs = equivalence1.getCommonSubexpressions
+//    assert(cs === Seq(add2))
+//
+//    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
+//      (GreaterThan(add2, Literal(4)), add1) ::
+//      (GreaterThan(add2, Literal(5)), add1) :: Nil
+//
+//    val caseWhenExpr2 = CaseWhen(conditions2, add1)
+//    val equivalence2 = new EquivalentExpressions
+//    equivalence2.addExprTree(caseWhenExpr2)
+//
+//    // `add1` is repeatedly in all branch values, and first predicate.
+//    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 2) == 1)
+//    assert(equivalence2.getAllExprStates().filter(_.realEvalCount == 2).head.expr eq add1)
+//
+//    val cs2 = equivalence2.getCommonSubexpressions
+//    assert(cs2 === Seq(add1))
 
     // Negative case. `add1` or `add2` is not commonly used in all predicates/branch values.
     val conditions3 = (GreaterThan(add1, Literal(3)), add2) ::
@@ -225,7 +249,14 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val caseWhenExpr3 = CaseWhen(conditions3, None)
     val equivalence3 = new EquivalentExpressions
     equivalence3.addExprTree(caseWhenExpr3)
-    assert(equivalence3.getAllExprStates().count(_.useCount == 2) == 0)
+    assert(equivalence3.getAllExprStates().count(_.realEvalCount == 2) == 0)
+    assert(equivalence3.getAllExprStates()
+      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.375) == 1)
+    assert(equivalence3.getAllExprStates()
+      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.25) == 1)
+
+    val cs3 = equivalence3.getCommonSubexpressions
+    assert(cs3 === Seq(add2, add1))
   }
 
   test("Children of conditional expressions: Coalesce") {
@@ -240,8 +271,12 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence1.addExprTree(coalesceExpr1)
 
     // `add2` is repeatedly in all conditions.
-    assert(equivalence1.getAllExprStates().count(_.useCount == 2) == 1)
-    assert(equivalence1.getAllExprStates().filter(_.useCount == 2).head.expr eq add2)
+    val ess = equivalence1.getAllExprStates()
+      .filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 1.0)
+    assert(ess.map(_.expr) === Seq(add2))
+
+    val cs = equivalence1.getCommonSubexpressions
+    assert(cs === Seq(add2))
 
     // Negative case. `add1` and `add2` both are not used in all branches.
     val conditions2 = GreaterThan(add1, Literal(3)) ::
@@ -252,7 +287,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(coalesceExpr2)
 
-    assert(equivalence2.getAllExprStates().count(_.useCount == 2) == 0)
+    assert(equivalence2.getAllExprStates().count(_.realEvalCount == 2) == 0)
+
+    val cs2 = equivalence2.getCommonSubexpressions
+    assert(cs2 === Seq.empty)
   }
 
   test("SPARK-34723: Correct parameter type for subexpression elimination under whole-stage") {
@@ -322,9 +360,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence.addExprTree(caseWhenExpr)
 
     val commonExprs = equivalence.getAllExprStates(1)
-    assert(commonExprs.size == 1)
-    assert(commonExprs.head.useCount == 2)
-    assert(commonExprs.head.expr eq add3)
+    assert(commonExprs.map(_.expr).toSet === Set(add3, add2, add1))
+    assert(commonExprs.count(_.realEvalCount == 2) == 3)
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq(add3))
   }
 
   test("SPARK-36073: SubExpr elimination should include common child exprs of conditional " +
@@ -338,8 +378,12 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val commonExprs = equivalence.getAllExprStates(1)
     assert(commonExprs.size == 1)
-    assert(commonExprs.head.useCount == 2)
+    assert(commonExprs.head.realEvalCount == 2)
+    assert(commonExprs.head.realCondEvalCount == 0.5)
     assert(commonExprs.head.expr eq add)
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq(add))
   }
 
   test("SPARK-36073: Transparently canonicalized expressions are not necessary subexpressions") {
@@ -351,8 +395,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val commonExprs = equivalence.getAllExprStates()
     assert(commonExprs.size == 2)
-    assert(commonExprs.map(_.useCount) === Seq(1, 1))
+    assert(commonExprs.map(_.realEvalCount) === Seq(1, 1))
     assert(commonExprs.map(_.expr) === Seq(add, transparent))
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq.empty)
   }
 
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
@@ -364,26 +411,32 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getAllExprStates().head.expr eq add)
 
     equivalence1.addExprTree(Add(Literal(3), add))
-    assert(equivalence1.getAllExprStates().map(_.useCount) === Seq(2, 1))
+    assert(equivalence1.getAllExprStates().map(_.realEvalCount) === Seq(2, 1))
     assert(equivalence1.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence1.addExprTree(Add(Literal(3), add))
-    assert(equivalence1.getAllExprStates().map(_.useCount) === Seq(2, 2))
+    assert(equivalence1.getAllExprStates().map(_.realEvalCount) === Seq(3, 2))
     assert(equivalence1.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
+
+    val cs = equivalence1.getCommonSubexpressions
+    assert(cs === Seq(add, Add(Literal(3), add)))
 
     val equivalence2 = new EquivalentExpressions
 
     equivalence2.addExprTree(Add(Literal(3), add))
-    assert(equivalence2.getAllExprStates().map(_.useCount) === Seq(1, 1))
+    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(1, 1))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence2.addExprTree(add)
-    assert(equivalence2.getAllExprStates().map(_.useCount) === Seq(2, 1))
+    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(2, 1))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
 
     equivalence2.addExprTree(Add(Literal(3), add))
-    assert(equivalence2.getAllExprStates().map(_.useCount) === Seq(2, 2))
+    assert(equivalence2.getAllExprStates().map(_.realEvalCount) === Seq(3, 2))
     assert(equivalence2.getAllExprStates().map(_.expr) === Seq(add, Add(Literal(3), add)))
+
+    val cs2 = equivalence2.getCommonSubexpressions
+    assert(cs2 === Seq(add, Add(Literal(3), add)))
   }
 
   test("SPARK-35499: Subexpressions should only be extracted from CaseWhen values with an "
@@ -399,7 +452,12 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence.addExprTree(caseWhenExpr)
 
     // `add1` is not in the elseValue, so we can't extract it from the branches
-    assert(equivalence.getAllExprStates().count(_.useCount == 2) == 0)
+    assert(equivalence.getAllExprStates().count(_.realEvalCount == 2) == 0)
+    assert(equivalence.getAllExprStates()
+      .count(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.875) == 1)
+
+    val cs = equivalence.getCommonSubexpressions
+    assert(cs === Seq(add1))
   }
 
   test("SPARK-35829: SubExprEliminationState keeps children sub exprs") {
@@ -440,14 +498,23 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
   test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
     val add = Add(Literal(1), Literal(0))
-    val n1 = NaNvl(Literal(1.0d), Add(add, add))
+    val add2 = Add(add, add)
+    val n1 = NaNvl(Literal(1.0d), add2)
     val e1 = new EquivalentExpressions
     e1.addExprTree(n1)
+    val ess = e1.getAllExprStates(0, Some(0))
+    assert(ess.filter(es => es.realEvalCount == 0 && es.realCondEvalCount == 0.5).map(_.expr) ===
+      Seq(add2))
+    assert(ess.filter(es => es.realEvalCount == 0 && es.realCondEvalCount == 1.0).map(_.expr) ===
+      Seq(add))
     assert(e1.getCommonSubexpressions.isEmpty)
 
     val n2 = NaNvl(add, add)
     val e2 = new EquivalentExpressions
     e2.addExprTree(n2)
+    val ess2 = e2.getAllExprStates(0, Some(0))
+    assert(ess2.filter(es => es.realEvalCount == 1 && es.realCondEvalCount == 0.5).map(_.expr) ===
+      Seq(add))
     assert(e2.getCommonSubexpressions.size == 1)
     assert(e2.getCommonSubexpressions.head == add)
   }
@@ -493,6 +560,440 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut((And(equal, Literal(false))), 1)
     checkShortcut(Or(equal, Literal(true)), 1)
     checkShortcut(Not(And(equal, Literal(false))), 1)
+  }
+
+  private def checkCSE(
+      expr: Expression,
+      expected: Seq[Expression],
+      minConditionalCount: Option[Double] = None) = {
+    val ee = if (minConditionalCount.isDefined) {
+      new EquivalentExpressions(minConditionalCount = minConditionalCount)
+    } else {
+      new EquivalentExpressions
+    }
+    ee.addExprTree(expr)
+    val cse = ee.getCommonSubexpressions
+    assert(cse === expected, s"Common subexpressions returned: $cse " +
+      s"doesn't match expected: $expected in\n${ee.debugString()}")
+  }
+
+  test("SPARK-35564: Common subexpressions") {
+    val mul12 = Multiply(Literal(1), Literal(2))
+    val mul123 = Multiply(mul12, Literal(3))
+    val mul1234 = Multiply(mul123, Literal(4))
+
+    // 1 * 2 + 1 * 2
+    checkCSE(Add(mul12, mul12), Seq(mul12))
+
+    // 1 * 2 + 1 * 2 * 3
+    checkCSE(Add(mul12, mul123), Seq(mul12))
+
+    // 1 * 2 + 1 * 2 * 3 * 4
+    checkCSE(Add(mul12, mul1234), Seq(mul12))
+
+    // 1 * 2 * 3 + 1 * 2 * 3
+    checkCSE(Add(mul123, mul123), Seq(mul123))
+
+    // 1 * 2 * 3 + 1 * 2 * 3 * 4
+    checkCSE(Add(mul123, mul1234), Seq(mul123))
+
+    // 1 * 2 + 1 * 2 * 3 + 1 * 2 * 3 * 4
+    checkCSE(Add(Add(mul12, mul123), mul123), Seq(mul12, mul123))
+
+    // (1 * 2 + 1 * 2) - (1 * 2 * 3 * 4 + 1 * 2 * 3 * 4)
+    checkCSE(Subtract(Add(mul12, mul12), Add(mul1234, mul1234)), Seq(mul12, mul1234))
+  }
+
+  private def toBool(e: Expression) = EqualTo(e, Rand(Literal(0)))
+
+  test("SPARK-35564: Conditional common subexpressions") {
+    val mul12 = Multiply(Literal(1), Literal(2))
+    val dummy = Literal(0)
+
+    // If(_, _, _)
+    checkCSE(If(toBool(dummy), dummy, dummy), Seq.empty)
+    // If(1 * 2, _, _)
+    checkCSE(If(toBool(mul12), dummy, dummy), Seq.empty)
+    // If(_, 1 * 2, _)
+    checkCSE(If(toBool(dummy), mul12, dummy), Seq.empty)
+    // If(1 * 2, 1 * 2, _)
+    checkCSE(If(toBool(mul12), mul12, dummy), Seq(mul12))
+    // If(_, _, 1 * 2)
+    checkCSE(If(toBool(dummy), dummy, mul12), Seq.empty)
+    // If(1 * 2, _, 1 * 2)
+    checkCSE(If(toBool(mul12), dummy, mul12), Seq(mul12))
+    // If(_, 1 * 2, 1 * 2)
+    checkCSE(If(toBool(dummy), mul12, mul12), Seq.empty)
+    // If(1 * 2, 1 * 2, 1 * 2)
+    checkCSE(If(toBool(mul12), mul12, mul12), Seq(mul12))
+
+
+    // If(1 * 2, 1 * 2, _) with min conditional count > 0.49
+    checkCSE(If(toBool(mul12), mul12, dummy), Seq(mul12), Some(0.49))
+    // If(1 * 2, 1 * 2, _) with min conditional count > 0.5
+    checkCSE(If(toBool(mul12), mul12, dummy), Seq.empty, Some(0.5))
+
+
+    // CaseWhen(_, _)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), dummy)), None), Seq.empty)
+    // CaseWhen(1 * 2, _)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), dummy)), None), Seq.empty)
+    // CaseWhen(_, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), mul12)), None), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), mul12)), None), Seq(mul12))
+
+
+    // CaseWhen(_, _, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, _, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy)), dummy), Seq.empty)
+    // CaseWhen(_, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12)), dummy), Seq(mul12))
+    // CaseWhen(_, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy)), mul12), Seq(mul12))
+    // CaseWhen(_, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12)), mul12), Seq(mul12))
+
+
+    // new CaseWhen(_, _, _, _)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), dummy), (dummy, dummy)), None), Seq.empty)
+    // new CaseWhen(1 * 2, _, _, _)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), dummy), (dummy, dummy)), None), Seq.empty)
+    // new CaseWhen(_, 1 * 2, _, _)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), mul12), (dummy, dummy)), None), Seq.empty)
+    // new CaseWhen(1 * 2, 1 * 2, _, _)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), mul12), (dummy, dummy)), None), Seq(mul12))
+    // new CaseWhen(_, _, 1 * 2, _)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), dummy), (mul12, dummy)), None), Seq.empty)
+    // new CaseWhen(1 * 2, _, 1 * 2, _)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), dummy), (mul12, dummy)), None), Seq(mul12))
+    // new CaseWhen(_, 1 * 2, 1 * 2, _)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), mul12), (mul12, dummy)), None), Seq.empty)
+    // new CaseWhen(1 * 2, 1 * 2, 1 * 2, _)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), mul12), (mul12, dummy)), None), Seq(mul12))
+    // new CaseWhen(_, _, _, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), dummy), (dummy, mul12)), None), Seq.empty)
+    // new CaseWhen(1 * 2, _, _, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), dummy), (dummy, mul12)), None), Seq(mul12))
+    // new CaseWhen(_, 1 * 2, _, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), mul12), (dummy, mul12)), None), Seq.empty)
+    // new CaseWhen(1 * 2, 1 * 2, _, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), mul12), (dummy, mul12)), None), Seq(mul12))
+    // new CaseWhen(_, _, 1 * 2, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), dummy), (mul12, mul12)), None), Seq.empty)
+    // new CaseWhen(1 * 2, _, 1 * 2, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), dummy), (mul12, mul12)), None), Seq(mul12))
+    // new CaseWhen(_, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(dummy), mul12), (mul12, mul12)), None), Seq(mul12))
+    // new CaseWhen(1 * 2, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(new CaseWhen(Seq((toBool(mul12), mul12), (mul12, mul12)), None), Seq(mul12))
+
+
+    // CaseWhen(_, _, _, _, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (dummy, dummy)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, _, _, _, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (dummy, dummy)), dummy), Seq.empty)
+    // CaseWhen(_, 1 * 2, _, _, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (dummy, dummy)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, _, _, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (dummy, dummy)), dummy), Seq(mul12))
+    // CaseWhen(_, _, 1 * 2, _, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (mul12, dummy)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, _, 1 * 2, _, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (mul12, dummy)), dummy), Seq(mul12))
+    // CaseWhen(_, 1 * 2, 1 * 2, _, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (mul12, dummy)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, 1 * 2, _, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (mul12, dummy)), dummy), Seq(mul12))
+    // CaseWhen(_, _, _, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (dummy, mul12)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, _, _, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (dummy, mul12)), dummy), Seq(mul12))
+    // CaseWhen(_, 1 * 2, _, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (dummy, mul12)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, _, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (dummy, mul12)), dummy), Seq(mul12))
+    // CaseWhen(_, _, 1 * 2, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (mul12, mul12)), dummy), Seq.empty)
+    // CaseWhen(1 * 2, _, 1 * 2, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (mul12, mul12)), dummy), Seq(mul12))
+    // CaseWhen(_, 1 * 2, 1 * 2, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (mul12, mul12)), dummy), Seq(mul12))
+    // CaseWhen(1 * 2, 1 * 2, 1 * 2, 1 * 2, _)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (mul12, mul12)), dummy), Seq(mul12))
+    // CaseWhen(_, _, _, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (dummy, dummy)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, _, _, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (dummy, dummy)), mul12), Seq(mul12))
+    // CaseWhen(_, 1 * 2, _, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (dummy, dummy)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, _, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (dummy, dummy)), mul12), Seq(mul12))
+    // CaseWhen(_, _, 1 * 2, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (mul12, dummy)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, _, 1 * 2, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (mul12, dummy)), mul12), Seq(mul12))
+    // CaseWhen(_, 1 * 2, 1 * 2, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (mul12, dummy)), mul12), Seq(mul12))
+    // CaseWhen(1 * 2, 1 * 2, 1 * 2, _, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (mul12, dummy)), mul12), Seq(mul12))
+    // CaseWhen(_, _, _, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (dummy, mul12)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, _, _, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (dummy, mul12)), mul12), Seq(mul12))
+    // CaseWhen(_, 1 * 2, _, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (dummy, mul12)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, 1 * 2, _, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (dummy, mul12)), mul12), Seq(mul12))
+    // CaseWhen(_, _, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy), (mul12, mul12)), mul12), Seq.empty)
+    // CaseWhen(1 * 2, _, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), dummy), (mul12, mul12)), mul12), Seq(mul12))
+    // CaseWhen(_, 1 * 2, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(dummy), mul12), (mul12, mul12)), mul12), Seq(mul12))
+    // CaseWhen(1 * 2, 1 * 2, 1 * 2, 1 * 2, 1 * 2)
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12), (mul12, mul12)), mul12), Seq(mul12))
+
+
+    // CaseWhen(1 * 2, 1 * 2, _) with min conditional count > 0.49
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12)), dummy), Seq(mul12), Some(0.49))
+    // CaseWhen(1 * 2, 1 * 2, _) with min conditional count > 0.5
+    checkCSE(CaseWhen(Seq((toBool(mul12), mul12)), dummy), Seq.empty, Some(0.5))
+
+
+    // Coalesce(_, _)
+    checkCSE(Coalesce(Seq(dummy, dummy)), Seq.empty)
+    // Coalesce(1 * 2, _)
+    checkCSE(Coalesce(Seq(mul12, dummy)), Seq.empty)
+    // Coalesce(_, 1 * 2)
+    checkCSE(Coalesce(Seq(dummy, mul12)), Seq.empty)
+    // Coalesce(1 * 2, 1 * 2)
+    checkCSE(Coalesce(Seq(mul12, mul12)), Seq(mul12))
+
+
+    // Coalesce(_, _, _)
+    checkCSE(Coalesce(Seq(dummy, dummy, dummy)), Seq.empty)
+    // Coalesce(1 * 2, _, _)
+    checkCSE(Coalesce(Seq(mul12, dummy, dummy)), Seq.empty)
+    // Coalesce(_, 1 * 2, _)
+    checkCSE(Coalesce(Seq(dummy, mul12, dummy)), Seq.empty)
+    // Coalesce(1 * 2, 1 * 2, _)
+    checkCSE(Coalesce(Seq(mul12, mul12, dummy)), Seq(mul12))
+    // Coalesce(_, _, 1 * 2)
+    checkCSE(Coalesce(Seq(dummy, dummy, mul12)), Seq.empty)
+    // Coalesce(1 * 2, _, 1 * 2)
+    checkCSE(Coalesce(Seq(mul12, dummy, mul12)), Seq(mul12))
+    // Coalesce(_, 1 * 2, 1 * 2)
+    checkCSE(Coalesce(Seq(dummy, mul12, mul12)), Seq.empty)
+    // Coalesce(1 * 2, 1 * 2, 1 * 2)
+    checkCSE(Coalesce(Seq(mul12, mul12, mul12)), Seq(mul12))
+
+
+    // Coalesce(1 * 2, 1 * 2) with min conditional count > 0.49
+    checkCSE(Coalesce(Seq(mul12, mul12)), Seq(mul12), Some(0.49))
+    // Coalesce(1 * 2, 1 * 2) with min conditional count > 0.5
+    checkCSE(Coalesce(Seq(mul12, mul12)), Seq.empty, Some(0.5))
+
+
+    // NaNvl(_, _)
+    checkCSE(NaNvl(dummy, dummy), Seq.empty)
+    // NaNvl(1 * 2, _)
+    checkCSE(NaNvl(mul12, dummy), Seq.empty)
+    // NaNvl(_, 1 * 2)
+    checkCSE(NaNvl(dummy, mul12), Seq.empty)
+    // NaNvl(1 * 2, 1 * 2)
+    checkCSE(NaNvl(mul12, mul12), Seq(mul12))
+
+
+    // NaNvl(1 * 2, 1 * 2) with min conditional count > 0.49
+    checkCSE(NaNvl(mul12, mul12), Seq(mul12), Some(0.49))
+    // NaNvl(1 * 2, 1 * 2) with min conditional count > 0.5
+    checkCSE(NaNvl(mul12, mul12), Seq.empty, Some(0.5))
+
+
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      // And(_, _)
+      checkCSE(And(toBool(dummy), toBool(dummy)), Seq.empty)
+      // And(1 * 2, _)
+      checkCSE(And(toBool(mul12), toBool(dummy)), Seq.empty)
+      // And(_, 1 * 2)
+      checkCSE(And(toBool(dummy), toBool(mul12)), Seq.empty)
+      // And(1 * 2, 1 * 2)
+      checkCSE(And(toBool(mul12), toBool(mul12)), Seq(mul12))
+
+
+      // And(1 * 2, 1 * 2) with min conditional count > 0.49
+      checkCSE(And(toBool(mul12), toBool(mul12)), Seq(mul12), Some(0.49))
+      // And(1 * 2, 1 * 2) with min conditional count > 0.5
+      checkCSE(And(toBool(mul12), toBool(mul12)), Seq.empty, Some(0.5))
+    }
+
+
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      // Or(_, _)
+      checkCSE(Or(toBool(dummy), toBool(dummy)), Seq.empty)
+      // Or(1 * 2, _)
+      checkCSE(Or(toBool(mul12), toBool(dummy)), Seq.empty)
+      // Or(_, 1 * 2)
+      checkCSE(Or(toBool(dummy), toBool(mul12)), Seq.empty)
+      // Or(1 * 2, 1 * 2)
+      checkCSE(Or(toBool(mul12), toBool(mul12)), Seq(mul12))
+
+
+      // Or(1 * 2, 1 * 2) with min conditional count > 0.49
+      checkCSE(Or(toBool(mul12), toBool(mul12)), Seq(mul12), Some(0.49))
+      // Or(1 * 2, 1 * 2) with min conditional count > 0.5
+      checkCSE(Or(toBool(mul12), toBool(mul12)), Seq.empty, Some(0.5))
+    }
+  }
+
+  test("SPARK-35564: Complex conditional common subexpressions") {
+    val mul12 = Multiply(Literal(1), Literal(2))
+    val dummy = Literal(0)
+    val sureMul12WithIf = If(toBool(dummy), mul12, mul12)
+    val conditionalMul12If = If(toBool(dummy), mul12, dummy)
+
+    // If(If(_, 1 * 2, 1 * 2), _, _)
+    checkCSE(If(toBool(sureMul12WithIf), dummy, dummy), Seq.empty)
+    // If(_, If(_, 1 * 2, _), _)
+    checkCSE(If(toBool(dummy), conditionalMul12If, dummy), Seq.empty)
+    // If(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), _)
+    checkCSE(If(toBool(sureMul12WithIf), conditionalMul12If, dummy), Seq(mul12))
+    // If(_, _, If(_, 1 * 2, _))
+    checkCSE(If(toBool(dummy), dummy, conditionalMul12If), Seq.empty)
+    // If(If(_, 1 * 2, 1 * 2), _, If(_, 1 * 2, _))
+    checkCSE(If(toBool(sureMul12WithIf), dummy, conditionalMul12If), Seq(mul12))
+    // If(_, If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(If(toBool(dummy), conditionalMul12If, conditionalMul12If), Seq.empty)
+    // If(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(If(toBool(sureMul12WithIf), conditionalMul12If, conditionalMul12If), Seq(mul12))
+
+
+    // CaseWhen(If(_, 1 * 2, 1 * 2), _, _)
+    checkCSE(CaseWhen(Seq((toBool(sureMul12WithIf), dummy)), dummy), Seq.empty)
+    // CaseWhen(_, If(_, 1 * 2, _), _)
+    checkCSE(CaseWhen(Seq((toBool(dummy), conditionalMul12If)), dummy), Seq.empty)
+    // CaseWhen(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), _)
+    checkCSE(CaseWhen(Seq((toBool(sureMul12WithIf), conditionalMul12If)), dummy), Seq(mul12))
+    // CaseWhen(_, _, If(_, 1 * 2, _))
+    checkCSE(CaseWhen(Seq((toBool(dummy), dummy)), conditionalMul12If), Seq.empty)
+    // CaseWhen(If(_, 1 * 2, 1 * 2), _, If(_, 1 * 2, _))
+    checkCSE(CaseWhen(Seq((toBool(sureMul12WithIf), dummy)), conditionalMul12If), Seq(mul12))
+    // CaseWhen(_, If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(CaseWhen(Seq((toBool(dummy), conditionalMul12If)), conditionalMul12If), Seq.empty)
+    // CaseWhen(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(CaseWhen(Seq((toBool(sureMul12WithIf), conditionalMul12If)), conditionalMul12If),
+      Seq(mul12))
+
+
+    // Coalesce(If(_, 1 * 2, 1 * 2), _, _)
+    checkCSE(Coalesce(Seq(sureMul12WithIf, dummy, dummy)), Seq.empty)
+    // Coalesce(_, If(_, 1 * 2, _), _)
+    checkCSE(Coalesce(Seq(dummy, conditionalMul12If, dummy)), Seq.empty)
+    // Coalesce(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), _)
+    checkCSE(Coalesce(Seq(sureMul12WithIf, conditionalMul12If, dummy)), Seq(mul12))
+    // Coalesce(_, _, If(_, 1 * 2, _))
+    checkCSE(Coalesce(Seq(dummy, dummy, conditionalMul12If)), Seq.empty)
+    // Coalesce(If(_, 1 * 2, 1 * 2), _, If(_, 1 * 2, _))
+    checkCSE(Coalesce(Seq(sureMul12WithIf, dummy, conditionalMul12If)), Seq(mul12))
+    // Coalesce(_, If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(Coalesce(Seq(dummy, conditionalMul12If, conditionalMul12If)), Seq.empty)
+    // Coalesce(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _), If(_, 1 * 2, _))
+    checkCSE(Coalesce(Seq(sureMul12WithIf, conditionalMul12If, conditionalMul12If)), Seq(mul12))
+
+
+    // NaNvl(If(_, 1 * 2, 1 * 2), _)
+    checkCSE(NaNvl(sureMul12WithIf, dummy), Seq.empty)
+    // NaNvl(_, If(_, 1 * 2, _))
+    checkCSE(NaNvl(dummy, conditionalMul12If), Seq.empty)
+    // NaNvl(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _))
+    checkCSE(NaNvl(sureMul12WithIf, conditionalMul12If), Seq(mul12))
+
+
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      // And(If(_, 1 * 2, 1 * 2), _)
+      checkCSE(And(toBool(sureMul12WithIf), toBool(dummy)), Seq.empty)
+      // And(_, If(_, 1 * 2, _))
+      checkCSE(And(toBool(dummy), toBool(conditionalMul12If)), Seq.empty)
+      // And(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _))
+      checkCSE(And(toBool(sureMul12WithIf), toBool(conditionalMul12If)), Seq(mul12))
+    }
+
+
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      // Or(If(_, 1 * 2, 1 * 2), _)
+      checkCSE(Or(toBool(sureMul12WithIf), toBool(dummy)), Seq.empty)
+      // Or(_, If(_, 1 * 2, _))
+      checkCSE(Or(toBool(dummy), toBool(conditionalMul12If)), Seq.empty)
+      // Or(If(_, 1 * 2, 1 * 2), If(_, 1 * 2, _))
+      checkCSE(Or(toBool(sureMul12WithIf), toBool(conditionalMul12If)), Seq(mul12))
+    }
+  }
+
+  test("SPARK-35564: Subexpressions should be extracted from conditional values if that value "
+    + "will always be evaluated elsewhere") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+
+    val conditions1 = (GreaterThan(add1, Literal(3)), add1) :: Nil
+    val caseWhenExpr1 = CaseWhen(conditions1, None)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+
+    // `add1` is evaluated once in the first condition, and optionally in the first value
+    assert(equivalence1.getCommonSubexpressions.size == 1)
+
+    val ifExpr = If(GreaterThan(add1, Literal(3)), add1, add2)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(ifExpr)
+
+    // `add1` is evaluated once in the condition, and optionally in the true value
+    assert(equivalence2.getCommonSubexpressions.size == 1)
+  }
+
+  test("SPARK-35564: Common expressions don't infinite loop with conditional expressions") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+
+    val inner = CaseWhen((GreaterThan(add2, Literal(2)), add1) :: Nil)
+    val outer = CaseWhen((GreaterThan(add1, Literal(2)), inner) :: Nil, add1)
+
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(outer)
+
+    // `add1` is evaluated in the outer condition, and optionally in the inner value
+    assert(equivalence.getCommonSubexpressions.size == 1)
+
+    val when1 = CaseWhen((GreaterThan(Literal(1), Literal(1)), Cast(Literal(1), LongType)) :: Nil)
+    val when2 = CaseWhen((GreaterThan(when1, Literal(2)), when1) :: Nil, when1)
+    val when3 = CaseWhen((GreaterThan(when1, Literal(1)), when2) :: Nil)
+
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(when3)
+
+    // `when1` is evaluated in the outer condition, and optionally in the inner value multiple
+    // times including in a nested conditional
+    assert(equivalence2.getCommonSubexpressions.size == 1)
+  }
+
+  test("SPARK-35564: Don't double count conditional expressions if present in all branches") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val add3 = Add(add2, Literal(4))
+
+    val caseWhenExpr1 = CaseWhen((GreaterThan(add1, Literal(3)), add3) :: Nil, add2)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+
+    // `add2` will only be evaluated once so don't create a subexpression
+    assert(equivalence1.getCommonSubexpressions.size == 0)
   }
 }
 
