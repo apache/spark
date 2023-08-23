@@ -2279,61 +2279,63 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a11 = Literal.create(null, ArrayType(StringType))
 
     // basic additions per type
-    checkEvaluation(ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 3, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 3, 4))
     checkEvaluation(
-      ArrayInsert(a3, Literal.create(3, IntegerType), Literal(true)),
+      new ArrayInsert(a3, Literal.create(3, IntegerType), Literal(true)),
       Seq[Boolean](true, false, true, true)
     )
     checkEvaluation(
-      ArrayInsert(
+      new ArrayInsert(
         a4,
         Literal(3),
         Literal.create(5.asInstanceOf[Byte], ByteType)),
       Seq[Byte](1, 2, 5, 3, 2))
 
     checkEvaluation(
-      ArrayInsert(
+      new ArrayInsert(
         a5,
         Literal(3),
         Literal.create(3.asInstanceOf[Short], ShortType)),
       Seq[Short](1, 2, 3, 3, 2))
 
     checkEvaluation(
-      ArrayInsert(a7, Literal(4), Literal(4.4)),
+      new ArrayInsert(a7, Literal(4), Literal(4.4)),
       Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
     )
 
     checkEvaluation(
-      ArrayInsert(a6, Literal(4), Literal(4.4F)),
+      new ArrayInsert(a6, Literal(4), Literal(4.4F)),
       Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
     )
-    checkEvaluation(ArrayInsert(a8, Literal(3), Literal(3L)), Seq(1L, 2L, 3L, 4L))
-    checkEvaluation(ArrayInsert(a9, Literal(3), Literal("d")), Seq("b", "a", "d", "c"))
+    checkEvaluation(new ArrayInsert(a8, Literal(3), Literal(3L)), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(new ArrayInsert(a9, Literal(3), Literal("d")), Seq("b", "a", "d", "c"))
 
     // index edge cases
-    checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
-    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(-3), Literal(3)), Seq(3, 1, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, null, 1, 2, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
+    checkEvaluation(new ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 2, 3, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(-3), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(new ArrayInsert(a1, Literal(-5), Literal(3)), Seq(3, null, 1, 2, 4))
     checkEvaluation(
-      ArrayInsert(a1, Literal(10), Literal(3)),
+      new ArrayInsert(a1, Literal(10), Literal(3)),
       Seq(1, 2, 4, null, null, null, null, null, null, 3)
     )
     checkEvaluation(
-      ArrayInsert(a1, Literal(-10), Literal(3)),
-      Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
+      new ArrayInsert(a1, Literal(-10), Literal(3)),
+      Seq(3, null, null, null, null, null, null, 1, 2, 4)
     )
 
     // null handling
-    checkEvaluation(ArrayInsert(
+    checkEvaluation(new ArrayInsert(
       a1, Literal(3), Literal.create(null, IntegerType)), Seq(1, 2, null, 4)
     )
-    checkEvaluation(ArrayInsert(a2, Literal(3), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
-    checkEvaluation(ArrayInsert(a10, Literal(3), Literal("d")), Seq("b", null, "d", "a", "g", null))
-    checkEvaluation(ArrayInsert(a11, Literal(3), Literal("d")), null)
-    checkEvaluation(ArrayInsert(a10, Literal.create(null, IntegerType), Literal("d")), null)
+    checkEvaluation(new ArrayInsert(a2, Literal(3), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
+    checkEvaluation(new ArrayInsert(a10, Literal(3), Literal("d")),
+      Seq("b", null, "d", "a", "g", null))
+    checkEvaluation(new ArrayInsert(a11, Literal(3), Literal("d")), null)
+    checkEvaluation(new ArrayInsert(a10, Literal.create(null, IntegerType), Literal("d")), null)
   }
 
   test("Array Intersect") {
@@ -2754,14 +2756,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("SPARK-42401: Array insert of null value (explicit)") {
     val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
-    checkEvaluation(ArrayInsert(
+    checkEvaluation(new ArrayInsert(
       a, Literal(2), Literal.create(null, StringType)), Seq("b", null, "a", "c")
     )
   }
 
   test("SPARK-42401: Array insert of null value (implicit)") {
     val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
-    checkEvaluation(ArrayInsert(
+    checkEvaluation(new ArrayInsert(
       a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
     )
   }

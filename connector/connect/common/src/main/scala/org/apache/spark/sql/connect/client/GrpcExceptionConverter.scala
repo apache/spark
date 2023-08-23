@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.time.DateTimeException
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -23,7 +25,7 @@ import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -76,7 +78,19 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
     errorConstructor((message, cause) => new TableAlreadyExistsException(message, cause)),
     errorConstructor((message, cause) => new TempTableAlreadyExistsException(message, cause)),
     errorConstructor((message, cause) => new NoSuchDatabaseException(message, cause)),
-    errorConstructor((message, cause) => new NoSuchTableException(message, cause)))
+    errorConstructor((message, cause) => new NoSuchTableException(message, cause)),
+    errorConstructor[NumberFormatException]((message, _) =>
+      new SparkNumberFormatException(message)),
+    errorConstructor[IllegalArgumentException]((message, cause) =>
+      new SparkIllegalArgumentException(message, cause)),
+    errorConstructor[ArithmeticException]((message, _) => new SparkArithmeticException(message)),
+    errorConstructor[UnsupportedOperationException]((message, _) =>
+      new SparkUnsupportedOperationException(message)),
+    errorConstructor[ArrayIndexOutOfBoundsException]((message, _) =>
+      new SparkArrayIndexOutOfBoundsException(message)),
+    errorConstructor[DateTimeException]((message, _) => new SparkDateTimeException(message)),
+    errorConstructor((message, cause) => new SparkRuntimeException(message, cause)),
+    errorConstructor((message, cause) => new SparkUpgradeException(message, cause)))
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =

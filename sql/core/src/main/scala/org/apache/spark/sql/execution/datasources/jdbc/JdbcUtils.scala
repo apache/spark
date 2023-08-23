@@ -453,7 +453,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case StringType if metadata.contains("rowid") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+        val rawRowId = rs.getRowId(pos + 1)
+        if (rawRowId == null) {
+          row.update(pos, null)
+        } else {
+          row.update(pos, UTF8String.fromString(rawRowId.toString))
+        }
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

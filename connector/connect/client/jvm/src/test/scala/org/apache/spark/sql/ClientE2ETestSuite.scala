@@ -29,8 +29,8 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -43,6 +43,14 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test("throw SparkArithmeticException") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      intercept[SparkArithmeticException] {
+        spark.sql("select 1/0").collect()
+      }
+    }
+  }
 
   test("throw NoSuchDatabaseException") {
     intercept[NoSuchDatabaseException] {
