@@ -42,8 +42,7 @@ from pyspark.ml.connect.io_utils import (
 )
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
-from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
-from pyspark.sql.types import BooleanType
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
 
@@ -484,7 +483,7 @@ class CrossValidator(
                 validation = dataset.filter(col(foldCol) == lit(i))
                 if training.isEmpty():
                     raise ValueError("The training data at fold %s is empty." % i)
-                if validation.isEmpty() == 0:
+                if validation.isEmpty():
                     raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 
