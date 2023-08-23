@@ -477,20 +477,11 @@ class CrossValidator(
                 train = df.filter(~condition)
                 datasets.append((train, validation))
         else:
-            # Use user-specified fold numbers.
-            def checker(foldNum: int) -> bool:
-                if foldNum < 0 or foldNum >= nFolds:
-                    raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
-                    )
-                return True
-
-            checker_udf = UserDefinedFunction(checker, BooleanType())
+            # TODO:
+            #  Add verification that foldCol column values are in range [0, nFolds)
             for i in range(nFolds):
-                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
-                validation = dataset.filter(
-                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
-                )
+                training = dataset.filter(col(foldCol) != lit(i))
+                validation = dataset.filter(col(foldCol) == lit(i))
                 if training.isEmpty():
                     raise ValueError("The training data at fold %s is empty." % i)
                 if validation.isEmpty() == 0:
