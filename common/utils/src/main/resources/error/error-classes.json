@@ -2676,7 +2676,7 @@
     "message" : [
       "Failed to evaluate the table function <functionName> because its table metadata <requestedMetadata>, but the function call <invalidFunctionCallProperty>."
     ],
-    "sqlState": "22023"
+    "sqlState" : "22023"
   },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
