@@ -3908,33 +3908,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Example 2: Combining two DataFrames with different schemas
 
         >>> from pyspark.sql.functions import lit
-        >>> from pyspark.sql.types import StructType, StructField, StringType
-        >>> schema1 = StructType(
-        ...     [
-        ...         StructField("name", StringType(), True),
-        ...         StructField("id", StringType(), True),
-        ...     ]
-        ... )
-        >>> schema2 = StructType(
-        ...     [
-        ...         StructField("id", StringType(), True),
-        ...         StructField("name", StringType(), True),
-        ...     ]
-        ... )
-        >>> df1 = spark.createDataFrame([("Alice", 1), ("Bob", 2)], schema1)
-        >>> df2 = spark.createDataFrame([(3, "Charlie"), (4, "Dave")], schema2)
+        >>> df1 = spark.createDataFrame([(100001, 1), (100002, 2)], schema="id LONG, money INT")
+        >>> df2 = spark.createDataFrame([(3, 100003), (4, 100003)], schema="money INT, id LONG")
         >>> df1 = df1.withColumn("age", lit(30))
         >>> df2 = df2.withColumn("age", lit(40))
         >>> df3 = df1.union(df2)
         >>> df3.show()
-        +-----+-------+---+
-        | name|     id|age|
-        +-----+-------+---+
-        |Alice|      1| 30|
-        |  Bob|      2| 30|
-        |    3|Charlie| 40|
-        |    4|   Dave| 40|
-        +-----+-------+---+
+        +------+------+---+
+        |    id| money|age|
+        +------+------+---+
+        |100001|     1| 30|
+        |100002|     2| 30|
+        |     3|100003| 40|
+        |     4|100003| 40|
+        +------+------+---+
 
         Example 3: Combining two DataFrames with mismatched columns
 
