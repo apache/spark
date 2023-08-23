@@ -3670,10 +3670,8 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
 @try_remote_functions
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
-    Applies an aggregate function to return an approximate distinct count of the specified column.
-
-    This function returns a new :class:`~pyspark.sql.Column` that estimates the number of distinct
-    elements in a column or a group of columns.
+    This aggregate function returns a new :class:`~pyspark.sql.Column`, which estimates
+    the approximate distinct count of elements in a specified column or a group of columns.
 
     .. versionadded:: 2.1.0
 
