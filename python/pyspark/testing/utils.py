@@ -412,8 +412,8 @@ def assertDataFrameEqual(
 
     Note that schema equality is checked only when `expected` is a DataFrame (not a list of Rows).
 
-    For DataFrames with float/Decimal values, assertDataFrame asserts approximate equality.
-    Two float/Decimal values a and b are approximately equal if the following equation is True:
+    For DataFrames with float/decimal values, assertDataFrame asserts approximate equality.
+    Two float/decimal values a and b are approximately equal if the following equation is True:
 
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
