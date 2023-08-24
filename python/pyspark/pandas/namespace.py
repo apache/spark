@@ -3278,7 +3278,7 @@ def merge_asof(
     ...     quotes,
     ...     on="time",
     ...     by="ticker",
-    ...     tolerance=F.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
+    ...     tolerance=sf.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
     ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
                          time ticker   price  quantity     bid     ask
     0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
@@ -3296,7 +3296,7 @@ def merge_asof(
     ...     quotes,
     ...     on="time",
     ...     by="ticker",
-    ...     tolerance=F.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
+    ...     tolerance=sf.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
     ...     allow_exact_matches=False
     ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
                          time ticker   price  quantity     bid     ask
@@ -3776,6 +3776,7 @@ def _test() -> None:
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
+    globs["sf"] = F
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.namespace tests")

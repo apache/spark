@@ -1281,10 +1281,10 @@ class Column:
 
         Examples
         --------
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
+        >>> df.select(df.name, sf.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
         +-----+------------------------------------------------------------+
@@ -1327,10 +1327,10 @@ class Column:
 
         Examples
         --------
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
+        >>> df.select(df.name, sf.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
         | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
         +-----+-------------------------------------+
