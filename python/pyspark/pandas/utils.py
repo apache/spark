@@ -928,11 +928,11 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     """
     Check both `left` and `right` have the same expressions.
 
-    >>> spark_column_equals(F.lit(0), F.lit(0))
+    >>> spark_column_equals(sf.lit(0), sf.lit(0))
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 1)
+    >>> spark_column_equals(sf.lit(0) + 1, sf.lit(0) + 1)
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 2)
+    >>> spark_column_equals(sf.lit(0) + 1, sf.lit(0) + 2)
     False
     >>> sdf1 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
     >>> spark_column_equals(sdf1["x"] + 1, sdf1["x"] + 1)
@@ -1045,6 +1045,7 @@ def _test() -> None:
 
     globs = pyspark.pandas.utils.__dict__.copy()
     globs["ps"] = pyspark.pandas
+    globs["sf"] = F
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
     )

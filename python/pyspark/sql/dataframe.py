@@ -2622,14 +2622,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          Row(a=5, left_val='b', right_val=3),
          Row(a=10, left_val='c', right_val=7)]
 
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> left._joinAsOf(
-        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=sf.lit(1)
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1)]
 
         >>> left._joinAsOf(
-        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=sf.lit(1)
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=None),
@@ -3758,7 +3758,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import functions as F
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.agg({"age": "max"}).show()
         +--------+
@@ -3766,7 +3766,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +--------+
         |       5|
         +--------+
-        >>> df.agg(F.min(df.age)).show()
+        >>> df.agg(sf.min(df.age)).show()
         +--------+
         |min(age)|
         +--------+
