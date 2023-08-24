@@ -2143,17 +2143,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
-    val expectedMsg = "[INVALID_HIVE_COLUMN_NAME] Cannot create the " +
-      s"table `$SESSION_CATALOG_NAME`.`default`.`t` having the " +
-      "column `get_json_object(jstring, $`.`f1)` " +
-      "whose name contains invalid characters ',' in Hive metastore."
 
     withTable("t") {
       val e = intercept[AnalysisException] {
         df.select($"key", functions.get_json_object($"jstring", "$.f1"))
           .write.format("hive").saveAsTable("t")
-      }.getMessage
-      assert(e.contains(expectedMsg))
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+      )
     }
 
     withTempView("tempView") {
@@ -2162,8 +2164,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[AnalysisException] {
           sql("CREATE TABLE t USING hive AS " +
             "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
-        }.getMessage
-        assert(e.contains(expectedMsg))
+        }
+        checkError(e,
+          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          parameters = Map(
+            "invalidChars" -> "','",
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+        )
       }
     }
   }
