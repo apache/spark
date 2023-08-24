@@ -172,7 +172,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // This method is factored out for testability
   protected def getShuffleClient(): MesosExternalBlockStoreClient = {
     new MesosExternalBlockStoreClient(
-      SparkTransportConf.fromSparkConf(conf, "shuffle"),
+      SparkTransportConf.fromSparkConfWithSslOptions(
+        conf, "shuffle", sslOptions = Some(securityManager.getSSLOptions("rpc"))),
       securityManager,
       securityManager.isAuthenticationEnabled(),
       conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))

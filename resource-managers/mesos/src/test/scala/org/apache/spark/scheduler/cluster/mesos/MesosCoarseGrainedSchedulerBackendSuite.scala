@@ -34,6 +34,7 @@ import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkCon
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -46,7 +47,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     with BeforeAndAfter
     with ScalaFutures {
 
-  private var sparkConf: SparkConf = _
+  protected var sparkConf: SparkConf = _
   private var driver: SchedulerDriver = _
   private var taskScheduler: TaskSchedulerImpl = _
   private var backend: MesosCoarseGrainedSchedulerBackend = _
@@ -807,7 +808,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend
   }
 
-  private def initializeSparkConf(
+  protected def initializeSparkConf(
     sparkConfVars: Map[String, String] = null,
     home: String = "/path"): Unit = {
     sparkConf = (new SparkConf)
@@ -839,5 +840,15 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     externalShuffleClient = mock[MesosExternalBlockStoreClient]
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient)
+  }
+}
+
+class SslMesosCoarseGrainedSchedulerBackendSuite extends MesosCoarseGrainedSchedulerBackendSuite {
+  override def initializeSparkConf(
+    sparkConfVars: Map[String, String] = null,
+    home: String = "/path"): Unit = {
+    super.initializeSparkConf(sparkConfVars, home)
+    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
+    updatedConfigs.entrySet().forEach(entry => sparkConf.set(entry.getKey, entry.getValue))
   }
 }

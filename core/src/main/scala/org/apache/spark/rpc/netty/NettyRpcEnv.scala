@@ -52,11 +52,13 @@ private[netty] class NettyRpcEnv(
     if (id == SparkContext.DRIVER_IDENTIFIER) "driver" else "executor"
   }
 
-  private[netty] val transportConf = SparkTransportConf.fromSparkConf(
+  private[netty] val transportConf = SparkTransportConf.fromSparkConfWithSslOptions(
     conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),
     "rpc",
     conf.get(RPC_IO_THREADS).getOrElse(numUsableCores),
-    role)
+    role,
+    sslOptions = Some(securityManager.getSSLOptions("rpc"))
+  )
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 
@@ -391,7 +393,11 @@ private[netty] class NettyRpcEnv(
         }
 
         val ioThreads = clone.getInt("spark.files.io.threads", 1)
-        val downloadConf = SparkTransportConf.fromSparkConf(clone, module, ioThreads)
+        val downloadConf = SparkTransportConf.fromSparkConfWithSslOptions(
+          clone,
+          module,
+          ioThreads,
+          sslOptions = Some(securityManager.getSSLOptions("rpc")))
         val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }

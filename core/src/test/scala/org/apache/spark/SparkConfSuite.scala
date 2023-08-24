@@ -341,7 +341,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
-  test("SPARK-26998: SSL configuration not needed on executors") {
+  test("SPARK-26998: SSL passwords not needed on executors") {
     val conf = new SparkConf(false)
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyPassword", "password")
@@ -349,7 +349,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.ssl.trustStorePassword", "password")
 
     val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
-    assert(filtered.isEmpty)
+    // Only the enabled flag should propagate
+    assert(filtered.length == 1)
+    assert(filtered(0)._1 == "spark.ssl.enabled")
   }
 
   test("SPARK-27244 toDebugString redacts sensitive information") {

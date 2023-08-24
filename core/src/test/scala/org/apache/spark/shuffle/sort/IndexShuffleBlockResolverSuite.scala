@@ -28,6 +28,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
+import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -37,8 +38,12 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _
 
+  def createSparkConf(): SparkConf = {
+    new SparkConf(loadDefaults = false)
+  }
+
   private var tempDir: File = _
-  private val conf: SparkConf = new SparkConf(loadDefaults = false)
+  private val conf: SparkConf = createSparkConf()
   private val appId = "TESTAPP"
 
   override def beforeEach(): Unit = {
@@ -273,5 +278,14 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
     assert(checksumAlgo === conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
     assert(checksumsInMemory === checksumsFromFile)
+  }
+}
+
+class SslIndexShuffleBlockResolverSuite extends IndexShuffleBlockResolverSuite {
+  override def createSparkConf(): SparkConf = {
+    val conf = super.createSparkConf()
+    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
+    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    conf
   }
 }

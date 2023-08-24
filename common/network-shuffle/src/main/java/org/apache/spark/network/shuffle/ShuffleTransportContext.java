@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -52,7 +53,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * */
 public class ShuffleTransportContext extends TransportContext {
   private static final Logger logger = LoggerFactory.getLogger(ShuffleTransportContext.class);
-  private static final ShuffleMessageDecoder SHUFFLE_DECODER =
+  @VisibleForTesting
+  protected static ShuffleMessageDecoder SHUFFLE_DECODER =
       new ShuffleMessageDecoder(MessageDecoder.INSTANCE);
   private final EventLoopGroup finalizeWorkers;
 
@@ -81,16 +83,16 @@ public class ShuffleTransportContext extends TransportContext {
   }
 
   @Override
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
-    TransportChannelHandler ch = super.initializePipeline(channel);
+  public TransportChannelHandler initializePipeline(SocketChannel channel, boolean isClient) {
+    TransportChannelHandler ch = super.initializePipeline(channel, isClient);
     addHandlerToPipeline(channel, ch);
     return ch;
   }
 
   @Override
   public TransportChannelHandler initializePipeline(SocketChannel channel,
-      RpcHandler channelRpcHandler) {
-    TransportChannelHandler ch = super.initializePipeline(channel, channelRpcHandler);
+      RpcHandler channelRpcHandler, boolean isClient) {
+    TransportChannelHandler ch = super.initializePipeline(channel, channelRpcHandler, isClient);
     addHandlerToPipeline(channel, ch);
     return ch;
   }

@@ -85,6 +85,13 @@ private[spark] trait BlockData {
    */
   def toNetty(): Object
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  def toNettyForSsl(): Object
+
   def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer
 
   def toByteBuffer(): ByteBuffer
@@ -102,6 +109,8 @@ private[spark] class ByteBufferBlockData(
   override def toInputStream(): InputStream = buffer.toInputStream()
 
   override def toNetty(): Object = buffer.toNetty
+
+  override def toNettyForSsl(): AnyRef = buffer.toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     buffer.copy(allocator)
@@ -1240,7 +1249,8 @@ private[spark] class BlockManager(
             new EncryptedBlockData(file, blockSize, conf, key))
 
         case _ =>
-          val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+          val transportConf = SparkTransportConf.fromSparkConfWithSslOptions(
+            conf, "shuffle", sslOptions = Some(securityManager.getSSLOptions("rpc")))
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
       Some(managedBuffer)

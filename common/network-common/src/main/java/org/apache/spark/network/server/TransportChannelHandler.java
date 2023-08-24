@@ -200,4 +200,8 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     super.channelUnregistered(ctx);
   }
 
+  public int getSslShuffleChunkSize() {
+    return transportContext.getConf().sslShuffleChunkSize();
+  }
+
 }

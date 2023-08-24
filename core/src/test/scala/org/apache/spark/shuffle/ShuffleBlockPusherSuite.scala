@@ -37,6 +37,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
+import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -53,9 +54,13 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   private var conf: SparkConf = _
   private var pushedBlocks = new ArrayBuffer[String]
 
+  def createSparkConf(): SparkConf = {
+    new SparkConf(loadDefaults = false)
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
-    conf = new SparkConf(loadDefaults = false)
+    conf = createSparkConf()
     MockitoAnnotations.openMocks(this).close()
     when(dependency.shuffleId).thenReturn(0)
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
@@ -478,5 +483,14 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
       super.notifyDriverAboutPushCompletion()
       semaphore.release()
     }
+  }
+}
+
+class SslShuffleBlockPusherSuite extends ShuffleBlockPusherSuite {
+  override def createSparkConf(): SparkConf = {
+    val conf = super.createSparkConf()
+    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
+    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    conf
   }
 }

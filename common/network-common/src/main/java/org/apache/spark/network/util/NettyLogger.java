@@ -25,6 +25,9 @@ import io.netty.handler.logging.LogLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 public class NettyLogger {
   private static final Logger logger = LoggerFactory.getLogger(NettyLogger.class);
 
@@ -42,6 +45,14 @@ public class NettyLogger {
       } else if (arg instanceof ByteBufHolder) {
         return format(ctx, eventName) + " " +
           ((ByteBufHolder) arg).content().readableBytes() + "B";
+      } else if (arg instanceof InputStream) {
+        int available = 0;
+        try {
+          available = ((InputStream) arg).available();
+        } catch (IOException ex) {
+          // Swallow
+        }
+        return format(ctx, eventName) + " " + available + "B";
       } else {
         return super.format(ctx, eventName, arg);
       }
