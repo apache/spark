@@ -669,12 +669,41 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         s"FROM $testTable GROUP BY dept ORDER BY max(name)"),
       Row(1, 1) :: Row(2, 2) :: Row(6, 6) :: Nil
     )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
+        "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+        "FROM employee GROUP BY dept ORDER BY max(name)"),
+      Row(1, 9500, 9510) :: Row(2, 11000, 11010) :: Row(6, 12000, 12010) :: Nil
+    )
 
     // having cond is resolved by aggregate's child
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) AS a, a + 10 AS b " +
         s"FROM $testTable GROUP BY dept HAVING max(name) = 'david'"),
       Row(1250, 2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + 10 AS b " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
+    )
+    checkAnswer(
+      sql("SELECT dept, avg(salary) AS a, a + cast(10 as double) AS b " +
+        "FROM employee GROUP BY dept HAVING max(bonus) > 1200"),
+      Row(2, 11000, 11010) :: Nil
     )
     // having cond is resolved by aggregate itself
     checkAnswer(
@@ -1138,5 +1167,121 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // non group by or non aggregate function in Aggregate queries negative cases are covered in
     // "Aggregate expressions not eligible to lift up, throws same error as inline".
+  }
+
+  test("Still resolves when Aggregate with LCA is not the direct child of Having") {
+    // Previously there was a limitation of lca that it can't resolve the query when it satisfies
+    // all the following criteria:
+    //  1) the main (outer) query has having clause
+    //  2) there is a window expression in the query
+    //  3) in the same SELECT list as the window expression in 2), there is an lca
+    // Though [UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING] is
+    // still not supported, after SPARK-44714, a lot other limitations are
+    // lifted because it allows to resolve LCA when the query has UnresolvedHaving but its direct
+    // child does not contain an LCA.
+    // Testcases in this test focus on this change regarding enablement of resolution.
+
+    // CTE definition contains window and LCA; outer query contains having
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept
+           |from w
+           |group by dept
+           |having max(salary) > 10000
+           |""".stripMargin),
+      Row(2) :: Row(6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept as d, d
+           |from w
+           |group by dept
+           |having max(salary) > 10000
+           |""".stripMargin),
+      Row(2, 2) :: Row(6, 6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |with w as (
+           |  select name, dept, salary, rank() over (partition by dept order by salary) as r, r
+           |  from $testTable
+           |)
+           |select dept as d
+           |from w
+           |group by dept
+           |having d = 2
+           |""".stripMargin),
+      Row(2) :: Nil
+    )
+
+    // inner subquery contains window and LCA; outer query contains having
+    checkAnswer(
+      sql(
+        s"""
+          |SELECT
+          |  dept
+          |FROM
+          |   (
+          |    select
+          |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+          |      1 as a, a + 1 as e
+          |    FROM
+          |      $testTable
+          |  ) AS inner_t
+          |GROUP BY
+          |  dept
+          |HAVING max(salary) > 10000
+          |""".stripMargin),
+      Row(2) :: Row(6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  dept as d, d
+           |FROM
+           |   (
+           |    select
+           |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+           |      1 as a, a + 1 as e
+           |    FROM
+           |      $testTable
+           |  ) AS inner_t
+           |GROUP BY
+           |  dept
+           |HAVING max(salary) > 10000
+           |""".stripMargin),
+      Row(2, 2) :: Row(6, 6) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  dept as d
+           |FROM
+           |   (
+           |    select
+           |      name, dept, salary, rank() over (partition by dept order by salary) as r,
+           |      1 as a, a + 1 as e
+           |    FROM
+           |      $testTable
+           |  ) AS inner_t
+           |GROUP BY
+           |  dept
+           |HAVING d = 2
+           |""".stripMargin),
+      Row(2) :: Nil
+    )
   }
 }

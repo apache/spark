@@ -97,4 +97,9 @@ Cannot resolve window reference `<windowName>`.
 
 Unsupported function name `<funcName>`.
 
+## VARIABLE_TYPE_OR_DEFAULT_REQUIRED
+
+The definition of a SQL variable requires either a datatype or a DEFAULT clause.
+For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`.
+
 

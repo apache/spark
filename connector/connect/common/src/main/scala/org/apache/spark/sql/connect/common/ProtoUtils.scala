@@ -84,7 +84,7 @@ private[connect] object ProtoUtils {
 
   // Because Spark Connect operation tags are also set as SparkContext Job tags, they cannot contain
   // SparkContext.SPARK_JOB_TAGS_SEP
-  private var SPARK_JOB_TAGS_SEP = ',' // SparkContext.SPARK_JOB_TAGS_SEP
+  private val SPARK_JOB_TAGS_SEP = ',' // SparkContext.SPARK_JOB_TAGS_SEP
 
   /**
    * Validate if a tag for ExecutePlanRequest.tags is valid. Throw IllegalArgumentException if

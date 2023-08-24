@@ -499,6 +499,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
         )
+        self._converter_map = dict()
 
     def _create_batch(self, series):
         """
@@ -538,6 +539,17 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
+    def _get_or_create_converter_from_pandas(self, dt):
+        if dt not in self._converter_map:
+            conv = _create_converter_from_pandas(
+                dt,
+                timezone=self._timezone,
+                error_on_duplicated_field_names=False,
+                ignore_unexpected_complex_type_values=True,
+            )
+            self._converter_map[dt] = conv
+        return self._converter_map[dt]
+
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
         Override the `_create_array` method in the superclass to create an Arrow Array
@@ -569,10 +581,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            # TODO(SPARK-43579): cache the converter for reuse
-            conv = _create_converter_from_pandas(
-                dt, timezone=self._timezone, error_on_duplicated_field_names=False
-            )
+            conv = self._get_or_create_converter_from_pandas(dt)
             series = conv(series)
 
         if hasattr(series.array, "__arrow_array__"):

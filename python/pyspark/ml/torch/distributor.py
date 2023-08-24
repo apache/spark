@@ -49,7 +49,6 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingServer,
 )
 from pyspark.ml.dl_util import FunctionPickler
-from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -165,7 +164,7 @@ class Distributor:
         from pyspark.sql.utils import is_remote
 
         self.is_remote = is_remote()
-        self.spark = _get_active_session(self.is_remote)
+        self.spark = SparkSession.active()
 
         # indicate whether the server side is local mode
         self.is_spark_local_master = False
@@ -767,9 +766,19 @@ class TorchDistributor(Distributor):
         log_streaming_server = LogStreamingServer()
         self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
         assert self.driver_address != ""
-        log_streaming_server.start(spark_host_address=self.driver_address)
-        time.sleep(1)  # wait for the server to start
-        self.log_streaming_server_port = log_streaming_server.port
+        try:
+            log_streaming_server.start(spark_host_address=self.driver_address)
+            time.sleep(1)  # wait for the server to start
+            self.log_streaming_server_port = log_streaming_server.port
+        except Exception as e:
+            # If starting log streaming server failed, we don't need to break
+            # the distributor training but emit a warning instead.
+            self.log_streaming_server_port = -1
+            self.logger.warning(
+                "Start torch distributor log streaming server failed, "
+                "You cannot receive logs sent from distributor workers, ",
+                f"error: {repr(e)}.",
+            )
 
         try:
             spark_task_function = self._get_spark_task_function(

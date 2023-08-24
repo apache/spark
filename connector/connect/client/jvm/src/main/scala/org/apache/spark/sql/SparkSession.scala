@@ -19,7 +19,7 @@ package org.apache.spark.sql
 import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -730,6 +730,23 @@ object SparkSession extends Logging {
       override def load(c: Configuration): SparkSession = create(c)
     })
 
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[SparkSession]
+
+  /**
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
+   * they are not set yet.
+   */
+  private def setDefaultAndActiveSession(session: SparkSession): Unit = {
+    defaultSession.compareAndSet(null, session)
+    if (getActiveSession.isEmpty) {
+      setActiveSession(session)
+    }
+  }
+
   /**
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
@@ -742,8 +759,17 @@ object SparkSession extends Logging {
    */
   private[sql] def onSessionClose(session: SparkSession): Unit = {
     sessions.invalidate(session.client.configuration)
+    defaultSession.compareAndSet(session, null)
+    if (getActiveSession.contains(session)) {
+      clearActiveSession()
+    }
   }
 
+  /**
+   * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
+   *
+   * @since 3.4.0
+   */
   def builder(): Builder = new Builder()
 
   private[sql] lazy val cleaner = {
@@ -755,6 +781,7 @@ object SparkSession extends Logging {
   class Builder() extends Logging {
     private val builder = SparkConnectClient.builder()
     private var client: SparkConnectClient = _
+    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
@@ -778,11 +805,95 @@ object SparkSession extends Logging {
       this
     }
 
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: String): Builder = synchronized {
+      options += key -> value
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Long): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Double): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config a map of options. Options set using this method are automatically propagated
+     * to the Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach { kv: (String, Any) =>
+        {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to both
+     * `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.5.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
+    }
+
+    @deprecated("enableHiveSupport does not work in Spark Connect")
+    def enableHiveSupport(): Builder = this
+
+    @deprecated("master does not work in Spark Connect, please use remote instead")
+    def master(master: String): Builder = this
+
+    @deprecated("appName does not work in Spark Connect")
+    def appName(name: String): Builder = this
+
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
         Option(new SparkSession(client, cleaner, planIdGenerator))
       } else {
         None
+      }
+    }
+
+    private def applyOptions(session: SparkSession): Unit = {
+      options.foreach { case (key, value) =>
+        session.conf.set(key, value)
       }
     }
 
@@ -799,10 +910,16 @@ object SparkSession extends Logging {
      *
      * This will always return a newly created session.
      *
+     * This method will update the default and/or active session if they are not set.
+     *
      * @since 3.5.0
      */
     def create(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
+      val session = tryCreateSessionFromClient()
+        .getOrElse(SparkSession.this.create(builder.configuration))
+      setDefaultAndActiveSession(session)
+      applyOptions(session)
+      session
     }
 
     /**
@@ -811,30 +928,82 @@ object SparkSession extends Logging {
      * If a session exist with the same configuration that is returned instead of creating a new
      * session.
      *
+     * This method will update the default and/or active session if they are not set. This method
+     * will always set the specified configuration options on the session, even when it is not
+     * newly created.
+     *
      * @since 3.5.0
      */
     def getOrCreate(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(sessions.get(builder.configuration))
+      val session = tryCreateSessionFromClient()
+        .getOrElse(sessions.get(builder.configuration))
+      setDefaultAndActiveSession(session)
+      applyOptions(session)
+      session
     }
   }
 
-  def getActiveSession: Option[SparkSession] = {
-    throw new UnsupportedOperationException("getActiveSession is not supported")
+  /**
+   * Returns the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get())
+
+  /**
+   * Sets the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def setDefaultSession(session: SparkSession): Unit = {
+    defaultSession.set(session)
   }
 
-  def getDefaultSession: Option[SparkSession] = {
-    throw new UnsupportedOperationException("getDefaultSession is not supported")
+  /**
+   * Clears the default SparkSession.
+   *
+   * @since 3.5.0
+   */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null)
   }
 
+  /**
+   * Returns the active SparkSession for the current thread.
+   *
+   * @since 3.5.0
+   */
+  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get())
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * an isolated SparkSession.
+   *
+   * @since 3.5.0
+   */
   def setActiveSession(session: SparkSession): Unit = {
-    throw new UnsupportedOperationException("setActiveSession is not supported")
+    activeThreadSession.set(session)
   }
 
+  /**
+   * Clears the active SparkSession for current thread.
+   *
+   * @since 3.5.0
+   */
   def clearActiveSession(): Unit = {
-    throw new UnsupportedOperationException("clearActiveSession is not supported")
+    activeThreadSession.remove()
   }
 
+  /**
+   * Returns the currently active SparkSession, otherwise the default one. If there is no default
+   * SparkSession, throws an exception.
+   *
+   * @since 3.5.0
+   */
   def active: SparkSession = {
-    throw new UnsupportedOperationException("active is not supported")
+    getActiveSession
+      .orElse(getDefaultSession)
+      .getOrElse(throw new IllegalStateException("No active or default Spark session found"))
   }
 }

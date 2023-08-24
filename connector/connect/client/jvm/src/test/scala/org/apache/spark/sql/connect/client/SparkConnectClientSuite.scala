@@ -164,6 +164,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       client => {
         assert(client.configuration.host == "localhost")
         assert(client.configuration.port == 1234)
+        assert(client.sessionId != null)
+        // Must be able to parse the UUID
+        assert(UUID.fromString(client.sessionId) != null)
       }),
     TestPackURI(
       "sc://localhost/;",
@@ -193,6 +196,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI("sc://host:123/;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=", isCorrect = false),
+    TestPackURI("sc://host:123/;session_id=abcdefgh", isCorrect = false),
+    TestPackURI(s"sc://host:123/;session_id=${UUID.randomUUID().toString}", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=true;token=mySecretToken", isCorrect = true),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
@@ -214,15 +220,37 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  private class DummyFn(val e: Throwable) {
+  private class DummyFn(val e: Throwable, numFails: Int = 3) {
     var counter = 0
     def fn(): Int = {
-      if (counter < 3) {
+      if (counter < numFails) {
         counter += 1
         throw e
       } else {
         42
       }
+    }
+  }
+
+  test("SPARK-44721: Retries run for a minimum period") {
+    // repeat test few times to avoid random flakes
+    for (_ <- 1 to 10) {
+      var totalSleepMs: Long = 0
+
+      def sleep(t: Long): Unit = {
+        totalSleepMs += t
+      }
+
+      val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
+      val retryHandler = new GrpcRetryHandler(GrpcRetryHandler.RetryPolicy(), sleep)
+
+      assertThrows[StatusRuntimeException] {
+        retryHandler.retry {
+          dummyFn.fn()
+        }
+      }
+
+      assert(totalSleepMs >= 10 * 60 * 1000) // waited at least 10 minutes
     }
   }
 

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, Decorrela
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_WINDOW_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -259,7 +259,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
+        new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -650,6 +650,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
+          case c: CreateVariable
+              if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
+            val ident = c.name.asInstanceOf[ResolvedIdentifier]
+            val varName = toSQLId(
+              ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+            throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+              "CRETE VARIABLE",
+              varName,
+              c.defaultExpr.originalSQL)
+
           case _ => // Falls back to the following checks
         }
 
@@ -753,6 +763,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
+            !o.isInstanceOf[CreateVariable] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
@@ -1027,10 +1038,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
-          expr.failAnalysis(
-            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-              "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            messageParameters = Map("treeNode" -> planToString(plan)))
+          cleanQueryInScalarSubquery(join.right.plan) match {
+            // Python UDTFs are by default non-deterministic. They are constructed as a
+            // OneRowRelation subquery and can be rewritten by the optimizer without
+            // any decorrelation.
+            case Generate(_: PythonUDTF, _, _, _, _, _: OneRowRelation)
+              if SQLConf.get.getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY) =>  // Ok
+            case _ =>
+              expr.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+                  "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+                messageParameters = Map("treeNode" -> planToString(plan)))
+          }
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
@@ -1069,13 +1088,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
         case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics)
+          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other)
+              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (!simplifiedMetrics.sameResult(simplifiedOther)) {
+              if (simplifiedMetrics != simplifiedOther) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1100,17 +1119,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.transformUpWithNewOutput {
+    plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
-          case (left: Alias, right: Attribute) =>
-            left.child.semanticEquals(right) && right.name == left.name
+        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
+          case (Alias(attr: AttributeReference, _), index) =>
+            // The input plan of this method is already canonicalized. The attribute id becomes the
+            // ordinal of this attribute in the child outputs. So an alias-only Project means the
+            // the id of the aliased attribute is the same as its index in the project list.
+            attr.exprId.id == index
           case _ => false
         }
         if (assignExprIdOnly) {
-          (p.child, p.output.zip(p.child.output))
+          p.child
         } else {
-          (p, Nil)
+          p
         }
     }
   }
@@ -1159,6 +1181,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
       case _: Project => usingDecorrelateInnerQueryFramework
+      case _: Join => usingDecorrelateInnerQueryFramework
       case _ => false
     }
 
@@ -1327,6 +1350,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         case a: Aggregate =>
           failOnInvalidOuterReference(a)
           checkPlan(a.child, aggregated = true, canContainOuter)
+
+        // Same as Aggregate above.
+        case w: Window =>
+          failOnInvalidOuterReference(w)
+          checkPlan(w.child, aggregated = true, canContainOuter)
 
         // Distinct does not host any correlated expressions, but during the optimization phase
         // it will be rewritten as Aggregate, which can only be on a correlation path if the

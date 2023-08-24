@@ -772,8 +772,10 @@ message ReleaseExecuteResponse {
   // Session id in which the release was running.
   string session_id = 1;
 
-  // Operation id of the operation which the release concerns.
-  string operation_id = 2;
+  // Operation id of the operation on which the release executed.
+  // If the operation couldn't be found (because e.g. it was concurrently released), will be unset.
+  // Otherwise, it will be equal to the operation_id from request.
+  optional string operation_id = 2;
 }
 
 // Main interface for the SparkConnect service.
@@ -809,7 +811,7 @@ service SparkConnectService {
   // Release an reattachable execution, or parts thereof.
   // The ExecutePlan must have been started with ReattachOptions.reattachable=true.
   // Non reattachable executions are released automatically and immediately after the ExecutePlan
-  // RPC and ReleaseExecute doesn't need to be used.
+  // RPC and ReleaseExecute may not be used.
   rpc ReleaseExecute(ReleaseExecuteRequest) returns (ReleaseExecuteResponse) {}
 }
 

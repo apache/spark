@@ -160,7 +160,9 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     val documentedKeywords = keywordsInDoc.map(_.head).toSet
     if (allCandidateKeywords != documentedKeywords) {
       val undocumented = (allCandidateKeywords -- documentedKeywords).toSeq.sorted
-      fail("Some keywords are not documented: " + undocumented.mkString(", "))
+      val overdocumented = (documentedKeywords -- allCandidateKeywords).toSeq.sorted
+      fail("Some keywords are not documented: " + undocumented.mkString(", ") +
+        " Extras: " + overdocumented.mkString(", "))
     }
   }
 

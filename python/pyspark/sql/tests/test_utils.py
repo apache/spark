@@ -15,6 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
+import difflib
+from itertools import zip_longest
+
 from pyspark.sql.functions import sha2, to_timestamp
 from pyspark.errors import (
     AnalysisException,
@@ -23,7 +27,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff
+from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
@@ -40,12 +44,7 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.sql.dataframe import DataFrame
-import pyspark.pandas as ps
-
-import difflib
-from typing import List, Union
-from itertools import zip_longest
+from pyspark.testing.sqlutils import have_pandas
 
 
 class UtilsTestsMixin:
@@ -690,7 +689,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
             },
@@ -703,7 +702,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": None,
             },
@@ -726,7 +725,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
             },
@@ -739,33 +738,195 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "expected",
                 "actual_type": None,
             },
         )
 
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
     def test_assert_equal_exact_pandas_df(self):
+        import pandas as pd
+        import numpy as np
+
+        df1 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
+        )
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
+        )
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_approx_equal_pandas_df(self):
+        import pandas as pd
+        import numpy as np
+
+        # test that asserts close enough equality for pandas df
+        df1 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59)]), columns=["a", "b", "c"]
+        )
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59.0001)]), columns=["a", "b", "c"]
+        )
+
+        assertDataFrameEqual(df1, df2, checkRowOrder=False)
+        assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_approx_equal_fail_exact_pandas_df(self):
+        import pandas as pd
+        import numpy as np
+
+        # test that asserts close enough equality for pandas df
+        df1 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59)]), columns=["a", "b", "c"]
+        )
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 59.0001)]), columns=["a", "b", "c"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=False, rtol=0, atol=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=True, rtol=0, atol=0)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_unequal_pandas_df(self):
+        import pandas as pd
+        import numpy as np
+
+        df1 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (6, 5, 4)]), columns=["a", "b", "c"]
+        )
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=False)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    def test_assert_type_error_pandas_df(self):
+        import pyspark.pandas as ps
+        import pandas as pd
+        import numpy as np
+
+        df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
+        df2 = pd.DataFrame(
+            data=np.array([(1, 2, 3), (4, 5, 6), (6, 5, 4)]), columns=["a", "b", "c"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=False)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_PANDAS_DATAFRAME",
+            message_parameters={
+                "left": df1.to_string(),
+                "left_dtype": str(df1.dtypes),
+                "right": df2.to_string(),
+                "right_dtype": str(df2.dtypes),
+            },
+        )
+
+    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    def test_assert_equal_exact_pandas_on_spark_df(self):
+        import pyspark.pandas as ps
+
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    def test_assert_equal_exact_pandas_df(self):
+    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    def test_assert_equal_exact_pandas_on_spark_df(self):
+        import pyspark.pandas as ps
+
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = ps.DataFrame(data=[30, 20, 10], columns=["Numbers"])
 
         assertDataFrameEqual(df1, df2)
 
-    def test_assert_equal_approx_pandas_df(self):
+    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    def test_assert_equal_approx_pandas_on_spark_df(self):
+        import pyspark.pandas as ps
+
         df1 = ps.DataFrame(data=[10.0001, 20.32, 30.1], columns=["Numbers"])
         df2 = ps.DataFrame(data=[10.0, 20.32, 30.1], columns=["Numbers"])
 
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
+    @unittest.skipIf(not have_pandas, "no pandas dependency")
     def test_assert_error_pandas_pyspark_df(self):
+        import pyspark.pandas as ps
         import pandas as pd
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
@@ -818,7 +979,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },
@@ -831,7 +992,7 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": Union[DataFrame, ps.DataFrame, List[Row]],
+                "expected_type": "Union[DataFrame, ps.DataFrame, List[Row]]",
                 "arg_name": "actual",
                 "actual_type": type(dict1),
             },

@@ -17,7 +17,6 @@
 package org.apache.spark.io;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,6 +24,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertEquals;
 
@@ -33,7 +33,8 @@ import static org.junit.Assert.assertEquals;
  */
 public abstract class GenericFileInputStreamSuite {
 
-  private byte[] randomBytes;
+  // Create a byte array of size 2 MB with random bytes
+  private byte[] randomBytes = new byte[2 * 1024 * 1024];
 
   protected File inputFile;
 
@@ -41,8 +42,7 @@ public abstract class GenericFileInputStreamSuite {
 
   @Before
   public void setUp() throws IOException {
-    // Create a byte array of size 2 MB with random bytes
-    randomBytes =  RandomUtils.nextBytes(2 * 1024 * 1024);
+    ThreadLocalRandom.current().nextBytes(randomBytes);
     inputFile = File.createTempFile("temp-file", ".tmp");
     FileUtils.writeByteArrayToFile(inputFile, randomBytes);
   }
