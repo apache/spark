@@ -21,6 +21,9 @@ Functions
 =========
 .. currentmodule:: pyspark.sql.functions
 
+A collections of builtin functions available for DataFrame operations.
+From Apache Spark 3.5.0, all functions support Spark Connect.
+
 Normal Functions
 ----------------
 .. autosummary::
@@ -387,7 +390,6 @@ String Functions
     char
     character_length
     char_length
-    chr
     concat_ws
     contains
     decode
@@ -503,12 +505,10 @@ Misc Functions
     hll_sketch_estimate
     hll_union
     java_method
-    random
     stack
     try_aes_decrypt
     typeof
     user
-    uuid
     version
 
 Predicate Functions

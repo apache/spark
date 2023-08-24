@@ -35,10 +35,13 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   val a3 = AttributeReference("a3", IntegerType)()
   val b3 = AttributeReference("b3", IntegerType)()
   val c3 = AttributeReference("c3", IntegerType)()
+  val a4 = AttributeReference("a4", IntegerType)()
+  val b4 = AttributeReference("b4", IntegerType)()
   val t0 = OneRowRelation()
   val testRelation = LocalRelation(a, b, c)
   val testRelation2 = LocalRelation(x, y, z)
   val testRelation3 = LocalRelation(a3, b3, c3)
+  val testRelation4 = LocalRelation(a4, b4)
 
   private def hasOuterReferences(plan: LogicalPlan): Boolean = {
     plan.exists(_.expressions.exists(SubExprUtils.containsOuter))
@@ -198,12 +201,15 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val innerPlan =
       Join(
         testRelation.as("t1"),
-        Filter(OuterReference(y) === 3, testRelation),
+        Filter(OuterReference(y) === b3, testRelation3),
         Inner,
         Some(OuterReference(x) === a),
         JoinHint.NONE)
-    val error = intercept[AssertionError] { DecorrelateInnerQuery(innerPlan, outerPlan.select()) }
-    assert(error.getMessage.contains("Correlated column is not allowed in join"))
+    val correctAnswer =
+      Join(
+        testRelation.as("t1"), testRelation3,
+        Inner, Some(a === a), JoinHint.NONE)
+    check(innerPlan, outerPlan, correctAnswer, Seq(b3 === y, x === a))
   }
 
   test("correlated values in project") {
@@ -453,5 +459,170 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           Filter(x > a,
             DomainJoin(Seq(x), testRelation))))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated equi-join") {
+    // Join in the subquery is on equi-predicates, so all the correlated references can be
+    // substituted by equivalent ones from the outer query, and domain join is not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner, Some(And(y === y, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated non-equi-join") {
+    // Join in the subquery is on non-equi-predicate, so we introduce a DomainJoin.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+    val correctAnswer =
+      Aggregate(
+        Seq(a), Seq(Alias(count(Literal(1)), "a")(), a),
+        Project(Seq(x, y, a3, b3, a),
+          Join(
+            DomainJoin(Seq(a), testRelation2),
+            testRelation3, Inner, Some(And(x === a3, y > a)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated left join") {
+    // Join in the subquery is on equi-predicates, so all the correlated references can be
+    // substituted by equivalent ones from the outer query, and domain join is not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(a), Seq(Alias(count(Literal(1)), "a")(), a),
+        Project(Seq(x, y, a3, b3, a),
+          Join(DomainJoin(Seq(a), testRelation2), testRelation3, LeftOuter,
+            Some(And(y === a, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated left join, " +
+    "correlation over right side") {
+    // Same as above, but the join predicate connects the outer reference and the column from the
+    // right (optional) side of the left join. Domain join is still not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, b3 === OuterReference(b))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(b), Seq(Alias(count(Literal(1)), "a")(), b),
+        Project(Seq(x, y, a3, b3, b),
+          Join(DomainJoin(Seq(b), testRelation2), testRelation3, LeftOuter,
+            Some(And(b === b3, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b <=> b))
+  }
+
+  test("SPARK-43780: correlated left join preserves the join predicates") {
+    // Left outer join preserves both predicates after being decorrelated.
+    val outerPlan = testRelation
+    val innerPlan =
+      Filter(
+        IsNotNull(c3),
+        Project(Seq(x, y, a3, b3, c3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, b3 === OuterReference(b))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Filter(
+        IsNotNull(c3),
+        Project(Seq(x, y, a3, b3, c3, b),
+          Join(DomainJoin(Seq(b), testRelation2), testRelation3, LeftOuter,
+            Some(And(x === a3, b === b3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(b <=> b))
+  }
+
+  test("SPARK-43780: union all in subquery with correlated join") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Union(
+        Seq(Project(Seq(x, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)),
+          Project(Seq(a4, b4),
+            testRelation4)))
+    val correctAnswer =
+      Union(
+        Seq(Project(Seq(x, b3, a),
+          Project(Seq(x, b3, a),
+            Join(
+              DomainJoin(Seq(a), testRelation2),
+              testRelation3, Inner,
+              Some(And(x === a3, y === a)), JoinHint.NONE))),
+          Project(Seq(a4, b4, a),
+            DomainJoin(Seq(a),
+              Project(Seq(a4, b4), testRelation4)))))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
+  }
+
+  test("window function with correlated equality predicate") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(Seq(b, c),
+        partitionSpec = Seq(c), orderSpec = b.asc :: Nil,
+        Filter(And(OuterReference(x) === a, b === 3),
+          testRelation))
+    // Both the project list and the partition spec have added the correlated variable.
+    val correctAnswer =
+      Window(Seq(b, c, a), partitionSpec = Seq(c, a), orderSpec = b.asc :: Nil,
+        Filter(b === 3,
+          testRelation))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a))
+  }
+
+  test("window function with correlated non-equality predicate") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(Seq(b, c),
+        partitionSpec = Seq(c), orderSpec = b.asc :: Nil,
+        Filter(And(OuterReference(x) > a, b === 3),
+          testRelation))
+    // Both the project list and the partition spec have added the correlated variable.
+    // The input to the filter is a domain join that produces 'x' values.
+    val correctAnswer =
+    Window(Seq(b, c, x), partitionSpec = Seq(c, x), orderSpec = b.asc :: Nil,
+      Filter(And(b === 3, x > a),
+        DomainJoin(Seq(x), testRelation)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("window function with correlated columns inside") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Window(Seq(b, c),
+        partitionSpec = Seq(c, OuterReference(x)), orderSpec = b.asc :: Nil,
+        Filter(b === 3,
+          testRelation))
+    val e = intercept[java.lang.AssertionError] {
+      DecorrelateInnerQuery(innerPlan, outerPlan.select())
+    }
+    assert(e.getMessage.contains("Correlated column is not allowed in"))
   }
 }

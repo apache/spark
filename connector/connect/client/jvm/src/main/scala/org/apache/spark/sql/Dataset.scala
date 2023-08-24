@@ -883,7 +883,8 @@ class Dataset[T] private[sql] (
         ClassTag(SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
         Seq(
           EncoderField(s"_1", this.agnosticEncoder, leftNullable, Metadata.empty),
-          EncoderField(s"_2", other.agnosticEncoder, rightNullable, Metadata.empty)))
+          EncoderField(s"_2", other.agnosticEncoder, rightNullable, Metadata.empty)),
+        None)
 
     sparkSession.newDataset(tupleEncoder) { builder =>
       val joinBuilder = builder.getJoinBuilder
@@ -1040,6 +1041,22 @@ class Dataset[T] private[sql] (
    */
   def col(colName: String): Column = {
     Column.apply(colName, getPlanId)
+  }
+
+  /**
+   * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
+   *
+   * A metadata column can be accessed this way even if the underlying data source defines a data
+   * column with a conflicting name.
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  def metadataColumn(colName: String): Column = Column { builder =>
+    val attributeBuilder = builder.getUnresolvedAttributeBuilder
+      .setUnparsedIdentifier(colName)
+      .setIsMetadataColumn(true)
+    getPlanId.foreach(attributeBuilder.setPlanId)
   }
 
   /**

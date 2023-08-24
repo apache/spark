@@ -141,12 +141,12 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.0</orc.version>
+    <orc.version>1.9.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
-    <ivy.version>2.5.1</ivy.version>
+    <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
@@ -160,7 +160,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.16</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.17</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -228,7 +228,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.8.0</kubernetes-client.version>
+    <kubernetes-client.version>6.8.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1297,6 +1297,13 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-test</artifactId>
         <version>${curator.version}</version>
+        <!-- TODO(SPARK-44170): Remove this `exclusion` after Spark starts supporting JUnit5. -->
+        <exclusions>
+          <exclusion>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Hadoop 3.x dependencies -->

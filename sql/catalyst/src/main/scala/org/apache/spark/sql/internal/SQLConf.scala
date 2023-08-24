@@ -513,10 +513,10 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
+        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
       .version("2.3.0")
-      .booleanConf
-      .createWithDefault(false)
+      .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
@@ -1528,7 +1528,7 @@ object SQLConf {
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -4288,18 +4288,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
-    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
-      .internal()
-      .doc("When set to false, if types in Avro are encoded in the same format, but " +
-        "the type in the Avro schema explicitly says that the data types are different, " +
-        "reject reading the data type in the format to avoid returning incorrect results. " +
-        "When set to true, it restores the legacy behavior of allow reading the data in the" +
-        " format, which may return incorrect results.")
-      .version("3.5.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
@@ -4369,6 +4357,38 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
+
+  val DECORRELATE_JOIN_PREDICATE_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
+        "predicates. This configuration is only effective when " +
+        s"'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
+    .internal()
+    .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
+      "incorrectly mapped the requested percentile to the sorted range of values in some cases " +
+      "and so returned incorrect results. Also, the new implementation is faster as it doesn't " +
+      "contain the interpolation logic that the old percentile_cont based one did.")
+    .version("3.3.4")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT =
+    buildConf("spark.sql.legacy.negativeIndexInArrayInsert")
+      .internal()
+      .doc("When set to true, restores the legacy behavior of `array_insert` for " +
+        "negative indexes - 0-based: the function inserts new element before the last one " +
+        "for the index -1. For example, `array_insert(['a', 'b'], -1, 'x')` returns " +
+        "`['a', 'x', 'b']`. When set to false, the -1 index points out to the last element, " +
+        "and the given example produces `['a', 'b', 'x']`.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -5222,6 +5242,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def legacyNegativeIndexInArrayInsert: Boolean = {
+    getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
+  }
 
   /** ********************** SQLConf functionality methods ************ */
 

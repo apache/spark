@@ -247,7 +247,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
       SparkKubernetesClientFactory.ClientType.Submission,
       sparkConf,
-      None,
       None)) { kubernetesClient =>
         val client = new Client(
           kubernetesConf,

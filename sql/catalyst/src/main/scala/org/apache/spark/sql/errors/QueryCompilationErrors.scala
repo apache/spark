@@ -3301,6 +3301,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("jsonSchema" -> toSQLType(schema)))
   }
 
+  def invalidXmlSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_XML_SCHEMA_MAP_TYPE",
+      messageParameters = Map("xmlSchema" -> toSQLType(schema)))
+  }
+
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1332",
@@ -3717,36 +3723,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
-    )
-  }
-
-  def avroIncorrectTypeError(
-      avroPath: String, sqlPath: String, avroType: String,
-      sqlType: String, key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "AVRO_INCORRECT_TYPE",
-      messageParameters = Map(
-        "avroPath" -> avroPath,
-        "sqlPath" -> sqlPath,
-        "avroType" -> avroType,
-        "sqlType" -> toSQLType(sqlType),
-        "key" -> key
-      )
-    )
-  }
-
-  def avroLowerPrecisionError(
-      avroPath: String, sqlPath: String, avroType: String,
-      sqlType: String, key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "AVRO_LOWER_PRECISION",
-      messageParameters = Map(
-        "avroPath" -> avroPath,
-        "sqlPath" -> sqlPath,
-        "avroType" -> avroType,
-        "sqlType" -> toSQLType(sqlType),
-        "key" -> key
-      )
     )
   }
 
