@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark._
 import org.apache.spark.api.python._
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,24 +44,31 @@ abstract class BasePythonUDFRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
-  abstract class PythonUDFWriter(
+  protected def writeUDF(dataOut: DataOutputStream): Unit
+
+  protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
-      context: TaskContext)
-    extends Writer(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext): Writer = {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
 
-    override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
-      val startData = dataOut.size()
-      val wroteData = PythonRDD.writeNextElementToStream(inputIterator, dataOut)
-      if (!wroteData) {
-        // Reached the end of input.
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        writeUDF(dataOut)
       }
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
-      wroteData
+
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        val startData = dataOut.size()
+        val wroteData = PythonRDD.writeNextElementToStream(inputIterator, dataOut)
+        if (!wroteData) {
+          // Reached the end of input.
+          dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        }
+        val deltaData = dataOut.size() - startData
+        pythonMetrics("pythonDataSent") += deltaData
+        wroteData
+      }
     }
   }
 
@@ -111,19 +119,22 @@ class PythonUDFRunner(
     jobArtifactUUID: Option[String])
   extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
 
-  protected override def newWriter(
-      env: SparkEnv,
-      worker: PythonWorker,
-      inputIterator: Iterator[Array[Byte]],
-      partitionIndex: Int,
-      context: TaskContext): Writer = {
-    new PythonUDFWriter(env, worker, inputIterator, partitionIndex, context) {
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  }
+}
 
-      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
-      }
+class PythonUDFWithNamedArgumentsRunner(
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argMetas: Array[Array[ArgumentMetadata]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BasePythonUDFRunner(
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
-    }
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
   }
 }
 
@@ -138,6 +149,32 @@ object PythonUDFRunner {
       dataOut.writeInt(offsets.length)
       offsets.foreach { offset =>
         dataOut.writeInt(offset)
+      }
+      dataOut.writeInt(chained.funcs.length)
+      chained.funcs.foreach { f =>
+        dataOut.writeInt(f.command.length)
+        dataOut.write(f.command.toArray)
+      }
+    }
+  }
+
+  def writeUDFs(
+      dataOut: DataOutputStream,
+      funcs: Seq[ChainedPythonFunctions],
+      argMetas: Array[Array[ArgumentMetadata]]): Unit = {
+    dataOut.writeInt(funcs.length)
+    funcs.zip(argMetas).foreach { case (chained, metas) =>
+      dataOut.writeInt(metas.length)
+      metas.foreach {
+        case ArgumentMetadata(offset, name) =>
+          dataOut.writeInt(offset)
+          name match {
+            case Some(name) =>
+              dataOut.writeBoolean(true)
+              PythonWorkerUtils.writeUTF(name, dataOut)
+            case _ =>
+              dataOut.writeBoolean(false)
+          }
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
