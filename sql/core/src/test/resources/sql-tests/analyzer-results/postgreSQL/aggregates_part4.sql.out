@@ -26,6 +26,6 @@ Aggregate [percentile_cont(thousand#x, cast(0.5 as double), false) AS percentile
 -- !query
 select percentile_disc(0.5) within group (order by thousand) from tenk1
 -- !query analysis
-Aggregate [percentile_disc(thousand#x, cast(0.5 as double), false, 0, 0) AS percentile_disc(0.5) WITHIN GROUP (ORDER BY thousand)#x]
+Aggregate [percentile_disc(thousand#x, cast(0.5 as double), false, 0, 0, false) AS percentile_disc(0.5) WITHIN GROUP (ORDER BY thousand)#x]
 +- SubqueryAlias spark_catalog.default.tenk1
    +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet

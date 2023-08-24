@@ -1770,7 +1770,6 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 forall.__doc__ = pysparkfuncs.forall.__doc__
 
 
-# TODO: support options
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
@@ -2747,9 +2746,6 @@ mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
-#     to_timestamp, from_utc_timestamp, to_utc_timestamp,
-#     timestamp_seconds, current_timestamp, date_trunc
 
 
 def curdate() -> Column:
@@ -3900,9 +3896,6 @@ def _test() -> None:
     import pyspark.sql.connect.functions
 
     globs = pyspark.sql.connect.functions.__dict__.copy()
-
-    # Spark Connect does not support Spark Context but the test depends on that.
-    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

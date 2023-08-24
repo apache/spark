@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, FunctionTableSubqueryArgumentExpression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -172,7 +172,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case other =>
         failure(other)
     }
-    // Negative tests
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
       val query = "select * from explode(table(t))"
@@ -202,7 +201,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       projectList = projectList,
       child = OneRowRelation())
     // There are no UDTF TABLE arguments, so there are no PARTITION BY child expression indexes.
-    val partitionChildIndexes = FunctionTableSubqueryArgumentExpression.partitionChildIndexes(_)
+    def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] =
+      udtfArguments.flatMap {
+        case f: FunctionTableSubqueryArgumentExpression =>
+          f.partitioningExpressionIndexes
+        case _ =>
+          Seq()
+      }
     assert(partitionChildIndexes(Seq(
       Literal(41))) ==
       Seq.empty[Int])
@@ -240,19 +245,18 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       Seq(1))
     // The UDTF has one scalar argument, then one TABLE argument, then another scalar argument. The
     // TABLE argument has two PARTITION BY expressions which are equal to the output attributes from
-    // the provided relation, in order. Therefore the PARTITION BY child expression indexes are 1
-    // and 2, because they begin at an offset of 1 from the zero-based start of the list of values
-    // provided to the UDTF 'eval' method.
+    // the provided relation, in order. Therefore the PARTITION BY child expression indexes are 0
+    // and 1.
     assert(partitionChildIndexes(Seq(
       Literal(41),
       FunctionTableSubqueryArgumentExpression(
         plan = projectTwoValues,
         partitionByExpressions = projectTwoValues.output),
       Literal("abc"))) ==
-      Seq(1, 2))
+      Seq(0, 1))
     // Same as above, but the PARTITION BY expressions are new expressions which must be projected
     // after all the attributes from the relation provided to the UDTF TABLE argument. Therefore the
-    // PARTITION BY child indexes are 3 and 4 because they begin at an offset of 3 from the
+    // PARTITION BY child indexes are 3 and 4 because they begin at an offset of 2 from the
     // zero-based start of the list of values provided to the UDTF 'eval' method.
     assert(partitionChildIndexes(Seq(
       Literal(41),
@@ -260,7 +264,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Literal(42), Literal(43))),
       Literal("abc"))) ==
-      Seq(3, 4))
+      Seq(2, 3))
     // Same as above, but the PARTITION BY list comprises just one addition expression.
     assert(partitionChildIndexes(Seq(
       Literal(41),
@@ -268,7 +272,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Add(projectList.head.toAttribute, Literal(1)))),
       Literal("abc"))) ==
-      Seq(3))
+      Seq(2))
     // Same as above, but the PARTITION BY list comprises one literal value and one addition
     // expression.
     assert(partitionChildIndexes(Seq(
@@ -277,6 +281,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Literal(42), Add(projectList.head.toAttribute, Literal(1)))),
       Literal("abc"))) ==
-      Seq(3, 4))
+      Seq(2, 3))
   }
 }
