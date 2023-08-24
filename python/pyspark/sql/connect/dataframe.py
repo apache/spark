@@ -550,7 +550,6 @@ class DataFrame:
 
     take.__doc__ = PySparkDataFrame.take.__doc__
 
-    # TODO: extend `on` to also be type List[Column].
     def join(
         self,
         other: "DataFrame",
@@ -879,7 +878,7 @@ class DataFrame:
     withWatermark.__doc__ = PySparkDataFrame.withWatermark.__doc__
 
     def hint(
-        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+        self, name: str, *parameters: Union["PrimitiveType", "Column", List["PrimitiveType"]]
     ) -> "DataFrame":
         if len(parameters) == 1 and isinstance(parameters[0], list):
             parameters = parameters[0]  # type: ignore[assignment]
@@ -890,17 +889,32 @@ class DataFrame:
                 message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
             )
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, float, int, Column, list)
+        allowed_primitive_types = (str, float, int)
+        allowed_types_repr = ", ".join(
+            [t.__name__ for t in allowed_types[:-1]]
+            + ["list[" + t.__name__ + "]" for t in allowed_primitive_types]
+        )
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
                     error_class="INVALID_ITEM_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
-                        "allowed_types": ", ".join([t.__name__ for t in allowed_types]),
+                        "allowed_types": allowed_types_repr,
                         "item_type": type(p).__name__,
                     },
                 )
+            if isinstance(p, list):
+                if not all(isinstance(e, allowed_primitive_types) for e in p):
+                    raise PySparkTypeError(
+                        error_class="INVALID_ITEM_FOR_CONTAINER",
+                        message_parameters={
+                            "arg_name": "parameters",
+                            "allowed_types": allowed_types_repr,
+                            "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
+                        },
+                    )
 
         return DataFrame.withPlan(
             plan.Hint(self._plan, name, list(parameters)),
@@ -1608,6 +1622,11 @@ class DataFrame:
             alias = self._get_alias()
             if self._plan is None:
                 raise SparkConnectException("Cannot analyze on empty plan.")
+
+            # validate the column name
+            if not hasattr(self._session, "is_mock_session"):
+                self.select(item).isLocal()
+
             return _to_col_with_plan_id(
                 col=alias if alias is not None else item,
                 plan_id=self._plan._plan_id,
@@ -2023,21 +2042,9 @@ class DataFrame:
 
     # SparkConnect specific API
     def offset(self, n: int) -> "DataFrame":
-        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
-
-        .. versionadded:: 3.4.0
-
-        Parameters
-        ----------
-        num : int
-            Number of records to skip.
-
-        Returns
-        -------
-        :class:`DataFrame`
-            Subset of the records
-        """
         return DataFrame.withPlan(plan.Offset(child=self._plan, offset=n), session=self._session)
+
+    offset.__doc__ = PySparkDataFrame.offset.__doc__
 
     @classmethod
     def withPlan(cls, plan: plan.LogicalPlan, session: "SparkSession") -> "DataFrame":

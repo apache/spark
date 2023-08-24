@@ -23,7 +23,6 @@ import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 import scala.util.Properties
 
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
@@ -51,29 +50,26 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   override def beforeAll(): Unit = {
-    // TODO(SPARK-44121) Remove this check condition
-    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
-      super.beforeAll()
-      ammoniteOut = new ByteArrayOutputStream()
-      testSuiteOut = new PipedOutputStream()
-      // Connect the `testSuiteOut` and `ammoniteIn` pipes
-      ammoniteIn = new PipedInputStream(testSuiteOut)
-      errorStream = new ByteArrayOutputStream()
+    super.beforeAll()
+    ammoniteOut = new ByteArrayOutputStream()
+    testSuiteOut = new PipedOutputStream()
+    // Connect the `testSuiteOut` and `ammoniteIn` pipes
+    ammoniteIn = new PipedInputStream(testSuiteOut)
+    errorStream = new ByteArrayOutputStream()
 
-      val args = Array("--port", serverPort.toString)
-      val task = new Runnable {
-        override def run(): Unit = {
-          ConnectRepl.doMain(
-            args = args,
-            semaphore = Some(semaphore),
-            inputStream = ammoniteIn,
-            outputStream = ammoniteOut,
-            errorStream = errorStream)
-        }
+    val args = Array("--port", serverPort.toString)
+    val task = new Runnable {
+      override def run(): Unit = {
+        ConnectRepl.doMain(
+          args = args,
+          semaphore = Some(semaphore),
+          inputStream = ammoniteIn,
+          outputStream = ammoniteOut,
+          errorStream = errorStream)
       }
-
-      executorService.submit(task)
     }
+
+    executorService.submit(task)
   }
 
   override def afterAll(): Unit = {
@@ -83,6 +79,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     semaphore.drainPermits()
+    if (ammoniteOut != null) {
+      ammoniteOut.reset()
+    }
   }
 
   def runCommandsInShell(input: String): String = {
@@ -132,20 +131,6 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """.stripMargin
     val output = runCommandsInShell(input)
     assertContains("Array[Int] = Array(19, 24, 29, 34, 39)", output)
-  }
-
-  // SPARK-43198: Switching REPL to CodeClass generation mode causes UDFs defined through lambda
-  // expressions to hit deserialization issues.
-  // TODO(SPARK-43227): Enable test after fixing deserialization issue.
-  ignore("UDF containing lambda expression") {
-    val input = """
-        |class A(x: Int) { def get = x * 20 + 5 }
-        |val dummyUdf = (x: Int) => new A(x).get
-        |val myUdf = udf(dummyUdf)
-        |spark.range(5).select(myUdf(col("id"))).as[Int].collect()
-      """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("Array[Int] = Array(5, 25, 45, 65, 85)", output)
   }
 
   test("UDF containing in-place lambda") {
@@ -238,9 +223,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF Registration") {
-    // TODO SPARK-44449 make this long again when upcasting is in.
     val input = """
-        |class A(x: Int) { def get: Long = x * 100 }
+        |class A(x: Int) { def get = x * 100 }
         |val myUdf = udf((x: Int) => new A(x).get)
         |spark.udf.register("dummyUdf", myUdf)
         |spark.sql("select dummyUdf(id) from range(5)").as[Long].collect()
@@ -250,9 +234,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF closure registration") {
-    // TODO SPARK-44449 make this int again when upcasting is in.
     val input = """
-        |class A(x: Int) { def get: Long = x * 15 }
+        |class A(x: Int) { def get = x * 15 }
         |spark.udf.register("directUdf", (x: Int) => new A(x).get)
         |spark.sql("select directUdf(id) from range(5)").as[Long].collect()
       """.stripMargin
@@ -278,5 +261,75 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """.stripMargin
     val output = runCommandsInShell(input)
     assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
+  }
+
+  test("Collect REPL generated class") {
+    val input =
+      """
+        |case class MyTestClass(value: Int)
+        |spark.range(4).
+        |  filter($"id" % 2 === 1).
+        |  select($"id".cast("int").as("value")).
+        |  as[MyTestClass].
+        |  collect().
+        |  map(mtc => s"MyTestClass(${mtc.value})").
+        |  mkString("[", ", ", "]")
+          """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("""String = "[MyTestClass(1), MyTestClass(3)]"""", output)
+  }
+
+  test("REPL class in encoder") {
+    val input = """
+        |case class MyTestClass(value: Int)
+        |spark.range(3).
+        |  select(col("id").cast("int").as("value")).
+        |  as[MyTestClass].
+        |  map(mtc => mtc.value).
+        |  collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(0, 1, 2)", output)
+  }
+
+  test("REPL class in UDF") {
+    val input = """
+        |case class MyTestClass(value: Int)
+        |spark.range(2).
+        |  map(i => MyTestClass(i.toInt)).
+        |  collect().
+        |  map(mtc => s"MyTestClass(${mtc.value})").
+        |  mkString("[", ", ", "]")
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("""String = "[MyTestClass(0), MyTestClass(1)]"""", output)
+  }
+
+  test("streaming works with REPL generated code") {
+    val input =
+      """
+        |val add1 = udf((i: Long) => i + 1)
+        |val query = {
+        |  spark.readStream
+        |      .format("rate")
+        |      .option("rowsPerSecond", "10")
+        |      .option("numPartitions", "1")
+        |      .load()
+        |      .withColumn("value", add1($"value"))
+        |      .writeStream
+        |      .format("memory")
+        |      .queryName("my_sink")
+        |      .start()
+        |}
+        |var progress = query.lastProgress
+        |while (query.isActive && (progress == null || progress.numInputRows == 0)) {
+        |  query.awaitTermination(100)
+        |  progress = query.lastProgress
+        |}
+        |val noException = query.exception.isEmpty
+        |query.stop()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("noException: Boolean = true", output)
   }
 }

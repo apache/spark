@@ -1134,20 +1134,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectTableNotViewError(
-              nameParts, isTemp = false, cmd, relationTypeMismatchHint, u)
+              nameParts, isTemp = false, cmd, true, u)
           case _: ResolvedTempView =>
             throw QueryCompilationErrors.expectTableNotViewError(
-              identifier, isTemp = true, cmd, relationTypeMismatchHint, u)
+              identifier, isTemp = true, cmd, true, u)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
+      case u @ UnresolvedView(identifier, cmd, allowTemp, hint) =>
         lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
           case t: ResolvedTable =>
+            val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectViewNotTableError(
-              t, cmd, relationTypeMismatchHint, u)
+              nameParts, cmd, hint, u)
           case other => other
         }.getOrElse(u)
 
@@ -2097,6 +2098,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
 
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
+            val functionTableSubqueryArgs =
+              mutable.ArrayBuffer.empty[FunctionTableSubqueryArgumentExpression]
             val tvf = resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
@@ -2109,6 +2112,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                         "PARTITION BY clause, but only Python table functions support this clause")
                 }
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                functionTableSubqueryArgs.append(t)
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
@@ -2117,11 +2121,34 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   tableArgs.size)
               }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+              // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
+              def assignUDTFPartitionColumnIndexes(
+                  fn: PythonUDTFPartitionColumnIndexes => LogicalPlan): Option[LogicalPlan] = {
+                val indexes: Seq[Int] = functionTableSubqueryArgs.headOption
+                  .map(_.partitioningExpressionIndexes).getOrElse(Seq.empty)
+                if (indexes.nonEmpty) {
+                  Some(fn(PythonUDTFPartitionColumnIndexes(indexes)))
+                } else {
+                  None
+                }
+              }
+              val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
+                case g@Generate(p: PythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
+                case g@Generate(p: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
+                case _ =>
+                  tvf
+              }
               Project(
                 Seq(UnresolvedStar(Some(Seq(alias)))),
                 LateralJoin(
                   tableArgs.reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
-                  LateralSubquery(SubqueryAlias(alias, tvf)), Inner, None)
+                  LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
               )
             } else {
               tvf
@@ -2199,7 +2226,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             val elementSchema = u.resolveElementSchema(u.func, u.children)
             PythonUDTF(u.name, u.func, elementSchema, u.children,
-              u.evalType, u.udfDeterministic, u.resultId)
+              u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes)
           }
         }
     }

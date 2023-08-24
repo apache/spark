@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
 import com.google.common.collect.{Lists, Maps}
@@ -48,6 +49,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Mu
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -508,7 +510,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val commonUdf = rel.getFunc
     commonUdf.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformTypedMapPartitions(commonUdf, baseRel)
+        val analyzed = session.sessionState.executePlan(baseRel).analyzed
+        transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
@@ -991,21 +994,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
 
-    def extractValue(expr: Expression): Any = {
-      expr match {
-        case Literal(s, StringType) if s != null =>
-          UnresolvedAttribute.quotedString(s.toString)
-        case literal: Literal => literal.value
-        case UnresolvedFunction(Seq("array"), arguments, _, _, _) =>
-          arguments.map(extractValue).toArray
-        case other =>
-          throw InvalidPlanInput(
-            s"Expression should be a Literal or CreateMap or CreateArray, " +
-              s"but got ${other.getClass} $other")
-      }
-    }
-
-    val params = rel.getParametersList.asScala.toSeq.map(transformExpression).map(extractValue)
+    val params = rel.getParametersList.asScala.toSeq.map(transformExpression)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
@@ -1383,6 +1372,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
       case proto.Expression.ExprTypeCase.CALL_FUNCTION =>
         transformCallFunction(exp.getCallFunction)
+      case proto.Expression.ExprTypeCase.NAMED_ARGUMENT_EXPRESSION =>
+        transformNamedArgumentExpression(exp.getNamedArgumentExpression)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -1399,6 +1390,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
     if (attr.hasPlanId) {
       expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
+    }
+    if (attr.hasIsMetadataColumn) {
+      expr.setTagValue(LogicalPlan.IS_METADATA_COL, attr.getIsMetadataColumn)
     }
     expr
   }
@@ -1504,6 +1498,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       false)
   }
 
+  private def transformNamedArgumentExpression(
+      namedArg: proto.NamedArgumentExpression): Expression = {
+    NamedArgumentExpression(namedArg.getKey, transformExpression(namedArg.getValue))
+  }
+
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
     unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
   }
@@ -1522,6 +1521,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           case nsm: NoSuchMethodException =>
             throw new ClassNotFoundException(
               s"Failed to load class correctly due to $nsm. " +
+                "Make sure the artifact where the class is defined is installed by calling" +
+                " session.addArtifact.")
+          case cnf: ClassNotFoundException =>
+            throw new ClassNotFoundException(
+              s"Failed to load class: ${cnf.getMessage}. " +
                 "Make sure the artifact where the class is defined is installed by calling" +
                 " session.addArtifact.")
           case _ => throw t
@@ -1729,6 +1733,36 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
+
+      case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
+        // [col, expectedNumItems: Long, numBits: Long]
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+
+        // Check expectedNumItems is LongType and value greater than 0L
+        val expectedNumItemsExpr = children(1)
+        val expectedNumItems = expectedNumItemsExpr match {
+          case Literal(l: Long, LongType) => l
+          case _ =>
+            throw InvalidPlanInput("Expected insertions must be long literal.")
+        }
+        if (expectedNumItems <= 0L) {
+          throw InvalidPlanInput("Expected insertions must be positive.")
+        }
+
+        val numBitsExpr = children(2)
+        // Check numBits is LongType and value greater than 0L
+        numBitsExpr match {
+          case Literal(numBits: Long, LongType) =>
+            if (numBits <= 0L) {
+              throw InvalidPlanInput("Number of bits must be positive.")
+            }
+          case _ =>
+            throw InvalidPlanInput("Number of bits must be long literal.")
+        }
+
+        Some(
+          new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
+            .toAggregateExpression())
 
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -2480,7 +2514,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
     }
-    executeHolder.eventsManager.postFinished()
+    executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(
       ExecutePlanResponse
@@ -2823,11 +2857,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       }
     }
 
+    // This is filled when a foreach batch runner started for Python.
+    var foreachBatchRunnerCleaner: Option[StreamingForeachBatchHelper.RunnerCleaner] = None
+
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          val (fn, cleaner) =
+            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
           val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
@@ -2842,16 +2882,26 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       writer.foreachBatch(foreachBatchFn)
     }
 
-    val query = writeOp.getPath match {
-      case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
-      case "" => writer.start()
-      case path => writer.start(path)
-    }
+    val query =
+      try {
+        writeOp.getPath match {
+          case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
+          case "" => writer.start()
+          case path => writer.start(path)
+        }
+      } catch {
+        case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
+          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          foreachBatchRunnerCleaner.foreach(_.close())
+          throw ex
+      }
 
-    // Register the new query so that the session and query references are cached.
-    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-      sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
-      query = query)
+    // Register the new query so that its reference is cached and is stopped on session timeout.
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
+    // Register the runner with the query if Python foreachBatch is enabled.
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
+    }
     executeHolder.eventsManager.postFinished()
 
     val result = WriteStreamOperationStartResult

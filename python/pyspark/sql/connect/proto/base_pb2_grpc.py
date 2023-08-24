@@ -130,7 +130,7 @@ class SparkConnectServiceServicer(object):
         """Release an reattachable execution, or parts thereof.
         The ExecutePlan must have been started with ReattachOptions.reattachable=true.
         Non reattachable executions are released automatically and immediately after the ExecutePlan
-        RPC and ReleaseExecute doesn't need to be used.
+        RPC and ReleaseExecute may not be used.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")

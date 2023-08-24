@@ -46,6 +46,8 @@ private[connect] class SparkConnectServerTab(
   def detach(): Unit = {
     parent.detachTab(this)
   }
+
+  override def displayOrder: Int = 3
 }
 
 private[connect] object SparkConnectServerTab {

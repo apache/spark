@@ -93,18 +93,6 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
-### AVRO_INCORRECT_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
-
 ### BATCH_METADATA_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2086,11 +2074,35 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
+### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+### [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The temp view `<tempViewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
+
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
+
+### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The view `<viewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2122,6 +2134,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 Cannot create view `<relationName>` because it already exists.
 Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects.
+
+### VIEW_EXCEED_MAX_NESTED_DEPTH
+
+SQLSTATE: none assigned
+
+The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 
@@ -2162,5 +2180,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

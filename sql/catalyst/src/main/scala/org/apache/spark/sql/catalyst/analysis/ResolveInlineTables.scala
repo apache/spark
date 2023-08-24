@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AliasHelper
-import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
@@ -32,14 +31,14 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with AliasHelper {
+object ResolveInlineTables extends Rule[LogicalPlan]
+  with CastSupport with AliasHelper with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     AlwaysProcess.fn, ruleId) {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
-      val newTable = ReplaceExpressions(table).asInstanceOf[UnresolvedInlineTable]
-      validateInputEvaluable(newTable)
-      convert(newTable)
+      validateInputEvaluable(table)
+      convert(table)
   }
 
   /**
@@ -75,7 +74,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
     table.rows.foreach { row =>
       row.foreach { e =>
         // Note that nondeterministic expressions are not supported since they are not foldable.
-        if (!e.resolved || !trimAliases(e).foldable) {
+        if (!e.resolved || !trimAliases(prepareForEval(e)).foldable) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))
@@ -115,7 +114,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
           } else {
             cast(e, targetType)
           }
-          castedExpr.eval()
+          prepareForEval(castedExpr).eval()
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(

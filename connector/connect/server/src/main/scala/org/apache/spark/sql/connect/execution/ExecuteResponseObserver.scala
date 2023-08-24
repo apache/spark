@@ -148,8 +148,8 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
 
   /** Attach a new consumer (ExecuteResponseGRPCSender). */
   def attachConsumer(newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
-    // detach the current sender before attaching new one
-    responseSender.foreach(_.detach())
+    // interrupt the current sender before attaching new one
+    responseSender.foreach(_.interrupt())
     responseSender = Some(newSender)
   }
 
@@ -239,11 +239,6 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Returns if the stream is finished. */
   def completed(): Boolean = synchronized {
     finalProducedIndex.isDefined
-  }
-
-  /** Consumer (ExecuteResponseGRPCSender) waits on the monitor of ExecuteResponseObserver. */
-  private def notifyConsumer(): Unit = {
-    notifyAll()
   }
 
   /**

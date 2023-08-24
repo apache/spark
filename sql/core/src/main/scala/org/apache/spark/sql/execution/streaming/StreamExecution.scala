@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException, SparkThrowable}
+import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -186,6 +186,9 @@ abstract class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
+  /* Make sure we propagate the ArtifactSet to the micro batch thread. */
+  private val jobArtifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
@@ -204,7 +207,9 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runStream()
+        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
+          runStream()
+        }
       }
     }
 
