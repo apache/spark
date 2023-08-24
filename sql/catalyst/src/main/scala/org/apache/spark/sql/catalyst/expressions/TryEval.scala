@@ -236,3 +236,31 @@ case class TryToBinary(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - This is a special version of `reflect` that" +
+    " performs the same operation, but returns a NULL value instead of raising an error if the invoke method thrown exception.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('java.util.UUID', 'randomUUID');
+       c33fb387-8500-4bfa-81d2-6e0e3e930df2
+      > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
+       a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
+      > SELECT _FUNC_('java.net.URLDecoder', 'decode', '%');
+       NULL
+  """,
+  since = "4.0.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class TryReflect(children: Seq[Expression]) extends RuntimeReplaceable {
+  override def replacement: Expression =
+    CallMethodViaReflection(children, failOnError = false)
+
+  override def prettyName: String = "try_reflect"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
+
+}
+

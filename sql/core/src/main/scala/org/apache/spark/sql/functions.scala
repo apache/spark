@@ -3683,6 +3683,16 @@ object functions {
   }
 
   /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = withExpr {
+    TryReflect(cols.map(_.expr))
+  }
+
+  /**
    * Returns the Spark version. The string contains 2 fields, the first being a release version
    * and the second being a git revision.
    *

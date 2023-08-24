@@ -55,64 +55,73 @@ import org.apache.spark.util.Utils
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class CallMethodViaReflection(children: Seq[Expression])
+case class CallMethodViaReflection(
+      children: Seq[Expression],
+      failOnError: Boolean = true)
   extends Nondeterministic
   with CodegenFallback
   with QueryErrorsBase {
 
+  def this(children: Seq[Expression]) =
+    this(children, true)
+
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size < 2) {
-      throw QueryCompilationErrors.wrongNumArgsError(
-        toSQLId(prettyName), Seq("> 1"), children.length
-      )
+    if (!failOnError) {
+      super.checkInputDataTypes()
     } else {
-      val unexpectedParameter = children.zipWithIndex.collectFirst {
-        case (e, 0) if !(e.dataType == StringType && e.foldable) =>
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> "class",
-              "inputType" -> toSQLType(StringType),
-              "inputExpr" -> toSQLExpr(children.head)
+      if (children.size < 2) {
+        throw QueryCompilationErrors.wrongNumArgsError(
+          toSQLId(prettyName), Seq("> 1"), children.length
+        )
+      } else {
+        val unexpectedParameter = children.zipWithIndex.collectFirst {
+          case (e, 0) if !(e.dataType == StringType && e.foldable) =>
+            DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> "class",
+                "inputType" -> toSQLType(StringType),
+                "inputExpr" -> toSQLExpr(children.head)
+              )
             )
-          )
-        case (e, 1) if !(e.dataType == StringType && e.foldable) =>
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> "method",
-              "inputType" -> toSQLType(StringType),
-              "inputExpr" -> toSQLExpr(children(1))
+          case (e, 1) if !(e.dataType == StringType && e.foldable) =>
+            DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> "method",
+                "inputType" -> toSQLType(StringType),
+                "inputExpr" -> toSQLExpr(children(1))
+              )
             )
-          )
-        case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_INPUT_TYPE",
-            messageParameters = Map(
-              "paramIndex" -> (idx + 1).toString,
-              "requiredType" -> toSQLType(
-                TypeCollection(BooleanType, ByteType, ShortType,
-                  IntegerType, LongType, FloatType, DoubleType, StringType)),
-              "inputSql" -> toSQLExpr(e),
-              "inputType" -> toSQLType(e.dataType))
-          )
-      }
+          case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_INPUT_TYPE",
+              messageParameters = Map(
+                "paramIndex" -> (idx + 1).toString,
+                "requiredType" -> toSQLType(
+                  TypeCollection(BooleanType, ByteType, ShortType,
+                    IntegerType, LongType, FloatType, DoubleType, StringType)),
+                "inputSql" -> toSQLExpr(e),
+                "inputType" -> toSQLType(e.dataType))
+            )
+        }
 
-      unexpectedParameter match {
-        case Some(mismatch) => mismatch
-        case _ if !classExists =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_CLASS_TYPE",
-            messageParameters = Map("className" -> className)
-          )
-        case _ if method == null =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_STATIC_METHOD",
-            messageParameters = Map("methodName" -> methodName, "className" -> className)
-          )
-        case _ => TypeCheckSuccess
+        unexpectedParameter match {
+          case Some(mismatch) => mismatch
+          case _ if !classExists =>
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_CLASS_TYPE",
+              messageParameters = Map("className" -> className)
+            )
+          case _ if method == null =>
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_STATIC_METHOD",
+              messageParameters = Map("methodName" -> methodName, "className" -> className)
+            )
+          case _ => TypeCheckSuccess
+        }
       }
     }
   }
@@ -133,8 +142,13 @@ case class CallMethodViaReflection(children: Seq[Expression])
       }
       i += 1
     }
-    val ret = method.invoke(null, buffer : _*)
-    UTF8String.fromString(String.valueOf(ret))
+    try {
+      val ret = method.invoke(null, buffer : _*)
+      UTF8String.fromString(String.valueOf(ret))
+    } catch {
+      case _: Exception if !failOnError =>
+        null
+    }
   }
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
