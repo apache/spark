@@ -1215,12 +1215,12 @@ event start time and evaluated gap duration during the query execution.
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-from pyspark.sql import functions as F
+from pyspark.sql import functions as sf
 
 events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
 session_window = session_window(events.timestamp, \
-    F.when(events.userId == "user1", "5 seconds") \
+    sf.when(events.userId == "user1", "5 seconds") \
     .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
 
 # Group the data by session window and userId, and compute the count of each group
