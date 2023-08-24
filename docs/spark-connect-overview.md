@@ -387,9 +387,23 @@ supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the
 APIs you are using are available before migrating existing code to Spark Connect.
 
-**Scala**: In Spark 3.4, Spark Connect supports most Scala APIs, including
+**Scala**: In Spark 3.5, Spark Connect supports most Scala APIs, including
 [Dataset](api/scala/org/apache/spark/sql/Dataset.html),
-[functions](api/scala/org/apache/spark/sql/functions$.html), and
-[Column](api/scala/org/apache/spark/sql/Column.html).
+[functions](api/scala/org/apache/spark/sql/functions$.html),
+[Column](api/scala/org/apache/spark/sql/Column.html),
+[Catalog](api/scala/org/apache/spark/sql/catalog/Catalog.html) and
+[KeyValueGroupedDataset](api/scala/org/apache/spark/sql/KeyValueGroupedDataset.html).
+
+User-Defined Functions (UDFs) are supported, by default for the shell and in standalone applications with
+additional set-up requirements.
+
+Majority of the Streaming API is supported, including
+[DataStreamReader](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html),
+[DataStreamWriter](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.htmll),
+[StreamingQuery](api/scala/org/apache/spark/sql/streaming/StreamingQuery.html) and
+[StreamingQueryListener](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html).
+
+APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
+and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are deprecated in all Spark Connect versions.
 
 Support for more APIs is planned for upcoming Spark releases.
