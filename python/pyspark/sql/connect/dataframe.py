@@ -54,6 +54,7 @@ from pyspark.sql.dataframe import (
 )
 
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
@@ -1599,12 +1600,16 @@ class DataFrame:
                 message_parameters={"feature": f"{name}()"},
             )
 
-        if name not in self.columns:
-            raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
-            )
-
-        return self[name]
+        try:
+            # let self[name] validate the column name
+            return self[name]
+        except AnalysisException as e:
+            if "UNRESOLVED_COLUMN" in e.message:
+                raise AttributeError(
+                    "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+                )
+            else:
+                raise
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
