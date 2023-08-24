@@ -1622,6 +1622,11 @@ class DataFrame:
             alias = self._get_alias()
             if self._plan is None:
                 raise SparkConnectException("Cannot analyze on empty plan.")
+
+            # validate the column name
+            if not hasattr(self._session, "is_mock_session"):
+                self.select(item).isLocal()
+
             return _to_col_with_plan_id(
                 col=alias if alias is not None else item,
                 plan_id=self._plan._plan_id,
