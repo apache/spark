@@ -823,7 +823,7 @@ def signum(col: "ColumnOrName") -> Column:
 signum.__doc__ = pysparkfuncs.signum.__doc__
 
 
-sigh = signum
+sign = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
