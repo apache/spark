@@ -1230,6 +1230,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       try {
         return createHybridStore(dm, appId, attempt, metadata)
       } catch {
+        case e: RuntimeException if e.getMessage != null &&
+            e.getMessage.contains("Not enough memory to create hybrid") =>
+          // Handle exception from `HistoryServerMemoryManager.lease`.
+          logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
+            s" Using $hybridStoreDiskBackend. " + e.getMessage)
         case e: Exception =>
           logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
             s" Using $hybridStoreDiskBackend.", e)
