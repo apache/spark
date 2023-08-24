@@ -30,6 +30,7 @@ license: |
 - Since Spark 3.5, the `plan` field is moved from `AnalysisException` to `EnhancedAnalysisException`.
 - Since Spark 3.5, `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` is enabled by default. To restore the previous behavior, set `spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` to `false`.
 - Since Spark 3.5, the `array_insert` function is 1-based for negative indexes. It inserts new element at the end of input arrays for the index -1. To restore the previous behavior, set `spark.sql.legacy.negativeIndexInArrayInsert` to `true`.
+- Since Spark 3.5, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`.
 
 ## Upgrading from Spark SQL 3.3 to 3.4
 
