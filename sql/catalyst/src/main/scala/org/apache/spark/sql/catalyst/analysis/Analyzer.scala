@@ -2143,10 +2143,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                           "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
                             "please remove these clauses and retry the query again.")
                   }
+                  var withSinglePartition = t.withSinglePartition
+                  var partitionByExpressions = t.partitionByExpressions
+                  var orderByExpressions = t.orderByExpressions
+                  if (a.withSinglePartition) {
+                    withSinglePartition = true
+                  }
+                  if (a.partitionByExpressions.nonEmpty) {
+                    partitionByExpressions = a.partitionByExpressions
+                  }
+                  if (a.orderByExpressions.nonEmpty) {
+                    orderByExpressions = a.orderByExpressions
+                  }
                   val newTableArgument = t.copy(
-                    withSinglePartition = a.withSinglePartition,
-                    partitionByExpressions = a.partitionByExpressions,
-                    orderByExpressions = a.orderByExpressions)
+                    withSinglePartition = withSinglePartition,
+                    partitionByExpressions = partitionByExpressions,
+                    orderByExpressions = orderByExpressions)
                   tableArgs.append(SubqueryAlias(alias, newTableArgument.evaluable))
                   functionTableSubqueryArgs.append(newTableArgument)
                 }.getOrElse {
