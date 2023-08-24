@@ -23,14 +23,14 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.Unpickler
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorker, PythonWorkerUtils}
+import org.apache.spark.{JobArtifactSet, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonWorkerUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -101,18 +101,8 @@ class PythonUDTFRunner(
     Seq(ChainedPythonFunctions(Seq(udtf.func))),
     PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
 
-  protected override def newWriter(
-      env: SparkEnv,
-      worker: PythonWorker,
-      inputIterator: Iterator[Array[Byte]],
-      partitionIndex: Int,
-      context: TaskContext): Writer = {
-    new PythonUDFWriter(env, worker, inputIterator, partitionIndex, context) {
-
-      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
-      }
-    }
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 }
 

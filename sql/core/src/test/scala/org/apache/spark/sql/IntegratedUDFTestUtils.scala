@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
-import org.apache.spark.util.Utils
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -306,9 +305,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
 
-  // TODO(SPARK-44097) Renable PandasUDF Tests in Java 21
   lazy val shouldTestPandasUDFs: Boolean =
-    isPythonAvailable && isPandasAvailable && isPyArrowAvailable && !Utils.isJavaVersionAtLeast21
+    isPythonAvailable && isPandasAvailable && isPyArrowAvailable
 
   /**
    * A base trait for various UDFs defined in this object.

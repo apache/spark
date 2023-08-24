@@ -176,6 +176,14 @@ class SparkSession:
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
             )
 
+        def _apply_options(self, session: "SparkSession") -> None:
+            with self._lock:
+                for k, v in self._options.items():
+                    try:
+                        session.conf.set(k, v)
+                    except Exception as e:
+                        warnings.warn(str(e))
+
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
@@ -200,6 +208,7 @@ class SparkSession:
                 session = SparkSession(connection=spark_remote)
 
             SparkSession._set_default_and_active_session(session)
+            self._apply_options(session)
             return session
 
         def getOrCreate(self) -> "SparkSession":
@@ -209,6 +218,7 @@ class SparkSession:
                     session = SparkSession._default_session
                     if session is None:
                         session = self.create()
+                self._apply_options(session)
                 return session
 
     _client: SparkConnectClient
