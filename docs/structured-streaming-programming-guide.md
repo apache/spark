@@ -1215,12 +1215,12 @@ event start time and evaluated gap duration during the query execution.
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-from pyspark.sql import functions as F
+from pyspark.sql import functions as sf
 
 events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
 session_window = session_window(events.timestamp, \
-    F.when(events.userId == "user1", "5 seconds") \
+    sf.when(events.userId == "user1", "5 seconds") \
     .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
 
 # Group the data by session window and userId, and compute the count of each group
@@ -2393,6 +2393,10 @@ RocksDB provides a way to limit the memory usage for all DB instances running on
 If you want to cap RocksDB memory usage in your Spark Structured Streaming deployment, this feature can be enabled by setting the `spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage` config to `true`.
 You can also determine the max allowed memory for RocksDB instances by setting the `spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB` value to a static number or as a fraction of the physical memory available on the node.
 Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
+
+Note that the `boundedMemoryUsage` config will enable a soft limit on the total memory usage for RocksDB.
+So the total memory used by RocksDB can temporarily exceed this value if all blocks allocated to higher level readers are in use.
+Enabling a strict limit is not possible at this time since it will cause query failures and we do not support re-balancing of the state across additional nodes.
 
 ##### RocksDB State Store Changelog Checkpointing
 In newer version of Spark, changelog checkpointing is introduced for RocksDB state store. The traditional checkpointing mechanism for RocksDB State Store is incremental snapshot checkpointing, where the manifest files and newly generated RocksDB SST files of RocksDB instances are uploaded to a durable storage.

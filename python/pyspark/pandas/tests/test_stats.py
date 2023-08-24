@@ -33,15 +33,24 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 class StatsTestsMixin:
     def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
-        functions = ["max", "min", "mean", "sum", "count"]
+        self.assert_eq(
+            psdf_or_psser.count(),
+            pdf_or_pser.count(),
+            almost=True,
+        )
+
+        functions = ["max", "min", "mean", "sum"]
         for funcname in functions:
-            self.assert_eq(getattr(psdf_or_psser, funcname)(), getattr(pdf_or_pser, funcname)())
+            self.assert_eq(
+                getattr(psdf_or_psser, funcname)(),
+                getattr(pdf_or_pser, funcname)(numeric_only=True),
+            )
 
         functions = ["std", "var", "product", "sem"]
         for funcname in functions:
             self.assert_eq(
                 getattr(psdf_or_psser, funcname)(),
-                getattr(pdf_or_pser, funcname)(),
+                getattr(pdf_or_pser, funcname)(numeric_only=True),
                 check_exact=False,
             )
 
@@ -49,7 +58,7 @@ class StatsTestsMixin:
         for funcname in functions:
             self.assert_eq(
                 getattr(psdf_or_psser, funcname)(ddof=0),
-                getattr(pdf_or_pser, funcname)(ddof=0),
+                getattr(pdf_or_pser, funcname)(ddof=0, numeric_only=True),
                 check_exact=False,
             )
 
@@ -76,11 +85,6 @@ class StatsTestsMixin:
         self._test_stat_functions(pdf.A, psdf.A)
         self._test_stat_functions(pdf, psdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43499): Enable SeriesTests.test_stat_functions_with_no_numeric_columns "
-        "for pandas 2.0.0.",
-    )
     def test_stat_functions_with_no_numeric_columns(self):
         pdf = pd.DataFrame(
             {
@@ -407,10 +411,6 @@ class StatsTestsMixin:
                     almost=True,
                 )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43497): Enable SeriesTests.test_cov_corr_meta for pandas 2.0.0.",
-    )
     def test_cov_corr_meta(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
@@ -428,7 +428,7 @@ class StatsTestsMixin:
                 index=pd.Index([1, 2, 3], name="myindex"),
             )
             psdf = ps.from_pandas(pdf)
-            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
+            self.assert_eq(psdf.corr(), pdf.corr(numeric_only=True), check_exact=False)
 
     def test_stats_on_boolean_dataframe(self):
         pdf = pd.DataFrame({"A": [True, False, True], "B": [False, False, True]})

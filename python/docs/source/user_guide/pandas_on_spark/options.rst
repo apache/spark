@@ -175,11 +175,11 @@ This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> from pyspark.sql import functions as F, Window
+    >>> from pyspark.sql import functions as sf, Window
     >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
-    >>> sequential_index = F.row_number().over(
-    ...    Window.orderBy(F.monotonically_increasing_id().asc())) - 1
+    >>> sequential_index = sf.row_number().over(
+    ...    Window.orderBy(sf.monotonically_increasing_id().asc())) - 1
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
     [0, 1, 2]
 
@@ -225,10 +225,10 @@ This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql import functions as sf
     >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
-    >>> spark_df.select(F.monotonically_increasing_id()) \
+    >>> spark_df.select(sf.monotonically_increasing_id()) \
     ...     .rdd.map(lambda r: r[0]).collect()
     [25769803776, 60129542144, 94489280512]
 

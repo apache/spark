@@ -310,3 +310,27 @@ Project [emp_name#x, bonus_amt#x]
             +- Project [emp_name#x, bonus_amt#x]
                +- SubqueryAlias BONUS
                   +- LocalRelation [emp_name#x, bonus_amt#x]
+
+
+-- !query
+SELECT *
+FROM BONUS
+WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
+                    FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
+                        AND DEPT.dept_name < BONUS.emp_name)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "(dept_name#x < outer(emp_name#x))\nFilter ((dept_id#x = dept_id#x) AND (dept_name#x < outer(emp_name#x)))\n+- Join Inner\n   :- SubqueryAlias emp\n   :  +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])\n   :     +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]\n   :        +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n   :           +- SubqueryAlias EMP\n   :              +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n   +- SubqueryAlias dept\n      +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])\n         +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n            +- Project [dept_id#x, dept_name#x, state#x]\n               +- SubqueryAlias DEPT\n                  +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 224,
+    "fragment" : "SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s\n                    FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id\n                        AND DEPT.dept_name < BONUS.emp_name"
+  } ]
+}
