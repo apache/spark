@@ -427,7 +427,7 @@ case class AlterTableChangeColumnCommand(
 
   private def verifyNonPartitionColumn(
       table: CatalogTable, columnName: String, resolver: Resolver): Unit = {
-    findColumnByName(table.dataSchema, columnName, resolver) match {
+    findColumnByName(table.partitionSchema, columnName, resolver) match {
       case Some(_) =>
         throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
       case None =>
