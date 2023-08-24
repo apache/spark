@@ -181,7 +181,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
       val tableSchema = CharVarcharUtils.getRawSchema(
-        removeInternalMetadata(outputColumns.toStructType), sparkSession.sessionState.conf)
+        removeInternalMetadata(outputColumns.toStructType.asNullable),
+        sparkSession.sessionState.conf)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
