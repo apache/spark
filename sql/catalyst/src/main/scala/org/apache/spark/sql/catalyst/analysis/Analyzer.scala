@@ -2155,7 +2155,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                           "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
                             "please remove these clauses and retry the query again.")
                   }
-                var withSinglePartition = t.withSinglePartition
+                  var withSinglePartition = t.withSinglePartition
                   var partitionByExpressions = t.partitionByExpressions
                   var orderByExpressions = t.orderByExpressions
                   if (a.withSinglePartition) {

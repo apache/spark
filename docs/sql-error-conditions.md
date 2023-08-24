@@ -1758,6 +1758,12 @@ Failed to analyze the Python user defined table function: `<msg>`
 
 Failed to evaluate the table function `<functionName>` because its table metadata `<requestedMetadata>`, but the function call `<invalidFunctionCallProperty>`.
 
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata was invalid; `<reason>`.
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
