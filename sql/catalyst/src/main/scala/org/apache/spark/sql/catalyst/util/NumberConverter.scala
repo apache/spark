@@ -56,13 +56,17 @@ object NumberConverter {
       ansiEnabled: Boolean,
       context: SQLQueryContext): Long = {
     var v: Long = 0L
-    // bound will always be positive since radix >= 2
-    // Note that: -1 is equivalent to 11111111...1111 which is the largest unsigned long value
-    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix)
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
-      // if v < 0, which mean its bit presentation starts with 1, so v * radix will cause
-      // overflow since radix is greater than 2
+      v *= radix
+      if (v < 0 ) {
+        if (ansiEnabled) {
+          throw QueryExecutionErrors.overflowInConvError(context)
+        } else {
+          return -1
+        }
+      }
+      v += value(i)
       if (v < 0) {
         if (ansiEnabled) {
           throw QueryExecutionErrors.overflowInConvError(context)
@@ -70,22 +74,6 @@ object NumberConverter {
           return -1
         }
       }
-      // check if v greater than bound
-      // if v is greater than bound, v * radix + radix will cause overflow.
-      if (v >= bound) {
-        // However our target is checking whether v * radix + value(i) can cause overflow or not.
-        // Because radix >= 2,so (-1 - value(i)) / radix will be positive (its bit presentation
-        // will start with 0) and we can easily checking for overflow by checking
-        // (-1 - value(i)) / radix < v or not
-        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
-          if (ansiEnabled) {
-            throw QueryExecutionErrors.overflowInConvError(context)
-          } else {
-            return -1
-          }
-        }
-      }
-      v = v * radix + value(i)
       i += 1
     }
     v
