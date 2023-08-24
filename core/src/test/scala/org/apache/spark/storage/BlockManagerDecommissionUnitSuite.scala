@@ -351,7 +351,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  test("test cached rdd migration no available hosts") {
+  test("SPARK-44547: test cached rdd migration no available hosts") {
     val blockTransferService = mock(classOf[BlockTransferService])
     val bm = mock(classOf[BlockManager])
 
@@ -374,12 +374,10 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     try {
       bmDecomManager.start()
       eventually(timeout(100.second), interval(10.milliseconds)) {
-        assert(bmDecomManager.shufflesToMigrate.isEmpty === true)
-        assert(bmDecomManager.numMigratedShuffles.get() === 0)
         verify(bm, never()).replicateBlock(
           mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
-        // BlockManagerDecommissioner stopped
         assert(bmDecomManager.rddBlocksLeft)
+        assert(bmDecomManager.stoppedRDD)
       }
     } finally {
       bmDecomManager.stop()
