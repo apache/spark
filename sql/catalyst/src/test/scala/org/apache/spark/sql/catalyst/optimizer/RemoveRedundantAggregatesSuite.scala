@@ -128,9 +128,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .select($"a", $"_nondeterministic" as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
-    val a = relation
-      .groupBy($"a", $"c")($"a", rand(0) as "c")
-      .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
   }
