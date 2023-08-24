@@ -2999,6 +2999,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
+              <hive.conf.validation>false</hive.conf.validation>
             </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
