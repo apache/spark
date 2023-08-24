@@ -29,7 +29,6 @@ import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.mockito.Mockito.when
 import org.scalatest.Tag
 import org.scalatestplus.mockito.MockitoSugar
@@ -157,8 +156,6 @@ class SparkConnectServiceSuite
 
   test("SPARK-41224: collect data using arrow") {
     withEvents { verifyEvents =>
-      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
       val instance = new SparkConnectService(false)
       val connect = new MockRemoteSession()
       val context = proto.UserContext
@@ -246,8 +243,6 @@ class SparkConnectServiceSuite
 
   test("SPARK-44776: LocalTableScanExec") {
     withEvents { verifyEvents =>
-      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
       val instance = new SparkConnectService(false)
       val connect = new MockRemoteSession()
       val context = proto.UserContext
@@ -319,8 +314,6 @@ class SparkConnectServiceSuite
     // Set 10 KiB as the batch size limit
     val batchSize = 10 * 1024
     withSparkConf("spark.connect.grpc.arrow.maxBatchSize" -> batchSize.toString) {
-      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
       val instance = new SparkConnectService(false)
       val connect = new MockRemoteSession()
       val context = proto.UserContext
@@ -742,8 +735,6 @@ class SparkConnectServiceSuite
   }
 
   test("Test observe response") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("test") {
       spark.sql("""
                   | CREATE TABLE test (col1 INT, col2 STRING)
