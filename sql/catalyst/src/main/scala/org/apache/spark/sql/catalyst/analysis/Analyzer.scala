@@ -2133,7 +2133,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // corresponding TABLE argument, and then update the TABLE argument representation
                 // to apply the requested partitioning and/or ordering.
                 pythonUDTFAnalyzeResult.map { a =>
-                  if (a.hasRepartitioning && t.hasRepartitioning) {
+                  if (a.withSinglePartition && a.partitionByExpressions.nonEmpty) {
+                    throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
+                      functionName = pythonUDTF.get.name,
+                      reason = "the 'with_single_partition' field cannot be assigned to true " +
+                        "if the 'partition_by' list is non-empty")
+                  } else if (a.orderByExpressions.nonEmpty && !a.withSinglePartition &&
+                    a.partitionByExpressions.isEmpty) {
+                    throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
+                      functionName = pythonUDTF.get.name,
+                      reason = "the 'order_by' field cannot be non-empty unless the " +
+                        "'with_single_partition' field is set to true or the 'partition_by' list " +
+                        "is non-empty")
+                  } else if (a.hasRepartitioning && t.hasRepartitioning) {
                     throw QueryCompilationErrors
                       .tableValuedFunctionRequiredMetadataIncompatibleWithCall(
                         functionName = pythonUDTF.get.name,
@@ -2143,7 +2155,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                           "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
                             "please remove these clauses and retry the query again.")
                   }
-                  var withSinglePartition = t.withSinglePartition
+                var withSinglePartition = t.withSinglePartition
                   var partitionByExpressions = t.partitionByExpressions
                   var orderByExpressions = t.orderByExpressions
                   if (a.withSinglePartition) {

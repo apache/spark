@@ -647,7 +647,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           TestPythonUDTF("udtf"),
           TestPythonUDTFCountSumLast,
           TestPythonUDTFWithSinglePartition,
-          TestPythonUDTFPartitionBy
+          TestPythonUDTFPartitionBy,
+          TestPythonUDTFInvalidPartitionByAndWithSinglePartition,
+          TestPythonUDTFInvalidOrderByWithoutPartitionBy
         )
         Seq(UDTFTestCase(
           s"$testCaseName - Python UDTFs", absPath, resultFile, udtfs

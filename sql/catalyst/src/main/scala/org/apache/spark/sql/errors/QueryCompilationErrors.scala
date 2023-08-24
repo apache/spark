@@ -3748,4 +3748,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "requestedMetadata" -> requestedMetadata,
         "invalidFunctionCallProperty" -> invalidFunctionCallProperty))
   }
+
+  def tableValuedFunctionRequiredMetadataInvalid(
+      functionName: String,
+      reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "reason" -> reason))
+  }
 }

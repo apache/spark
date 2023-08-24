@@ -33,6 +33,12 @@ SELECT * FROM UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION);
 SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col);
 SELECT * FROM UDTFPartitionByOrderBy(TABLE(t2) WITH SINGLE PARTITION);
 SELECT * FROM UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2));
+SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION);
+SELECT * FROM UDTFInvalidPartitionByAndWithSinglePartition(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) WITH SINGLE PARTITION);
+SELECT * FROM UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
 
 -- cleanup
 DROP VIEW t1;
