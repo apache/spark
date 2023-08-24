@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 3.5 to 4.0
 
-- Since Spark 4.0, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`. To restore the previous behavior, set `spark.sql.maxSinglePartitionBytes` to `9223372036854775807`(the value of `Long.MaxValue`).
+- Since Spark 4.0, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`. To restore the previous behavior, set `spark.sql.maxSinglePartitionBytes` to `9223372036854775807`(`Long.MaxValue`).
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 
