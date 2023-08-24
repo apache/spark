@@ -3021,6 +3021,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
+        case e: NamedArgumentExpression =>
+          // For NamedArgumentExpression, we extract the value and replace it with
+          // an AttributeReference (with an internal column name, e.g. "_w0").
+          NamedArgumentExpression(
+            e.key,
+            extractedExprMap.getOrElseUpdate(e.canonicalized,
+              Alias(e.value, s"_w${extractedExprMap.size}")()).toAttribute)
         case e: Expression =>
           // For other expressions, we extract it and replace it with an AttributeReference (with
           // an internal column name, e.g. "_w0").

@@ -452,13 +452,13 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
 def wrap_grouped_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(*series):
+    def wrapped(*args, **kwargs):
         import pandas as pd
 
-        result = f(*series)
+        result = f(*args, **kwargs)
         return pd.Series([result])
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
 
 
 def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
@@ -484,19 +484,19 @@ def wrap_unbounded_window_agg_pandas_udf(f, return_type):
     # the scalar value.
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(*series):
+    def wrapped(*args, **kwargs):
         import pandas as pd
 
-        result = f(*series)
-        return pd.Series([result]).repeat(len(series[0]))
+        result = f(*args, **kwargs)
+        return pd.Series([result]).repeat(len((list(args) + list(kwargs.values()))[0]))
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
 
 
 def wrap_bounded_window_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(begin_index, end_index, *series):
+    def wrapped(begin_index, end_index, *args, **kwargs):
         import pandas as pd
 
         result = []
@@ -521,11 +521,12 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
             # Note: Calling reset_index on the slices will increase the cost
             #       of creating slices by about 100%. Therefore, for performance
             #       reasons we don't do it here.
-            series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
-            result.append(f(*series_slices))
+            args_slices = [s.iloc[begin_array[i] : end_array[i]] for s in args]
+            kwargs_slices = {k: s.iloc[begin_array[i] : end_array[i]] for k, s in kwargs.items()}
+            result.append(f(*args_slices, **kwargs_slices))
         return pd.Series(result)
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
 
 
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
@@ -535,6 +536,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         PythonEvalType.SQL_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         # The below doesn't support named argument, but shares the same protocol.
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     ):
