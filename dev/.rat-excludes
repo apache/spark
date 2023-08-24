@@ -146,6 +146,3 @@ empty.proto
 LimitedInputStream.java
 TimSort.java
 xml-resources/*
-TestProto.java
-TestProtoObj.java
-TestProtoObjOrBuilder.java
