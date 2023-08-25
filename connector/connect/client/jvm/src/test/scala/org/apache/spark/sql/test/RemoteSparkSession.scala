@@ -24,9 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Tag}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
@@ -102,9 +100,7 @@ object SparkConnectServerUtils {
   private def testConfigs: Seq[String] = {
     // To find InMemoryTableCatalog for V2 writer tests
     val catalystTestJar =
-      tryFindJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
-        .map(clientTestJar => clientTestJar.getCanonicalPath)
-        .get
+      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
 
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
@@ -180,9 +176,6 @@ object SparkConnectServerUtils {
   }
 
   def createSparkSession(): SparkSession = {
-    if (!SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
-      return null
-    }
     SparkConnectServerUtils.start()
 
     val spark = SparkSession
@@ -224,18 +217,5 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     }
     spark = null
     super.afterAll()
-  }
-
-  /**
-   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default, we
-   * should delete this function after SPARK-44121 is completed.
-   */
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
-      pos: Position): Unit = {
-    super.test(testName, testTags: _*) {
-      // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
-      testFun
-    }
   }
 }

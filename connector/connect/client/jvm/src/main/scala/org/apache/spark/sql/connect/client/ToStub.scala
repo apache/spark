@@ -14,24 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.connect.client
 
-import org.apache.spark.sql.connect.client.ToStub
-import org.apache.spark.sql.test.RemoteSparkSession
-
-class StubbingTestSuite extends RemoteSparkSession {
-  private def eval[T](f: => T): T = f
-
-  test("capture of to-be stubbed class") {
-    val session = spark
-    import session.implicits._
-    val result = spark
-      .range(0, 10, 1, 1)
-      .map(n => n + 1)
-      .as[ToStub]
-      .head()
-    eval {
-      assert(result.value == 1)
-    }
-  }
-}
+/**
+ * Class used to test stubbing. This needs to be in the main source tree, because this is not
+ * synced with the connect server during tests.
+ */
+case class ToStub(value: Long)
