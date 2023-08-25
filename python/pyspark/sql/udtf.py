@@ -44,7 +44,7 @@ def _create_udtf(
     returnType: Union[StructType, str],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
-    deterministic: bool = True,
+    deterministic: bool = False,
 ) -> "UserDefinedTableFunction":
     """Create a Python UDTF with the given eval type."""
     udtf_obj = UserDefinedTableFunction(
