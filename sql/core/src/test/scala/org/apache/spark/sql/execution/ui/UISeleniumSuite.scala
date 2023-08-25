@@ -114,7 +114,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     }
   }
 
-  test("Escape html is not necessary") {
+  test("SPARK-44960: Escape html is not necessary for Spark UI") {
     spark = creatSparkSessionWithUI
     val escape = (BASIC_ESCAPE.keySet().asScala.toSeq ++ ISO8859_1_ESCAPE.keySet().asScala ++
       HTML40_EXTENDED_ESCAPE.keySet().asScala).mkString

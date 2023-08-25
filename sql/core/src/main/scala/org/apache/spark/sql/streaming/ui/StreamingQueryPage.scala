@@ -176,6 +176,14 @@ private[ui] class StreamingQueryPagedTable(
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
         streamingQuery.summary.runId)
 
+    def details: Seq[Node] = {
+      if (isActive) {
+        Seq.empty[Node]
+      } else {
+        SparkUIUtils.errorMessageCell(streamingQuery.summary.exception.getOrElse("-"))
+      }
+    }
+
     <tr>
       <td>{UIUtils.getQueryName(streamingQuery)}</td>
       <td>{UIUtils.getQueryStatus(streamingQuery)}</td>
@@ -186,13 +194,7 @@ private[ui] class StreamingQueryPagedTable(
       <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgInput)}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgProcess)}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
-      {
-        if (isActive) {
-          Seq.empty[Node]
-        } else {
-          SparkUIUtils.errorMessageCell(streamingQuery.summary.exception.getOrElse("-"))
-        }
-      }
+      {details}
     </tr>
   }
 }

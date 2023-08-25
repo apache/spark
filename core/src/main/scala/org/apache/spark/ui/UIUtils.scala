@@ -708,7 +708,7 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
-  def errorSummary(errorMessage: String): (String, Boolean) = {
+  private[spark] def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =
       ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
