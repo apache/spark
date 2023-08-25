@@ -1582,6 +1582,9 @@ class DataFrame:
         return None
 
     def __getattr__(self, name: str) -> "Column":
+        if self._plan is None:
+            raise SparkConnectException("Cannot analyze on empty plan.")
+
         if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
@@ -1604,7 +1607,11 @@ class DataFrame:
                 "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
             )
 
-        return self[name]
+        alias = self._get_alias()
+        return _to_col_with_plan_id(
+            col=alias if alias is not None else name,
+            plan_id=self._plan._plan_id,
+        )
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
