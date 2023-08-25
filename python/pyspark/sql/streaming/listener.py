@@ -477,7 +477,8 @@ class StreamingQueryProgress:
             name=j["name"],
             timestamp=j["timestamp"],
             batchId=j["batchId"],
-            batchDuration=j["batchDuration"],
+            # before spark 4.0, batchDuration is not in the json method of jvm side StreamingQueryProgress
+            batchDuration=j["batchDuration"] if "batchDuration" in j else None,
             durationMs=dict(j["durationMs"]) if "durationMs" in j else {},
             eventTime=dict(j["eventTime"]) if "eventTime" in j else {},
             stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
