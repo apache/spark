@@ -848,6 +848,10 @@ jobs:
         key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           scala-213-coursier-
+    - name: Clear repo
+      run: |
+        rm -rf /home/runner/.m2/repository/org/slf4j/slf4j-api
+        ls -al /home/runner/.m2/repository/org/slf4j
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
