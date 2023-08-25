@@ -175,7 +175,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       right: LogicalPlan,
       hint: JoinHint,
       joinType: JoinType): Boolean = {
-    // If any of the side can be broadcast, then it is not a shuffle join.
+    // If any of the child can be broadcast, then it is not a shuffle join.
     !(canLeftSideBeBroadcast(left, conf, hint, joinType) ||
       canRightSideBeBroadcast(right, conf, hint, joinType))
   }
