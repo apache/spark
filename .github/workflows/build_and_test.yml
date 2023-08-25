@@ -237,7 +237,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Free up disk space
@@ -413,7 +413,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           pyspark-coursier-
     - name: Free up disk space
@@ -521,7 +521,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           sparkr-coursier-
     - name: Free up disk space
@@ -627,7 +627,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           docs-coursier-
     - name: Cache Maven local repository
@@ -844,7 +844,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           scala-213-coursier-
     - name: Install Java 8
@@ -894,7 +894,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           tpcds-coursier-
     - name: Install Java 8
@@ -999,7 +999,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
         restore-keys: |
           docker-integration-coursier-
     - name: Install Java 8
@@ -1057,7 +1057,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/coursier
-          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt', 'project/build.properties') }}
           restore-keys: |
             k8s-integration-coursier-
       - name: Install Java ${{ inputs.java }}
