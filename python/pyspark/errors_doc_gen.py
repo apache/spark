@@ -45,13 +45,17 @@ This is a list of common, named error classes returned by PySpark which are defi
 When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <https://spark.apache.org/docs/latest/api/python/development/contributing.html#contributing-error-and-exception>`_.
 """  # noqa
     with open(output_rst_file_path, "w") as f:
-        f.write(header + "\n")
+        f.write(header + "\n\n")
         for error_key, error_details in ERROR_CLASSES_MAP.items():
             f.write(error_key + "\n")
-            f.write("-" * len(error_key) + "\n\n")  # Underline for the error key
+            # The length of the error class name and underline must be the same
+            # to satisfy the RST format.
+            f.write("-" * len(error_key) + "\n\n")
             messages = error_details["message"]
             for message in messages:
-                # Escape parentheses with a backslash when they follow a backtick
+                # Escape parentheses with a backslash when they follow a backtick.
                 message = re.sub(r"`(\()", r"`\\\1", message)
                 f.write(message + "\n")
-            f.write("\n")  # Add an empty line for better readability
+            # Add 2 new lines between the descriptions of each error class
+            # to improve the readability of the generated RST file.
+            f.write("\n\n")
