@@ -612,6 +612,9 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Clean local repo
+      run: |
+        rm -rf /home/runner/.m2/repository/
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space_container ]; then
@@ -804,6 +807,9 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Clean local repo
+      run: |
+        rm -rf /home/runner/.m2/repository/
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
