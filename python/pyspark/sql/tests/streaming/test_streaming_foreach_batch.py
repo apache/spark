@@ -176,7 +176,7 @@ class StreamingTestsForeachBatchMixin:
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
     def test_streaming_foreach_batch_import(self):
-        import time  # not imported in foreach_batch_worker
+        import time  # not imported in foreachBatch_worker
 
         table_name = "testTable_foreach_batch_import"
 
