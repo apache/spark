@@ -674,18 +674,37 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-44804: SortMergeJoin should respect the streamed side ordering") {
+    def assertOrdering(plan: SparkPlan, expectedOrdering: Seq[String]): Unit = {
+      assert(plan.outputOrdering.map(_.sql) === expectedOrdering)
+    }
+
     val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB),
       outputPartitioning = HashPartitioning(exprA :: Nil, 5))
     val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB, orderingC, orderingA),
       outputPartitioning = HashPartitioning(exprB :: Nil, 5))
 
-    Seq(Inner -> 2,
-      LeftOuter -> 2,
-      RightOuter -> 3,
-      FullOuter -> 0).foreach { case (joinType, orderNum) =>
-      val smj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, joinType, None, plan1, plan2)
-      assert(smj.outputOrdering.length == orderNum)
-    }
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None, plan1, plan2),
+      Seq("1 ASC NULLS FIRST", "2 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprB), Seq(exprA), Inner, None, plan2, plan1),
+      Seq("2 ASC NULLS FIRST", "3 ASC NULLS FIRST", "1 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), LeftOuter, None, plan1, plan2),
+      Seq("1 ASC NULLS FIRST", "2 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprB), Seq(exprA), LeftOuter, None, plan2, plan1),
+      Seq("2 ASC NULLS FIRST", "3 ASC NULLS FIRST", "1 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), RightOuter, None, plan1, plan2),
+      Seq("2 ASC NULLS FIRST", "3 ASC NULLS FIRST", "1 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprB), Seq(exprA), RightOuter, None, plan2, plan1),
+      Seq("1 ASC NULLS FIRST", "2 ASC NULLS FIRST"))
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), FullOuter, None, plan1, plan2), Seq())
+    assertOrdering(
+      SortMergeJoinExec(Seq(exprB), Seq(exprA), FullOuter, None, plan2, plan1), Seq())
   }
 
   test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
