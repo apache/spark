@@ -2681,9 +2681,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("SPARK-42401: Array insert of null value (explicit)") {
     val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
-    checkEvaluation(new ArrayInsert(
-      a, Literal(2), Literal.create(null, StringType)), Seq("b", null, "a", "c")
-    )
+    checkEvaluation(
+      new ArrayInsert(a, Literal(2), Literal.create(null, StringType)),
+      Seq("b", null, "a", "c"))
+    checkEvaluation(
+      new ArrayInsert(a, Literal(-1), Literal.create(null, StringType)),
+      Seq("b", "a", "c", null))
   }
 
   test("SPARK-42401: Array insert of null value (implicit)") {
