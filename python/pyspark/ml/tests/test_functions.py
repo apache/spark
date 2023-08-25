@@ -15,15 +15,27 @@
 # limitations under the License.
 #
 import numpy as np
-import pandas as pd
 import unittest
 
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
 from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
+
+if have_pandas:
+    import pandas as pd
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
 class PredictBatchUDFTests(SparkSessionTestCase):
     def setUp(self):
         super(PredictBatchUDFTests, self).setUp()
