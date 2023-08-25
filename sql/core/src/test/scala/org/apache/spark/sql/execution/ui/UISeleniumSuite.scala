@@ -27,7 +27,7 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.{interval, timeout}
 import org.scalatestplus.selenium.WebBrowser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.ui.SparkUICssErrorHandler
 
@@ -119,7 +119,10 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     val escape = (BASIC_ESCAPE.keySet().asScala.toSeq ++ ISO8859_1_ESCAPE.keySet().asScala ++
       HTML40_EXTENDED_ESCAPE.keySet().asScala).mkString
     val errorMsg = escapeJava(escape.mkString)
-    intercept[Exception](spark.sql(s"SELECT raise_error('$errorMsg')").collect())
+    val e1 = intercept[SparkException](spark.sql(s"SELECT raise_error('$errorMsg')").collect())
+    val e2 = e1.getCause
+    assert(e2.isInstanceOf[RuntimeException])
+    assert(e2.getMessage === escape)
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       val summary = findErrorSummaryOnSQLUI()
       assert(!summary.contains("&amp;"))
