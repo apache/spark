@@ -20,6 +20,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import sys
+import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
@@ -33,7 +34,7 @@ from pyspark.sql.streaming.readwriter import (
 )
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -488,18 +489,30 @@ class DataStreamWriter:
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
         # Python ForeachWriter isn't really a PythonUDF. But we reuse it for simplicity.
-        self._write_proto.foreach_writer.python_function.command = CloudPickleSerializer().dumps(
-            command
-        )
+        try:
+            self._write_proto.foreach_writer.python_function.command = (
+                CloudPickleSerializer().dumps(command)
+            )
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                message_parameters={"name": "foreach"},
+            )
         self._write_proto.foreach_writer.python_function.python_ver = "%d.%d" % sys.version_info[:2]
         return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
-            func
-        )
+        try:
+            self._write_proto.foreach_batch.python_function.command = CloudPickleSerializer().dumps(
+                func
+            )
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                message_parameters={"name": "foreachBatch"},
+            )
         self._write_proto.foreach_batch.python_function.python_ver = get_python_ver()
         return self
 
