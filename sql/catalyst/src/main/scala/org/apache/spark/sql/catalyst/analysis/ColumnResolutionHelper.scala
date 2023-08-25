@@ -95,7 +95,7 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, SESSION_USER and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
