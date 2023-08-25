@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import com.fasterxml.jackson.core.JsonToken
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.types.UTF8String
@@ -27,9 +29,35 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param cause the actual exception about why the parser cannot return full result.
  */
 case class PartialResultException(
-     partialResult: InternalRow,
-     cause: Throwable)
-  extends Exception(cause)
+    partialResult: InternalRow,
+    cause: Throwable) extends Exception(cause) {
+  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
+  override def fillInStackTrace(): Throwable = this
+}
+
+/**
+ * Exception thrown when the underlying parser returns a partial array result.
+ * @param partialResult the partial array result.
+ * @param cause the actual exception about why the parser cannot return full result.
+ */
+case class PartialArrayDataResultException(
+    partialResult: ArrayData,
+    cause: Throwable) extends Exception(cause) {
+  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
+  override def fillInStackTrace(): Throwable = this
+}
+
+/**
+ * Exception thrown when the underlying parser returns a partial map result.
+ * @param partialResult the partial map result.
+ * @param cause the actual exception about why the parser cannot return full result.
+ */
+case class PartialMapDataResultException(
+    partialResult: MapData,
+    cause: Throwable) extends Exception(cause) {
+  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
+  override def fillInStackTrace(): Throwable = this
+}
 
 /**
  * Exception thrown when the underlying parser returns partial result list of parsing.
@@ -65,3 +93,25 @@ case class StringAsDataTypeException(
     fieldName: String,
     fieldValue: String,
     dataType: DataType) extends RuntimeException()
+
+/**
+ * No-stacktrace equivalent of `QueryExecutionErrors.cannotParseJSONFieldError`.
+ * Used for code control flow in the parser without overhead of creating a full exception.
+ */
+case class CannotParseJSONFieldException(
+    fieldName: String,
+    fieldValue: String,
+    jsonType: JsonToken,
+    dataType: DataType) extends RuntimeException() {
+  override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
+  override def fillInStackTrace(): Throwable = this
+}
+
+/**
+ * No-stacktrace equivalent of `QueryExecutionErrors.emptyJsonFieldValueError`.
+ * Used for code control flow in the parser without overhead of creating a full exception.
+ */
+case class EmptyJsonFieldValueException(dataType: DataType) extends RuntimeException() {
+  override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
+  override def fillInStackTrace(): Throwable = this
+}
