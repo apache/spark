@@ -851,7 +851,11 @@ jobs:
     - name: Clear repo
       run: |
         rm -rf /home/runner/.m2
+        rm -rf /home/runner/.sbt
         ls -al /home/runner
+        ls -al /home/runner/work
+        ls -al /home/runner/work/spark
+        ls -al /home/runner/work/spark/spark
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
