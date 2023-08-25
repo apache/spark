@@ -2380,7 +2380,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         }
 
         self.assertEqual(
-            sf_fn - cf_fn, sf_excluded_fn, "Missing functions in Spark Connect not as expected"
+            sf_fn - cf_fn,
+            sf_excluded_fn,
+            "Missing functions in Spark Connect not as expected",
         )
 
         # Functions in Spark Connect we do not expect to be available in vanilla PySpark
@@ -2389,7 +2391,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         }
 
         self.assertEqual(
-            cf_fn - sf_fn, cf_excluded_fn, "Missing functions in vanilla PySpark not as expected"
+            cf_fn - sf_fn,
+            cf_excluded_fn,
+            "Missing functions in vanilla PySpark not as expected",
         )
 
 
