@@ -19,16 +19,15 @@ import unittest
 import uuid
 from typing import Optional
 
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-import pyspark.sql.connect.proto as proto
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-from pyspark.sql.connect.client.core import Retrying
-from pyspark.sql.connect.client.reattach import RetryException
 
 if should_test_connect:
     import pandas as pd
     import pyarrow as pa
+    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+    from pyspark.sql.connect.client.core import Retrying
+    from pyspark.sql.connect.client.reattach import RetryException
+    import pyspark.sql.connect.proto as proto
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

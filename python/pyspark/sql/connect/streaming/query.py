@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 import json
 import sys
@@ -32,8 +35,6 @@ from pyspark.sql.streaming.query import (
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-
-__all__ = ["StreamingQuery", "StreamingQueryManager"]
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
