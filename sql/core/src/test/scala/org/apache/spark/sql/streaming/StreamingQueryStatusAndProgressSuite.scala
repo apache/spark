@@ -46,7 +46,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  "name" : "myName",
         |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "batchId" : 2,
-        |  "batchDuration" : 0,
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
@@ -113,7 +112,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |  "name" : null,
          |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "batchId" : 2,
-         |  "batchDuration" : 0,
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
