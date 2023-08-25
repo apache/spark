@@ -4339,7 +4339,7 @@ object SQLConf {
         "for the index -1. For example, `array_insert(['a', 'b'], -1, 'x')` returns " +
         "`['a', 'x', 'b']`. When set to false, the -1 index points out to the last element, " +
         "and the given example produces `['a', 'b', 'x']`.")
-      .version("3.5.0")
+      .version("3.4.2")
       .booleanConf
       .createWithDefault(false)
 
