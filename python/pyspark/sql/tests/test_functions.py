@@ -92,6 +92,24 @@ class FunctionsTestsMixin:
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
         )
 
+    def test_public_function(self):
+        fn_list = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+
+        fn_execuded_list = [
+            "get_active_spark_context",  # internal helper function
+            "try_remote_functions",  # internal helper function
+            "to_str",  # internal helper function
+        ]
+        for fn in fn_execuded_list:
+            fn_list.remove(fn)
+
+        # check alias: both function 'pow' and its alias 'power' should be in the list
+        self.assertTrue("pow" in fn_list)
+        self.assertTrue("power" in fn_list)
+
+        for fn in fn_list:
+            self.assertTrue(fn in F.__all__, f"function {fn} is not exposed")
+
     def test_explode(self):
         d = [
             Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"}),
