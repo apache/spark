@@ -59,11 +59,7 @@ class IndexesTestsMixin:
         ]:
             psdf = ps.from_pandas(pdf)
             self.assert_eq(psdf.index, pdf.index)
-            # Int64Index is removed from pandas 2.0.0, so we should compare the dtype itself.
-            if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-                self.assert_eq(psdf.index.dtype, pdf.index.dtype)
-            else:
-                self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
+            self.assert_eq(psdf.index.dtype, pdf.index.dtype)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
         with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
