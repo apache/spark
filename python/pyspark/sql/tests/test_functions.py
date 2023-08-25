@@ -93,22 +93,37 @@ class FunctionsTestsMixin:
         )
 
     def test_public_function(self):
-        fn_list = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+        inspected_list = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
 
-        fn_execuded_list = [
+        public_list = set(F.__all__)
+
+        # check alias: both function 'pow' and its alias 'power' should be included
+        self.assertTrue("pow" in inspected_list)
+        self.assertTrue("power" in inspected_list)
+        self.assertTrue("pow" in public_list)
+        self.assertTrue("power" in public_list)
+
+        inspected_execuded_list = {
             "get_active_spark_context",  # internal helper function
             "try_remote_functions",  # internal helper function
             "to_str",  # internal helper function
-        ]
-        for fn in fn_execuded_list:
-            fn_list.remove(fn)
+        }
 
-        # check alias: both function 'pow' and its alias 'power' should be in the list
-        self.assertTrue("pow" in fn_list)
-        self.assertTrue("power" in fn_list)
+        self.assertEqual(
+            inspected_list - public_list,
+            inspected_execuded_list,
+            "Inspected functions NOT exposed!",
+        )
 
-        for fn in fn_list:
-            self.assertTrue(fn in F.__all__, f"function {fn} is not exposed")
+        public_execuded_list = {
+            "PandasUDFType",  # type, not a function
+        }
+
+        self.assertEqual(
+            public_list - inspected_list,
+            public_execuded_list,
+            "Non-existent functions exposed!",
+        )
 
     def test_explode(self):
         d = [
