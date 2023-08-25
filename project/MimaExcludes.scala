@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 4.0.x
   lazy val v40excludes = v35excludes ++ Seq(
+    // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$")
   )
 
   // Exclude rules for 3.5.x from 3.4.0
@@ -80,10 +83,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
     // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
-    // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this")
   )
 
   // Default exclude rules
