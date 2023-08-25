@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.ui
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration.DurationInt
 
+import org.apache.commons.text.StringEscapeUtils.escapeJava
+import org.apache.commons.text.translate.EntityArrays._
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.{interval, timeout}
@@ -48,6 +51,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     assert(webUrl.isDefined, "please turn on spark.ui.enabled")
     go to s"${webUrl.get}/SQL"
     findAll(cssSelector("""#failed-table td .stacktrace-details""")).map(_.text).toList
+  }
+
+  private def findErrorSummaryOnSQLUI(): String = {
+    val webUrl = spark.sparkContext.uiWebUrl
+    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
+    go to s"${webUrl.get}/SQL"
+    findAll(cssSelector("""#failed-table td""")).map(_.text).toList.last
   }
 
   private def findExecutionIDOnSQLUI(): Int = {
@@ -101,6 +111,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
       assert(planDot.head.startsWith("digraph G {"))
       val planDetails = findAll(cssSelector("""#physical-plan-details""")).map(_.text).toList
       assert(planDetails.head.contains("TABLE_OR_VIEW_NOT_FOUND"))
+    }
+  }
+
+  test("Escape html is not necessary") {
+    spark = creatSparkSessionWithUI
+    val escape = (BASIC_ESCAPE.keySet().asScala.toSeq ++ ISO8859_1_ESCAPE.keySet().asScala ++
+      HTML40_EXTENDED_ESCAPE.keySet().asScala).mkString
+    val errorMsg = escapeJava(escape.mkString)
+    intercept[Exception](spark.sql(s"SELECT raise_error('$errorMsg')").collect())
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      val summary = findErrorSummaryOnSQLUI()
+      assert(!summary.contains("&amp;"))
     }
   }
 }
