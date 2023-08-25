@@ -78,27 +78,29 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("CREATE TABLE USING AS SELECT based on the file without write permission") {
-    // setWritable(...) does not work on Windows. Please refer JDK-6728842.
-    assume(!Utils.isWindows)
-    val childPath = new File(path.toString, "child")
-    path.mkdir()
-    path.setWritable(false)
+    withTable("jsonTable") {
+      // setWritable(...) does not work on Windows. Please refer JDK-6728842.
+      assume(!Utils.isWindows)
+      val childPath = new File(path.toString, "child")
+      path.mkdir()
+      path.setWritable(false)
 
-    val e = intercept[SparkException] {
-      sql(
-        s"""
-           |CREATE TABLE jsonTable
-           |USING json
-           |OPTIONS (
-           |  path '${childPath.toURI}'
-           |) AS
-           |SELECT a, b FROM jt
+      val e = intercept[SparkException] {
+        sql(
+          s"""
+             |CREATE TABLE jsonTable
+             |USING json
+             |OPTIONS (
+             |  path '${childPath.toURI}'
+             |) AS
+             |SELECT a, b FROM jt
          """.stripMargin)
-      sql("SELECT a, b FROM jsonTable").collect()
-    }
+        sql("SELECT a, b FROM jsonTable").collect()
+      }
 
-    assert(e.getMessage().contains("Job aborted"))
-    path.setWritable(true)
+      assert(e.getMessage().contains("Job aborted"))
+      path.setWritable(true)
+    }
   }
 
   test("create a table, drop it and create another one with the same name") {
