@@ -494,7 +494,7 @@ object SQLConf {
         "reserves required memory * 2 memory; otherwise, spark reserves " +
         "required memory * this ratio memory, and will release this column vector memory before " +
         "reading the next batch rows.")
-      .version("3.5.0")
+      .version("4.0.0")
       .doubleConf
       .createWithDefault(1.2)
 
@@ -503,7 +503,7 @@ object SQLConf {
       .doc("When the required memory is larger than this, spark reserves required memory * " +
         s"${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and release this column " +
         s"vector memory before reading the next batch rows. -1 means disabling the optimization.")
-      .version("3.5.0")
+      .version("4.0.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(-1)
 
