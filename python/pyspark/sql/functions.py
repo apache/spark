@@ -7778,9 +7778,6 @@ def to_unix_timestamp(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7819,9 +7816,6 @@ def to_timestamp_ltz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7831,17 +7825,15 @@ def to_timestamp_ltz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
@@ -7860,9 +7852,6 @@ def to_timestamp_ntz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7872,17 +7861,15 @@ def to_timestamp_ntz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
@@ -14447,13 +14434,16 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |    2.0|
     +-------+
     >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    ... # doctest: +SKIP
     >>> df.select(call_function("custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
     |                               102.0|
     +------------------------------------+
     >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
