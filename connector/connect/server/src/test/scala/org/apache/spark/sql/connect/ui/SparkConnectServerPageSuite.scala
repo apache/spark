@@ -65,7 +65,6 @@ class SparkConnectServerPageSuite
         "userId",
         "userName",
         "dummy query",
-        None,
         Set()))
     listener.onOtherEvent(
       SparkListenerConnectOperationAnalyzed("jobTag", "dummy plan", System.currentTimeMillis()))

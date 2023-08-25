@@ -744,6 +744,9 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
 pow.__doc__ = pysparkfuncs.pow.__doc__
 
 
+power = pow
+
+
 def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
@@ -824,7 +827,7 @@ def signum(col: "ColumnOrName") -> Column:
 signum.__doc__ = pysparkfuncs.signum.__doc__
 
 
-sigh = signum
+sign = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -1770,7 +1773,6 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 forall.__doc__ = pysparkfuncs.forall.__doc__
 
 
-# TODO: support options
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
@@ -2747,9 +2749,6 @@ mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
-#     to_timestamp, from_utc_timestamp, to_utc_timestamp,
-#     timestamp_seconds, current_timestamp, date_trunc
 
 
 def curdate() -> Column:

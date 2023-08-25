@@ -41,7 +41,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    IllegalArgumentException,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -854,7 +859,7 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise PySparkNotImplementedError(
+            raise IllegalArgumentException(
                 error_class="UNSUPPORTED_JOIN_TYPE",
                 message_parameters={"join_type": how},
             )
@@ -2206,7 +2211,7 @@ class PythonUDTF:
         try:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,

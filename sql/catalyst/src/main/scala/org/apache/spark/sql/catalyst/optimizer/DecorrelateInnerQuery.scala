@@ -478,7 +478,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // parentOuterReferences: a set of parent outer references. As we recurse down we collect the
     // set of outer references that are part of the Domain, and use it to construct the DomainJoins
     // and join conditions.
-    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated.
+    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated
+    // (or used as an input for a window function)
     // underSetOp: a boolean flag indicating whether a set operator (e.g. UNION) is a parent of the
     // inner plan.
     //
@@ -653,6 +654,25 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val referencesToAdd = missingReferences(newProjectList, joinCond)
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
+
+          case w @ Window(projectList, partitionSpec, orderSpec, child) =>
+            val outerReferences = collectOuterReferences(w.expressions)
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
+              s"function: $w")
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
+            // For now these are no-op, as we don't allow correlated references in the window
+            // function itself.
+            val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
+            val newPartitionSpec = replaceOuterReferences(partitionSpec, outerReferenceMap)
+            val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
+            val referencesToAdd = missingReferences(newProjectList, joinCond)
+
+            val newWindow = Window(newProjectList ++ referencesToAdd,
+              partitionSpec = newPartitionSpec ++ referencesToAdd,
+              orderSpec = newOrderSpec, newChild)
+            (newWindow, joinCond, outerReferenceMap)
 
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
