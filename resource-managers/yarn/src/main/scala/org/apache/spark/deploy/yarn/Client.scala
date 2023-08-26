@@ -890,7 +890,7 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getUserName()
     env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*

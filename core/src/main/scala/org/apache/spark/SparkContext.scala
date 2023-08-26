@@ -560,7 +560,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // TODO: Set this only in the Mesos scheduler.
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
     executorEnvs ++= _conf.getExecutorEnv
-    executorEnvs("SPARK_USER") = sparkUser
+    executorEnvs("SPARK_USER") = Utils.getCurrentFullUserName()
 
     if (_conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
       // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"

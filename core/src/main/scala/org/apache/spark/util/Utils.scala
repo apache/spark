@@ -56,7 +56,8 @@ import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{HadoopKerberosName, UserGroupInformation}
+import org.apache.hadoop.security.authentication.util.KerberosName
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
@@ -2440,8 +2441,21 @@ private[spark] object Utils
    * overridden by the `SPARK_USER` environment variable.
    */
   def getCurrentUserName(): String = {
+    logDebug(s"env SPARK_USER: ${System.getenv("SPARK_USER")} in getCurrentUserName()")
+    val userName = Option(System.getenv("SPARK_USER")) match {
+      case Some(sparkUser) if sparkUser.nonEmpty =>
+        if (!KerberosName.hasRulesBeenSet()) {
+          HadoopKerberosName.setConfiguration(new Configuration())
+        }
+        new HadoopKerberosName(sparkUser).getShortName
+      case _ => UserGroupInformation.getCurrentUser().getShortUserName()
+    }
+    logDebug(s"userName: ${userName} in getCurrentUserName()")
+    userName
+  }
+  def getCurrentFullUserName(): String = {
     Option(System.getenv("SPARK_USER"))
-      .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+      .getOrElse(UserGroupInformation.getCurrentUser().getUserName())
   }
 
   val EMPTY_USER_GROUPS = Set.empty[String]
