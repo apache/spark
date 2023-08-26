@@ -264,8 +264,6 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
-  override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
-
   override def initQueryContext(): Option[SQLQueryContext] = {
     if (failOnError) {
       Some(origin.context)
