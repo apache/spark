@@ -1900,7 +1900,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="INVALID_ITEM_FOR_CONTAINER",
             message_parameters={
                 "arg_name": "parameters",
-                "allowed_types": "str, list, float, int",
+                "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
             },
         )
@@ -3347,6 +3347,27 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
+class SparkConnectSessionWithOptionsTest(ReusedConnectTestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder.config("string", "foo")
+            .config("integer", 1)
+            .config("boolean", False)
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
+    def test_config(self):
+        # Config
+        self.assertEqual(self.spark.conf.get("string"), "foo")
+        self.assertEqual(self.spark.conf.get("boolean"), "false")
+        self.assertEqual(self.spark.conf.get("integer"), "1")
+
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
     def test_retry_error_handling(self):
@@ -3372,6 +3393,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3387,6 +3410,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3403,6 +3428,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3419,6 +3446,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3435,6 +3464,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3451,6 +3482,8 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=1,
                 max_backoff=10,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)

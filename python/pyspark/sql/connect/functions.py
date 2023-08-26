@@ -744,6 +744,9 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
 pow.__doc__ = pysparkfuncs.pow.__doc__
 
 
+power = pow
+
+
 def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
@@ -824,7 +827,7 @@ def signum(col: "ColumnOrName") -> Column:
 signum.__doc__ = pysparkfuncs.signum.__doc__
 
 
-sigh = signum
+sign = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -1770,7 +1773,6 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 forall.__doc__ = pysparkfuncs.forall.__doc__
 
 
-# TODO: support options
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
@@ -2653,13 +2655,6 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
-def chr(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("chr", col)
-
-
-chr.__doc__ = pysparkfuncs.chr.__doc__
-
-
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("contains", left, right)
 
@@ -2754,9 +2749,6 @@ mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
-#     to_timestamp, from_utc_timestamp, to_utc_timestamp,
-#     timestamp_seconds, current_timestamp, date_trunc
 
 
 def curdate() -> Column:
@@ -3695,13 +3687,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function_over_columns("uuid")
-
-
-uuid.__doc__ = pysparkfuncs.uuid.__doc__
-
-
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
@@ -3811,18 +3796,6 @@ def stack(*cols: "ColumnOrName") -> Column:
 stack.__doc__ = pysparkfuncs.stack.__doc__
 
 
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
-
-
-random.__doc__ = pysparkfuncs.random.__doc__
-
-
 def bitmap_bit_position(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_bit_position", col)
 
@@ -3926,9 +3899,6 @@ def _test() -> None:
     import pyspark.sql.connect.functions
 
     globs = pyspark.sql.connect.functions.__dict__.copy()
-
-    # Spark Connect does not support Spark Context but the test depends on that.
-    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

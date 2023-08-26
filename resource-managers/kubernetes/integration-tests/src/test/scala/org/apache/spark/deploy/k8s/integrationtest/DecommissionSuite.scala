@@ -47,7 +47,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
           |appender.console.name = console
           |appender.console.target = SYSTEM_OUT
           |appender.console.layout.type = PatternLayout
-          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
+          |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
           |
           |logger.spark.name = org.apache.spark
           |logger.spark.level = debug

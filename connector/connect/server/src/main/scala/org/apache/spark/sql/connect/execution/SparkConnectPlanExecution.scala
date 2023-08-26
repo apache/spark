@@ -110,6 +110,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
+    var totalNumRows: Long = 0
     def sendBatch(bytes: Array[Byte], count: Long): Unit = {
       val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
       val batch = proto.ExecutePlanResponse.ArrowBatch
@@ -120,14 +121,15 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       response.setArrowBatch(batch)
       responseObserver.onNext(response.build())
       numSent += 1
+      totalNumRows += count
     }
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        executePlan.eventsManager.postFinished()
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
+        executePlan.eventsManager.postFinished(Some(totalNumRows))
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           val rows = dataframe.queryExecution.executedPlan.execute()
@@ -162,8 +164,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
                 resultFunc = () => ())
               // Collect errors and propagate them to the main thread.
               .andThen {
-                case Success(_) =>
-                  executePlan.eventsManager.postFinished()
+                case Success(_) => // do nothing
                 case Failure(throwable) =>
                   signal.synchronized {
                     error = Some(throwable)
@@ -200,8 +201,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               currentPartitionId += 1
             }
             ThreadUtils.awaitReady(future, Duration.Inf)
+            executePlan.eventsManager.postFinished(Some(totalNumRows))
           } else {
-            executePlan.eventsManager.postFinished()
+            executePlan.eventsManager.postFinished(Some(totalNumRows))
           }
         }
     }

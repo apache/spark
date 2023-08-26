@@ -21,6 +21,7 @@ import struct
 import sys
 import unittest
 import difflib
+from decimal import Decimal
 from time import time, sleep
 from typing import (
     Any,
@@ -411,8 +412,8 @@ def assertDataFrameEqual(
 
     Note that schema equality is checked only when `expected` is a DataFrame (not a list of Rows).
 
-    For DataFrames with float values, assertDataFrame asserts approximate equality.
-    Two float values a and b are approximately equal if the following equation is True:
+    For DataFrames with float/decimal values, assertDataFrame asserts approximate equality.
+    Two float/decimal values a and b are approximately equal if the following equation is True:
 
     ``absolute(a - b) <= (atol + rtol * absolute(b))``.
 
@@ -538,6 +539,9 @@ def assertDataFrameEqual(
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
+                    return False
+            elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
+                if abs(val1 - val2) > (Decimal(atol) + Decimal(rtol) * abs(val2)):
                     return False
             else:
                 if val1 != val2:

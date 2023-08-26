@@ -32,7 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{JsonProtocol, ManualClock}
 
 class ExecuteEventsManagerSuite
     extends SparkFunSuite
@@ -55,19 +55,25 @@ class ExecuteEventsManagerSuite
   test("SPARK-43923: post started") {
     val events = setupEvents(ExecuteStatus.Pending)
     events.postStarted()
+    val expectedEvent = SparkListenerConnectOperationStarted(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis(),
+      DEFAULT_SESSION_ID,
+      DEFAULT_USER_ID,
+      DEFAULT_USER_NAME,
+      DEFAULT_TEXT,
+      Set.empty,
+      Map.empty)
+    expectedEvent.planRequest = Some(events.executeHolder.request)
 
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(SparkListenerConnectOperationStarted(
-        events.executeHolder.jobTag,
-        DEFAULT_QUERY_ID,
-        DEFAULT_CLOCK.getTimeMillis(),
-        DEFAULT_SESSION_ID,
-        DEFAULT_USER_ID,
-        DEFAULT_USER_NAME,
-        DEFAULT_TEXT,
-        Some(events.executeHolder.request),
-        Set.empty,
-        Map.empty))
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationStarted])
   }
 
   test("SPARK-43923: post analyzed with plan") {
@@ -75,13 +81,18 @@ class ExecuteEventsManagerSuite
 
     val mockPlan = mock[LogicalPlan]
     events.postAnalyzed(Some(mockPlan))
-    val event = SparkListenerConnectOperationAnalyzed(
+    val expectedEvent = SparkListenerConnectOperationAnalyzed(
       events.executeHolder.jobTag,
       DEFAULT_QUERY_ID,
       DEFAULT_CLOCK.getTimeMillis())
-    event.analyzedPlan = Some(mockPlan)
+    expectedEvent.analyzedPlan = Some(mockPlan)
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(event)
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationAnalyzed])
   }
 
   test("SPARK-43923: post analyzed with empty plan") {
@@ -98,58 +109,95 @@ class ExecuteEventsManagerSuite
   test("SPARK-43923: post readyForExecution") {
     val events = setupEvents(ExecuteStatus.Analyzed)
     events.postReadyForExecution()
-    val event = SparkListenerConnectOperationReadyForExecution(
+    val expectedEvent = SparkListenerConnectOperationReadyForExecution(
       events.executeHolder.jobTag,
       DEFAULT_QUERY_ID,
       DEFAULT_CLOCK.getTimeMillis())
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(event)
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationReadyForExecution])
   }
 
   test("SPARK-43923: post canceled") {
     val events = setupEvents(ExecuteStatus.Started)
     events.postCanceled()
+    val expectedEvent = SparkListenerConnectOperationCanceled(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(
-        SparkListenerConnectOperationCanceled(
-          events.executeHolder.jobTag,
-          DEFAULT_QUERY_ID,
-          DEFAULT_CLOCK.getTimeMillis()))
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationCanceled])
   }
 
   test("SPARK-43923: post failed") {
     val events = setupEvents(ExecuteStatus.Started)
     events.postFailed(DEFAULT_ERROR)
+    val expectedEvent = SparkListenerConnectOperationFailed(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis(),
+      DEFAULT_ERROR,
+      Map.empty[String, String])
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(
-        SparkListenerConnectOperationFailed(
-          events.executeHolder.jobTag,
-          DEFAULT_QUERY_ID,
-          DEFAULT_CLOCK.getTimeMillis(),
-          DEFAULT_ERROR,
-          Map.empty[String, String]))
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationFailed])
   }
 
   test("SPARK-43923: post finished") {
     val events = setupEvents(ExecuteStatus.Started)
     events.postFinished()
+    val expectedEvent = SparkListenerConnectOperationFinished(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationFinished])
+  }
+
+  test("SPARK-44776: post finished with row number") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished(Some(100))
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationFinished(
           events.executeHolder.jobTag,
           DEFAULT_QUERY_ID,
-          DEFAULT_CLOCK.getTimeMillis()))
+          DEFAULT_CLOCK.getTimeMillis(),
+          Some(100)))
   }
 
   test("SPARK-43923: post closed") {
     val events = setupEvents(ExecuteStatus.Finished)
     events.postClosed()
+    val expectedEvent = SparkListenerConnectOperationClosed(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
     verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(
-        SparkListenerConnectOperationClosed(
-          events.executeHolder.jobTag,
-          DEFAULT_QUERY_ID,
-          DEFAULT_CLOCK.getTimeMillis()))
+      .post(expectedEvent)
+
+    assert(
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
+        .isInstanceOf[SparkListenerConnectOperationClosed])
   }
 
   test("SPARK-43923: Closed wrong order throws exception") {

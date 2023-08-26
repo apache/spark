@@ -24,8 +24,6 @@ import warnings
 from distutils.version import LooseVersion
 from typing import cast
 
-import numpy as np
-
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
@@ -183,6 +181,8 @@ class ArrowTestsMixin:
 
     @property
     def create_np_arrs(self):
+        import numpy as np
+
         int_dtypes = ["int8", "int16", "int32", "int64"]
         float_dtypes = ["float32", "float64"]
         return (
@@ -584,6 +584,8 @@ class ArrowTestsMixin:
                 self.check_createDataFrame_with_ndarray(arrow_enabled)
 
     def check_createDataFrame_with_ndarray(self, arrow_enabled):
+        import numpy as np
+
         dtypes = ["tinyint", "smallint", "int", "bigint", "float", "double"]
         expected_dtypes = (
             [[("value", t)] for t in dtypes]
@@ -1015,10 +1017,6 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.collect(), data)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43506): Enable ArrowTests.test_toPandas_empty_columns for pandas 2.0.0.",
-    )
     def test_toPandas_empty_columns(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):

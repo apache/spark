@@ -25,13 +25,14 @@ private[xml] object TestUtils {
   def field(name: String, dataType: DataType = StringType, nullable: Boolean = true): StructField =
     StructField(name, dataType, nullable)
 
-  def struct(fields: StructField*): StructType = buildSchema(fields: _*)
+  def structField(fields: StructField*): StructType = buildSchema(fields: _*)
 
-  def struct(name: String, fields: StructField*): StructField = field(name, struct(fields: _*))
+  def structField(name: String, fields: StructField*): StructField =
+    field(name, structField(fields: _*))
 
   def structArray(name: String, fields: StructField*): StructField =
-    field(name, ArrayType(struct(fields: _*)))
+    field(name, ArrayType(structField(fields: _*)))
 
-  def array(name: String, dataType: DataType): StructField = field(name, ArrayType(dataType))
+  def arrayField(name: String, dataType: DataType): StructField = field(name, ArrayType(dataType))
 
 }

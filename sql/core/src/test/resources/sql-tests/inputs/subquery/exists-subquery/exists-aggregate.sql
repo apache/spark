@@ -118,3 +118,10 @@ WHERE  NOT EXISTS (SELECT 1
                                       FROM   dept 
                                       WHERE  emp.dept_id = dept.dept_id 
                                       GROUP  BY dept.dept_id));
+
+-- Window functions are not supported in EXISTS subqueries yet
+SELECT *
+FROM BONUS
+WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
+                    FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
+                        AND DEPT.dept_name < BONUS.emp_name);

@@ -21,24 +21,14 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.execution.python.EvalPythonUDTFExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
-
-object EvalPythonUDTFExec {
-  /**
-   * Metadata for arguments of Python UDTF.
-   *
-   * @param offset the offset of the argument
-   * @param name the name of the argument if it's a `NamedArgumentExpression`
-   */
-  case class ArgumentMetadata(offset: Int, name: Option[String])
-}
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time.
@@ -66,7 +56,6 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(context, iter)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -104,7 +93,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // Also keep track of the number rows added to the queue.
       // This is needed to process extra output rows from the `terminate()` call of the UDTF.
       var count = 0L
-      val projectedRowIter = contextAwareIterator.map { inputRow =>
+      val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         count += 1
         projection(inputRow)

@@ -56,6 +56,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments in SCALAR type.
+
     Parameters
     ----------
     f : function, optional
@@ -152,6 +155,20 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         +------------------+
         |       [John, Doe]|
         +------------------+
+
+        This type of Pandas UDF can use keyword arguments:
+
+        >>> @pandas_udf(returnType=IntegerType())
+        ... def calc(a: pd.Series, b: pd.Series) -> pd.Series:
+        ...     return a + 10 * b
+        ...
+        >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+        +-----------------------------+
+        |calc(b => (id * 10), a => id)|
+        +-----------------------------+
+        |                            0|
+        |                          101|
+        +-----------------------------+
 
         .. note:: The length of the input is not that of the whole input column, but is the
             length of an internal batch used for each call to the function.

@@ -16,15 +16,18 @@
  */
 package org.apache.spark.sql.connect.client
 
-import scala.jdk.CollectionConverters._
+import java.time.DateTimeException
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.util.JsonUtils
@@ -62,14 +65,32 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   private def errorConstructor[T <: Throwable: ClassTag](
-      throwableCtr: (String, Throwable) => T): (String, (String, Throwable) => Throwable) = {
+      throwableCtr: (String, Option[Throwable]) => T)
+      : (String, (String, Option[Throwable]) => Throwable) = {
     val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
     (className, throwableCtr)
   }
 
   private val errorFactory = Map(
     errorConstructor((message, _) => new ParseException(None, message, Origin(), Origin())),
-    errorConstructor((message, cause) => new AnalysisException(message, cause = Option(cause))))
+    errorConstructor((message, cause) => new AnalysisException(message, cause = cause)),
+    errorConstructor((message, _) => new NamespaceAlreadyExistsException(message)),
+    errorConstructor((message, cause) => new TableAlreadyExistsException(message, cause)),
+    errorConstructor((message, cause) => new TempTableAlreadyExistsException(message, cause)),
+    errorConstructor((message, cause) => new NoSuchDatabaseException(message, cause)),
+    errorConstructor((message, cause) => new NoSuchTableException(message, cause)),
+    errorConstructor[NumberFormatException]((message, _) =>
+      new SparkNumberFormatException(message)),
+    errorConstructor[IllegalArgumentException]((message, cause) =>
+      new SparkIllegalArgumentException(message, cause)),
+    errorConstructor[ArithmeticException]((message, _) => new SparkArithmeticException(message)),
+    errorConstructor[UnsupportedOperationException]((message, _) =>
+      new SparkUnsupportedOperationException(message)),
+    errorConstructor[ArrayIndexOutOfBoundsException]((message, _) =>
+      new SparkArrayIndexOutOfBoundsException(message)),
+    errorConstructor[DateTimeException]((message, _) => new SparkDateTimeException(message)),
+    errorConstructor((message, cause) => new SparkRuntimeException(message, cause)),
+    errorConstructor((message, cause) => new SparkUpgradeException(message, cause)))
 
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Option[Throwable] = {
     val classes =
@@ -79,7 +100,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
       .find(errorFactory.contains)
       .map { cls =>
         val constructor = errorFactory.get(cls).get
-        constructor(message, null)
+        constructor(message, None)
       }
   }
 
