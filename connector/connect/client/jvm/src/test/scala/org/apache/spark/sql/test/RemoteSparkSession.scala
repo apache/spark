@@ -165,12 +165,15 @@ object SparkConnectServerUtils {
     val testClassesPath = Paths.get(IntegrationTestUtils.connectClientTestClassDir)
     spark.client.artifactManager.addClassDir(testClassesPath)
 
-    // We need scalatest & scalactic on the classpath to make the tests work.
+    // We need scalatest & scalactic on the session's classpath to make the tests work.
     val jars = System
       .getProperty("java.class.path")
       .split(File.pathSeparatorChar)
-      .filter(_.endsWith(".jar"))
-      .filter(e => e.contains("scalatest") || e.contains("scalactic"))
+      .filter { e: String =>
+        val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
+        fileName.endsWith(".jar") &&
+          (fileName.startsWith("scalatest") || fileName.startsWith("scalactic"))
+      }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars)
   }
