@@ -864,6 +864,17 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(to_char(col("a"), lit("$99.99"))),
       Seq(Row("$78.12"))
     )
+
+    val df2 = Seq((Array(1.toByte), "base64")).toDF("input", "format")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.select(to_char(col("input"), col("format"))).collect()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1100",
+      parameters = Map(
+        "argName" -> "format",
+        "funcName" -> "to_char",
+        "requiredType" -> "string"))
   }
 
   test("to_varchar") {
