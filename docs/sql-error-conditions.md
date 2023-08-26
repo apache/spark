@@ -2014,6 +2014,12 @@ The feature is not supported:
 
 For more details see [UNSUPPORTED_FEATURE](sql-error-conditions-unsupported-feature-error-class.html)
 
+### UNSUPPORTED_FUNCTION_BY_HIVE_VERSION
+
+SQLSTATE: none assigned
+
+Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
+
 ### [UNSUPPORTED_GENERATOR](sql-error-conditions-unsupported-generator-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)

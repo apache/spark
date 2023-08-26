@@ -1635,7 +1635,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2189",
+      errorClass = "UNSUPPORTED_FUNCTION_BY_HIVE_VERSION",
       messageParameters = Map.empty)
   }
 

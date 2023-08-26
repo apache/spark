@@ -3205,6 +3205,11 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FUNCTION_BY_HIVE_VERSION" : {
+    "message" : [
+      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
+    ]
+  },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
       "The generator is not supported:"
@@ -5642,11 +5647,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2189" : {
-    "message" : [
-      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
     ]
   },
   "_LEGACY_ERROR_TEMP_2190" : {
