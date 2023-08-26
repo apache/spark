@@ -244,7 +244,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
     if (expressions.length == 2) {
       val (inputExpr, format) = (expressions(0), expressions(1))
       inputExpr.dataType match {
-        case _: DatetimeType => DateFormatClass(inputExpr, expressions(1))
+        case _: DatetimeType => DateFormatClass(inputExpr, format)
         case _: BinaryType =>
           if (!(format.dataType == StringType && format.foldable)) {
             throw QueryCompilationErrors.requireLiteralParameter(funcName, "format", "string")
@@ -253,8 +253,9 @@ object ToCharacterBuilder extends ExpressionBuilder {
             case "base64" => Base64(inputExpr)
             case "hex" => Hex(inputExpr)
             case "utf-8" => new Decode(Seq(inputExpr, format))
+            case invalid => throw QueryCompilationErrors.binaryFormatError(funcName, invalid)
           }
-        case _ => ToCharacter(inputExpr, expressions(1))
+        case _ => ToCharacter(inputExpr, format)
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)

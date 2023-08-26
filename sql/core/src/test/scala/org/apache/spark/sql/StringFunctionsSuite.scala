@@ -875,6 +875,26 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "argName" -> "format",
         "funcName" -> "to_char",
         "requiredType" -> "string"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.select(to_char(col("input"), lit("invalid_format"))).collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.BINARY_FORMAT",
+      parameters = Map(
+        "parameter" -> "`format`",
+        "functionName" -> "`to_char`",
+        "invalidFormat" -> "'invalid_format'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select to_char('a', 'b', 'c')")
+      },
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`to_char`",
+        "expectedNum" -> "2",
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT),
+      context = ExpectedContext("", "", 7, 28, "to_char('a', 'b', 'c')"))
   }
 
   test("to_varchar") {
