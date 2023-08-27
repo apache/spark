@@ -689,6 +689,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
+    // Before creating test tables, deletes warehouse dir
     val f = new File(new URI(conf.warehousePath))
     if (f.exists()) {
       Utils.deleteRecursively(f)
