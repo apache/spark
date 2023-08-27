@@ -14,9 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.common.config
+package org.apache.spark.sql
 
-private[sql] object ConnectCommon {
-  val CONNECT_GRPC_BINDING_PORT: Int = 15002
-  val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024;
+import org.apache.spark.sql.connect.client.ToStub
+import org.apache.spark.sql.test.RemoteSparkSession
+
+class StubbingTestSuite extends RemoteSparkSession {
+  private def eval[T](f: => T): T = f
+
+  test("capture of to-be stubbed class") {
+    val session = spark
+    import session.implicits._
+    val result = spark
+      .range(0, 10, 1, 1)
+      .map(n => n + 1)
+      .as[ToStub]
+      .head()
+    eval {
+      assert(result.value == 1)
+    }
+  }
 }
