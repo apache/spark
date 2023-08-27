@@ -25,13 +25,15 @@ import sys
 import functools
 import warnings
 from inspect import getfullargspec
-from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
+from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.connect.expressions import (
     ColumnReference,
-    PythonUDF,
     CommonInlineUserDefinedFunction,
+    Expression,
+    NamedArgumentExpression,
+    PythonUDF,
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
@@ -155,12 +157,14 @@ class UserDefinedFunction:
         self.deterministic = deterministic
 
     def _build_common_inline_user_defined_function(
-        self, *cols: "ColumnOrName"
+        self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedFunction:
-        arg_cols = [
-            col if isinstance(col, Column) else Column(ColumnReference(col)) for col in cols
+        def to_expr(col: "ColumnOrName") -> Expression:
+            return col._expr if isinstance(col, Column) else ColumnReference(col)
+
+        arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
+            NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()
         ]
-        arg_exprs = [col._expr for col in arg_cols]
 
         py_udf = PythonUDF(
             output_type=self.returnType,
@@ -175,8 +179,8 @@ class UserDefinedFunction:
             arguments=arg_exprs,
         )
 
-    def __call__(self, *cols: "ColumnOrName") -> Column:
-        return Column(self._build_common_inline_user_defined_function(*cols))
+    def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
+        return Column(self._build_common_inline_user_defined_function(*args, **kwargs))
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
@@ -196,8 +200,8 @@ class UserDefinedFunction:
         )
 
         @functools.wraps(self.func, assigned=assignments)
-        def wrapper(*args: "ColumnOrName") -> Column:
-            return self(*args)
+        def wrapper(*args: "ColumnOrName", **kwargs: "ColumnOrName") -> Column:
+            return self(*args, **kwargs)
 
         wrapper.__name__ = self._name
         wrapper.__module__ = (

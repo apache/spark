@@ -108,12 +108,11 @@ object StreamingForeachBatchHelper extends Logging {
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
-      "pyspark.sql.connect.streaming.worker.foreachBatch_worker")
+      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
     val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
-      // TODO(SPARK-44460): Support Auth credentials
       // TODO(SPARK-44462): A new session id pointing to args.df.sparkSession needs to be created.
       //     This is because MicroBatch execution clones the session during start.
       //     The session attached to the foreachBatch dataframe is different from the one the one

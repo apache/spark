@@ -441,6 +441,19 @@ $ kubectl port-forward <driver-pod-name> 4040:4040
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
 
+Since Apache Spark 4.0.0, Driver UI provides a way to see driver logs via a new configuration.
+
+```
+spark.driver.log.localDir=/tmp
+```
+
+Then, the Spark driver UI can be accessed on `http://localhost:4040/logs/`.
+Optionally, the layout of log is configured by the following.
+
+```
+spark.driver.log.layout="%m%n%ex"
+```
+
 ### Debugging
 
 There may be several kinds of failures. If the Kubernetes API server rejects the request made from spark-submit, or the

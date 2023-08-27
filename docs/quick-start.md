@@ -130,8 +130,8 @@ Dataset actions and transformations can be used for more complex computations. L
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
->>> from pyspark.sql import functions as F
->>> textFile.select(F.size(F.split(textFile.value, "\s+")).name("numWords")).agg(F.max(F.col("numWords"))).collect()
+>>> from pyspark.sql import functions as sf
+>>> textFile.select(sf.size(sf.split(textFile.value, "\s+")).name("numWords")).agg(sf.max(sf.col("numWords"))).collect()
 [Row(max(numWords)=15)]
 {% endhighlight %}
 
@@ -140,7 +140,7 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(F.explode(F.split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(sf.explode(sf.split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
 Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:

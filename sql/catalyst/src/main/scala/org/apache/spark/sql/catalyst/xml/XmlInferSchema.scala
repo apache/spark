@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.util
+package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.stream.XMLEventReader
-import javax.xml.stream.events.{Attribute, Characters, EndElement, StartElement, XMLEvent}
+import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.Schema
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -28,12 +29,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.util.PermissiveMode
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
-import org.apache.spark.sql.execution.datasources.xml.parsers.StaxXmlParserUtils
-import org.apache.spark.sql.execution.datasources.xml.util.TypeCast._
+import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.types._
 
-private[xml] object InferSchema {
+private[sql] object XmlInferSchema {
 
   /**
    * Copied from internal Spark api
@@ -78,20 +77,7 @@ private[xml] object InferSchema {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xml =>
-        try {
-          xsdSchema.foreach { schema =>
-            schema.newValidator().validate(new StreamSource(new StringReader(xml)))
-          }
-
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          Some(inferObject(parser, options, rootAttributes))
-        } catch {
-          case NonFatal(_) if options.parseMode == PermissiveMode =>
-            Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
-          case NonFatal(_) =>
-            None
-        }
+        infer(xml, options, xsdSchema)
       }
     }.fold(StructType(Seq()))(compatibleType(options))
 
@@ -100,6 +86,25 @@ private[xml] object InferSchema {
       case _ =>
         // canonicalizeType erases all empty structs, including the only one we want to keep
         StructType(Seq())
+    }
+  }
+
+  def infer(xml: String,
+      options: XmlOptions,
+      xsdSchema: Option[Schema] = None): Option[DataType] = {
+    try {
+      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
+      xsd.foreach { schema =>
+        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+      }
+      val parser = StaxXmlParserUtils.filteredReader(xml)
+      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+      Some(inferObject(parser, options, rootAttributes))
+    } catch {
+      case NonFatal(_) if options.parseMode == PermissiveMode =>
+        Some(StructType(Seq(StructField(options.columnNameOfCorruptRecord, StringType))))
+      case NonFatal(_) =>
+        None
     }
   }
 
@@ -118,8 +123,8 @@ private[xml] object InferSchema {
         case v if isInteger(v) => IntegerType
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
-        case v if isTimestamp(v, options) => TimestampType
         case v if isDate(v, options) => DateType
+        case v if isTimestamp(v, options) => TimestampType
         case _ => StringType
       }
     } else {
@@ -224,7 +229,7 @@ private[xml] object InferSchema {
     // This can be inferred as ArrayType.
     nameToDataType.foreach {
       case (field, dataTypes) if dataTypes.length > 1 =>
-        val elementType = dataTypes.reduceLeft(InferSchema.compatibleType(options))
+        val elementType = dataTypes.reduceLeft(XmlInferSchema.compatibleType(options))
         builder += StructField(field, ArrayType(elementType), nullable = true)
       case (field, dataTypes) =>
         builder += StructField(field, dataTypes.head, nullable = true)
@@ -237,7 +242,7 @@ private[xml] object InferSchema {
   /**
    * Convert NullType to StringType and remove StructTypes with no fields
    */
-  private def canonicalizeType(dt: DataType): Option[DataType] = dt match {
+  def canonicalizeType(dt: DataType): Option[DataType] = dt match {
     case at @ ArrayType(elementType, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -499,6 +499,20 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-44865: Test StreamingRelationV2 with metadata column") {
+    val tblName = "teststream.table_name"
+    withTable(tblName) {
+      spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
+      val stream = MemoryStream[Int]
+      val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      table.asInstanceOf[InMemoryStreamTable].setStream(stream)
+      // It will not throw UNRESOLVED_COLUMN exception because
+      // we add metadata column to StreamingRelationV2
+      spark.readStream.table(tblName).select("value", "_seq")
+    }
+  }
+
   private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")
@@ -576,7 +590,10 @@ object DataStreamTableAPISuite {
   val V1FallbackTestTableName = "fallbackV1Test"
 }
 
-class InMemoryStreamTable(override val name: String) extends Table with SupportsRead {
+class InMemoryStreamTable(override val name: String)
+  extends Table
+  with SupportsRead
+  with SupportsMetadataColumns {
   var stream: MemoryStream[Int] = _
 
   def setStream(inputData: MemoryStream[Int]): Unit = stream = inputData
@@ -590,6 +607,14 @@ class InMemoryStreamTable(override val name: String) extends Table with Supports
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)
   }
+
+  private object SeqColumn extends MetadataColumn {
+    override def name: String = "_seq"
+    override def dataType: DataType = IntegerType
+    override def comment: String = "Seq"
+  }
+
+  override val metadataColumns: Array[MetadataColumn] = Array(SeqColumn)
 }
 
 class NonStreamV2Table(override val name: String)

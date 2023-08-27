@@ -860,7 +860,6 @@ object SparkConnectClient {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
-
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
@@ -1595,6 +1594,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
+    (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",

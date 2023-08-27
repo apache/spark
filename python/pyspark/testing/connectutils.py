@@ -76,6 +76,7 @@ class MockRemoteSession:
     def __init__(self):
         self.hooks = {}
         self.session_id = str(uuid.uuid4())
+        self.is_mock_session = True
 
     def set_hook(self, name, hook):
         self.hooks[name] = hook

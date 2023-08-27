@@ -26,8 +26,6 @@ sparkSession <- sparkR.session(
 
 test_that("createDataFrame/collect Arrow optimization", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
 
   conf <- callJMethod(sparkSession, "conf")
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
@@ -45,16 +43,12 @@ test_that("createDataFrame/collect Arrow optimization", {
 
 test_that("createDataFrame/collect Arrow optimization - many partitions (partition order test)", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   expect_equal(collect(createDataFrame(mtcars, numPartitions = 32)),
                collect(createDataFrame(mtcars, numPartitions = 1)))
 })
 
 test_that("createDataFrame/collect Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   rdf <- data.frame(list(list(a = 1,
                               b = "a",
                               c = TRUE,
@@ -79,8 +73,6 @@ test_that("createDataFrame/collect Arrow optimization - type specification", {
 
 test_that("dapply() Arrow optimization", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   df <- createDataFrame(mtcars)
 
   conf <- callJMethod(sparkSession, "conf")
@@ -115,8 +107,6 @@ test_that("dapply() Arrow optimization", {
 
 test_that("dapply() Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   # Note that regular dapply() seems not supporting date and timestamps
   # whereas Arrow-optimized dapply() does.
   rdf <- data.frame(list(list(a = 1,
@@ -146,8 +136,6 @@ test_that("dapply() Arrow optimization - type specification", {
 
 test_that("dapply() Arrow optimization - type specification (date and timestamp)", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
                               b = as.POSIXct("1990-02-24 12:34:56"))))
   df <- createDataFrame(rdf)
@@ -157,8 +145,6 @@ test_that("dapply() Arrow optimization - type specification (date and timestamp)
 
 test_that("gapply() Arrow optimization", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   df <- createDataFrame(mtcars)
 
   conf <- callJMethod(sparkSession, "conf")
@@ -202,8 +188,6 @@ test_that("gapply() Arrow optimization", {
 
 test_that("gapply() Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   # Note that regular gapply() seems not supporting date and timestamps
   # whereas Arrow-optimized gapply() does.
   rdf <- data.frame(list(list(a = 1,
@@ -236,8 +220,6 @@ test_that("gapply() Arrow optimization - type specification", {
 
 test_that("gapply() Arrow optimization - type specification (date and timestamp)", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
                               b = as.POSIXct("1990-02-24 12:34:56"))))
   df <- createDataFrame(rdf)
@@ -249,8 +231,6 @@ test_that("gapply() Arrow optimization - type specification (date and timestamp)
 
 test_that("Arrow optimization - unsupported types", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
 
   expect_error(checkSchemaInArrow(structType("a FLOAT")), "not support float type")
   expect_error(checkSchemaInArrow(structType("a BINARY")), "not support binary type")
@@ -262,8 +242,6 @@ test_that("Arrow optimization - unsupported types", {
 
 test_that("SPARK-32478: gapply() Arrow optimization - error message for schema mismatch", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
   df <- createDataFrame(list(list(a = 1L, b = "a")))
 
   expect_error(
@@ -273,8 +251,6 @@ test_that("SPARK-32478: gapply() Arrow optimization - error message for schema m
 
 test_that("SPARK-43789: Automatically pick the number of partitions based on Arrow batch size", {
   skip_if_not_installed("arrow")
-  # TODO(SPARK-44127) Reenable test_sparkSQL_arrow.R in Java 21
-  skip_if(sparkR.callJStatic("org.apache.spark.util.Utils", "isJavaVersionAtLeast21"))
 
   conf <- callJMethod(sparkSession, "conf")
   maxRecordsPerBatch <- sparkR.conf("spark.sql.execution.arrow.maxRecordsPerBatch")[[1]]

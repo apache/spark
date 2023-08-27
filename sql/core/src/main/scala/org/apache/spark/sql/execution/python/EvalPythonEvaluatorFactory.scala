@@ -25,6 +25,7 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -32,11 +33,11 @@ abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
     output: Seq[Attribute])
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   protected def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+      argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
@@ -78,14 +79,20 @@ abstract class EvalPythonEvaluatorFactory(
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = inputs.map { input =>
+      val argMetas = inputs.map { input =>
         input.map { e =>
-          if (allInputs.exists(_.semanticEquals(e))) {
-            allInputs.indexWhere(_.semanticEquals(e))
+          val (key, value) = e match {
+            case NamedArgumentExpression(key, value) =>
+              (Some(key), value)
+            case _ =>
+              (None, e)
+          }
+          if (allInputs.exists(_.semanticEquals(value))) {
+            ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
           } else {
-            allInputs += e
-            dataTypes += e.dataType
-            allInputs.length - 1
+            allInputs += value
+            dataTypes += value.dataType
+            ArgumentMetadata(allInputs.length - 1, key)
           }
         }.toArray
       }.toArray
@@ -102,7 +109,7 @@ abstract class EvalPythonEvaluatorFactory(
       }
 
       val outputRowIterator =
-        evaluate(pyFuncs, argOffsets, projectedRowIter, schema, context)
+        evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)

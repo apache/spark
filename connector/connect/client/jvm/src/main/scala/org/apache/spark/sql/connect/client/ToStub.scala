@@ -14,16 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.xml.util
-
-import org.apache.spark.sql.Row
+package org.apache.spark.sql.connect.client
 
 /**
- * Exception thrown when the underlying parser returns a partial result of parsing.
- * @param partialResult the partial result of parsing a bad record.
- * @param cause the actual exception about why the parser cannot return full result.
+ * Class used to test stubbing. This needs to be in the main source tree, because this is not
+ * synced with the connect server during tests.
  */
-case class PartialResultException(
-    partialResult: Row,
-    cause: Throwable)
-  extends Exception(cause)
+case class ToStub(value: Long)

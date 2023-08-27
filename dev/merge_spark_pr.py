@@ -394,7 +394,22 @@ def choose_jira_assignee(issue, asf_jira):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                assign_issue(asf_jira, issue.key, assignee.name)
+                try:
+                    assign_issue(asf_jira, issue.key, assignee.name)
+                except Exception as e:
+                    if (
+                        e.__class__.__name__ == "JIRAError"
+                        and ("'%s' cannot be assigned" % assignee.name)
+                        in getattr(e, "response").text
+                    ):
+                        continue_maybe(
+                            "User '%s' cannot be assigned, add to contributors role and try again?"
+                            % assignee.name
+                        )
+                        grant_contributor_role(assignee.name, asf_jira)
+                        assign_issue(asf_jira, issue.key, assignee.name)
+                    else:
+                        raise e
                 return assignee
         except KeyboardInterrupt:
             raise
@@ -403,7 +418,13 @@ def choose_jira_assignee(issue, asf_jira):
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
-def assign_issue(client: jira.client.JIRA, issue: int, assignee: str) -> bool:
+def grant_contributor_role(user: str, asf_jira):
+    role = asf_jira.project_role("SPARK", 10010)
+    role.add_user(user)
+    print("Successfully added user '%s' to contributors role" % user)
+
+
+def assign_issue(client, issue: int, assignee: str) -> bool:
     """
     Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
     The original one has an issue that it will search users again and only choose the assignee

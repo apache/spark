@@ -82,7 +82,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k"
+      "collect_top_k",
+      // TODO: XML functions will soon be added to SQL Function registry and removed from this list
+      // https://issues.apache.org/jira/browse/SPARK-44787
+      "from_xml", "schema_of_xml"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
@@ -3399,7 +3402,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null))
     )
     checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
-    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, 3, 2, 5, 1, 2))))
+
+    withSQLConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT.key -> "true") {
+      checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    }
   }
 
   test("transform function - array for primitive type not containing null") {
