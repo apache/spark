@@ -387,13 +387,34 @@ def choose_jira_assignee(issue):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                assign_issue(issue.key, assignee.name)
+                try:
+                    assign_issue(issue.key, assignee.name)
+                except Exception as e:
+                    if (
+                        e.__class__.__name__ == "JIRAError"
+                        and ("'%s' cannot be assigned" % assignee.name)
+                        in getattr(e, "response").text
+                    ):
+                        continue_maybe(
+                            "User '%s' cannot be assigned, add to contributors role and try again?"
+                            % assignee.name
+                        )
+                        grant_contributor_role(assignee.name)
+                        assign_issue(issue.key, assignee.name)
+                    else:
+                        raise e
                 return assignee
         except KeyboardInterrupt:
             raise
         except BaseException:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
+
+
+def grant_contributor_role(user: str):
+    role = asf_jira.project_role("SPARK", 10010)
+    role.add_user(user)
+    print("Successfully added user '%s' to contributors role" % user)
 
 
 def assign_issue(issue: int, assignee: str) -> bool:

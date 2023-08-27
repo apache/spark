@@ -65,11 +65,20 @@ function codeTabs() {
 
       tabBar.append(
         '<li class="nav-item"><button class="' +
-        active + 'nav-link tab_' + lang + '" data-bs-target="#' + id +
-        '" data-bs-toggle="tab">' + buttonLabel + '</button></li>'
+        active + 'nav-link tab_' + lang + '" data-bs-target="#' +
+        id + '" data-tab-lang="tab_' + lang + '" data-bs-toggle="tab">' +
+        buttonLabel + '</button></li>'
       );
     });
     counter++;
+  });
+  $("ul.nav-tabs button").click(function (e) {
+    // Toggling a tab should switch all tabs corresponding to the same language
+    // while retaining the scroll position
+    e.preventDefault();
+    var scrollOffset = $(this).offset().top - $(document).scrollTop();
+    $("." + $(this).attr('data-tab-lang')).tab('show');
+    $(document).scrollTop($(this).offset().top - scrollOffset);
   });
 }
 

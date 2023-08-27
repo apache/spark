@@ -26,7 +26,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
-private[client] class GrpcRetryHandler(
+private[sql] class GrpcRetryHandler(
     private val retryPolicy: GrpcRetryHandler.RetryPolicy,
     private val sleep: Long => Unit = Thread.sleep) {
 
@@ -146,7 +146,7 @@ private[client] class GrpcRetryHandler(
   }
 }
 
-private[client] object GrpcRetryHandler extends Logging {
+private[sql] object GrpcRetryHandler extends Logging {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.

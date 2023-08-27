@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
 
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.test.ConnectFunSuite
 
 /**
  * Tests for non-dataframe related SparkSession operations.

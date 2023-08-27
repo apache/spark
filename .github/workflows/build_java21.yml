@@ -42,7 +42,7 @@ jobs:
       jobs: >-
         {
           "build": "true",
-          "pyspark": "false",
+          "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true"
