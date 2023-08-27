@@ -25,7 +25,7 @@ def my_test_function_1():
 
 
 class StreamingTestsForeachBatchMixin:
-    def test_streaming_foreachBatch(self):
+    def test_streaming_foreach_batch(self):
         q = None
 
         def collectBatch(batch_df, batch_id):
@@ -41,7 +41,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_tempview(self):
+    def test_streaming_foreach_batch_tempview(self):
         q = None
 
         def collectBatch(batch_df, batch_id):
@@ -63,7 +63,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_propagates_python_errors(self):
+    def test_streaming_foreach_batch_propagates_python_errors(self):
         from pyspark.errors import StreamingQueryException
 
         q = None
@@ -82,7 +82,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_graceful_stop(self):
+    def test_streaming_foreach_batch_graceful_stop(self):
         # SPARK-39218: Make foreachBatch streaming query stop gracefully
         def func(batch_df, _):
             batch_df.sparkSession._jvm.java.lang.Thread.sleep(10000)
@@ -92,8 +92,8 @@ class StreamingTestsForeachBatchMixin:
         q.stop()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
-    def test_streaming_foreachBatch_spark_session(self):
-        table_name = "testTable_foreachBatch"
+    def test_streaming_foreach_batch_spark_session(self):
+        table_name = "testTable_foreach_batch"
 
         def func(df: DataFrame, batch_id: int):
             if batch_id > 0:  # only process once
@@ -115,8 +115,8 @@ class StreamingTestsForeachBatchMixin:
         )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-    def test_streaming_foreachBatch_path_access(self):
-        table_name = "testTable_foreachBatch_path"
+    def test_streaming_foreach_batch_path_access(self):
+        table_name = "testTable_foreach_batch_path"
 
         def func(df: DataFrame, batch_id: int):
             if batch_id > 0:  # only process once
@@ -141,11 +141,11 @@ class StreamingTestsForeachBatchMixin:
     def my_test_function_2():
         return 2
 
-    def test_streaming_foreachBatch_fuction_calling(self):
+    def test_streaming_foreach_batch_fuction_calling(self):
         def my_test_function_3():
             return 3
 
-        table_name = "testTable_foreachBatch_function"
+        table_name = "testTable_foreach_batch_function"
 
         def func(df: DataFrame, batch_id: int):
             if batch_id > 0:  # only process once
@@ -175,10 +175,10 @@ class StreamingTestsForeachBatchMixin:
         )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-    def test_streaming_foreachBatch_import(self):
-        import time  # not imported in foreachBatch_worker
+    def test_streaming_foreach_batch_import(self):
+        import time  # not imported in foreach_batch_worker
 
-        table_name = "testTable_foreachBatch_import"
+        table_name = "testTable_foreach_batch_import"
 
         def func(df: DataFrame, batch_id: int):
             if batch_id > 0:  # only process once
@@ -204,7 +204,7 @@ class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestC
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import *  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_foreach_batch import *  # noqa: F401
 
     try:
         import xmlrunner
