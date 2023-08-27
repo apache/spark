@@ -21,7 +21,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class StreamingTestsForeachBatchMixin:
-    def test_streaming_foreachBatch(self):
+    def test_streaming_foreach_batch(self):
         q = None
 
         def collectBatch(batch_df, batch_id):
@@ -37,7 +37,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_tempview(self):
+    def test_streaming_foreach_batch_tempview(self):
         q = None
 
         def collectBatch(batch_df, batch_id):
@@ -59,7 +59,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_propagates_python_errors(self):
+    def test_streaming_foreach_batch_propagates_python_errors(self):
         from pyspark.errors import StreamingQueryException
 
         q = None
@@ -78,7 +78,7 @@ class StreamingTestsForeachBatchMixin:
             if q:
                 q.stop()
 
-    def test_streaming_foreachBatch_graceful_stop(self):
+    def test_streaming_foreach_batch_graceful_stop(self):
         # SPARK-39218: Make foreachBatch streaming query stop gracefully
         def func(batch_df, _):
             batch_df.sparkSession._jvm.java.lang.Thread.sleep(10000)
@@ -95,7 +95,7 @@ class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestC
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreachBatch import *  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_foreach_batch import *  # noqa: F401
 
     try:
         import xmlrunner

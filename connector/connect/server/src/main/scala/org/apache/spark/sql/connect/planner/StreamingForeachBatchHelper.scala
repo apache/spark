@@ -108,7 +108,7 @@ object StreamingForeachBatchHelper extends Logging {
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
-      "pyspark.sql.connect.streaming.worker.foreachBatch_worker")
+      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
     val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
