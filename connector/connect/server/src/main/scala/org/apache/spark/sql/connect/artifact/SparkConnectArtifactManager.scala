@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CONNECT_SCALA_UDF_STUB_PREFIXES
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
@@ -162,15 +162,37 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def classloader: ClassLoader = {
     val urls = getSparkConnectAddedJars :+ classDir.toUri.toURL
-    val loader = if (SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES).nonEmpty) {
-      val stubClassLoader =
-        StubClassLoader(null, SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES))
-      new ChildFirstURLClassLoader(
-        urls.toArray,
-        stubClassLoader,
-        Utils.getContextOrSparkClassLoader)
+    val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
+    val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val loader = if (prefixes.nonEmpty) {
+      // Two things you need to know about classloader for all of this to make sense:
+      // 1. A classloader needs to be able to fully define a class.
+      // 2. Classes are loaded lazily. Only when a class is used the classes it references are
+      //    loaded.
+      // This makes stubbing a bit more complicated then you'd expect. We cannot put the stubbing
+      // classloader as a fallback at the end of the loading process, because then classes that
+      // have been found in one of the parent classloaders and that contain a reference to a
+      // missing, to-be-stubbed missing class will still fail with classloading errors later on.
+      // The way we currently fix this is by making the stubbing class loader the last classloader
+      // it delegates to.
+      if (userClasspathFirst) {
+        // USER -> SYSTEM -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+      } else {
+        // SYSTEM -> USER -> STUB
+        new ChildFirstURLClassLoader(
+          urls.toArray,
+          StubClassLoader(null, prefixes),
+          Utils.getContextOrSparkClassLoader)
+      }
     } else {
-      new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      if (userClasspathFirst) {
+        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      } else {
+        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+      }
     }
 
     logDebug(s"Using class loader: $loader, containing urls: $urls")

@@ -556,7 +556,7 @@ object SQLConf {
       "will introduce shuffle to improve parallelism.")
     .version("3.4.0")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(Long.MaxValue)
+    .createWithDefaultString("128m")
 
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
@@ -1497,6 +1497,16 @@ object SQLConf {
         s"large amount of data. This config requires both ${V2_BUCKETING_ENABLED.key} and " +
         s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be enabled")
       .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+ val V2_BUCKETING_SHUFFLE_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
+      .doc("During a storage-partitioned join, whether to allow to shuffle only one side." +
+        "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
+        "only shuffle the other side. This optimization will reduce the amount of data that " +
+        s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4386,7 +4396,7 @@ object SQLConf {
         "for the index -1. For example, `array_insert(['a', 'b'], -1, 'x')` returns " +
         "`['a', 'x', 'b']`. When set to false, the -1 index points out to the last element, " +
         "and the given example produces `['a', 'b', 'x']`.")
-      .version("3.5.0")
+      .version("3.4.2")
       .booleanConf
       .createWithDefault(false)
 
@@ -4898,6 +4908,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
+  def v2BucketingShuffleEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
