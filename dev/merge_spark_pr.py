@@ -495,12 +495,13 @@ def get_current_ref():
 
 def initialize_jira():
     global asf_jira
+    jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:
         print("ERROR finding jira library. Run 'pip3 install jira' to install.")
         continue_maybe("Continue without jira?")
     elif JIRA_ACCESS_TOKEN:
-        client = jira.client.JIRA({"server": JIRA_API_BASE}, token_auth=JIRA_ACCESS_TOKEN)
+        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password authn
             client.current_user()
@@ -508,14 +509,14 @@ def initialize_jira():
         except Exception as e:
             if e.__class__.__name__ == "JIRAError" and getattr(e, "status_code", None) == 401:
                 msg = (
-                    "ASF JIRA could not authenticate with the invalid or expired token %s"
+                    "ASF JIRA could not authenticate with the invalid or expired token '%s'"
                     % JIRA_ACCESS_TOKEN
                 )
                 fail(msg)
             else:
                 raise e
     elif JIRA_USERNAME and JIRA_PASSWORD:
-        asf_jira = jira.client.JIRA({"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
         continue_maybe("Continue without jira?")
