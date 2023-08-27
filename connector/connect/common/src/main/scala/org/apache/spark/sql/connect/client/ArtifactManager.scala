@@ -145,10 +145,28 @@ class ArtifactManager(
     addArtifacts(classFinders.asScala.flatMap(_.findClasses()))
   }
 
+  private[sql] def addClassDir(base: Path): Unit = {
+    if (!Files.isDirectory(base)) {
+      return
+    }
+    val builder = Seq.newBuilder[Artifact]
+    val stream = Files.walk(base)
+    try {
+      stream.forEach { path =>
+        if (Files.isRegularFile(path) && path.toString.endsWith(".class")) {
+          builder += Artifact.newClassArtifact(base.relativize(path), new LocalFile(path))
+        }
+      }
+    } finally {
+      stream.close()
+    }
+    addArtifacts(builder.result())
+  }
+
   /**
    * Add a number of artifacts to the session.
    */
-  private def addArtifacts(artifacts: Iterable[Artifact]): Unit = {
+  private[client] def addArtifacts(artifacts: Iterable[Artifact]): Unit = {
     if (artifacts.isEmpty) {
       return
     }

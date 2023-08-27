@@ -20,9 +20,9 @@ import java.sql.Timestamp
 import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types._
 
 case class ClickEvent(id: String, timestamp: Timestamp)
