@@ -799,6 +799,44 @@ package object config {
     .intConf
     .createOptional
 
+  private[spark] val EXECUTOR_CODE_PROFILING_ENABLED =
+    ConfigBuilder("spark.executor.profiling.enabled")
+      .doc("Turn on code profiling via async_profiler in executors.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_CODE_PROFILING_OUTPUT_DIR =
+    ConfigBuilder("spark.executor.profiling.outputDir")
+      .doc("HDFS compatible file-system  path to where the profiler will write output jfr files.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val EXECUTOR_CODE_PROFILING_LOCAL_DIR =
+    ConfigBuilder("spark.executor.profiling.localDir")
+      .doc("Local file system path on executor where profiler output is saved. Defaults to the " +
+        "working directory of the executor process.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(".")
+
+  private[spark] val EXECUTOR_CODE_PROFILING_OPTIONS =
+    ConfigBuilder("spark.executor.profiling.options")
+      .doc("Options to pass on to the async profiler.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("event=wall,interval=10ms,alloc=2m,lock=10ms,chunktime=300s")
+
+  private[spark] val EXECUTOR_CODE_PROFILING_FRACTION =
+    ConfigBuilder("spark.executor.profiling.fraction")
+      .doc("Fraction of executors to profile")
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(v => v >= 0.0 && v < 1.0,
+        "Fraction of executors to profile must be in [0,1)")
+      .createWithDefault(0.1)
+
   private[spark] val PY_FILES = ConfigBuilder("spark.yarn.dist.pyFiles")
     .internal()
     .version("2.2.1")
