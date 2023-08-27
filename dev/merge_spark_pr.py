@@ -243,26 +243,6 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 
 
 def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
-    jira_server = {"server": JIRA_API_BASE}
-
-    if JIRA_ACCESS_TOKEN is not None:
-        asf_jira = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
-    try:
-        # Eagerly check if the token is valid to align with the behavior of username/password authn
-        asf_jira.current_user()
-    except Exception as e:
-        if e.__class__.__name__ == "JIRAError" and getattr(e, "status_code", None) == 401:
-            msg = (
-                "ASF JIRA could not authenticate with the invalid or expired token %s"
-                % JIRA_ACCESS_TOKEN
-            )
-            fail(msg)
-        else:
-            raise e
-
-    else:
-        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
-
     jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
         jira_id = default_jira_id
@@ -276,7 +256,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     cur_summary = issue.fields.summary
     cur_assignee = issue.fields.assignee
     if cur_assignee is None:
-        cur_assignee = choose_jira_assignee(issue, asf_jira)
+        cur_assignee = choose_jira_assignee(issue)
     # Check again, we might not have chosen an assignee
     if cur_assignee is None:
         cur_assignee = "NOT ASSIGNED!!!"
@@ -375,7 +355,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     print("Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions))
 
 
-def choose_jira_assignee(issue, asf_jira):
+def choose_jira_assignee(issue):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
     including the original reporter and all commentators
@@ -407,7 +387,7 @@ def choose_jira_assignee(issue, asf_jira):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                assign_issue(asf_jira, issue.key, assignee.name)
+                assign_issue(issue.key, assignee.name)
                 return assignee
         except KeyboardInterrupt:
             raise
@@ -416,16 +396,16 @@ def choose_jira_assignee(issue, asf_jira):
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
-def assign_issue(client, issue: int, assignee: str) -> bool:
+def assign_issue(issue: int, assignee: str) -> bool:
     """
     Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
     The original one has an issue that it will search users again and only choose the assignee
     from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
     is already resolved.
     """
-    url = getattr(client, "_get_latest_url")(f"issue/{issue}/assignee")
+    url = getattr(asf_jira, "_get_latest_url")(f"issue/{issue}/assignee")
     payload = {"name": assignee}
-    getattr(client, "_session").put(url, data=json.dumps(payload))
+    getattr(asf_jira, "_session").put(url, data=json.dumps(payload))
     return True
 
 
@@ -513,16 +493,40 @@ def get_current_ref():
         return ref
 
 
+def initialize_jira():
+    global asf_jira
+
+    if not JIRA_IMPORTED:
+        print("ERROR finding jira library. Run 'pip3 install jira' to install.")
+        continue_maybe("Continue without jira?")
+    elif JIRA_ACCESS_TOKEN:
+        client = jira.client.JIRA({"server": JIRA_API_BASE}, token_auth=JIRA_ACCESS_TOKEN)
+        try:
+            # Eagerly check if the token is valid to align with the behavior of username/password authn
+            client.current_user()
+            asf_jira = client
+        except Exception as e:
+            if e.__class__.__name__ == "JIRAError" and getattr(e, "status_code", None) == 401:
+                msg = (
+                    "ASF JIRA could not authenticate with the invalid or expired token %s"
+                    % JIRA_ACCESS_TOKEN
+                )
+                fail(msg)
+            else:
+                raise e
+    elif JIRA_USERNAME and JIRA_PASSWORD:
+        asf_jira = jira.client.JIRA({"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+    else:
+        print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
+        continue_maybe("Continue without jira?")
+
+
 def main():
+    initialize_jira()
     global original_head
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
-
-    # Check this up front to avoid failing the JIRA update at the very end
-    if not JIRA_ACCESS_TOKEN and (not JIRA_USERNAME or not JIRA_PASSWORD):
-        msg = "The env-vars JIRA_ACCESS_TOKEN or JIRA_USERNAME/JIRA_PASSWORD are not set. Continue?"
-        continue_maybe(msg)
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
@@ -621,20 +625,15 @@ def main():
     while input("\n%s (y/n): " % pick_prompt).lower() == "y":
         merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
-    if JIRA_IMPORTED:
-        if JIRA_ACCESS_TOKEN or (JIRA_USERNAME and JIRA_PASSWORD):
-            continue_maybe("Would you like to update an associated JIRA?")
-            jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-                pr_num,
-                GITHUB_BASE,
-                pr_num,
-            )
-            resolve_jira_issues(title, merged_refs, jira_comment)
-        else:
-            print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
-            print("Exiting without trying to close the associated JIRA.")
+    if asf_jira is not None:
+        continue_maybe("Would you like to update an associated JIRA?")
+        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+            pr_num,
+            GITHUB_BASE,
+            pr_num,
+        )
+        resolve_jira_issues(title, merged_refs, jira_comment)
     else:
-        print("Could not find jira-python library. Run 'pip3 install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
 
