@@ -31,6 +31,16 @@ output_rst_file_path = (
 )
 generate_supported_api(output_rst_file_path)
 
+# generate development/errors.rst
+from pyspark.errors_doc_gen import generate_errors_doc
+
+output_rst_file_path = (
+    "%s/development/errors.rst"
+    % os.path.dirname(os.path.abspath(__file__))
+)
+generate_errors_doc(output_rst_file_path)
+
+
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
 gen_rst_dirs = ["reference/api", "reference/pyspark.pandas/api",
