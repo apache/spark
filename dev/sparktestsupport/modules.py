@@ -497,7 +497,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.streaming.test_streaming",
         "pyspark.sql.tests.streaming.test_streaming_foreach",
-        "pyspark.sql.tests.streaming.test_streaming_foreachBatch",
+        "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
@@ -866,7 +866,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
-        "pyspark.sql.tests.connect.streaming.test_parity_foreachBatch",
+        "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
@@ -886,8 +886,6 @@ pyspark_ml_connect = Module(
         "python/pyspark/ml/connect",
     ],
     python_test_goals=[
-        # ml doctests
-        "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",

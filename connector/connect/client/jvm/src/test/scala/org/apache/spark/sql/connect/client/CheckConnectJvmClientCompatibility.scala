@@ -25,7 +25,7 @@ import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.lib.MiMaLib
 
 import org.apache.spark.SparkBuildInfo.spark_version
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
+import org.apache.spark.sql.test.IntegrationTestUtils._
 
 /**
  * A tool for checking the binary compatibility of the connect client API against the spark SQL

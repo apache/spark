@@ -58,7 +58,7 @@ private[sql] class SparkConnectClient(
   // a new client will create a new session ID.
   private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
 
-  private[client] val artifactManager: ArtifactManager = {
+  private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
   }
 
