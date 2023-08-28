@@ -644,8 +644,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     }
     assert(e.getMessage.contains("Correlated column is not allowed in"))
   }
-
-
+  
   test("SPARK-36191: limit in the correlated subquery") {
     val outerPlan = testRelation
     val innerPlan =
