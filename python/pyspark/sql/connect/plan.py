@@ -464,7 +464,6 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._columns = list(columns)
-        self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
