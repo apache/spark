@@ -869,6 +869,7 @@ jobs:
         echo "..."
         rm -rf /home/runner/.cache/coursier/v1/https/maven-central.storage-download.googleapis.com/maven2/org/slf4j
         rm -rf /home/runner/.cache/coursier/v1/https/repo1.maven.org/maven2/org/slf4j
+        rm -rf /home/runner/.m2/repository/
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
