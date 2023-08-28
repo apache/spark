@@ -864,8 +864,8 @@ jobs:
         ls -al /home/runner/work/spark/spark
         echo "ls -al /home/runner/.cache/coursier"
         ls -al /home/runner/.cache/coursier
-        echo "tree -L 3 /home/runner/.cache/coursier"
-        tree -L 3 /home/runner/.cache/coursier
+        echo "tree -L 6 /home/runner/.cache/coursier"
+        tree -L 6 /home/runner/.cache/coursier
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
