@@ -49,8 +49,11 @@ object CheckConnectJvmClientCompatibility {
 
   private val sqlJar = {
     val path = Paths.get(
-      sparkHome, "sql", "core",
-      "target", "scala-" + scalaVersion,
+      sparkHome,
+      "sql",
+      "core",
+      "target",
+      "scala-" + scalaVersion,
       "spark-sql_" + scalaVersion + "-" + spark_version + ".jar")
     assert(Files.exists(path), s"$path does not exist")
     path.toFile
@@ -58,8 +61,13 @@ object CheckConnectJvmClientCompatibility {
 
   private val clientJar = {
     val path = Paths.get(
-      sparkHome, "connector", "connect", "client", "jvm",
-      "target", "scala-" + scalaVersion,
+      sparkHome,
+      "connector",
+      "connect",
+      "client",
+      "jvm",
+      "target",
+      "scala-" + scalaVersion,
       "spark-connect-client-jvm_" + scalaVersion + "-" + spark_version + ".jar")
     assert(Files.exists(path), s"$path does not exist")
     path.toFile
