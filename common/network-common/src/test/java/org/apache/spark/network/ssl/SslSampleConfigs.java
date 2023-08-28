@@ -65,7 +65,7 @@ public class SslSampleConfigs {
     confMap.put("spark.ssl.enabled", "true");
     confMap.put("spark.ssl.trustStoreReloadingEnabled", "false");
     confMap.put("spark.ssl.openSslEnabled", "false");
-    confMap.put("spark.ssl.trustStoreReloadInterval", "10000");
+    confMap.put("spark.ssl.trustStoreReloadIntervalMs", "10000");
     confMap.put("spark.ssl.keyStore", SslSampleConfigs.keyStorePath);
     confMap.put("spark.ssl.keyStorePassword", "password");
     confMap.put("spark.ssl.privateKey", SslSampleConfigs.privateKeyPath);
@@ -86,7 +86,7 @@ public class SslSampleConfigs {
     confMap.put("spark.ssl.rpc.enabled", "true");
     confMap.put("spark.ssl.rpc.trustStoreReloadingEnabled", "false");
     confMap.put("spark.ssl.rpc.openSslEnabled", "false");
-    confMap.put("spark.ssl.rpc.trustStoreReloadInterval", "10000");
+    confMap.put("spark.ssl.rpc.trustStoreReloadIntervalMs", "10000");
     confMap.put("spark.ssl.rpc.keyStore", SslSampleConfigs.keyStorePath);
     confMap.put("spark.ssl.rpc.keyStorePassword", "password");
     confMap.put("spark.ssl.rpc.privateKey", SslSampleConfigs.privateKeyPath);

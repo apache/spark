@@ -91,7 +91,7 @@ public class SSLFactory {
     this.keyManagers = keyManagers(b.keyStore, b.keyStorePassword);
     this.trustManagers = trustStoreManagers(
       b.trustStore, b.trustStorePassword,
-      b.trustStoreReloadingEnabled, b.trustStoreReloadInterval
+      b.trustStoreReloadingEnabled, b.trustStoreReloadIntervalMs
     );
     this.jdkSslContext = createSSLContext(requestedProtocol, keyManagers, trustManagers);
   }
@@ -162,7 +162,7 @@ public class SSLFactory {
     private File trustStore;
     private String trustStorePassword;
     private boolean trustStoreReloadingEnabled;
-    private int trustStoreReloadInterval;
+    private int trustStoreReloadIntervalMs;
     private boolean openSslEnabled;
 
     /**
@@ -249,16 +249,16 @@ public class SSLFactory {
      * @param trustStore
      * @param trustStorePassword
      * @param trustStoreReloadingEnabled
-     * @param trustStoreReloadInterval
+     * @param trustStoreReloadIntervalMs
      * @return
      */
     public Builder trustStore(
         File trustStore, String trustStorePassword,
-        boolean trustStoreReloadingEnabled, int trustStoreReloadInterval) {
+        boolean trustStoreReloadingEnabled, int trustStoreReloadIntervalMs) {
       this.trustStore = trustStore;
       this.trustStorePassword = trustStorePassword;
       this.trustStoreReloadingEnabled = trustStoreReloadingEnabled;
-      this.trustStoreReloadInterval = trustStoreReloadInterval;
+      this.trustStoreReloadIntervalMs = trustStoreReloadIntervalMs;
       return this;
     }
 
@@ -369,7 +369,7 @@ public class SSLFactory {
 
   private static TrustManager[] trustStoreManagers(
       File trustStore, String trustStorePassword,
-      boolean trustStoreReloadingEnabled, int trustStoreReloadInterval)
+      boolean trustStoreReloadingEnabled, int trustStoreReloadIntervalMs)
           throws IOException, GeneralSecurityException {
     if (trustStore == null || !trustStore.exists()) {
       return credulousTrustStoreManagers();
@@ -380,7 +380,7 @@ public class SSLFactory {
 
       if (trustStoreReloadingEnabled) {
         ReloadingX509TrustManager reloading = new ReloadingX509TrustManager(
-          KeyStore.getDefaultType(), trustStore, trustStorePassword, trustStoreReloadInterval);
+          KeyStore.getDefaultType(), trustStore, trustStorePassword, trustStoreReloadIntervalMs);
         reloading.init();
         return new TrustManager[]{reloading};
       } else {

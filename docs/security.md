@@ -629,7 +629,7 @@ replaced with one of the above namespaces.
     </td>
   </tr>
   <tr>
-    <td><code>${ns}.trustStoreReloadInterval</code></td>
+    <td><code>${ns}.trustStoreReloadIntervalMs</code></td>
     <td>None</td>
     <td>
       The interval at which the trust store should be reloaded (in milliseconds).

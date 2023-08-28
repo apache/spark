@@ -270,7 +270,7 @@ public class TransportContext implements Closeable {
             conf.sslRpcTrustStore(),
             conf.sslRpcTrustStorePassword(),
             conf.sslRpcTrustStoreReloadingEnabled(),
-            conf.sslRpcTrustStoreReloadInterval())
+            conf.sslRpctrustStoreReloadIntervalMs())
           .build();
       } else {
         if (conf.sslRpcDangerouslyFallbackIfKeysNotPresent()) {

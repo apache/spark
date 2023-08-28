@@ -85,7 +85,7 @@ public class TransportConfSuite {
   }
 
   @Test
-  public void testSslTrustStoreReloadInterval() {
-    assertEquals(10000, transportConf.sslRpcTrustStoreReloadInterval());
+  public void testSsltrustStoreReloadIntervalMs() {
+    assertEquals(10000, transportConf.sslRpctrustStoreReloadIntervalMs());
   }
 }

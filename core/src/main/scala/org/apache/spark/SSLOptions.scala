@@ -54,7 +54,7 @@ import org.apache.spark.network.util.MapConfigProvider
  * @param trustStoreType      the type of the trust-store
  * @param trustStoreReloadingEnabled enables or disables using a trust-store that reloads
  *                                   its configuration when the trust-store file on disk changes
- * @param trustStoreReloadInterval the interval, in milliseconds,
+ * @param trustStoreReloadIntervalMs the interval, in milliseconds,
  *                                 when the trust-store will reload its configuration
  * @param openSslEnabled      enables or disables using an OpenSSL implementation
  * (if available on host system), requires certChain and keyFile arguments
@@ -79,7 +79,7 @@ private[spark] case class SSLOptions(
     trustStorePassword: Option[String] = None,
     trustStoreType: Option[String] = None,
     trustStoreReloadingEnabled: Boolean = false,
-    trustStoreReloadInterval: Int = 10000,
+    trustStoreReloadIntervalMs: Int = 10000,
     openSslEnabled: Boolean = false,
     protocol: Option[String] = None,
     enabledAlgorithms: Set[String] = Set.empty,
@@ -168,7 +168,7 @@ private[spark] case class SSLOptions(
     confMap.put(s"$nsp.enabled", enabled.toString)
     confMap.put(s"$nsp.trustStoreReloadingEnabled", trustStoreReloadingEnabled.toString)
     confMap.put(s"$nsp.openSslEnabled", openSslEnabled.toString)
-    confMap.put(s"$nsp.trustStoreReloadInterval", trustStoreReloadInterval.toString)
+    confMap.put(s"$nsp.trustStoreReloadIntervalMs", trustStoreReloadIntervalMs.toString)
     keyStore.map(_.getAbsolutePath).foreach(confMap.put(s"$nsp.keyStore", _))
     keyStorePassword.foreach(confMap.put(s"$nsp.keyStorePassword", _))
     privateKey.map(_.getAbsolutePath).foreach(confMap.put(s"$nsp.privateKey", _))
@@ -191,7 +191,7 @@ private[spark] case class SSLOptions(
       s"keyStoreType=$keyStoreType, needClientAuth=$needClientAuth, " +
       s"certChain=$certChain, trustStore=$trustStore, " +
       s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
-      s"trustStoreReloadInterval=$trustStoreReloadInterval, " +
+      s"trustStoreReloadIntervalMs=$trustStoreReloadIntervalMs, " +
       s"trustStoreReloadingEnabled=$trustStoreReloadingEnabled, openSSLEnabled=$openSslEnabled, " +
       s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}, " +
       s"dangerouslyFallbackIfKeysNotPresent=$dangerouslyFallbackIfKeysNotPresent"
@@ -218,7 +218,7 @@ private[spark] object SSLOptions extends Logging {
    * $ - `[ns].trustStoreType` - the type of trust-store
    * $ - `[ns].trustStoreReloadingEnabled` - enables or disables using a trust-store
    * that reloads its configuration when the trust-store file on disk changes
-   * $ - `[ns].trustStoreReloadInterval` - the interval, in milliseconds, the
+   * $ - `[ns].trustStoreReloadIntervalMs` - the interval, in milliseconds, the
    * trust-store will reload its configuration
    * $ - `[ns].openSslEnabled` - enables or disables using an OpenSSL implementation
    * (if available on host system), requires certChain and keyFile arguments
@@ -301,8 +301,8 @@ private[spark] object SSLOptions extends Logging {
     val trustStoreReloadingEnabled = conf.getBoolean(s"$ns.trustStoreReloadingEnabled",
         defaultValue = defaults.exists(_.trustStoreReloadingEnabled))
 
-    val trustStoreReloadInterval = conf.getInt(s"$ns.trustStoreReloadInterval",
-      defaultValue = defaults.map(_.trustStoreReloadInterval).getOrElse(10000))
+    val trustStoreReloadIntervalMs = conf.getInt(s"$ns.trustStoreReloadIntervalMs",
+      defaultValue = defaults.map(_.trustStoreReloadIntervalMs).getOrElse(10000))
 
     val openSslEnabled = conf.getBoolean(s"$ns.openSslEnabled",
         defaultValue = defaults.exists(_.openSslEnabled))
@@ -334,7 +334,7 @@ private[spark] object SSLOptions extends Logging {
       trustStorePassword,
       trustStoreType,
       trustStoreReloadingEnabled,
-      trustStoreReloadInterval,
+      trustStoreReloadIntervalMs,
       openSslEnabled,
       protocol,
       enabledAlgorithms,

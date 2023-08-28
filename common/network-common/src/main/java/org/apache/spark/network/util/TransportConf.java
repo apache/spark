@@ -361,8 +361,8 @@ public class TransportConf {
   /**
    * The interval, in milliseconds, the trust-store will reload its configuration
    */
-  public int sslRpcTrustStoreReloadInterval() {
-    return conf.getInt("spark.ssl.rpc.trustStoreReloadInterval", 10000);
+  public int sslRpctrustStoreReloadIntervalMs() {
+    return conf.getInt("spark.ssl.rpc.trustStoreReloadIntervalMs", 10000);
   }
 
   /**
