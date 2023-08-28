@@ -110,9 +110,9 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MinorGCTime",
     "MajorGCCount",
     "MajorGCTime",
+    "TotalGCTime",
     "ConcurrentGCCount",
-    "ConcurrentGCTime",
-    "TotalGCTime"
+    "ConcurrentGCTime"
   )
 
   /* We builtin some common GC collectors */

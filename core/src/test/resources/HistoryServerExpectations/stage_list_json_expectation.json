@@ -74,9 +74,9 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
-    "ConcurrentGCTime" : 0,
-    "TotalGCTime" : 0
+    "ConcurrentGCTime" : 0
   },
   "isShufflePushEnabled" : false,
   "shuffleMergersCount" : 0
@@ -157,9 +157,9 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
-    "ConcurrentGCTime" : 0,
-    "TotalGCTime" : 0
+    "ConcurrentGCTime" : 0
   },
   "isShufflePushEnabled" : false,
   "shuffleMergersCount" : 0
@@ -239,9 +239,9 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
-    "ConcurrentGCTime" : 0,
-    "TotalGCTime" : 0
+    "ConcurrentGCTime" : 0
   },
   "isShufflePushEnabled" : false,
   "shuffleMergersCount" : 0
@@ -321,9 +321,9 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "TotalGCTime" : 0,
     "ConcurrentGCCount" : 0,
-    "ConcurrentGCTime" : 0,
-    "TotalGCTime" : 0
+    "ConcurrentGCTime" : 0
   },
   "isShufflePushEnabled" : false,
   "shuffleMergersCount" : 0
