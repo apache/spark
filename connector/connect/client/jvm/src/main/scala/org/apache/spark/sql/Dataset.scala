@@ -3336,4 +3336,10 @@ class Dataset[T] private[sql] (
       result.close()
     }
   }
+
+  /**
+   * We cannot deserialize a connect [[Dataset]] because of a class clash on the server side. We
+   * null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
