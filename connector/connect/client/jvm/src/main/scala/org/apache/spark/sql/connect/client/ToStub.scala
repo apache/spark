@@ -14,9 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.common.config
+package org.apache.spark.sql.connect.client
 
-private[sql] object ConnectCommon {
-  val CONNECT_GRPC_BINDING_PORT: Int = 15002
-  val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024;
-}
+/**
+ * Class used to test stubbing. This needs to be in the main source tree, because this is not
+ * synced with the connect server during tests.
+ */
+case class ToStub(value: Long)
