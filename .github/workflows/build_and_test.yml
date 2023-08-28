@@ -830,44 +830,6 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
-      with:
-        path: |
-          build/apache-maven-*
-          build/scala-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          scala-213-coursier-
-    - name: Clear repo
-      run: |
-        echo "rm -rf /home/runner/.m2"
-        rm -rf /home/runner/.m2
-        echo "rm -rf /home/runner/.sbt"
-        rm -rf /home/runner/.sbt
-        echo "ls -al /home/runner"
-        ls -al /home/runner
-        echo "ls -al /home/runner/work"
-        ls -al /home/runner/work
-        echo "ls -al /home/runner/work/spark"
-        ls -al /home/runner/work/spark
-        echo "ls -al /home/runner/work/spark/spark"
-        ls -al /home/runner/work/spark/spark
-        echo "ls -al /home/runner/.cache/coursier/v1/https"
-        ls -al /home/runner/.cache/coursier/v1/https
-        echo "rm -rf /home/runner/.cache/coursier/v1/https"
-        rm -rf /home/runner/.cache/coursier/v1/https
-        echo "ls -al /home/runner/.cache/coursier/v1/https"
-        ls -al /home/runner/.cache/coursier/v1/https
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
