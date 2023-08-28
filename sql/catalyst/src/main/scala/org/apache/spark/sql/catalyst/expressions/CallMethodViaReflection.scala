@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -142,7 +144,7 @@ case class CallMethodViaReflection(
       val ret = method.invoke(null, buffer : _*)
       UTF8String.fromString(String.valueOf(ret))
     } catch {
-      case _: Exception if !failOnError =>
+      case NonFatal(_) if !failOnError =>
         null
     }
   }
