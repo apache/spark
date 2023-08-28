@@ -253,14 +253,18 @@ case class TryToBinary(
   since = "4.0.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class TryReflect(children: Seq[Expression]) extends RuntimeReplaceable {
-  override def replacement: Expression =
-    CallMethodViaReflection(children, failOnError = false)
+case class TryReflect(params: Seq[Expression], replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+
+  def this(params: Seq[Expression]) = this(params,
+    CallMethodViaReflection(params, failOnError = false))
 
   override def prettyName: String = "try_reflect"
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
+  override def parameters: Seq[Expression] = params
 
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
 }
 

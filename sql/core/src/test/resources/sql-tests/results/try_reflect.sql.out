@@ -56,72 +56,115 @@ NULL
 
 
 -- !query
-SELECT try_reflect("java.lang.Math", "max", "test", 3)
+SELECT try_reflect("java.wrongclass.Math", "max", 2, 3)
 -- !query schema
-struct<try_reflect(java.lang.Math, max, test, 3):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_CLASS_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "className" : "java.wrongclass.Math",
+    "sqlExpr" : "\"reflect(java.wrongclass.Math, max, 2, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "try_reflect(\"java.wrongclass.Math\", \"max\", 2, 3)"
+  } ]
+}
 
 
 -- !query
-SELECT try_reflect("java.lang.Math", "min", 2, "str")
+SELECT try_reflect("java.lang.Math", "wrongmethod", 2, 3)
 -- !query schema
-struct<try_reflect(java.lang.Math, min, 2, str):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "className" : "java.lang.Math",
+    "methodName" : "wrongmethod",
+    "sqlExpr" : "\"reflect(java.lang.Math, wrongmethod, 2, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "try_reflect(\"java.lang.Math\", \"wrongmethod\", 2, 3)"
+  } ]
+}
 
 
 -- !query
-SELECT try_reflect("java.lang.Math", "round", "tt")
+SELECT try_reflect("java.lang.Math")
 -- !query schema
-struct<try_reflect(java.lang.Math, round, tt):string>
+struct<>
 -- !query output
-NULL
-
-
--- !query
-SELECT try_reflect("java.lang.String", "isEmpty")
--- !query schema
-struct<try_reflect(java.lang.String, isEmpty):string>
--- !query output
-NULL
-
-
--- !query
-SELECT try_reflect("java.lang.Math", "exp", 1.0)
--- !query schema
-struct<try_reflect(java.lang.Math, exp, 1.0):string>
--- !query output
-NULL
-
-
--- !query
-SELECT try_reflect("java.lang.Math", "floor", "test")
--- !query schema
-struct<try_reflect(java.lang.Math, floor, test):string>
--- !query output
-NULL
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "> 1",
+    "functionName" : "`reflect`"
+  }
+}
 
 
 -- !query
 SELECT try_reflect("java.lang.Math", "round", 2.5)
 -- !query schema
-struct<try_reflect(java.lang.Math, round, 2.5):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "3",
+    "requiredType" : "(\"BOOLEAN\" or \"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"STRING\")",
+    "sqlExpr" : "\"reflect(java.lang.Math, round, 2.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "try_reflect(\"java.lang.Math\", \"round\", 2.5)"
+  } ]
+}
 
 
 -- !query
-SELECT try_reflect("java.lang.Math", "exp", 1.0)
+SELECT try_reflect("java.lang.Object", "toString")
 -- !query schema
-struct<try_reflect(java.lang.Math, exp, 1.0):string>
+struct<>
 -- !query output
-NULL
-
-
--- !query
-SELECT try_reflect("java.lang.Math", "floor", 1.9)
--- !query schema
-struct<try_reflect(java.lang.Math, floor, 1.9):string>
--- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "className" : "java.lang.Object",
+    "methodName" : "toString",
+    "sqlExpr" : "\"reflect(java.lang.Object, toString)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "try_reflect(\"java.lang.Object\", \"toString\")"
+  } ]
+}

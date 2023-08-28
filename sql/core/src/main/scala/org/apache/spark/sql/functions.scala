@@ -3689,7 +3689,7 @@ object functions {
    * @since 4.0.0
    */
   def try_reflect(cols: Column*): Column = withExpr {
-    TryReflect(cols.map(_.expr))
+    new TryReflect(cols.map(_.expr))
   }
 
   /**

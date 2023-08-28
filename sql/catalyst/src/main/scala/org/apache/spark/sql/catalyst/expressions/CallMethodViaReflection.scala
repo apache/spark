@@ -68,60 +68,56 @@ case class CallMethodViaReflection(
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!failOnError) {
-      super.checkInputDataTypes()
+    if (children.size < 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else {
-      if (children.size < 2) {
-        throw QueryCompilationErrors.wrongNumArgsError(
-          toSQLId(prettyName), Seq("> 1"), children.length
-        )
-      } else {
-        val unexpectedParameter = children.zipWithIndex.collectFirst {
-          case (e, 0) if !(e.dataType == StringType && e.foldable) =>
-            DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> "class",
-                "inputType" -> toSQLType(StringType),
-                "inputExpr" -> toSQLExpr(children.head)
-              )
+      val unexpectedParameter = children.zipWithIndex.collectFirst {
+        case (e, 0) if !(e.dataType == StringType && e.foldable) =>
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "class",
+              "inputType" -> toSQLType(StringType),
+              "inputExpr" -> toSQLExpr(children.head)
             )
-          case (e, 1) if !(e.dataType == StringType && e.foldable) =>
-            DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> "method",
-                "inputType" -> toSQLType(StringType),
-                "inputExpr" -> toSQLExpr(children(1))
-              )
+          )
+        case (e, 1) if !(e.dataType == StringType && e.foldable) =>
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "method",
+              "inputType" -> toSQLType(StringType),
+              "inputExpr" -> toSQLExpr(children(1))
             )
-          case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
-            DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_INPUT_TYPE",
-              messageParameters = Map(
-                "paramIndex" -> (idx + 1).toString,
-                "requiredType" -> toSQLType(
-                  TypeCollection(BooleanType, ByteType, ShortType,
-                    IntegerType, LongType, FloatType, DoubleType, StringType)),
-                "inputSql" -> toSQLExpr(e),
-                "inputType" -> toSQLType(e.dataType))
-            )
-        }
+          )
+        case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> (idx + 1).toString,
+              "requiredType" -> toSQLType(
+                TypeCollection(BooleanType, ByteType, ShortType,
+                  IntegerType, LongType, FloatType, DoubleType, StringType)),
+              "inputSql" -> toSQLExpr(e),
+              "inputType" -> toSQLType(e.dataType))
+          )
+      }
 
-        unexpectedParameter match {
-          case Some(mismatch) => mismatch
-          case _ if !classExists =>
-            DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_CLASS_TYPE",
-              messageParameters = Map("className" -> className)
-            )
-          case _ if method == null =>
-            DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_STATIC_METHOD",
-              messageParameters = Map("methodName" -> methodName, "className" -> className)
-            )
-          case _ => TypeCheckSuccess
-        }
+      unexpectedParameter match {
+        case Some(mismatch) => mismatch
+        case _ if !classExists =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_CLASS_TYPE",
+            messageParameters = Map("className" -> className)
+          )
+        case _ if method == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_STATIC_METHOD",
+            messageParameters = Map("methodName" -> methodName, "className" -> className)
+          )
+        case _ => TypeCheckSuccess
       }
     }
   }
