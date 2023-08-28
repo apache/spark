@@ -866,7 +866,7 @@ jobs:
         ls -al /home/runner/.cache/coursier
         echo "tree -L 6 /home/runner/.cache/coursier"
         tree -L 6 /home/runner/.cache/coursier
-        "echo..."
+        echo "..."
         rm -rf /home/runner/.cache/coursier/v1/https/maven-central.storage-download.googleapis.com/maven2/org/slf4j
         rm -rf /home/runner/.cache/coursier/v1/https/repo1.maven.org/maven2/org/slf4j
     - name: Install Java 8
