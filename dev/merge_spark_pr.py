@@ -524,7 +524,8 @@ def initialize_jira():
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
         try:
-            # Eagerly check if the token is valid to align with the behavior of username/password authn
+            # Eagerly check if the token is valid to align with the behavior of username/password
+            # authn
             client.current_user()
             asf_jira = client
         except Exception as e:
