@@ -884,6 +884,14 @@ class SparkSession:
                 PySparkSession(
                     SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
                 )
+
+                # Lastly remove all static configurations that are not allowed to set in the regular
+                # Spark Connect session.
+                jvm = SparkContext._jvm
+                utl = jvm.org.apache.spark.sql.api.python.PythonSQLUtils  # type: ignore[union-attr]
+                for conf_set in utl.listStaticSQLConfigs():
+                    opts.pop(conf_set._1(), None)
+
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
