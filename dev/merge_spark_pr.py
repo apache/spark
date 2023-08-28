@@ -538,6 +538,9 @@ def initialize_jira():
             else:
                 raise e
     elif JIRA_USERNAME and JIRA_PASSWORD:
+        print("You can use JIRA_ACCESS_TOKEN instead of JIRA_USERNAME/JIRA_PASSWORD.")
+        print("Visit https://issues.apache.org/jira/secure/ViewProfile.jspa ")
+        print("and click 'Personal Access Tokens' menu to manage your own tokens.")
         asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
