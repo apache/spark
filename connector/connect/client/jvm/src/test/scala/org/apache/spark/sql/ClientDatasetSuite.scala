@@ -26,8 +26,8 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 
 // Add sample tests.

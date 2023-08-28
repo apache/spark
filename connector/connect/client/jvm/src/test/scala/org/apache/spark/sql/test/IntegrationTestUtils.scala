@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client.util
+package org.apache.spark.sql.test
 
 import java.io.File
 import java.nio.file.{Files, Paths}
@@ -30,8 +30,12 @@ object IntegrationTestUtils {
 
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
+  private val DEBUG_SC_JVM_CLIENT_ENV = "SPARK_DEBUG_SC_JVM_CLIENT"
   // Enable this flag to print all server logs to the console
-  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
+  private[sql] val isDebug = {
+    System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean ||
+    Option(System.getenv(DEBUG_SC_JVM_CLIENT_ENV)).exists(_.toBoolean)
+  }
 
   private[sql] lazy val scalaVersion = {
     versionNumberString.split('.') match {
@@ -49,8 +53,14 @@ object IntegrationTestUtils {
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
 
-  private[connect] def debugConfigs: Seq[String] = {
-    val log4j2 = s"$sparkHome/connector/connect/client/jvm/src/test/resources/log4j2.properties"
+  private[sql] lazy val connectClientHomeDir = s"$sparkHome/connector/connect/client/jvm"
+
+  private[sql] lazy val connectClientTestClassDir = {
+    s"$connectClientHomeDir/target/$scalaDir/test-classes"
+  }
+
+  private[sql] def debugConfigs: Seq[String] = {
+    val log4j2 = s"$connectClientHomeDir/src/test/resources/log4j2.properties"
     if (isDebug) {
       Seq(
         // Enable to see the server plan change log
@@ -70,9 +80,9 @@ object IntegrationTestUtils {
 
   // Log server start stop debug info into console
   // scalastyle:off println
-  private[connect] def debug(msg: String): Unit = if (isDebug) println(msg)
+  private[sql] def debug(msg: String): Unit = if (isDebug) println(msg)
   // scalastyle:on println
-  private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
+  private[sql] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
 
   private[sql] lazy val isSparkHiveJarAvailable: Boolean = {
     val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +

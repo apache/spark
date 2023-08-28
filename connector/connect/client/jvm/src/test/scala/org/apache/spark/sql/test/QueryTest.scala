@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.client.util
+package org.apache.spark.sql.test
 
 import java.util.TimeZone
 

@@ -21,9 +21,9 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**

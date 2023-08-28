@@ -20,9 +20,9 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 
 class UserDefinedFunctionSuite extends ConnectFunSuite {
