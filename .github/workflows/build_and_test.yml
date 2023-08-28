@@ -642,6 +642,10 @@ jobs:
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
+    - name: Clear Maven repository
+      run: |
+        echo "rm -rf /home/runner/.m2"
+        rm -rf /home/runner/.m2
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
@@ -848,29 +852,10 @@ jobs:
         key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           scala-213-coursier-
-    - name: Clear repo
+    - name: Clear Maven repository
       run: |
         echo "rm -rf /home/runner/.m2"
         rm -rf /home/runner/.m2
-        echo "rm -rf /home/runner/.sbt"
-        rm -rf /home/runner/.sbt
-        echo "ls -al /home/runner"
-        ls -al /home/runner
-        echo "ls -al /home/runner/work"
-        ls -al /home/runner/work
-        echo "ls -al /home/runner/work/spark"
-        ls -al /home/runner/work/spark
-        echo "ls -al /home/runner/work/spark/spark"
-        ls -al /home/runner/work/spark/spark
-        echo "ls -al /home/runner/.cache/coursier"
-        ls -al /home/runner/.cache/coursier
-        echo "tree -L 6 /home/runner/.cache/coursier"
-        tree -L 6 /home/runner/.cache/coursier
-        echo "..."
-        rm -rf /home/runner/.cache/coursier/v1/https/maven-central.storage-download.googleapis.com/maven2/org/slf4j
-        rm -rf /home/runner/.cache/coursier/v1/https/repo1.maven.org/maven2/org/slf4j
-        rm -rf /home/runner/.cache/coursier/v1/https/maven-central.storage-download.googleapis.com/maven2/org/scala-lang/scala-compiler
-        rm -rf /home/runner/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-compiler
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
