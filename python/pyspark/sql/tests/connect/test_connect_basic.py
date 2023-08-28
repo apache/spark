@@ -85,6 +85,15 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
     test cases."""
 
     @classmethod
+    def conf(cls):
+        conf = super(SparkConnectSQLTestCase, cls).conf()
+        # Make the server terminate reattachable streams every 1 second and 123 bytes,
+        # to make the tests exercise reattach.
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "123")
+        return conf
+
+    @classmethod
     def setUpClass(cls):
         super(SparkConnectSQLTestCase, cls).setUpClass()
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
