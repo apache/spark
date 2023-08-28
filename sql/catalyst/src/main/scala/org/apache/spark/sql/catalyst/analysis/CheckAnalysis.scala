@@ -1405,6 +1405,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           failOnInvalidOuterReference(g)
           checkPlan(g.child, aggregated, canContainOuter)
 
+        // Correlated subquery can have a LIMIT clause
+        case l@(GlobalLimit(_, _) | LocalLimit(_, _)) =>
+          failOnInvalidOuterReference(l)
+          checkPlan(l.children(0), aggregated, canContainOuter)
+
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
         // under a correlation point but they and their descendant operators

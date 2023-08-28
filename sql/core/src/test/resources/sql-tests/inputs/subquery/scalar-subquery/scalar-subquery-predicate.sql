@@ -318,6 +318,23 @@ WHERE t1b = (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s
                FROM t2) as tmp);
 
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2b < t1b
+              ORDER BY t2d LIMIT 1);
+
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, non-equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2c = t1c
+              ORDER BY t2c LIMIT 1);
+
 -- Set operations in correlation path
 
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);

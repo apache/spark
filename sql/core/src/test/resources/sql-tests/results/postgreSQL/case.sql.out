@@ -130,9 +130,10 @@ SELECT '3' AS `One`,
     ELSE 4
   END AS `Simple ELSE`
 -- !query schema
-struct<One:string,Simple ELSE:int>
+struct<>
 -- !query output
-3	3
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
@@ -142,9 +143,10 @@ SELECT '4' AS `One`,
     ELSE 4
   END AS `ELSE default`
 -- !query schema
-struct<One:string,ELSE default:int>
+struct<>
 -- !query output
-4	4
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
@@ -155,9 +157,10 @@ SELECT '6' AS `One`,
     ELSE 7
   END AS `Two WHEN with default`
 -- !query schema
-struct<One:string,Two WHEN with default:int>
+struct<>
 -- !query output
-6	6
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
@@ -165,44 +168,75 @@ SELECT '7' AS `None`,
   CASE WHEN rand() < 0 THEN 1
   END AS `NULL on no matches`
 -- !query schema
-struct<None:string,NULL on no matches:int>
+struct<>
 -- !query output
-7	NULL
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
 -- !query schema
-struct<CASE WHEN (i > 100) THEN (1 / 0) ELSE 0 END:double>
+struct<>
 -- !query output
-0.0
-0.0
-0.0
-0.0
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
 SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END
 -- !query schema
-struct<CASE WHEN (a = a) THEN 1 ELSE 2 END:int>
+struct<>
 -- !query output
-1
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
@@ -212,12 +246,39 @@ SELECT '' AS `Five`,
   END AS `>= 3 or Null`
   FROM CASE_TBL
 -- !query schema
-struct<Five:string,>= 3 or Null:int>
+struct<>
 -- !query output
-	3
-	4
-	NULL
-	NULL
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -227,12 +288,39 @@ SELECT '' AS `Five`,
   END AS `Simplest Math`
   FROM CASE_TBL
 -- !query schema
-struct<Five:string,Simplest Math:int>
+struct<>
 -- !query output
-	1
-	2
-	6
-	8
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -245,12 +333,39 @@ SELECT '' AS `Five`, i AS `Value`,
   END AS `Category`
   FROM CASE_TBL
 -- !query schema
-struct<Five:string,Value:int,Category:string>
+struct<>
 -- !query output
-	1	one
-	2	two
-	3	big
-	4	big
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -263,60 +378,154 @@ SELECT '' AS `Five`,
   END AS `Category`
   FROM CASE_TBL
 -- !query schema
-struct<Five:string,Category:string>
+struct<>
 -- !query output
-	big
-	big
-	one
-	two
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
 SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4
 -- !query schema
-struct<i:int,f:double>
+struct<>
 -- !query output
-4	NULL
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
 SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2
 -- !query schema
-struct<i:int,f:double>
+struct<>
 -- !query output
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
 
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<coalesce(f, i, j):double>
+struct<>
 -- !query output
--30.3
--30.3
--30.3
--30.3
--30.3
--30.3
--6.0
-1.0
-1.0
-10.1
-10.1
-10.1
-10.1
-10.1
-10.1
-2.0
-2.0
-20.2
-20.2
-20.2
-20.2
-20.2
-20.2
-3.0
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -324,10 +533,39 @@ SELECT *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(a.f, b.i, b.j) = 2
 -- !query schema
-struct<i:int,f:double,i:int,j:int>
+struct<>
 -- !query output
-4	NULL	2	-2
-4	NULL	2	-4
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -335,32 +573,39 @@ SELECT '' AS Five, NULLIF(a.i,b.i) AS `NULLIF(a.i,b.i)`,
   NULLIF(b.i, 4) AS `NULLIF(b.i,4)`
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<Five:string,NULLIF(a.i,b.i):int,NULLIF(b.i,4):int>
+struct<>
 -- !query output
-	1	2
-	1	2
-	1	3
-	1	NULL
-	2	1
-	2	1
-	2	3
-	2	NULL
-	3	1
-	3	1
-	3	2
-	3	2
-	3	NULL
-	4	1
-	4	1
-	4	2
-	4	2
-	4	3
-	4	NULL
-	NULL	1
-	NULL	1
-	NULL	2
-	NULL	2
-	NULL	3
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -368,10 +613,39 @@ SELECT '' AS `Two`, *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(f,b.i) = 2
 -- !query schema
-struct<Two:string,i:int,f:double,i:int,j:int>
+struct<>
 -- !query output
-	4	NULL	2	-2
-	4	NULL	2	-4
+java.lang.IllegalStateException
+Cannot call methods on a stopped SparkContext.
+This stopped SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
+
+The currently active SparkContext was created at:
+
+org.apache.spark.sql.SQLQueryTestSuite.beforeAll(SQLQueryTestSuite.scala:797)
+org.scalatest.BeforeAndAfterAll.liftedTree1$1(BeforeAndAfterAll.scala:212)
+org.scalatest.BeforeAndAfterAll.run(BeforeAndAfterAll.scala:210)
+org.scalatest.BeforeAndAfterAll.run$(BeforeAndAfterAll.scala:208)
+org.apache.spark.SparkFunSuite.run(SparkFunSuite.scala:69)
+org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128)
+java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628)
+java.base/java.lang.Thread.run(Thread.java:829)
 
 
 -- !query
@@ -385,9 +659,10 @@ SELECT CASE
   WHEN 'it was bar!' THEN 'bar recognized'
   ELSE 'unrecognized' END
 -- !query schema
-struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
+struct<>
 -- !query output
-bar recognized
+java.lang.IllegalStateException
+SparkContext has been shutdown
 
 
 -- !query
