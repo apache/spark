@@ -689,12 +689,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
-    // Before creating test tables, deletes orphan directories in warehouse dir
-    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
-      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
-      if (f.exists()) {
-        Utils.deleteRecursively(f)
-      }
+    // Before creating test tables, deletes warehouse dir
+    val f = new File(new URI(conf.warehousePath))
+    if (f.exists()) {
+      Utils.deleteRecursively(f)
     }
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
