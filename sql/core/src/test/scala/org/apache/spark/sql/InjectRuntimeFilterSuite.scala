@@ -605,7 +605,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  test ("Runtime bloom filter join: should add bf for right outer join even if right side is" +
+  test("Runtime bloom filter join: should add bf for right outer join even if right side is" +
     " smaller than broadcast threshold") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "300",
@@ -629,7 +629,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  test ("Runtime bloom filter join: should add bf for left semi join even if left side is" +
+  test("Runtime bloom filter join: should add bf for left semi join even if left side is" +
     " smaller than broadcast threshold") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100",
