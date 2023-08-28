@@ -17,8 +17,16 @@
 from __future__ import annotations
 
 import inspect
-import numpy as np
 import uuid
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
+
+import numpy as np
+
+try:
+    import pandas as pd
+except ImportError:
+    pass  # Let it throw a better error message later when the API is invoked.
+
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
@@ -35,10 +43,8 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.ml.util import try_remote_functions
-from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
-    import pandas as pd
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 supported_scalar_types = (
@@ -160,8 +166,6 @@ def _batched(
     data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]], batch_size: int
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
-    import pandas as pd
-
     if isinstance(data, pd.DataFrame):
         df = data
     elif isinstance(data, pd.Series):
@@ -177,8 +181,6 @@ def _batched(
 
 
 def _is_tensor_col(data: Union[pd.Series, pd.DataFrame]) -> bool:
-    import pandas as pd
-
     if isinstance(data, pd.Series):
         return data.dtype == np.object_ and isinstance(data.iloc[0], (np.ndarray, list))
     elif isinstance(data, pd.DataFrame):
@@ -193,8 +195,6 @@ def _is_tensor_col(data: Union[pd.Series, pd.DataFrame]) -> bool:
 
 def _has_tensor_cols(data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]]) -> bool:
     """Check if input Series/DataFrame/Tuple contains any tensor-valued columns."""
-    import pandas as pd
-
     if isinstance(data, (pd.Series, pd.DataFrame)):
         return _is_tensor_col(data)
     else:  # isinstance(data, Tuple):
@@ -276,8 +276,6 @@ def _validate_and_transform_prediction_result(
 ) -> pd.DataFrame | pd.Series:
     """Validate numpy-based model predictions against the expected pandas_udf return_type and
     transforms the predictions into an equivalent pandas DataFrame or Series."""
-    import pandas as pd
-
     if isinstance(return_type, StructType):
         struct_rtype: StructType = return_type
         fieldNames = struct_rtype.names
@@ -829,7 +827,6 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
     import sys
-    import warnings
 
     from pyspark.sql.pandas.utils import (
         require_minimum_pandas_version,

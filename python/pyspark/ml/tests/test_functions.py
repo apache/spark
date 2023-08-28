@@ -28,9 +28,6 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 
-if have_pandas:
-    import pandas as pd
-
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
@@ -38,6 +35,8 @@ if have_pandas:
 )
 class PredictBatchUDFTests(SparkSessionTestCase):
     def setUp(self):
+        import pandas as pd
+
         super(PredictBatchUDFTests, self).setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 

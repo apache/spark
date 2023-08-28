@@ -135,6 +135,7 @@ class TorchDistributorDistributedUnitTestsOnConnect(
         cls.spark.stop()
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchWrapperUnitTestsOnConnect(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
 
