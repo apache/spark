@@ -86,10 +86,10 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
   // Statistics about cached responses.
-  private var cachedSizeUntilHighestConsumed = CachedSize()
-  private var cachedSizeUntilLastProduced = CachedSize()
-  private var autoRemovedSize = CachedSize()
-  private var totalSize = CachedSize()
+  private val cachedSizeUntilHighestConsumed = CachedSize()
+  private val cachedSizeUntilLastProduced = CachedSize()
+  private val autoRemovedSize = CachedSize()
+  private val totalSize = CachedSize()
 
   /**
    * Total size of response to be held buffered after giving out with getResponse. 0 for none, any

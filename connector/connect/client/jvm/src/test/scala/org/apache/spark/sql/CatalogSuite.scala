@@ -22,7 +22,7 @@ import java.io.{File, FilenameFilter}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.test.{RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
 

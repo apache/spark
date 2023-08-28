@@ -16,6 +16,7 @@
 #
 import os
 import unittest
+from inspect import getmembers, isfunction
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
@@ -2362,6 +2363,38 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_pandas_udf_import(self):
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
+
+    def test_function_parity(self):
+        # This test compares the available list of functions in pyspark.sql.functions with those
+        # available in the Spark Connect Python Client in pyspark.sql.connect.functions
+
+        sf_fn = {name for (name, value) in getmembers(SF, isfunction) if name[0] != "_"}
+
+        cf_fn = {name for (name, value) in getmembers(CF, isfunction) if name[0] != "_"}
+
+        # Functions in vanilla PySpark we do not expect to be available in Spark Connect
+        sf_excluded_fn = {
+            "get_active_spark_context",  # internal helper function
+            "try_remote_functions",  # internal helper function
+            "to_str",  # internal helper function
+        }
+
+        self.assertEqual(
+            sf_fn - cf_fn,
+            sf_excluded_fn,
+            "Missing functions in Spark Connect not as expected",
+        )
+
+        # Functions in Spark Connect we do not expect to be available in vanilla PySpark
+        cf_excluded_fn = {
+            "check_dependencies",  # internal helper function
+        }
+
+        self.assertEqual(
+            cf_fn - sf_fn,
+            cf_excluded_fn,
+            "Missing functions in vanilla PySpark not as expected",
+        )
 
 
 if __name__ == "__main__":

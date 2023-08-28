@@ -40,7 +40,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
   // forwarding of thread locals needs to be taken into account.
-  private var executionThread: Thread = new ExecutionThread()
+  private val executionThread: Thread = new ExecutionThread()
 
   private var interrupted: Boolean = false
 

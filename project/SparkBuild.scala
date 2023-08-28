@@ -860,7 +860,6 @@ object SparkConnectClient {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
-
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(

@@ -44,7 +44,7 @@ from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedData
 from pyspark.errors import (
     PySparkTypeError,
     PySparkNotImplementedError,
-    PySparkRuntimeError,
+    PySparkPicklingError,
     IllegalArgumentException,
 )
 
@@ -2211,7 +2211,7 @@ class PythonUDTF:
         try:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,
