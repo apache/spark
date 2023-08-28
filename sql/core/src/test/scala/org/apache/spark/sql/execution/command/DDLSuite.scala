@@ -2416,8 +2416,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = e,
         errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
         sqlState = "428FR",
-        parameters = Map("tableName" -> "spark_catalog.default.t",
-          "columnName" -> "i"))
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`i`"))
     }
   }
 }

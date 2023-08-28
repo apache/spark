@@ -2583,7 +2583,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
       messageParameters =
-        Map("tableName" -> tableName, "columnName" -> columnName)
+        Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
     )
   }
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
