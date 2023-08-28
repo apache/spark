@@ -1312,9 +1312,9 @@
       "MinorGCTime" : [ 0.0, 0.0, 115.0, 115.0, 115.0 ],
       "MajorGCCount" : [ 0.0, 0.0, 4.0, 4.0, 4.0 ],
       "MajorGCTime" : [ 0.0, 0.0, 339.0, 339.0, 339.0 ],
+      "TotalGCTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
       "ConcurrentGCCount" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-      "ConcurrentGCTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-      "TotalGCTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+      "ConcurrentGCTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
     }
   },
   "isShufflePushEnabled" : false,
