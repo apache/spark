@@ -878,7 +878,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         errorClass = "_LEGACY_ERROR_TEMP_1100",
         parameters = Map(
           "argName" -> "format",
-          "funcName" -> "to_char",
+          "funcName" -> funcName,
           "requiredType" -> "string"))
       checkError(
         exception = intercept[AnalysisException] {
@@ -887,7 +887,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         errorClass = "INVALID_PARAMETER_VALUE.BINARY_FORMAT",
         parameters = Map(
           "parameter" -> "`format`",
-          "functionName" -> "`to_char`",
+          "functionName" -> s"`$funcName`",
           "invalidFormat" -> "'invalid_format'"))
       checkError(
         exception = intercept[AnalysisException] {

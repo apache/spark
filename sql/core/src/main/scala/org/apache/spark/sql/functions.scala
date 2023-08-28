@@ -4431,7 +4431,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_varchar(e: Column, format: Column): Column = to_char(e, format)
+  def to_varchar(e: Column, format: Column): Column = call_function("to_varchar", e, format)
 
   /**
    * Convert string 'e' to a number based on the string format 'format'.
