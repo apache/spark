@@ -120,7 +120,6 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
           KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
           SparkKubernetesClientFactory.ClientType.Submission,
           sparkConf,
-          None,
           None)
         ) { kubernetesClient =>
           implicit val client: KubernetesClient = kubernetesClient

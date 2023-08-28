@@ -21,7 +21,7 @@ import scala.collection.convert.ImplicitConversions._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Helper class for conversions between [[DataType]] and [[proto.DataType]].
@@ -124,7 +124,7 @@ object DataTypeProtoConverter {
     }
 
     if (t.hasJvmClass) {
-      Utils
+      SparkClassUtils
         .classForName[UserDefinedType[_]](t.getJvmClass)
         .getConstructor()
         .newInstance()

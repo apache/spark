@@ -78,7 +78,7 @@ class SparkSessionTestCase(unittest.TestCase):
         session.stop()
 
 
-class ArrowParityTests(ReusedConnectTestCase):
+class JobCancellationTests(ReusedConnectTestCase):
     def test_tags(self):
         self.spark.clearTags()
         self.spark.addTag("a")

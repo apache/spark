@@ -916,6 +916,32 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("SPARK-43781: cogroup two datasets derived from the same source") {
+    val inputType = StructType(Array(StructField("id", LongType, false),
+      StructField("type", StringType, false)))
+    val keyType = StructType(Array(StructField("id", LongType, false)))
+
+    val inputRows = new java.util.ArrayList[Row]()
+    inputRows.add(Row(1L, "foo"))
+    inputRows.add(Row(1L, "bar"))
+    inputRows.add(Row(2L, "foo"))
+    val input = spark.createDataFrame(inputRows, inputType)
+    val fooGroups = input.filter("type = 'foo'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
+    val barGroups = input.filter("type = 'bar'").groupBy("id").as(ExpressionEncoder(keyType),
+      ExpressionEncoder(inputType))
+
+    val result = fooGroups.cogroup(barGroups) { case (row, iterator, iterator1) =>
+      iterator.toSeq ++ iterator1.toSeq
+    }(ExpressionEncoder(inputType)).collect()
+    assert(result.length == 3)
+
+    val result2 = fooGroups.cogroupSorted(barGroups)($"id")($"id") {
+      case (row, iterator, iterator1) => iterator.toSeq ++ iterator1.toSeq
+    }(ExpressionEncoder(inputType)).collect()
+    assert(result2.length == 3)
+  }
+
   test("SPARK-34806: observation on datasets") {
     val namedObservation = Observation("named")
     val unnamedObservation = Observation()
@@ -2514,6 +2540,27 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-44311: UDF on value class taking underlying type (backwards compatability)") {
+    val f = udf((v: Int) => v > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class field in product") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(ValueClassContainer(ValueClass(1)), ValueClassContainer(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("v"))), ValueClassContainer(ValueClass(2)))
+  }
+
+  test("SPARK-44311: UDF on value class this is stored as a struct") {
+    val f = udf((v: ValueClass) => v.i > 1)
+    val ds = Seq(Tuple1(ValueClass(1)), Tuple1(ValueClass(2))).toDS()
+
+    checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
@@ -2544,6 +2591,9 @@ class DatasetLargeResultCollectingSuite extends QueryTest
     val res = df.queryExecution.executedPlan.executeCollect()
   }
 }
+
+case class ValueClass(i: Int) extends AnyVal
+case class ValueClassContainer(v: ValueClass)
 
 case class Bar(a: Int)
 

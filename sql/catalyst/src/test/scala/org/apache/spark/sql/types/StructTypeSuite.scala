@@ -324,7 +324,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     check(Seq("s1", "S12"), Some(Seq("s1") -> StructField("s12", IntegerType)))
     caseSensitiveCheck(Seq("s1", "S12"), None)
     check(Seq("S1.non_exist"), None)
-    var e = intercept[SparkException] {
+    var e = intercept[AnalysisException] {
       check(Seq("S1", "S12", "S123"), None)
     }
     checkError(
@@ -335,17 +335,17 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "path" -> "`s1`.`s12`"))
 
     // ambiguous name
-    var e2 = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
     checkError(
-      exception = e2,
+      exception = e,
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
     // simple map type
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       check(Seq("m1", "key"), None)
     }
     checkError(
@@ -356,7 +356,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "path" -> "`m1`"))
     checkCollection(Seq("m1", "key"), Some(Seq("m1") -> StructField("key", IntegerType, false)))
     checkCollection(Seq("M1", "value"), Some(Seq("m1") -> StructField("value", IntegerType)))
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "key", "name"), None)
     }
     checkError(
@@ -365,7 +365,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       parameters = Map(
         "fieldName" -> "`M1`.`key`.`name`",
         "path" -> "`m1`.`key`"))
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "value", "name"), None)
     }
     checkError(
@@ -382,7 +382,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     checkCollection(Seq("M2", "value", "b"),
       Some(Seq("m2", "value") -> StructField("b", IntegerType)))
     checkCollection(Seq("M2", "value", "non_exist"), None)
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("m2", "key", "A", "name"), None)
     }
     checkError(
@@ -391,7 +391,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       parameters = Map(
         "fieldName" -> "`m2`.`key`.`A`.`name`",
         "path" -> "`m2`.`key`.`a`"))
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("M2", "value", "b", "name"), None)
     }
     checkError(
@@ -401,7 +401,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "fieldName" -> "`M2`.`value`.`b`.`name`",
         "path" -> "`m2`.`value`.`b`"))
     // simple array type
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       check(Seq("A1", "element"), None)
     }
     checkError(
@@ -411,7 +411,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "fieldName" -> "`A1`.`element`",
         "path" -> "`a1`"))
     checkCollection(Seq("A1", "element"), Some(Seq("a1") -> StructField("element", IntegerType)))
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("A1", "element", "name"), None)
     }
     checkError(
@@ -425,7 +425,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     checkCollection(Seq("A2", "element", "C"),
       Some(Seq("a2", "element") -> StructField("c", IntegerType)))
     checkCollection(Seq("A2", "element", "non_exist"), None)
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("a2", "element", "C", "name"), None)
     }
     checkError(
@@ -439,7 +439,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     checkCollection(Seq("M3", "value", "value", "MA"),
       Some(Seq("m3", "value", "value") -> StructField("ma", IntegerType)))
     checkCollection(Seq("M3", "value", "value", "non_exist"), None)
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("M3", "value", "value", "MA", "name"), None)
     }
     checkError(
@@ -453,7 +453,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     checkCollection(Seq("A3", "element", "element", "D"),
       Some(Seq("a3", "element", "element") -> StructField("d", IntegerType)))
     checkCollection(Seq("A3", "element", "element", "non_exist"), None)
-    e = intercept[SparkException] {
+    e = intercept[AnalysisException] {
       checkCollection(Seq("A3", "element", "element", "D", "name"), None)
     }
     checkError(

@@ -73,6 +73,38 @@ trait FunctionBuilderBase[T] {
 
 object NamedParametersSupport {
   /**
+   * This method splits named arguments from the argument list.
+   * Also checks if:
+   * - the named arguments don't contains positional arguments once keyword arguments start
+   * - the named arguments don't use the duplicated names
+   *
+   * @param functionSignature The function signature that defines the positional ordering
+   * @param args The argument list provided in function invocation
+   * @return A tuple of a list of positional arguments and a list of keyword arguments
+   */
+  def splitAndCheckNamedArguments(
+      args: Seq[Expression],
+      functionName: String): (Seq[Expression], Seq[NamedArgumentExpression]) = {
+    val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
+
+    val namedParametersSet = collection.mutable.Set[String]()
+
+    (positionalArgs,
+      namedArgs.zipWithIndex.map {
+        case (namedArg @ NamedArgumentExpression(parameterName, _), _) =>
+          if (namedParametersSet.contains(parameterName)) {
+            throw QueryCompilationErrors.doubleNamedArgumentReference(
+              functionName, parameterName)
+          }
+          namedParametersSet.add(parameterName)
+          namedArg
+        case (_, index) =>
+          throw QueryCompilationErrors.unexpectedPositionalArgument(
+            functionName, namedArgs(index - 1).asInstanceOf[NamedArgumentExpression].key)
+      })
+  }
+
+  /**
    * This method is the default routine which rearranges the arguments in positional order according
    * to the function signature provided. This will also fill in any default values that exists for
    * optional arguments. This method will also be invoked even if there are no named arguments in
@@ -93,7 +125,7 @@ object NamedParametersSupport {
         functionName, functionSignature)
     }
 
-    val (positionalArgs, namedArgs) = args.span(!_.isInstanceOf[NamedArgumentExpression])
+    val (positionalArgs, namedArgs) = splitAndCheckNamedArguments(args, functionName)
     val namedParameters: Seq[InputParameter] = parameters.drop(positionalArgs.size)
 
     // The following loop checks for the following:
@@ -102,27 +134,16 @@ object NamedParametersSupport {
     val allParameterNames: Seq[String] = parameters.map(_.name)
     val parameterNamesSet: Set[String] = allParameterNames.toSet
     val positionalParametersSet = allParameterNames.take(positionalArgs.size).toSet
-    val namedParametersSet = collection.mutable.Set[String]()
 
-    for (arg <- namedArgs) {
-      arg match {
-        case namedArg: NamedArgumentExpression =>
-          val parameterName = namedArg.key
-          if (!parameterNamesSet.contains(parameterName)) {
-            throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key,
-              parameterNamesSet.toSeq)
-          }
-          if (positionalParametersSet.contains(parameterName)) {
-            throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
-              functionName, namedArg.key)
-          }
-          if (namedParametersSet.contains(parameterName)) {
-            throw QueryCompilationErrors.doubleNamedArgumentReference(
-              functionName, namedArg.key)
-          }
-          namedParametersSet.add(namedArg.key)
-        case _ =>
-          throw QueryCompilationErrors.unexpectedPositionalArgument(functionName)
+    namedArgs.foreach { namedArg =>
+      val parameterName = namedArg.key
+      if (!parameterNamesSet.contains(parameterName)) {
+        throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key,
+          parameterNamesSet.toSeq)
+      }
+      if (positionalParametersSet.contains(parameterName)) {
+        throw QueryCompilationErrors.positionalAndNamedArgumentDoubleReference(
+          functionName, namedArg.key)
       }
     }
 
@@ -135,21 +156,21 @@ object NamedParametersSupport {
     }
 
     // This constructs a map from argument name to value for argument rearrangement.
-    val namedArgMap = namedArgs.map { arg =>
-      val namedArg = arg.asInstanceOf[NamedArgumentExpression]
+    val namedArgMap = namedArgs.map { namedArg =>
       namedArg.key -> namedArg.value
     }.toMap
 
     // We rearrange named arguments to match their positional order.
-    val rearrangedNamedArgs: Seq[Expression] = namedParameters.map { param =>
-      namedArgMap.getOrElse(
-        param.name,
-        if (param.default.isEmpty) {
-          throw QueryCompilationErrors.requiredParameterNotFound(functionName, param.name)
-        } else {
-          param.default.get
-        }
-      )
+    val rearrangedNamedArgs: Seq[Expression] = namedParameters.zipWithIndex.map {
+      case (param, index) =>
+        namedArgMap.getOrElse(
+          param.name,
+          if (param.default.isEmpty) {
+            throw QueryCompilationErrors.requiredParameterNotFound(functionName, param.name, index)
+          } else {
+            param.default.get
+          }
+        )
     }
     val rearrangedArgs = positionalArgs ++ rearrangedNamedArgs
     assert(rearrangedArgs.size == parameters.size)

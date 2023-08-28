@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkException, TestUtils}
+import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -633,12 +633,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    val e = intercept[SparkException] { spark.read.schema(userSchema).textFile() }
+    val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
     assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
       "user specified schema not supported"))
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir) }
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(dir, dir) }
-    intercept[SparkException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
   }
 
   test("csv - API and behavior regarding schema") {
@@ -969,7 +969,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-16848: table API throws an exception for user specified schema") {
     withTable("t") {
       val schema = StructType(StructField("a", StringType) :: Nil)
-      val e = intercept[SparkException] {
+      val e = intercept[AnalysisException] {
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))

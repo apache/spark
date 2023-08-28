@@ -470,6 +470,34 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
     format("csv").save(path)
   }
 
+  /**
+   * Saves the content of the `DataFrame` in XML format at the specified path. This is equivalent
+   * to:
+   * {{{
+   *   format("xml").save(path)
+   * }}}
+   *
+   * Note that writing a XML file from `DataFrame` having a field `ArrayType` with its element as
+   * `ArrayType` would have an additional nested field for the element. For example, the
+   * `DataFrame` having a field below,
+   *
+   * {@code fieldA [[data1], [data2]]}
+   *
+   * would produce a XML file below. { @code <fieldA> <item>data1</item> </fieldA> <fieldA>
+   * <item>data2</item> </fieldA>}
+   *
+   * Namely, roundtrip in writing and reading can end up in different schema structure.
+   *
+   * You can find the XML-specific options for writing XML files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.0.0
+   */
+  def xml(path: String): Unit = {
+    format("xml").save(path)
+  }
+
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////

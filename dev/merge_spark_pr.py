@@ -52,6 +52,11 @@ PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
+# ASF JIRA access token
+# If it is configured, username and password are dismissed
+# Go to https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens for
+# your own token management.
+JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
@@ -237,19 +242,13 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     return pick_ref
 
 
-def fix_version_from_branch(branch, versions):
-    # Note: Assumes this is a sorted (newest->oldest) list of un-released versions
-    if branch == "master":
-        return versions[0]
-    else:
-        branch_ver = branch.replace("branch-", "")
-        return list(filter(lambda x: x.name.startswith(branch_ver), versions))[-1]
-
-
 def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
-    asf_jira = jira.client.JIRA(
-        {"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD)
-    )
+    jira_server = {"server": JIRA_API_BASE}
+
+    if JIRA_ACCESS_TOKEN is not None:
+        asf_jira = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN)
+    else:
+        asf_jira = jira.client.JIRA(jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
     jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
@@ -280,14 +279,37 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     )
 
     versions = asf_jira.project_versions("SPARK")
+    # Consider only x.y.z, unreleased, unarchived versions
+    versions = [
+        x
+        for x in versions
+        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
+    ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
-    versions = list(filter(lambda x: x.raw["released"] is False, versions))
-    # Consider only x.y.z versions
-    versions = list(filter(lambda x: re.match(r"\d+\.\d+\.\d+", x.name), versions))
 
-    default_fix_versions = list(
-        map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
-    )
+    default_fix_versions = []
+    for b in merge_branches:
+        if b == "master":
+            default_fix_versions.append(versions[0].name)
+        else:
+            found = False
+            found_versions = []
+            for v in versions:
+                if v.name.startswith(b.replace("branch-", "")):
+                    found_versions.append(v.name)
+                    found = True
+            if found:
+                # There might be several unreleased versions for specific branches
+                # For example, assuming
+                # versions = ['4.0.0', '3.5.1', '3.5.0', '3.4.2', '3.3.4', '3.3.3']
+                # we've found two candidates for branch-3.5, we pick the last/smallest one
+                default_fix_versions.append(found_versions[-1])
+            else:
+                print(
+                    "Target version for %s is not found on JIRA, it may be archived or "
+                    "not created. Skipping it." % b
+                )
+
     for v in default_fix_versions:
         # Handles the case where we have forked a release branch but not yet made the release.
         # In this case, if the PR is committed to the master branch and the release branch, we
@@ -343,13 +365,13 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
 def choose_jira_assignee(issue, asf_jira):
     """
     Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
-    including the original reporter and all commentors
+    including the original reporter and all commentators
     """
     while True:
         try:
             reporter = issue.fields.reporter
-            commentors = list(map(lambda x: x.author, issue.fields.comment.comments))
-            candidates = set(commentors)
+            commentators = list(map(lambda x: x.author, issue.fields.comment.comments))
+            candidates = set(commentators)
             candidates.add(reporter)
             candidates = list(candidates)
             print("JIRA is unassigned, choose assignee")
@@ -357,8 +379,8 @@ def choose_jira_assignee(issue, asf_jira):
                 if author.key == "apachespark":
                     continue
                 annotations = ["Reporter"] if author == reporter else []
-                if author in commentors:
-                    annotations.append("Commentor")
+                if author in commentators:
+                    annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = input(
                 "Enter number of user, or userid, to assign to (blank to leave unassigned):"
@@ -372,13 +394,47 @@ def choose_jira_assignee(issue, asf_jira):
                 except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
-                asf_jira.assign_issue(issue.key, assignee.name)
+                try:
+                    assign_issue(asf_jira, issue.key, assignee.name)
+                except Exception as e:
+                    if (
+                        e.__class__.__name__ == "JIRAError"
+                        and ("'%s' cannot be assigned" % assignee.name)
+                        in getattr(e, "response").text
+                    ):
+                        continue_maybe(
+                            "User '%s' cannot be assigned, add to contributors role and try again?"
+                            % assignee.name
+                        )
+                        grant_contributor_role(assignee.name, asf_jira)
+                        assign_issue(asf_jira, issue.key, assignee.name)
+                    else:
+                        raise e
                 return assignee
         except KeyboardInterrupt:
             raise
         except BaseException:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
+
+
+def grant_contributor_role(user: str, asf_jira):
+    role = asf_jira.project_role("SPARK", 10010)
+    role.add_user(user)
+    print("Successfully added user '%s' to contributors role" % user)
+
+
+def assign_issue(client, issue: int, assignee: str) -> bool:
+    """
+    Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
+    The original one has an issue that it will search users again and only choose the assignee
+    from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
+    is already resolved.
+    """
+    url = getattr(client, "_get_latest_url")(f"issue/{issue}/assignee")
+    payload = {"name": assignee}
+    getattr(client, "_session").put(url, data=json.dumps(payload))
+    return True
 
 
 def resolve_jira_issues(title, merge_branches, comment):
@@ -472,8 +528,9 @@ def main():
     original_head = get_current_ref()
 
     # Check this up front to avoid failing the JIRA update at the very end
-    if not JIRA_USERNAME or not JIRA_PASSWORD:
-        continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
+    if not JIRA_ACCESS_TOKEN and (not JIRA_USERNAME or not JIRA_PASSWORD):
+        msg = "The env-vars JIRA_ACCESS_TOKEN or JIRA_USERNAME/JIRA_PASSWORD are not set. Continue?"
+        continue_maybe(msg)
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
@@ -573,7 +630,7 @@ def main():
         merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
     if JIRA_IMPORTED:
-        if JIRA_USERNAME and JIRA_PASSWORD:
+        if JIRA_ACCESS_TOKEN or (JIRA_USERNAME and JIRA_PASSWORD):
             continue_maybe("Would you like to update an associated JIRA?")
             jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
                 pr_num,
@@ -582,10 +639,10 @@ def main():
             )
             resolve_jira_issues(title, merged_refs, jira_comment)
         else:
-            print("JIRA_USERNAME and JIRA_PASSWORD not set")
+            print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
             print("Exiting without trying to close the associated JIRA.")
     else:
-        print("Could not find jira-python library. Run 'sudo pip3 install jira' to install.")
+        print("Could not find jira-python library. Run 'pip3 install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
 

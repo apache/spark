@@ -1215,12 +1215,12 @@ event start time and evaluated gap duration during the query execution.
 
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-from pyspark.sql import functions as F
+from pyspark.sql import functions as sf
 
 events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
 session_window = session_window(events.timestamp, \
-    F.when(events.userId == "user1", "5 seconds") \
+    sf.when(events.userId == "user1", "5 seconds") \
     .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
 
 # Group the data by session window and userId, and compute the count of each group
@@ -2393,6 +2393,10 @@ RocksDB provides a way to limit the memory usage for all DB instances running on
 If you want to cap RocksDB memory usage in your Spark Structured Streaming deployment, this feature can be enabled by setting the `spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage` config to `true`.
 You can also determine the max allowed memory for RocksDB instances by setting the `spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB` value to a static number or as a fraction of the physical memory available on the node.
 Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
+
+Note that the `boundedMemoryUsage` config will enable a soft limit on the total memory usage for RocksDB.
+So the total memory used by RocksDB can temporarily exceed this value if all blocks allocated to higher level readers are in use.
+Enabling a strict limit is not possible at this time since it will cause query failures and we do not support re-balancing of the state across additional nodes.
 
 ##### RocksDB State Store Changelog Checkpointing
 In newer version of Spark, changelog checkpointing is introduced for RocksDB state store. The traditional checkpointing mechanism for RocksDB State Store is incremental snapshot checkpointing, where the manifest files and newly generated RocksDB SST files of RocksDB instances are uploaded to a durable storage.
@@ -4093,7 +4097,7 @@ The table below describes the configurations for this feature and default values
 | Option    | Value           | Default | Description       |
 |-------------|-----------------|------------|---------------------|
 |asyncProgressTrackingEnabled|true/false|false|enable or disable asynchronous progress tracking|
-|asyncProgressCheckpointingInterval|minutes|1|the interval in which we commit offsets and completion commits|
+|asyncProgressTrackingCheckpointIntervalMs|millisecond|1000|the interval in which we commit offsets and completion commits|
 
 ## Limitations
 The initial version of the feature has the following limitations:
@@ -4114,7 +4118,7 @@ Also the following error message may be printed in the driver logs:
 The offset log for batch x doesn't exist, which is required to restart the query from the latest batch x from the offset log. Please ensure there are two subsequent offset logs available for the latest batch via manually deleting the offset file(s). Please also ensure the latest batch for commit log is equal or one batch earlier than the latest batch for offset log.
 ```
 
-This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressCheckpointingInterval” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
+This is caused by the fact that when async progress tracking is enabled, the framework will not checkpoint progress for every batch as would be done if async progress tracking is not used. To solve this problem simply re-enable “asyncProgressTrackingEnabled” and set “asyncProgressTrackingCheckpointIntervalMs” to 0 and run the streaming query until at least two micro-batches have been processed. Async progress tracking can be now safely disabled and restarting query should proceed normally.
 
 # Continuous Processing
 ## [Experimental]

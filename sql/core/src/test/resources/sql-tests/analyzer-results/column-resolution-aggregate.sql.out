@@ -18,7 +18,7 @@ CreateViewCommand `v2`, VALUES (1, 1, 1), (2, 2, 1) AS t(x, y, all), false, fals
 -- !query
 SELECT max(a) AS b, b FROM v1 GROUP BY k
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -52,7 +52,7 @@ Project [a#x]
 -- !query
 SELECT a AS k FROM v1 GROUP BY k
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -66,7 +66,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT x FROM v2 GROUP BY all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -80,7 +80,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT a AS all, b FROM v1 GROUP BY all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",

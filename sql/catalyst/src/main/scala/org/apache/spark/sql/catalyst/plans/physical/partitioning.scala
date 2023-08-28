@@ -313,7 +313,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * by `expressions`. `partitionValues`, if defined, should contain value of partition key(s) in
  * ascending order, after evaluated by the transforms in `expressions`, for each input partition.
  * In addition, its length must be the same as the number of input partitions (and thus is a 1-1
- * mapping), and each row in `partitionValues` must be unique.
+ * mapping). The `partitionValues` may contain duplicated partition values.
  *
  * For example, if `expressions` is `[years(ts_col)]`, then a valid value of `partitionValues` is
  * `[0, 1, 2]`, which represents 3 input partitions with distinct partition values. All rows
@@ -355,6 +355,13 @@ case class KeyGroupedPartitioning(
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     KeyGroupedShuffleSpec(this, distribution)
+
+  lazy val uniquePartitionValues: Seq[InternalRow] = {
+    partitionValues
+        .map(InternalRowComparableWrapper(_, expressions))
+        .distinct
+        .map(_.row)
+  }
 }
 
 object KeyGroupedPartitioning {
@@ -728,7 +735,13 @@ case class KeyGroupedShuffleSpec(
       case _ => false
     }
 
-  override def canCreatePartitioning: Boolean = false
+  override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
+    // Only support partition expressions are AttributeReference for now
+    partitioning.expressions.forall(_.isInstanceOf[AttributeReference])
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    KeyGroupedPartitioning(clustering, partitioning.numPartitions, partitioning.partitionValues)
+  }
 }
 
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {

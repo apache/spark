@@ -988,15 +988,15 @@ private object KeyValueGroupedDatasetImpl {
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     val gf = ScalarUserDefinedFunction(
       function = groupingFunc,
-      inputEncoders = ds.encoder :: Nil, // Using the original value and key encoders
+      inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
     new KeyValueGroupedDatasetImpl(
       ds.sparkSession,
       ds.plan,
       kEncoder,
       kEncoder,
-      ds.encoder,
-      ds.encoder,
+      ds.agnosticEncoder,
+      ds.agnosticEncoder,
       Arrays.asList(gf.apply(col("*")).expr),
       UdfUtils.identical(),
       () => ds.map(groupingFunc)(kEncoder))

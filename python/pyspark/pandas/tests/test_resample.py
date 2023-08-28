@@ -19,6 +19,8 @@
 import unittest
 import inspect
 import datetime
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -283,7 +285,52 @@ class ResampleTestsMixin:
         )
 
 
+class ResampleWithTimezoneMixin:
+    timezone = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.timezone = os.environ.get("TZ", None)
+        os.environ["TZ"] = "America/New_York"
+        super(ResampleWithTimezoneMixin, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super(ResampleWithTimezoneMixin, cls).tearDownClass()
+        if cls.timezone is not None:
+            os.environ["TZ"] = cls.timezone
+
+    @property
+    def pdf(self):
+        np.random.seed(22)
+        index = pd.date_range(start="2011-01-02", end="2022-05-01", freq="1D")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
+    def test_series_resample_with_timezone(self):
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "Asia/Seoul",
+                "spark.sql.timestampType": "TIMESTAMP_NTZ",
+            }
+        ):
+            p_resample = self.pdf.resample(rule="1001H", closed="right", label="right")
+            ps_resample = self.psdf.resample(rule="1001H", closed="right", label="right")
+            self.assert_eq(
+                p_resample.sum().sort_index(),
+                ps_resample.sum().sort_index(),
+                almost=True,
+            )
+
+
 class ResampleTests(ResampleTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
+class ResampleWithTimezoneTests(ResampleWithTimezoneMixin, PandasOnSparkTestCase, TestUtils):
     pass
 
 

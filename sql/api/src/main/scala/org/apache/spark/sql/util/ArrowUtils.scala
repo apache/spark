@@ -26,7 +26,7 @@ import org.apache.arrow.vector.complex.MapVector
 import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
-import org.apache.spark.sql.errors.{ArrowErrors, DataTypeErrors}
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 
 private[sql] object ArrowUtils {
@@ -60,7 +60,7 @@ private[sql] object ArrowUtils {
     case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
     case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
     case _ =>
-      throw DataTypeErrors.unsupportedDataTypeError(dt)
+      throw ExecutionErrors.unsupportedDataTypeError(dt)
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
@@ -85,7 +85,7 @@ private[sql] object ArrowUtils {
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
     case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
-    case _ => throw ArrowErrors.unsupportedArrowTypeError(dt)
+    case _ => throw ExecutionErrors.unsupportedArrowTypeError(dt)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
@@ -179,7 +179,7 @@ private[sql] object ArrowUtils {
         st.names
       } else {
         if (errorOnDuplicatedFieldNames) {
-          throw ArrowErrors.duplicatedFieldNameInArrowStructError(st.names)
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(st.names)
         }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>

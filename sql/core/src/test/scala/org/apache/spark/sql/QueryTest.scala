@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Assertions
 
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
@@ -96,7 +97,7 @@ abstract class QueryTest extends PlanTest {
 
   private def getResult[T](ds: => Dataset[T]): Array[T] = {
     val analyzedDS = try ds catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""
@@ -131,7 +132,7 @@ abstract class QueryTest extends PlanTest {
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""

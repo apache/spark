@@ -25,13 +25,13 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, ForeachWriter}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.common.ForeachWriterPacket
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, UdfUtils}
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger
@@ -216,7 +216,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * @since 3.5.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    val serialized = SparkSerDeUtils.serialize(ForeachWriterPacket(writer, ds.encoder))
+    val serialized = SparkSerDeUtils.serialize(ForeachWriterPacket(writer, ds.agnosticEncoder))
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))
@@ -245,6 +245,24 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
       .setOutputType(DataTypeProtoConverter.toConnectProtoType(NullType)) // Unused.
       .setNullable(true) // Unused.
     this
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * (Java-specific) Sets the output of the streaming query to be processed using the provided
+   * function. This is supported only in the micro-batch execution modes (that is, when the
+   * trigger is not continuous). In every micro-batch, the provided function will be called in
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier. The
+   * batchId can be used to deduplicate and transactionally write the output (that is, the
+   * provided Dataset) to external systems. The output Dataset is guaranteed to be exactly the
+   * same for the same batchId (assuming all operations are deterministic in the query).
+   *
+   * @since 3.5.0
+   */
+  @Evolving
+  def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
+    foreachBatch(UdfUtils.foreachBatchFuncToScalaFunc(function))
   }
 
   /**

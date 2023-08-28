@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
-import org.apache.spark.util.Utils
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -306,15 +305,20 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
 
-  // TODO(SPARK-44097) Renable PandasUDF Tests in Java 21
   lazy val shouldTestPandasUDFs: Boolean =
-    isPythonAvailable && isPandasAvailable && isPyArrowAvailable && !Utils.isJavaVersionAtLeast21
+    isPythonAvailable && isPandasAvailable && isPyArrowAvailable
 
   /**
    * A base trait for various UDFs defined in this object.
    */
   sealed trait TestUDF {
     def apply(exprs: Column*): Column
+
+    val prettyName: String
+  }
+
+  sealed trait TestUDTF {
+    def apply(session: SparkSession, exprs: Column*): DataFrame
 
     val prettyName: String
   }
@@ -393,7 +397,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       pythonScript: String,
       returnType: StructType,
       evalType: Int = PythonEvalType.SQL_TABLE_UDF,
-      deterministic: Boolean = true): UserDefinedPythonTableFunction = {
+      deterministic: Boolean = false): UserDefinedPythonTableFunction = {
     UserDefinedPythonTableFunction(
       name = name,
       func = SimplePythonFunction(
@@ -407,6 +411,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
       returnType = Some(returnType),
       pythonEvalType = evalType,
       udfDeterministic = deterministic)
+  }
+
+  case class TestPythonUDTF(name: String) extends TestUDTF {
+    private val pythonScript: String =
+      """
+        |class TestUDTF:
+        |    def eval(self, a: int, b: int):
+        |        if a > 0 and b > 0:
+        |            yield a, a - b
+        |            yield b, b - a
+        |        elif a == 0 and b == 0:
+        |            yield 0, 0
+        |        else:
+        |            ...
+        |""".stripMargin
+
+    private[IntegratedUDFTestUtils] lazy val udtf = createUserDefinedPythonTableFunction(
+      name = "TestUDTF",
+      pythonScript = pythonScript,
+      returnType = StructType.fromDDL("x int, y int")
+    )
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Regular Python UDTF"
   }
 
   /**
@@ -587,5 +617,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalaUDF => session.udf.register(udf.name, udf.udf)
     case other => throw new RuntimeException(s"Unknown UDF class [${other.getClass}]")
+  }
+
+  /**
+   * Register UDTFs used in the test cases.
+   */
+  def registerTestUDTF(testUDTF: TestUDTF, session: SparkSession): Unit = testUDTF match {
+    case udtf: TestPythonUDTF => session.udtf.registerPython(udtf.name, udtf.udtf)
+    case other => throw new RuntimeException(s"Unknown UDTF class [${other.getClass}]")
   }
 }

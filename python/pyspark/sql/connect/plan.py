@@ -21,6 +21,7 @@ check_dependencies(__name__)
 from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
+import pickle
 from threading import Lock
 from inspect import signature, isclass
 
@@ -40,7 +41,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    IllegalArgumentException,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -578,7 +584,7 @@ class Hint(LogicalPlan):
         self._name = name
 
         for param in parameters:
-            assert isinstance(param, (list, str, float, int))
+            assert isinstance(param, (list, str, float, int, Column))
             if isinstance(param, list):
                 assert all(isinstance(p, (str, float, int)) for p in param)
 
@@ -853,7 +859,7 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise PySparkNotImplementedError(
+            raise IllegalArgumentException(
                 error_class="UNSUPPORTED_JOIN_TYPE",
                 message_parameters={"join_type": how},
             )
@@ -2202,7 +2208,17 @@ class PythonUDTF:
         if self._return_type is not None:
             udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
         udtf.eval_type = self._eval_type
-        udtf.command = CloudPickleSerializer().dumps(self._func)
+        try:
+            udtf.command = CloudPickleSerializer().dumps(self._func)
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and "
+                    "make sure the function is serializable.",
+                },
+            )
         udtf.python_ver = self._python_ver
         return udtf
 

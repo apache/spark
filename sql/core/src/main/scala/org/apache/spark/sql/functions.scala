@@ -3822,6 +3822,8 @@ object functions {
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
+   * @note Input strings which are null are skipped.
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -4403,9 +4405,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_char(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
-  }
+  def to_char(e: Column, format: Column): Column = call_function("to_char", e, format)
 
   /**
    * Convert `e` to a string based on the `format`.
@@ -4431,9 +4431,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_varchar(e: Column, format: Column): Column = withExpr {
-    ToCharacter(e.expr, format.expr)
-  }
+  def to_varchar(e: Column, format: Column): Column = to_char(e, format)
 
   /**
    * Convert string 'e' to a number based on the string format 'format'.
@@ -6019,6 +6017,8 @@ object functions {
    * Concatenates multiple input columns together into a single column.
    * The function works with strings, binary and compatible array columns.
    *
+   * @note Returns null if any of the input columns are null.
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -6155,7 +6155,7 @@ object functions {
    * @since 3.4.0
    */
   def array_insert(arr: Column, pos: Column, value: Column): Column = withExpr {
-    ArrayInsert(arr.expr, pos.expr, value.expr)
+    new ArrayInsert(arr.expr, pos.expr, value.expr)
   }
 
   /**
@@ -7309,6 +7309,103 @@ object functions {
    * @since 3.0.0
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
+    XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
+  }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(new XmlToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
+
+  /**
+   * Parses a column containing a XML string into the data type
+   * corresponding to the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+
+   * @group collection_funcs
+   * @since
+   */
+  def from_xml(e: Column, schema: StructType): Column =
+    from_xml(e, schema, Map.empty[String, String])
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml a foldable string column containing a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: Column): Column = withExpr(new SchemaOfXml(xml.expr))
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a XML string and infers its schema in DDL format using options.
+   *
+   * @param xml    a foldable string column containing XML data.
+   * @param options options to control how the xml is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfXml(xml.expr, options.asScala.toMap))
+  }
 
   /**
    * A transform for timestamps and dates to partition data into years.

@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<catalog>
+   <book id="bk101">
+      <author>Gambardella, Matthew</author>
+      <title>XML Developer's Guide</title>
+      <genre>
+         <genreid>1</genreid>
+         <name>Computer</name>
+      </genre>
+      <price>44.95</price>
+      <publish_dates>
+         <publish_date>
+            <year>2000</year>
+            <month>10</month>
+            <day>01</day>
+         </publish_date>
+      </publish_dates>
+   </book>
+   <book id="bk102">
+      <author>Ralls, Kim</author>
+      <title>Midnight Rain</title>
+      <genre>
+         <genreid>2</genreid>
+         <name>Fantasy</name>
+      </genre>
+      <price>5.95</price>
+      <publish_dates>
+         <publish_date>
+            <year>2000</year>
+            <month>12</month>
+            <day>16</day>
+         </publish_date>
+         <publish_date tag="lastest">
+            <year>2000</year>
+            <month>12</month>
+            <day>17</day>
+         </publish_date>
+      </publish_dates>
+   </book>
+   <book id="bk103">
+      <author>Corets, Eva</author>
+      <title>Maeve Ascendant</title>
+      <genre>
+         <genreid>2</genreid>
+         <name>Fantasy</name>
+      </genre>
+      <publish_dates>
+         <publish_date>
+            <year>2000</year>
+            <month>11</month>
+            <day>07</day>
+         </publish_date>
+         <publish_date>
+            <year>2000</year>
+            <month>11</month>
+            <day>08</day>
+         </publish_date>
+      </publish_dates>
+   </book>
+</catalog>

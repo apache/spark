@@ -442,7 +442,7 @@ class DayTimeIntervalType(AnsiIntervalType):
 
     def toInternal(self, dt: datetime.timedelta) -> Optional[int]:
         if dt is not None:
-            return (math.floor(dt.total_seconds()) * 1000000) + dt.microseconds
+            return (((dt.days * 86400) + dt.seconds) * 1_000_000) + dt.microseconds
 
     def fromInternal(self, micros: int) -> Optional[datetime.timedelta]:
         if micros is not None:
@@ -2402,7 +2402,7 @@ class Row(tuple):
                 "%s=%r" % (k, v) for k, v in zip(self.__fields__, tuple(self))
             )
         else:
-            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
+            return "<Row(%s)>" % ", ".join(repr(field) for field in self)
 
 
 class DateConverter:

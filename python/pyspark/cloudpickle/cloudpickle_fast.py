@@ -631,7 +631,7 @@ class CloudPickler(Pickler):
         try:
             return Pickler.dump(self, obj)
         except RuntimeError as e:
-            if "recursion" in e.args[0]:
+            if len(e.args) > 0 and "recursion" in e.args[0]:
                 msg = (
                     "Could not pickle object as excessively deep recursion "
                     "required."

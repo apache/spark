@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -289,44 +289,7 @@ object Cast extends QueryErrorsBase {
    * precision lose or possible runtime failures. For example, long -> int, string -> int are not
    * up-cast.
    */
-  def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case _ if from == to => true
-    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
-    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (f, t) if legalNumericPrecedence(f, t) => true
-    case (DateType, TimestampType) => true
-    case (DateType, TimestampNTZType) => true
-    case (TimestampNTZType, TimestampType) => true
-    case (TimestampType, TimestampNTZType) => true
-    case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
-    case (NullType, _) => true
-
-    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
-    // `timestampToLong` for details.
-    case (TimestampType, LongType) => true
-    case (LongType, TimestampType) => true
-
-    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      resolvableNullability(fn, tn) && canUpCast(fromType, toType)
-
-    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      resolvableNullability(fn, tn) && canUpCast(fromKey, toKey) && canUpCast(fromValue, toValue)
-
-    case (StructType(fromFields), StructType(toFields)) =>
-      fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (f1, f2) =>
-            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
-        }
-
-    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
-    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
-
-    case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
-
-    case _ => false
-  }
+  def canUpCast(from: DataType, to: DataType): Boolean = UpCastRule.canUpCast(from, to)
 
   /**
    * Returns true iff we can cast the `from` type to `to` type as per the ANSI SQL.
@@ -357,12 +320,6 @@ object Cast extends QueryErrorsBase {
         }
 
     case _ => false
-  }
-
-  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
-    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-    fromPrecedence >= 0 && fromPrecedence < toPrecedence
   }
 
   def canNullSafeCastToDecimal(from: DataType, to: DecimalType): Boolean = from match {

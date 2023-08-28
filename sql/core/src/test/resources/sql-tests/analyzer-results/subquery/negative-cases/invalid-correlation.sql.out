@@ -49,7 +49,7 @@ AND    t2b = (SELECT max(avg)
                      )
              )
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -74,7 +74,7 @@ WHERE  t1a IN (SELECT   min(t2a)
                                 GROUP BY t3b
                                 HAVING   t3b > t2b ))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
   "messageParameters" : {
@@ -153,7 +153,7 @@ WHERE  t1a IN (SELECT t2a
                WHERE  EXISTS (SELECT min(t2a) 
                               FROM   t3))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
@@ -189,7 +189,7 @@ FROM   t1
 JOIN   t1_copy
 ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
