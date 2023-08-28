@@ -99,7 +99,7 @@
   },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
-      "ALTER TABLE CHANGE COLUMN is not supported for partition columns in non-delta tables.",
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns in non-delta tables.",
       "<columnName> is a partition column in non-delta table <tableName>."
     ],
     "sqlState" : "428FR"
