@@ -17,9 +17,13 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_summarizer import SummarizerTestsMixin
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+if should_test_connect:
+    from pyspark.ml.tests.connect.test_legacy_mode_summarizer import SummarizerTestsMixin
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
