@@ -327,11 +327,14 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * @param numPartitions the number of partitions
  * @param partitionValues the values for the cluster keys of the distribution, must be
  *                        in ascending order.
+ * @param originalPartitionValues the original input partition values before any grouping has been
+ *                                applied, must be in ascending order.
  */
 case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
-    partitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
+    partitionValues: Seq[InternalRow] = Seq.empty,
+    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -368,7 +371,7 @@ object KeyGroupedPartitioning {
   def apply(
       expressions: Seq[Expression],
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
-    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues)
+    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues, partitionValues)
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
