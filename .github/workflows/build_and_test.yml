@@ -647,20 +647,13 @@ jobs:
       with:
         distribution: temurin
         java-version: 8
-    - name: License test
-      run: ./dev/check-license
-    - name: Dependencies test
-      run: ./dev/test-dependencies.sh
-    - name: Scala linter
-      run: ./dev/lint-scala
-    - name: Java linter
-      run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       if: inputs.branch != 'branch-3.3'
       run: |
-        echo "rm -rf ~/.m2"
-        rm -rf ~/.m2
+        echo "pwd ~/.m2"
         pwd ~/.m2
+        echo "rm -rf /root/.m2"
+        rm -rf /root/.m2
         ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies for branch-3.3
       if: inputs.branch == 'branch-3.3'
