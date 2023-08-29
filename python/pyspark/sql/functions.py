@@ -709,7 +709,9 @@ def asc(col: "ColumnOrName") -> Column:
     Example 3: Combine `asc` with `desc` to sort by multiple columns.
 
     >>> from pyspark.sql.functions import asc, desc
-    >>> df = spark.createDataFrame([(2, 'A', 4), (1, 'B', 3), (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
     >>> df.sort(asc("group"), desc("value")).show()
     +---+-----+-----+
     | id|group|value|
@@ -786,7 +788,9 @@ def desc(col: "ColumnOrName") -> Column:
     Example 3: Combine `asc` with `desc` to sort by multiple columns.
 
     >>> from pyspark.sql.functions import asc, desc
-    >>> df = spark.createDataFrame([(2, 'A', 4), (1, 'B', 3), (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
     >>> df.sort(desc("group"), asc("value")).show()
     +---+-----+-----+
     | id|group|value|
