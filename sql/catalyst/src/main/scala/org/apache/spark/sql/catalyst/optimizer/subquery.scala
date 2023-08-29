@@ -193,14 +193,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             expr
           }
       })
-      val withoutSubqueryPredicate = withoutSubquery.reduceOption(And)
-      val withSubqueryPredicate = newSubqueryPredicates.reduceOption(And)
-      val newCondition = (withoutSubqueryPredicate, withSubqueryPredicate) match {
-        case (Some(a), Some(b)) => Some(And(a, b))
-        case (Some(a), None) => Some(a)
-        case (None, Some(b)) => Some(b)
-        case (None, None) => None
-      }
+      val newCondition =
+        (withoutSubquery.reduceOption(And) ++ newSubqueryPredicates.reduceOption(And))
+          .reduceOption(And)
       // Remove unwanted exists columns from new existence joins
       Project(j.output, j.copy(left = newLeft, right = newRight, condition = newCondition))
 
