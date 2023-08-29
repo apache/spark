@@ -484,6 +484,41 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Python UDTF finding the count, sum, and last value from the input rows"
   }
 
+  object TestPythonUDTFLastString extends TestUDTF {
+    val name: String = "UDTFLastString"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import Row, StringType, StructType
+         |class $name:
+         |    def __init__(self):
+         |        self._last = ""
+         |
+         |    @staticmethod
+         |    def analyze(self):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("last", StringType()))
+         |
+         |    def eval(self, row: Row):
+         |        self._last = row["input"]
+         |
+         |    def terminate(self):
+         |        yield self._last,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF returning the last string provided in the input table"
+  }
+
+
   object TestPythonUDTFWithSinglePartition extends TestUDTF {
     val name: String = "UDTFWithSinglePartition"
     val pythonScript: String =
@@ -840,8 +875,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
   /**
    * Register UDTFs used in the test cases.
    */
-  def registerTestUDTFs(testUDTFs: Seq[TestUDTF], session: SparkSession): Unit = {
-    testUDTFs.foreach {
+  case class TestUDTFSet(udtfs: Seq[TestUDTF])
+  def registerTestUDTFs(testUDTFSet: TestUDTFSet, session: SparkSession): Unit = {
+    testUDTFSet.udtfs.foreach {
       _ match {
         case udtf: TestUDTF => session.udtf.registerPython(udtf.name, udtf.udtf)
         case other => throw new RuntimeException(s"Unknown UDTF class [${other.getClass}]")

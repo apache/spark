@@ -18,7 +18,7 @@
 User-defined table function related classes and functions
 """
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import inspect
 import sys
 import warnings
@@ -107,8 +107,8 @@ class AnalyzeResult:
 
     schema: StructType
     with_single_partition: bool = False
-    partition_by: Sequence[PartitioningColumn] = ()
-    order_by: Sequence[OrderingColumn] = ()
+    partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
+    order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
 
 
 def _create_udtf(
