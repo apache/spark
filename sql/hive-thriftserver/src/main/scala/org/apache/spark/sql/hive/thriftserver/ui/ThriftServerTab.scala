@@ -44,24 +44,27 @@ private[thriftserver] class ThriftServerTab(
   parent.attachTab(this)
   parent.attachHandler(createServletHandler("/sqlserver/overridesqlconf", new HttpServlet {
     override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-      resp.setContentType("text/html; charset=UTF-8");
       val key = req.getParameter("key")
       val value = req.getParameter("value")
-      try {
-        SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
-        overriddenSQLConf.put(key, value)
-        // scalastyle:off println
-        resp.getWriter.println("<script>window.location.replace(document.referrer);</script>")
-        // scalastyle:on println
-      } catch {
-        case e: Throwable =>
-          val msg = s"Failed to override SQL configuration: ${e.getMessage}."
-          logWarning(msg)
-          // scalastyle:off println
-          resp.getWriter
-            .println(s"<script>alert('$msg');window.location.replace(document.referrer);</script>")
-          // scalastyle:on println
+      var alertMsg = ""
+      if (SQLConf.isStaticConfigKey(key)) {
+        alertMsg = s"alert('Cannot modify the value of a static config: $key.');"
+      } else {
+        try {
+          SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
+          overriddenSQLConf.put(key, value)
+        } catch {
+          case e: Throwable =>
+            val msg = s"Failed to override SQL configuration: ${e.getMessage}."
+            logWarning(msg)
+            alertMsg = s"alert('$msg');"
+        }
       }
+      resp.setContentType("text/html; charset=UTF-8");
+      // scalastyle:off println
+      resp.getWriter
+        .println(s"<script>$alertMsg;window.location.replace(document.referrer);</script>")
+      // scalastyle:on println
     }
 
     override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {

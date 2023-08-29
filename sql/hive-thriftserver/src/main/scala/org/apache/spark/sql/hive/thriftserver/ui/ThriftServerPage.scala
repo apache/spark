@@ -182,7 +182,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           <div class="form-group">
             <label>SQL configuration value:</label>
             <input type="text" class="form-control" style="width:50%" id="value" name="value"
-                   required="true" maxlength="200" placeholder="Enter boolean, number or string"/>
+                   required="true" maxlength="5000" placeholder="Enter boolean, number or string"/>
           </div>
           <button type="submit" class="btn btn-primary">Override</button>
         </form>
