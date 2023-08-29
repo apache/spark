@@ -53,7 +53,7 @@ import org.apache.spark.util.collection.BitSet
 private class MutableInt(var i: Int)
 
 // A tag of a `TreeNode`, which defines name and type
-// Note: In general, developers only care about its tagging capabilities,
+// Note: In general, if developers only care about its tagging capabilities,
 // so Unit should be considered first before using Boolean.
 case class TreeNodeTag[T](name: String)
 
