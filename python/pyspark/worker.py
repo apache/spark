@@ -770,6 +770,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         message_parameters={
                             "type_name": type(result).__name__,
                             "value": str(result),
+                            "func": f.__name__,
                         },
                     )
 

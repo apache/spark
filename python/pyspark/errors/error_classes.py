@@ -244,7 +244,7 @@ ERROR_CLASSES_JSON = """
   },
   "INVALID_ARROW_UDTF_RETURN_TYPE" : {
     "message" : [
-      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the function returned a value of type <type_name> with value: <value>."
+      "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <type_name> with value: <value>."
     ]
   },
   "INVALID_BROADCAST_OPERATION": {
