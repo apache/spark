@@ -714,6 +714,12 @@ class SparkSession private[sql] (
   def clearTags(): Unit = {
     client.clearTags()
   }
+
+  /**
+   * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
+   * We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
 
 // The minimal builder needed to create a spark session.
