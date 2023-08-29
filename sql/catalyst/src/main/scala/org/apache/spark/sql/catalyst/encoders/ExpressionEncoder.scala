@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
@@ -56,6 +56,12 @@ object ExpressionEncoder {
       SerializerBuildHelper.createSerializer(enc),
       DeserializerBuildHelper.createDeserializer(enc),
       enc.clsTag)
+  }
+
+  def apply(schema: StructType): ExpressionEncoder[Row] = apply(schema, lenient = false)
+
+  def apply(schema: StructType, lenient: Boolean): ExpressionEncoder[Row] = {
+    apply(RowEncoder.encoderFor(schema, lenient))
   }
 
   // TODO: improve error message for java bean encoder.

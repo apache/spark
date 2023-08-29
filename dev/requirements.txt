@@ -42,7 +42,7 @@ docutils<0.18.0
 markupsafe==2.0.1
 
 # Development scripts
-jira
+jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
@@ -64,4 +64,7 @@ grpc-stubs==1.24.11
 torch
 torchvision
 torcheval
+
+# DeepspeedTorchDistributor dependencies
+deepspeed; sys_platform != 'darwin'
 

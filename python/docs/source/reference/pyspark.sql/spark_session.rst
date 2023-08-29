@@ -28,6 +28,7 @@ See also :class:`SparkSession`.
 .. autosummary::
     :toctree: api/
 
+    SparkSession.active
     SparkSession.builder.appName
     SparkSession.builder.config
     SparkSession.builder.enableHiveSupport
@@ -63,3 +64,10 @@ Spark Connect Only
     SparkSession.addArtifacts
     SparkSession.copyFromLocalToFs
     SparkSession.client
+    SparkSession.interruptAll
+    SparkSession.interruptTag
+    SparkSession.interruptOperation
+    SparkSession.addTag
+    SparkSession.removeTag
+    SparkSession.getTags
+    SparkSession.clearTags

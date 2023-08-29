@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.UnaryExecNode
-import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * A relation produced by applying a function that takes an iterator of batches
@@ -46,7 +45,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
     val pythonFunction = func.asInstanceOf[PythonUDF].func
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
     val evaluatorFactory = new MapInBatchEvaluatorFactory(
@@ -66,8 +65,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       if (conf.usePartitionEvaluator) {
         rddBarrier.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        rddBarrier.mapPartitions { iter =>
-          evaluatorFactory.createEvaluator().eval(0, iter)
+        rddBarrier.mapPartitionsWithIndex { (index, iter) =>
+          evaluatorFactory.createEvaluator().eval(index, iter)
         }
       }
     } else {
@@ -75,8 +74,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       if (conf.usePartitionEvaluator) {
         inputRdd.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
-        inputRdd.mapPartitionsInternal { iter =>
-          evaluatorFactory.createEvaluator().eval(0, iter)
+        inputRdd.mapPartitionsWithIndexInternal { (index, iter) =>
+          evaluatorFactory.createEvaluator().eval(index, iter)
         }
       }
     }

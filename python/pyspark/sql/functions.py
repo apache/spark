@@ -79,6 +79,436 @@ if has_numpy:
 # since it requires making every single overridden definition.
 
 
+__all__ = [
+    "abs",
+    "acos",
+    "acosh",
+    "add_months",
+    "aes_decrypt",
+    "aes_encrypt",
+    "aggregate",
+    "any_value",
+    "approxCountDistinct",
+    "approx_count_distinct",
+    "approx_percentile",
+    "array",
+    "array_agg",
+    "array_append",
+    "array_compact",
+    "array_contains",
+    "array_distinct",
+    "array_except",
+    "array_insert",
+    "array_intersect",
+    "array_join",
+    "array_max",
+    "array_min",
+    "array_position",
+    "array_prepend",
+    "array_remove",
+    "array_repeat",
+    "array_size",
+    "array_sort",
+    "array_union",
+    "arrays_overlap",
+    "arrays_zip",
+    "asc",
+    "asc_nulls_first",
+    "asc_nulls_last",
+    "ascii",
+    "asin",
+    "asinh",
+    "assert_true",
+    "atan",
+    "atan2",
+    "atanh",
+    "avg",
+    "base64",
+    "bin",
+    "bit_and",
+    "bit_count",
+    "bit_get",
+    "bit_length",
+    "bit_or",
+    "bit_xor",
+    "bitmap_bit_position",
+    "bitmap_bucket_number",
+    "bitmap_construct_agg",
+    "bitmap_count",
+    "bitmap_or_agg",
+    "bitwiseNOT",
+    "bitwise_not",
+    "bool_and",
+    "bool_or",
+    "broadcast",
+    "bround",
+    "btrim",
+    "bucket",
+    "call_function",
+    "call_udf",
+    "cardinality",
+    "cast",
+    "cbrt",
+    "ceil",
+    "ceiling",
+    "char",
+    "char_length",
+    "character_length",
+    "coalesce",
+    "col",
+    "collect_list",
+    "collect_set",
+    "column",
+    "concat",
+    "concat_ws",
+    "contains",
+    "conv",
+    "convert_timezone",
+    "corr",
+    "cos",
+    "cosh",
+    "cot",
+    "count",
+    "countDistinct",
+    "count_distinct",
+    "count_if",
+    "count_min_sketch",
+    "covar_pop",
+    "covar_samp",
+    "crc32",
+    "create_map",
+    "csc",
+    "cume_dist",
+    "curdate",
+    "current_catalog",
+    "current_database",
+    "current_date",
+    "current_schema",
+    "current_timestamp",
+    "current_timezone",
+    "current_user",
+    "date_add",
+    "date_diff",
+    "date_format",
+    "date_from_unix_date",
+    "date_part",
+    "date_sub",
+    "date_trunc",
+    "dateadd",
+    "datediff",
+    "datepart",
+    "day",
+    "dayofmonth",
+    "dayofweek",
+    "dayofyear",
+    "days",
+    "decode",
+    "degrees",
+    "dense_rank",
+    "desc",
+    "desc_nulls_first",
+    "desc_nulls_last",
+    "e",
+    "element_at",
+    "elt",
+    "encode",
+    "endswith",
+    "equal_null",
+    "every",
+    "exists",
+    "exp",
+    "explode",
+    "explode_outer",
+    "expm1",
+    "expr",
+    "extract",
+    "factorial",
+    "filter",
+    "find_in_set",
+    "first",
+    "first_value",
+    "flatten",
+    "floor",
+    "forall",
+    "format_number",
+    "format_string",
+    "from_csv",
+    "from_json",
+    "from_unixtime",
+    "from_utc_timestamp",
+    "get",
+    "get_json_object",
+    "getbit",
+    "greatest",
+    "grouping",
+    "grouping_id",
+    "hash",
+    "hex",
+    "histogram_numeric",
+    "hll_sketch_agg",
+    "hll_sketch_estimate",
+    "hll_union",
+    "hll_union_agg",
+    "hour",
+    "hours",
+    "hypot",
+    "ifnull",
+    "ilike",
+    "initcap",
+    "inline",
+    "inline_outer",
+    "input_file_block_length",
+    "input_file_block_start",
+    "input_file_name",
+    "instr",
+    "isnan",
+    "isnotnull",
+    "isnull",
+    "java_method",
+    "json_array_length",
+    "json_object_keys",
+    "json_tuple",
+    "kurtosis",
+    "lag",
+    "last",
+    "last_day",
+    "last_value",
+    "lcase",
+    "lead",
+    "least",
+    "left",
+    "length",
+    "levenshtein",
+    "like",
+    "lit",
+    "ln",
+    "localtimestamp",
+    "locate",
+    "log",
+    "log10",
+    "log1p",
+    "log2",
+    "lower",
+    "lpad",
+    "ltrim",
+    "make_date",
+    "make_dt_interval",
+    "make_interval",
+    "make_timestamp",
+    "make_timestamp_ltz",
+    "make_timestamp_ntz",
+    "make_ym_interval",
+    "map_concat",
+    "map_contains_key",
+    "map_entries",
+    "map_filter",
+    "map_from_arrays",
+    "map_from_entries",
+    "map_keys",
+    "map_values",
+    "map_zip_with",
+    "mask",
+    "max",
+    "max_by",
+    "md5",
+    "mean",
+    "median",
+    "min",
+    "min_by",
+    "minute",
+    "mode",
+    "monotonically_increasing_id",
+    "month",
+    "months",
+    "months_between",
+    "named_struct",
+    "nanvl",
+    "negate",
+    "negative",
+    "next_day",
+    "now",
+    "nth_value",
+    "ntile",
+    "nullif",
+    "nvl",
+    "nvl2",
+    "octet_length",
+    "overlay",
+    "overload",
+    "parse_url",
+    "percent_rank",
+    "percentile",
+    "percentile_approx",
+    "pi",
+    "pmod",
+    "posexplode",
+    "posexplode_outer",
+    "position",
+    "positive",
+    "pow",
+    "power",
+    "printf",
+    "product",
+    "quarter",
+    "radians",
+    "raise_error",
+    "rand",
+    "randn",
+    "rank",
+    "reduce",
+    "reflect",
+    "regexp",
+    "regexp_count",
+    "regexp_extract",
+    "regexp_extract_all",
+    "regexp_instr",
+    "regexp_like",
+    "regexp_replace",
+    "regexp_substr",
+    "regr_avgx",
+    "regr_avgy",
+    "regr_count",
+    "regr_intercept",
+    "regr_r2",
+    "regr_slope",
+    "regr_sxx",
+    "regr_sxy",
+    "regr_syy",
+    "repeat",
+    "replace",
+    "reverse",
+    "right",
+    "rint",
+    "rlike",
+    "round",
+    "row_number",
+    "rpad",
+    "rtrim",
+    "schema_of_csv",
+    "schema_of_json",
+    "sec",
+    "second",
+    "sentences",
+    "sequence",
+    "session_window",
+    "sha",
+    "sha1",
+    "sha2",
+    "shiftLeft",
+    "shiftRight",
+    "shiftRightUnsigned",
+    "shiftleft",
+    "shiftright",
+    "shiftrightunsigned",
+    "shuffle",
+    "sign",
+    "signum",
+    "sin",
+    "sinh",
+    "size",
+    "skewness",
+    "slice",
+    "some",
+    "sort_array",
+    "soundex",
+    "spark_partition_id",
+    "split",
+    "split_part",
+    "sqrt",
+    "stack",
+    "startswith",
+    "std",
+    "stddev",
+    "stddev_pop",
+    "stddev_samp",
+    "str_to_map",
+    "struct",
+    "substr",
+    "substring",
+    "substring_index",
+    "sum",
+    "sumDistinct",
+    "sum_distinct",
+    "tan",
+    "tanh",
+    "timestamp_micros",
+    "timestamp_millis",
+    "timestamp_seconds",
+    "toDegrees",
+    "toRadians",
+    "to_binary",
+    "to_char",
+    "to_csv",
+    "to_date",
+    "to_json",
+    "to_number",
+    "to_timestamp",
+    "to_timestamp_ltz",
+    "to_timestamp_ntz",
+    "to_unix_timestamp",
+    "to_utc_timestamp",
+    "to_varchar",
+    "transform",
+    "transform_keys",
+    "transform_values",
+    "translate",
+    "trim",
+    "trunc",
+    "try_add",
+    "try_aes_decrypt",
+    "try_avg",
+    "try_divide",
+    "try_element_at",
+    "try_multiply",
+    "try_subtract",
+    "try_sum",
+    "try_to_binary",
+    "try_to_number",
+    "try_to_timestamp",
+    "typeof",
+    "ucase",
+    "udf",
+    "udtf",
+    "unbase64",
+    "unhex",
+    "unix_date",
+    "unix_micros",
+    "unix_millis",
+    "unix_seconds",
+    "unix_timestamp",
+    "unwrap_udt",
+    "upper",
+    "url_decode",
+    "url_encode",
+    "user",
+    "var_pop",
+    "var_samp",
+    "variance",
+    "version",
+    "weekday",
+    "weekofyear",
+    "when",
+    "width_bucket",
+    "window",
+    "window_time",
+    "xpath",
+    "xpath_boolean",
+    "xpath_double",
+    "xpath_float",
+    "xpath_int",
+    "xpath_long",
+    "xpath_number",
+    "xpath_short",
+    "xpath_string",
+    "xxhash64",
+    "year",
+    "years",
+    "zip_with",
+    "pandas_udf",
+    "PandasUDFType",
+]
+
+
 def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
     """
     Retrieves JVM function identified by name from
@@ -613,9 +1043,6 @@ def mode(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -625,6 +1052,10 @@ def mode(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the most frequent value in a group.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -930,9 +1361,6 @@ def median(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -942,6 +1370,10 @@ def median(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the median of the values in a group.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -3372,9 +3804,6 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     dividend : str, :class:`~pyspark.sql.Column` or float
@@ -3386,6 +3815,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     -------
     :class:`~pyspark.sql.Column`
         positive value of dividend mod divisor.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -3669,13 +4102,11 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
 
 @try_remote_functions
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
-    """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
-    of column `col`.
+    """
+    This aggregate function returns a new :class:`~pyspark.sql.Column`, which estimates
+    the approximate distinct count of elements in a specified column or a group of columns.
 
     .. versionadded:: 2.1.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
@@ -3683,24 +4114,70 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        The label of the column to count distinct values in.
     rsd : float, optional
-        maximum relative standard deviation allowed (default = 0.05).
-        For rsd < 0.01, it is more efficient to use :func:`count_distinct`
+        The maximum allowed relative standard deviation (default = 0.05).
+        If rsd < 0.01, it would be more efficient to use :func:`count_distinct`.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column of computed results.
+        A new Column object representing the approximate unique count.
+
+    See Also
+    ----------
+    :meth:`pyspark.sql.functions.count_distinct`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    Example 1: Counting distinct values in a single column DataFrame representing integers
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.createDataFrame([1,2,2,3], "int")
     >>> df.agg(approx_count_distinct("value").alias('distinct_values')).show()
     +---------------+
     |distinct_values|
     +---------------+
     |              3|
     +---------------+
+
+    Example 2: Counting distinct values in a single column DataFrame representing strings
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.createDataFrame([("apple",), ("orange",), ("apple",), ("banana",)], ['fruit'])
+    >>> df.agg(approx_count_distinct("fruit").alias('distinct_fruits')).show()
+    +---------------+
+    |distinct_fruits|
+    +---------------+
+    |              3|
+    +---------------+
+
+    Example 3: Counting distinct values in a DataFrame with multiple columns
+
+    >>> from pyspark.sql.functions import approx_count_distinct, struct
+    >>> df = spark.createDataFrame([("Alice", 1),
+    ...                             ("Alice", 2),
+    ...                             ("Bob", 3),
+    ...                             ("Bob", 3)], ["name", "value"])
+    >>> df = df.withColumn("combined", struct("name", "value"))
+    >>> df.agg(approx_count_distinct("combined").alias('distinct_pairs')).show()
+    +--------------+
+    |distinct_pairs|
+    +--------------+
+    |             3|
+    +--------------+
+
+    Example 4: Counting distinct values with a specified relative standard deviation
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.range(100000)
+    >>> df.agg(approx_count_distinct("id").alias('with_default_rsd'),
+    ...        approx_count_distinct("id", 0.1).alias('with_rsd_0.1')).show()
+    +----------------+------------+
+    |with_default_rsd|with_rsd_0.1|
+    +----------------+------------+
+    |           95546|      102065|
+    +----------------+------------+
     """
     if rsd is None:
         return _invoke_function_over_columns("approx_count_distinct", col)
@@ -4312,9 +4789,22 @@ def monotonically_increasing_id() -> Column:
 
     Examples
     --------
-    >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
-    >>> df0.select(monotonically_increasing_id().alias('id')).collect()
-    [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 10, 1, 2).select(sf.monotonically_increasing_id()).show()
+    +-----------------------------+
+    |monotonically_increasing_id()|
+    +-----------------------------+
+    |                            0|
+    |                            1|
+    |                            2|
+    |                            3|
+    |                            4|
+    |                   8589934592|
+    |                   8589934593|
+    |                   8589934594|
+    |                   8589934595|
+    |                   8589934596|
+    +-----------------------------+
     """
     return _invoke_function("monotonically_increasing_id")
 
@@ -4510,11 +5000,7 @@ def approx_percentile(
     in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
     of `col` values is less than the value or equal to that value.
 
-
-    .. versionadded:: 3.1.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -4603,13 +5089,13 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('rand', rand(seed=42) * 3).show() # doctest: +SKIP
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
     +---+------------------+
-    |  0|1.4385751892400076|
-    |  1|1.7082186019706387|
+    |  0|1.8575681106759028|
+    |  1|1.5288056527339444|
     +---+------------------+
     """
     if seed is not None:
@@ -4644,14 +5130,14 @@ def randn(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.withColumn('randn', randn(seed=42)).show() # doctest: +SKIP
-    +---+--------------------+
-    | id|               randn|
-    +---+--------------------+
-    |  0|-0.04167221574820542|
-    |  1| 0.15241403986452778|
-    +---+--------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
+    +---+------------------+
+    | id|             randn|
+    +---+------------------+
+    |  0| 2.384479054241165|
+    |  1|0.1920934041293524|
+    +---+------------------+
     """
     if seed is not None:
         return _invoke_function("randn", seed)
@@ -5146,26 +5632,27 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
-    >>> df = spark.createDataFrame([10, 100, 1000], "INT")
-    >>> df.select(log(10.0, df.value).alias('ten')).show() # doctest: +SKIP
-    +---+
-    |ten|
-    +---+
-    |1.0|
-    |2.0|
-    |3.0|
-    +---+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
+    >>> df.select(sf.log(2.0, df.value).alias('log2_value')).show()
+    +----------+
+    |log2_value|
+    +----------+
+    |       0.0|
+    |       1.0|
+    |       2.0|
+    +----------+
 
     And Natural logarithm
 
-    >>> df.select(log(df.value)).show() # doctest: +SKIP
-    +-----------------+
-    |        ln(value)|
-    +-----------------+
-    |2.302585092994046|
-    |4.605170185988092|
-    |4.605170185988092|
-    +-----------------+
+    >>> df.select(sf.log(df.value).alias('ln_value')).show()
+    +------------------+
+    |          ln_value|
+    +------------------+
+    |               0.0|
+    |0.6931471805599453|
+    |1.3862943611198906|
+    +------------------+
     """
     if arg2 is None:
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
@@ -7656,9 +8143,6 @@ def window_time(
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     windowColumn : :class:`~pyspark.sql.Column`
@@ -7668,6 +8152,10 @@ def window_time(
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -7758,6 +8246,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     return _invoke_function("session_window", time_col, gap_duration)
 
 
+@try_remote_functions
 def to_unix_timestamp(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7781,12 +8270,6 @@ def to_unix_timestamp(
     >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=1460098800)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
-
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
-    [Row(r=None)]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
@@ -7794,6 +8277,7 @@ def to_unix_timestamp(
         return _invoke_function_over_columns("to_unix_timestamp", timestamp)
 
 
+@try_remote_functions
 def to_timestamp_ltz(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7813,17 +8297,15 @@ def to_timestamp_ltz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
@@ -7831,6 +8313,7 @@ def to_timestamp_ltz(
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
 
 
+@try_remote_functions
 def to_timestamp_ntz(
     timestamp: "ColumnOrName",
     format: Optional["ColumnOrName"] = None,
@@ -7850,17 +8333,15 @@ def to_timestamp_ntz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
@@ -10320,28 +10801,6 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
-@try_remote_functions
-def chr(col: "ColumnOrName") -> Column:
-    """
-    Returns the ASCII character having the binary equivalent to `col`.
-    If col is larger than 256 the result is equivalent to chr(col % 256)
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        Input column or strings.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(65,)], ['a'])
-    >>> df.select(chr(df.a).alias('r')).collect()
-    [Row(r='A')]
-    """
-    return _invoke_function_over_columns("chr", col)
-
-
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -11176,9 +11635,6 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11194,6 +11650,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     Notes
     -----
     The position is not 1 based, but 0 based index.
+    Supports Spark Connect.
 
     See Also
     --------
@@ -11342,9 +11799,6 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     arr : :class:`~pyspark.sql.Column` or str
@@ -11360,6 +11814,10 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     :class:`~pyspark.sql.Column`
         an array of values, including the new specified value
 
+    Notes
+    -----
+    Supports Spark Connect.
+
     Examples
     --------
     >>> df = spark.createDataFrame(
@@ -11367,7 +11825,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     ...     ['data', 'pos', 'val']
     ... )
     >>> df.select(array_insert(df.data, df.pos.cast('integer'), df.val).alias('data')).collect()
-    [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'd', 'b', 'a'])]
+    [Row(data=['a', 'd', 'b', 'c']), Row(data=['c', 'b', 'd', 'a'])]
     >>> df.select(array_insert(df.data, 5, 'hello').alias('data')).collect()
     [Row(data=['a', 'b', 'c', None, 'hello']), Row(data=['c', 'b', 'a', None, 'hello'])]
     """
@@ -11482,9 +11940,6 @@ def array_compact(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11494,6 +11949,10 @@ def array_compact(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         an array by excluding the null values.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11512,9 +11971,6 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11526,6 +11982,10 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         an array of values from first array along with the element.
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11570,11 +12030,11 @@ def explode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> df.select(explode(df.intlist).alias("anInt")).collect()
     [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
 
-    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    >>> df.select(explode(df.mapfield).alias("key", "value")).show()
     +---+-----+
     |key|value|
     +---+-----+
@@ -11609,11 +12069,11 @@ def posexplode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(posexplode(eDF.intlist)).collect()
+    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> df.select(posexplode(df.intlist)).collect()
     [Row(pos=0, col=1), Row(pos=1, col=2), Row(pos=2, col=3)]
 
-    >>> eDF.select(posexplode(eDF.mapfield)).show()
+    >>> df.select(posexplode(df.mapfield)).show()
     +---+---+-----+
     |pos|key|value|
     +---+---+-----+
@@ -11630,9 +12090,6 @@ def inline(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11646,6 +12103,10 @@ def inline(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`explode`
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -11771,9 +12232,6 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -11788,6 +12246,10 @@ def inline_outer(col: "ColumnOrName") -> Column:
     --------
     :meth:`explode_outer`
     :meth:`inline`
+
+    Notes
+    -----
+    Supports Spark Connect.
 
     Examples
     --------
@@ -14396,16 +14858,16 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     """
-    Call a builtin or temp function.
+    Call a SQL function.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    udfName : str
-        name of the function
+    funcName : str
+        function name that follows the SQL identifier syntax (can be quoted, can be qualified)
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in the function
 
@@ -14443,9 +14905,25 @@ def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
     +-------+
     |    2.0|
     +-------+
+    >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    ... # doctest: +SKIP
+    >>> df.select(call_function("custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
+    >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
+    +------------------------------------+
+    |spark_catalog.default.custom_avg(id)|
+    +------------------------------------+
+    |                               102.0|
+    +------------------------------------+
     """
     sc = get_active_spark_context()
-    return _invoke_function("call_function", udfName, _to_seq(sc, cols, _to_java_column))
+    return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
 
 
 @try_remote_functions
@@ -14455,8 +14933,9 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
+    Notes
+    -----
+    Supports Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
@@ -14785,27 +15264,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     [Row(r=6), Row(r=9)]
     """
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
-
-
-@try_remote_functions
-def uuid() -> Column:
-    """
-    Returns an universally unique identifier (UUID) string. The value is returned as a canonical
-    UUID 36-character string.
-
-    .. versionadded:: 3.5.0
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(uuid()).show(truncate=False) # doctest: +SKIP
-    +------------------------------------+
-    |uuid()                              |
-    +------------------------------------+
-    |3dcc5174-9da9-41ca-815f-34c05c6d3926|
-    +------------------------------------+
-    """
-    return _invoke_function_over_columns("uuid")
 
 
 @try_remote_functions
@@ -15223,44 +15681,6 @@ def stack(*cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    """
-    Returns a random value with independent and identically distributed (i.i.d.) uniformly
-    distributed values in [0, 1).
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        The seed for the random generator.
-
-    Examples
-    --------
-    >>> df = spark.range(1)
-    >>> df.select(random()).show(truncate=False) # doctest: +SKIP
-    +--------------------+
-    |rand()              |
-    +--------------------+
-    |0.026810514415005593|
-    +--------------------+
-
-    >>> df.select(random(lit(1))).show(truncate=False) # doctest: +SKIP
-    +------------------+
-    |rand(1)           |
-    +------------------+
-    |0.4836508543933039|
-    +------------------+
-    """
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
-
-
-@try_remote_functions
 def bitmap_bit_position(col: "ColumnOrName") -> Column:
     """
     Returns the bit position for the given input column.
@@ -15416,6 +15836,9 @@ def udf(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     f : function
@@ -15448,6 +15871,20 @@ def udf(
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
+
+    UDF can use keyword arguments:
+
+    >>> @udf(returnType=IntegerType())
+    ... def calc(a, b):
+    ...     return a + 10 * b
+    ...
+    >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+    +-----------------------------+
+    |calc(b => (id * 10), a => id)|
+    +-----------------------------+
+    |                            0|
+    |                          101|
+    +-----------------------------+
 
     Notes
     -----
@@ -15521,6 +15958,12 @@ def udtf(
     """Creates a user defined table function (UDTF).
 
     .. versionadded:: 3.5.0
+
+    .. versionchanged:: 4.0.0
+        Supports Python side analysis.
+
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
 
     Parameters
     ----------
@@ -15598,6 +16041,38 @@ def udtf(
     |  1|  x|
     +---+---+
 
+    UDTF can use keyword arguments:
+
+    >>> @udtf
+    ... class TestUDTFWithKwargs:
+    ...     @staticmethod
+    ...     def analyze(
+    ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
+    ...     ) -> AnalyzeResult:
+    ...         return AnalyzeResult(
+    ...             StructType().add("a", a.data_type)
+    ...                 .add("b", b.data_type)
+    ...                 .add("x", kwargs["x"].data_type)
+    ...         )
+    ...
+    ...     def eval(self, a, b, **kwargs):
+    ...         yield a, b, kwargs["x"]
+    ...
+    >>> TestUDTFWithKwargs(lit(1), x=lit("x"), b=lit("b")).show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
+
+    >>> _ = spark.udtf.register("test_udtf", TestUDTFWithKwargs)
+    >>> spark.sql("SELECT * FROM test_udtf(1, x => 'x', b => 'b')").show()
+    +---+---+---+
+    |  a|  b|  x|
+    +---+---+---+
+    |  1|  b|  x|
+    +---+---+---+
+
     Arrow optimization can be explicitly enabled when creating UDTFs:
 
     >>> @udtf(returnType="c1: int, c2: int", useArrow=True)
@@ -15614,14 +16089,13 @@ def udtf(
 
     Notes
     -----
-    User-defined table functions (UDTFs) are considered deterministic by default.
-    Use `asNondeterministic()` to mark a function as non-deterministic. E.g.:
+    User-defined table functions (UDTFs) are considered non-deterministic by default.
+    Use `asDeterministic()` to mark a function as deterministic. E.g.:
 
-    >>> import random
-    >>> class RandomUDTF:
+    >>> class PlusOne:
     ...     def eval(self, a: int):
-    ...         yield a * int(random.random() * 100),
-    >>> random_udtf = udtf(RandomUDTF, returnType="r: int").asNondeterministic()
+    ...         yield a + 1,
+    >>> plus_one = udtf(PlusOne, returnType="r: int").asDeterministic()
 
     Use "yield" to produce one row for the UDTF result relation as many times
     as needed. In the context of a lateral join, each such result row will be

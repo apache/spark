@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.Socket
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InputStream}
+import java.nio.ByteBuffer
+import java.nio.channels.SelectionKey
 import java.nio.charset.StandardCharsets
 import java.util.HashMap
 
@@ -26,16 +27,17 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.Pickler
 
-import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonRDD, SpecialLengths}
+import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.DirectByteBufferOutputStream
 
 /**
  * A user-defined Python function. This is used by the Python API.
@@ -48,6 +50,19 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
+        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF) {
+      /*
+       * Check if the named arguments:
+       * - don't have duplicated names
+       * - don't contain positional arguments after named arguments
+       */
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+    } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic)
     } else {
@@ -99,6 +114,13 @@ case class UserDefinedPythonTableFunction(
   }
 
   def builder(exprs: Seq[Expression]): LogicalPlan = {
+    /*
+     * Check if the named arguments:
+     * - don't have duplicated names
+     * - don't contain positional arguments after named arguments
+     */
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+
     val udtf = returnType match {
       case Some(rt) =>
         PythonUDTF(
@@ -173,35 +195,48 @@ object UserDefinedPythonTableFunction {
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+    val workerMemoryMb = SQLConf.get.pythonUDTFAnalyzerMemory
+
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
     val envVars = new HashMap[String, String](func.envVars)
     val pythonExec = func.pythonExec
     val pythonVer = func.pythonVer
+    val pythonIncludes = func.pythonIncludes.asScala.toSet
+    val broadcastVars = func.broadcastVars.asScala.toSeq
+    val maybeAccumulator = Option(func.accumulator).map(_.copyAndReset())
 
+    envVars.put("SPARK_LOCAL_DIRS", localdir)
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
+    workerMemoryMb.foreach { memoryMb =>
+      envVars.put("PYSPARK_UDTF_ANALYZER_MEMORY_MB", memoryMb.toString)
+    }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
+
+    envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
-    val (worker: Socket, _) =
+    val (worker: PythonWorker, _) =
       env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
     var releasedOrClosed = false
+    val bufferStream = new DirectByteBufferOutputStream()
     try {
-      val dataOut =
-        new DataOutputStream(new BufferedOutputStream(worker.getOutputStream, bufferSize))
-      val dataIn = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
+      val dataOut = new DataOutputStream(new BufferedOutputStream(bufferStream, bufferSize))
 
-      // Python version of driver
-      PythonRDD.writeUTF(pythonVer, dataOut)
+      PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
+      PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
+      PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
       // Send Python UDTF
       dataOut.writeInt(func.command.length)
@@ -210,7 +245,7 @@ object UserDefinedPythonTableFunction {
       // Send arguments
       dataOut.writeInt(exprs.length)
       exprs.zip(tableArgs).foreach { case (expr, is_table) =>
-        PythonRDD.writeUTF(expr.dataType.json, dataOut)
+        PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
         if (expr.foldable) {
           dataOut.writeBoolean(true)
           val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
@@ -220,10 +255,21 @@ object UserDefinedPythonTableFunction {
           dataOut.writeBoolean(false)
         }
         dataOut.writeBoolean(is_table)
+        // If the expr is NamedArgumentExpression, send its name.
+        expr match {
+          case NamedArgumentExpression(key, _) =>
+            dataOut.writeBoolean(true)
+            PythonWorkerUtils.writeUTF(key, dataOut)
+          case _ =>
+            dataOut.writeBoolean(false)
+        }
       }
 
       dataOut.writeInt(SpecialLengths.END_OF_STREAM)
       dataOut.flush()
+
+      val dataIn = new DataInputStream(new BufferedInputStream(
+        new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
       // Receive the schema
       val schema = dataIn.readInt() match {
@@ -240,6 +286,9 @@ object UserDefinedPythonTableFunction {
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
 
+      PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
+      Option(func.accumulator).foreach(_.merge(maybeAccumulator.get))
+
       dataIn.readInt() match {
         case SpecialLengths.END_OF_STREAM if reuseWorker =>
           env.releasePythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
@@ -253,10 +302,60 @@ object UserDefinedPythonTableFunction {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
     } finally {
-      if (!releasedOrClosed) {
-        // An error happened. Force to close the worker.
-        env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+      try {
+        bufferStream.close()
+      } finally {
+        if (!releasedOrClosed) {
+          // An error happened. Force to close the worker.
+          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+        }
       }
+    }
+  }
+
+  /**
+   * A wrapper of the non-blocking IO to write to/read from the worker.
+   *
+   * Since we use non-blocking IO to communicate with workers; see SPARK-44705,
+   * a wrapper is needed to do IO with the worker.
+   * This is a port and simplified version of `PythonRunner.ReaderInputStream`,
+   * and only supports to write all at once and then read all.
+   */
+  private class WorkerInputStream(worker: PythonWorker, buffer: ByteBuffer) extends InputStream {
+
+    private[this] val temp = new Array[Byte](1)
+
+    override def read(): Int = {
+      val n = read(temp)
+      if (n <= 0) {
+        -1
+      } else {
+        // Signed byte to unsigned integer
+        temp(0) & 0xff
+      }
+    }
+
+    override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      val buf = ByteBuffer.wrap(b, off, len)
+      var n = 0
+      while (n == 0) {
+        worker.selector.select()
+        if (worker.selectionKey.isReadable) {
+          n = worker.channel.read(buf)
+        }
+        if (worker.selectionKey.isWritable) {
+          var acceptsInput = true
+          while (acceptsInput && buffer.hasRemaining) {
+            val n = worker.channel.write(buffer)
+            acceptsInput = n > 0
+          }
+          if (!buffer.hasRemaining) {
+            // We no longer have any data to write to the socket.
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
+        }
+      }
+      n
     }
   }
 }

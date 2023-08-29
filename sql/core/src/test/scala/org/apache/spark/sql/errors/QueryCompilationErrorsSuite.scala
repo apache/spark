@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -532,7 +532,7 @@ class QueryCompilationErrorsSuite
 
       val query = "ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'"
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[AnalysisException] {
           sql(query)
         },
         errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",

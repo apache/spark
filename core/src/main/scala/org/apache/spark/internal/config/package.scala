@@ -123,6 +123,13 @@ package object config {
         "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
+  private[spark] val DRIVER_LOG_LOCAL_DIR =
+    ConfigBuilder("spark.driver.log.localDir")
+      .doc("Specifies a local directory to write driver logs and enable Driver Log UI Tab.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   private[spark] val DRIVER_LOG_DFS_DIR =
     ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
 
@@ -2244,6 +2251,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_ALLOW_SYNC_LOG_LEVEL =
+    ConfigBuilder("spark.executor.syncLogLevel.enabled")
+      .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
+        "will be propagated to all executors.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
     ConfigBuilder("spark.executor.killOnFatalError.depth")
       .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
@@ -2547,4 +2562,18 @@ package object config {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CONNECT_SCALA_UDF_STUB_PREFIXES =
+    ConfigBuilder("spark.connect.scalaUdf.stubPrefixes")
+      .internal()
+      .doc("""
+          |Comma-separated list of binary names of classes/packages that should be stubbed during
+          |the Scala UDF serde and execution if not found on the server classpath.
+          |An empty list effectively disables stubbing for all missing classes.
+          |By default, the server stubs classes from the Scala client package.
+          |""".stripMargin)
+      .version("3.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
 }

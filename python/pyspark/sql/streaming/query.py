@@ -618,11 +618,23 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         listener : :class:`StreamingQueryListener`
             A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
             :class:`~pyspark.sql.streaming.StreamingQuery`.
+
+        Notes
+        -----
+        This function behaves differently in Spark Connect mode.
+        In Connect, the provided functions doesn't have access to variables defined outside of it.
+        Also in Connect, you need to use `self.spark` to access spark session.
+        Using `spark` would throw an exception.
+        In short, if you want to use spark session inside the listener,
+        please use `self.spark` in Connect mode, and use `spark` otherwise.
 
         Examples
         --------

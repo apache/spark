@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
@@ -91,22 +91,25 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def outputPartitioning: physical.Partitioning = {
-    if (partitions.length == 1) {
-      SinglePartition
-    } else {
-      keyGroupedPartitioning match {
-        case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
-          groupedPartitions.map { partitionValues =>
+    keyGroupedPartitioning match {
+      case Some(exprs) if KeyGroupedPartitioning.supportsExpressions(exprs) =>
+        groupedPartitions
+          .map { partitionValues =>
             KeyGroupedPartitioning(exprs, partitionValues.size, partitionValues.map(_._1))
-          }.getOrElse(super.outputPartitioning)
-        case _ =>
-          super.outputPartitioning
-      }
+          }
+          .getOrElse(super.outputPartitioning)
+      case _ =>
+        super.outputPartitioning
     }
   }
 
-  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] =
-    groupPartitions(inputPartitions)
+  @transient lazy val groupedPartitions: Option[Seq[(InternalRow, Seq[InputPartition])]] = {
+    // Early check if we actually need to materialize the input partitions.
+    keyGroupedPartitioning match {
+      case Some(_) => groupPartitions(inputPartitions)
+      case _ => None
+    }
+  }
 
   /**
    * Group partition values for all the input partitions. This returns `Some` iff:
@@ -170,11 +173,16 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def supportsColumnar: Boolean = {
-    require(inputPartitions.forall(readerFactory.supportColumnarReads) ||
-      !inputPartitions.exists(readerFactory.supportColumnarReads),
-      "Cannot mix row-based and columnar input partitions.")
-
-    inputPartitions.exists(readerFactory.supportColumnarReads)
+    scan.columnarSupportMode() match {
+      case Scan.ColumnarSupportMode.PARTITION_DEFINED =>
+        require(
+          inputPartitions.forall(readerFactory.supportColumnarReads) ||
+            !inputPartitions.exists(readerFactory.supportColumnarReads),
+          "Cannot mix row-based and columnar input partitions.")
+        inputPartitions.exists(readerFactory.supportColumnarReads)
+      case Scan.ColumnarSupportMode.SUPPORTED => true
+      case Scan.ColumnarSupportMode.UNSUPPORTED => false
+    }
   }
 
   def inputRDD: RDD[InternalRow]

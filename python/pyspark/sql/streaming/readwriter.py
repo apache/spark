@@ -1404,20 +1404,29 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
+        This function behaves differently in Spark Connect mode. See examples.
+        In Connect, the provided function doesn't have access to variables defined outside of it.
 
         Examples
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
+        >>> my_value = -1
         >>> def func(batch_df, batch_id):
+        ...     global my_value
+        ...     my_value = 100
         ...     batch_df.collect()
         ...
         >>> q = df.writeStream.foreachBatch(func).start()
         >>> time.sleep(3)
         >>> q.stop()
+        >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
 
         from pyspark.java_gateway import ensure_callback_server_started

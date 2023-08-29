@@ -19,12 +19,12 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.util.Arrays
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkSerDeUtils
 
 case class ClickEvent(id: String, timestamp: Timestamp)
 
@@ -179,7 +179,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
 
     // Star is not allowed as group sort column
-    val message = intercept[SparkException] {
+    val message = intercept[AnalysisException] {
       grouped
         .flatMapSortedGroups(col("*")) { (g, iter) =>
           Iterator(String.valueOf(g), iter.mkString(","))
@@ -483,9 +483,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
-    // TODO SPARK-44449 make this string again when upcasting is in.
-    val keys = grouped.keyAs[Int].keys.sort($"value")
-    checkDataset(keys, 1, 2, 10, 20)
+    val keys = grouped.keyAs[String].keys.sort($"value")
+    checkDataset(keys, "1", "2", "10", "20")
   }
 
   test("flatMapGroupsWithState") {
@@ -631,6 +630,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       1,
       30,
       3)
+  }
+
+  test("serialize as null") {
+    val kvgds = session.range(10).groupByKey(_ % 2)
+    val bytes = SparkSerDeUtils.serialize(kvgds)
+    assert(SparkSerDeUtils.deserialize[KeyValueGroupedDataset[Long, Long]](bytes) == null)
   }
 }
 

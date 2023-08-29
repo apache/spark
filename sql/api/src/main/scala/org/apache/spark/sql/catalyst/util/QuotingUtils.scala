@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.connector.catalog.Identifier
+
 object QuotingUtils {
   private def quoteByDefault(elem: String): String = {
     "\"" + elem + "\""
@@ -29,11 +31,33 @@ object QuotingUtils {
     quoteByDefault(schema)
   }
 
+  def quoteIdentifier(name: String): String = {
+    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
+    // identifier with back-ticks.
+    "`" + name.replace("`", "``") + "`"
+  }
+
+  def quoteNameParts(name: Seq[String]): String = {
+    name.map(part => quoteIdentifier(part)).mkString(".")
+  }
+
   def quoteIfNeeded(part: String): String = {
     if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
       part
     } else {
       s"`${part.replace("`", "``")}`"
+    }
+  }
+
+  def quoted(namespace: Array[String]): String = {
+    namespace.map(quoteIfNeeded).mkString(".")
+  }
+
+  def quoted(ident: Identifier): String = {
+    if (ident.namespace.nonEmpty) {
+      ident.namespace.map(quoteIfNeeded).mkString(".") + "." + quoteIfNeeded(ident.name)
+    } else {
+      quoteIfNeeded(ident.name)
     }
   }
 

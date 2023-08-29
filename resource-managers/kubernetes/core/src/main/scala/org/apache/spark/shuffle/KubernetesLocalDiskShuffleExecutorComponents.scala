@@ -98,8 +98,13 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
       logInfo(s"Try to recover ${f.getAbsolutePath}")
       try {
         val id = BlockId(f.getName)
-        val decryptedSize = f.length()
-        bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
+        // To make it sure to handle only shuffle blocks
+        if (id.isShuffle) {
+          val decryptedSize = f.length()
+          bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
+        } else {
+          logInfo("Ignore a non-shuffle block file.")
+        }
       } catch {
         case _: UnrecognizedBlockId =>
           logInfo("Skip due to UnrecognizedBlockId.")

@@ -22,7 +22,7 @@ import java.io.{File, FilenameFilter}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.test.{RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -46,7 +46,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(databasesWithPattern.length == 0)
         val database = spark.catalog.getDatabase(db)
         assert(database.name == db)
-        val message = intercept[SparkException] {
+        val message = intercept[AnalysisException] {
           spark.catalog.getDatabase("notExists")
         }.getMessage
         assert(message.contains("SCHEMA_NOT_FOUND"))
@@ -141,7 +141,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(spark.catalog.listTables().collect().map(_.name).toSet == Set(parquetTableName))
       }
     }
-    val message = intercept[SparkException] {
+    val message = intercept[AnalysisException] {
       spark.catalog.getTable(parquetTableName)
     }.getMessage
     assert(message.contains("TABLE_OR_VIEW_NOT_FOUND"))
@@ -207,7 +207,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     assert(spark.catalog.getFunction(absFunctionName).name == absFunctionName)
     val notExistsFunction = "notExists"
     assert(!spark.catalog.functionExists(notExistsFunction))
-    val message = intercept[SparkException] {
+    val message = intercept[AnalysisException] {
       spark.catalog.getFunction(notExistsFunction)
     }.getMessage
     assert(message.contains("UNRESOLVED_ROUTINE"))

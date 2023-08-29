@@ -35,11 +35,11 @@ class DeepspeedTorchDistributor(TorchDistributor):
 
     def __init__(
         self,
-        num_gpus: int = 1,
+        numGpus: int = 1,
         nnodes: int = 1,
-        local_mode: bool = True,
-        use_gpu: bool = True,
-        deepspeed_config: Optional[Union[str, Dict[str, Any]]] = None,
+        localMode: bool = True,
+        useGpu: bool = True,
+        deepspeedConfig: Optional[Union[str, Dict[str, Any]]] = None,
     ):
         """
         This class is used to run deepspeed training workloads with spark clusters.
@@ -49,25 +49,51 @@ class DeepspeedTorchDistributor(TorchDistributor):
 
         Parameters
         ----------
-        num_gpus: int
+        numGpus: int
             The number of GPUs to use per node (analagous to num_gpus in deepspeed command).
         nnodes: int
             The number of nodes that should be used for the run.
-        local_mode: bool
+        localMode: bool
             Whether or not to run the training in a distributed fashion or just locally.
-        use_gpu: bool
+        useGpu: bool
             Boolean flag to determine whether to utilize gpus.
-        deepspeed_config: Union[Dict[str,Any], str] or None:
+        deepspeedConfig: Union[Dict[str,Any], str] or None:
             The configuration file to be used for launching the deepspeed application.
             If it's a dictionary containing the parameters, then we will create the file.
             If None, deepspeed will fall back to default parameters.
+
+        Examples
+        --------
+        Run Deepspeed training function on a single node
+
+        >>> def train(learning_rate):
+        ...     import deepspeed
+        ...     # rest of training function
+        ...     return model
+        >>> distributor = DeepspeedTorchDistributor(
+        ...     numGpus=4,
+        ...     nnodes=1,
+        ...     useGpu=True,
+        ...     localMode=True,
+        ...     deepspeedConfig="path/to/config.json")
+        >>> output = distributor.run(train, 0.01)
+
+        Run Deepspeed training function on multiple nodes
+
+        >>> distributor = DeepspeedTorchDistributor(
+        ...     numGpus=4,
+        ...     nnodes=3,
+        ...     useGpu=True,
+        ...     localMode=False,
+        ...     deepspeedConfig="path/to/config.json")
+        >>> output = distributor.run(train, 0.01)
         """
-        num_processes = num_gpus * nnodes
-        self.deepspeed_config = deepspeed_config
+        num_processes = numGpus * nnodes
+        self.deepspeed_config = deepspeedConfig
         super().__init__(
             num_processes,
-            local_mode,
-            use_gpu,
+            localMode,
+            useGpu,
             _ssl_conf=DeepspeedTorchDistributor._DEEPSPEED_SSL_CONF,
         )
         self.cleanup_deepspeed_conf = False

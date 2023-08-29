@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
 
@@ -111,9 +113,17 @@ case class BitmapCount(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
-      TypeCheckResult.TypeCheckFailure("Bitmap must be a BinaryType")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckSuccess
     }
   }
 
@@ -248,9 +258,17 @@ case class BitmapOrAgg(child: Expression,
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
-      TypeCheckResult.TypeCheckFailure("Bitmap must be a BinaryType")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckSuccess
     }
   }
 

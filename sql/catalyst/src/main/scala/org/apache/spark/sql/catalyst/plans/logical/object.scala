@@ -149,8 +149,8 @@ object MapPartitionsInR {
         broadcastVars,
         encoder.schema,
         schema,
-        CatalystSerde.generateObjAttr(RowEncoder(schema)),
-        deserialized))(RowEncoder(schema))
+        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+        deserialized))(ExpressionEncoder(schema))
     }
   }
 }
@@ -448,14 +448,6 @@ case class MapGroups(
     copy(child = newChild)
 }
 
-/** Internal class representing State */
-trait LogicalGroupState[S]
-
-/** Types of timeouts used in FlatMapGroupsWithState */
-case object NoTimeout extends GroupStateTimeout
-case object ProcessingTimeTimeout extends GroupStateTimeout
-case object EventTimeTimeout extends GroupStateTimeout
-
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
@@ -611,8 +603,8 @@ object FlatMapGroupsInR {
         UnresolvedDeserializer(valueDeserializer, dataAttributes),
         groupingAttributes,
         dataAttributes,
-        CatalystSerde.generateObjAttr(RowEncoder(schema)),
-        child))(RowEncoder(schema))
+        CatalystSerde.generateObjAttr(ExpressionEncoder(schema)),
+        child))(ExpressionEncoder(schema))
     }
   }
 }

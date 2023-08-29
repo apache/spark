@@ -17,14 +17,19 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 
-import org.apache.spark.api.python.PythonRDD
-import org.apache.spark.api.python.SimplePythonFunction
-import org.apache.spark.api.python.StreamingPythonRunner
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
+
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
  * A helper class for handling ForeachBatch related functionality in Spark Connect servers
@@ -32,6 +37,16 @@ import org.apache.spark.sql.connect.service.SparkConnectService
 object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
+
+  case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
+    override def close(): Unit = {
+      try runner.stop()
+      catch {
+        case NonFatal(ex) => // Exception is not propagated.
+          logWarning("Error while stopping streaming Python worker", ex)
+      }
+    }
+  }
 
   private case class FnArgsWithId(dfId: String, df: DataFrame, batchId: Long)
 
@@ -44,16 +59,16 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
     {
       val dfId = UUID.randomUUID().toString
-      log.info(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
+      logInfo(s"Caching DataFrame with id $dfId") // TODO: Add query id to the log.
 
-      // TODO: Sanity check there is no other active DataFrame for this query. The query id
-      //       needs to be saved in the cache for this check.
+      // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
+      //  The query id needs to be saved in the cache for this check.
 
       sessionHolder.cacheDataFrameById(dfId, df)
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        log.info(s"Removing DataFrame with id $dfId from the cache")
+        logInfo(s"Removing DataFrame with id $dfId from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -69,7 +84,8 @@ object StreamingForeachBatchHelper extends Logging {
   def scalaForeachBatchWrapper(
       fn: ForeachBatchFnType,
       sessionHolder: SessionHolder): ForeachBatchFnType = {
-    // TODO: Set up Spark Connect session. Do we actually need this for the first version?
+    // TODO(SPARK-44462): Set up Spark Connect session.
+    // Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
         fn(args.df, args.batchId) // dfId is not used, see hack comment above.
@@ -84,40 +100,108 @@ object StreamingForeachBatchHelper extends Logging {
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
-      sessionHolder: SessionHolder): ForeachBatchFnType = {
+      sessionHolder: SessionHolder): (ForeachBatchFnType, RunnerCleaner) = {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-    val runner = StreamingPythonRunner(pythonFn, connectUrl)
-    val (dataOut, dataIn) = runner.init(sessionHolder.sessionId)
+    val runner = StreamingPythonRunner(
+      pythonFn,
+      connectUrl,
+      sessionHolder.sessionId,
+      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
+    val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
-      // TODO(SPARK-44460): Support Auth credentials
       // TODO(SPARK-44462): A new session id pointing to args.df.sparkSession needs to be created.
       //     This is because MicroBatch execution clones the session during start.
       //     The session attached to the foreachBatch dataframe is different from the one the one
       //     the query was started with. `sessionHolder` here contains the latter.
+      //     Another issue with not creating new session id: foreachBatch worker keeps
+      //     the session alive. The session mapping at Connect server does not expire and query
+      //     keeps running even if the original client disappears. This keeps the query running.
 
       PythonRDD.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
       dataOut.flush()
 
       val ret = dataIn.readInt()
-      log.info(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+      logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
     }
 
-    dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder)
+    (dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder), RunnerCleaner(runner))
   }
 
-  // TODO(SPARK-44433): Improve termination of Processes
-  //   The goal is that when a query is terminated, the python process asociated with foreachBatch
-  //   should be terminated. One way to do that is by registering stremaing query listener:
-  //   After pythonForeachBatchWrapper() is invoked by the SparkConnectPlanner.
-  //   At that time, we don't have the streaming queries yet.
-  //   Planner should call back into this helper with the query id when it starts it immediately
-  //   after. Save the query id to StreamingPythonRunner mapping. This mapping should be
-  //   part of the SessionHolder.
-  //   When a query is terminated, check the mapping and terminate any associated runner.
-  //   These runners should be terminated when a session is deleted (due to timeout, etc).
+  /**
+   * This manages cache from queries to cleaner for runners used for streaming queries. This is
+   * used in [[SessionHolder]].
+   */
+  class CleanerCache(sessionHolder: SessionHolder) {
+
+    private case class CacheKey(queryId: String, runId: String)
+
+    // Mapping from streaming (queryId, runId) to runner cleaner. Used for Python foreachBatch.
+    private val cleanerCache: ConcurrentMap[CacheKey, AutoCloseable] = new ConcurrentHashMap()
+
+    private lazy val streamingListener = { // Initialized on first registered query
+      val listener = new StreamingRunnerCleanerListener
+      sessionHolder.session.streams.addListener(listener)
+      logInfo(s"Registered runner clean up listener for session ${sessionHolder.sessionId}")
+      listener
+    }
+
+    private[connect] def registerCleanerForQuery(
+        query: StreamingQuery,
+        cleaner: AutoCloseable): Unit = {
+
+      streamingListener // Access to initialize
+      val key = CacheKey(query.id.toString, query.runId.toString)
+
+      Option(cleanerCache.putIfAbsent(key, cleaner)) match {
+        case Some(_) =>
+          throw new IllegalStateException(s"Unexpected: a cleaner for query $key is already set")
+        case None => // Inserted. Normal.
+      }
+    }
+
+    /** Cleans up all the registered runners. */
+    private[connect] def cleanUpAll(): Unit = {
+      // Clean up all remaining registered runners.
+      cleanerCache.keySet().asScala.foreach(cleanupStreamingRunner(_))
+    }
+
+    private def cleanupStreamingRunner(key: CacheKey): Unit = {
+      Option(cleanerCache.remove(key)).foreach { cleaner =>
+        logInfo(s"Cleaning up runner for queryId ${key.queryId} runId ${key.runId}.")
+        cleaner.close()
+      }
+    }
+
+    /**
+     * An internal streaming query listener that cleans up Python runner (if there is any) when a
+     * query is terminated.
+     */
+    private class StreamingRunnerCleanerListener extends StreamingQueryListener {
+      override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
+
+      override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
+
+      override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
+        val key = CacheKey(event.id.toString, event.runId.toString)
+        cleanupStreamingRunner(key)
+      }
+    }
+
+    private[connect] def listEntriesForTesting(): Map[(String, String), AutoCloseable] = {
+      cleanerCache
+        .entrySet()
+        .asScala
+        .map { e =>
+          (e.getKey.queryId, e.getKey.runId) -> e.getValue
+        }
+        .toMap
+    }
+
+    private[connect] def listenerForTesting: StreamingQueryListener = streamingListener
+  }
 }

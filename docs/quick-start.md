@@ -130,8 +130,8 @@ Dataset actions and transformations can be used for more complex computations. L
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
->>> from pyspark.sql.functions import *
->>> textFile.select(size(split(textFile.value, "\s+")).name("numWords")).agg(max(col("numWords"))).collect()
+>>> from pyspark.sql import functions as sf
+>>> textFile.select(sf.size(sf.split(textFile.value, "\s+")).name("numWords")).agg(sf.max(sf.col("numWords"))).collect()
 [Row(max(numWords)=15)]
 {% endhighlight %}
 
@@ -140,7 +140,7 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(sf.explode(sf.split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
 Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
@@ -313,7 +313,7 @@ named `SimpleApp.scala`:
 import org.apache.spark.sql.SparkSession
 
 object SimpleApp {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val logFile = "YOUR_SPARK_HOME/README.md" // Should be some file on your system
     val spark = SparkSession.builder.appName("Simple Application").getOrCreate()
     val logData = spark.read.textFile(logFile).cache()

@@ -21,7 +21,6 @@ import java.nio.file.{Files, Paths}
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
@@ -695,8 +694,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -724,8 +721,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create and using") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -763,8 +758,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with append") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -796,8 +789,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwrite") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -851,8 +842,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwritePartitions") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 

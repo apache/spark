@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -102,7 +101,7 @@ case class AggregateInPandasExec(
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val largeVarTypes = conf.arrowUseLargeVarTypes
-    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 

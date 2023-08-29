@@ -157,7 +157,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Inline CTE", Once,
       InlineCTE()) ::
-    Batch("Union", Once,
+    Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
@@ -178,7 +178,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
-      OptimizeSubqueries) ::
+      OptimizeSubqueries,
+      OptimizeOneRowRelationSubquery) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,

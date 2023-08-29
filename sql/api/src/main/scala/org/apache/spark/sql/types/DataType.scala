@@ -29,12 +29,12 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.SparkClassUtils

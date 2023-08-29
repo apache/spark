@@ -20,7 +20,10 @@ package org.apache.spark.sql
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
@@ -1022,6 +1025,269 @@ class UDFRegistration(session: SparkSession) extends Logging {
       typeTag[A20],
       typeTag[A21],
       typeTag[A22])
+    register(name, udf)
+  }
+
+  //  (0 to 22).foreach { i =>
+  //    val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
+  //    val version = "3.5.0"
+  //    println(s"""
+  //               |/**
+  //               | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
+  //               | * @since $version
+  //               | */
+  //               |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
+  //               |  val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+  //               |  register(name, udf)
+  //               |}""".stripMargin)
+  //  }
+
+  /**
+   * Register a deterministic Java UDF0 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF1 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF1[_, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF2 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF2[_, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF3 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF3[_, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF4 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF5 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF6 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF7 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF8 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF9 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF9[_, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF10 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF10[_, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF11 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF12 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF13 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF14 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF15 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF16 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF17 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF18 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF19 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF20 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF21 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    register(name, udf)
+  }
+
+  /**
+   * Register a deterministic Java UDF22 instance as user-defined function (UDF).
+   * @since 3.5.0
+   */
+  def register(
+      name: String,
+      f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+      returnType: DataType): Unit = {
+    val udf = ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
     register(name, udf)
   }
   // scalastyle:on line.size.limit

@@ -31,7 +31,6 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
-import org.apache.commons.text.StringEscapeUtils
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -256,17 +255,14 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
-    <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.2.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -712,7 +708,7 @@ private[spark] object UIUtils extends Logging {
 
   private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
 
-  private def errorSummary(errorMessage: String): (String, Boolean) = {
+  def errorSummary(errorMessage: String): (String, Boolean) = {
     var isMultiline = true
     val maybeErrorClass =
       ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
@@ -727,8 +723,7 @@ private[spark] object UIUtils extends Logging {
       errorMessage
     }
 
-    val errorSummary = StringEscapeUtils.escapeHtml4(errorClassOrBrief)
-    (errorSummary, isMultiline)
+    (errorClassOrBrief, isMultiline)
   }
 
   def errorMessageCell(errorMessage: String): Seq[Node] = {

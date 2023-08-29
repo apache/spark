@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.window.{SlidingWindowFunctionFrame, UnboundedFollowingWindowFunctionFrame, UnboundedPrecedingWindowFunctionFrame, UnboundedWindowFunctionFrame, WindowEvaluatorFactoryBase, WindowFunctionFrame}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 class WindowInPandasEvaluatorFactory(
@@ -162,7 +161,8 @@ class WindowInPandasEvaluatorFactory(
 
     private val udfWindowBoundTypes = pyFuncs.indices.map(i =>
       frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
-    private val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
+    private val pythonRunnerConf: Map[String, String] =
+      (ArrowPythonRunner.getPythonRunnerConfMap(conf)
       + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
 
     // Filter child output attributes down to only those that are UDF inputs.

@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * Grouped a iterator into batches.
@@ -75,7 +75,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
-      ArrowUtils.getPythonRunnerConfMap(conf),
+      ArrowPythonRunner.getPythonRunnerConfMap(conf),
       pythonMetrics,
       jobArtifactUUID)
   }
@@ -95,11 +95,11 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-    extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+      argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
@@ -109,10 +109,10 @@ class ArrowEvalPythonEvaluatorFactory(
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
-    val columnarBatchIter = new ArrowPythonRunner(
+    val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
       funcs,
       evalType,
-      argOffsets,
+      argMetas,
       schema,
       sessionLocalTimeZone,
       largeVarTypes,

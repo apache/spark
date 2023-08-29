@@ -22,9 +22,9 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.unsafe.types.UTF8String
 
 /**

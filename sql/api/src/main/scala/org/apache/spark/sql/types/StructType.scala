@@ -24,12 +24,12 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.SqlApiConf
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{SparkCollectionUtils, SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * A [[StructType]] object can be constructed by

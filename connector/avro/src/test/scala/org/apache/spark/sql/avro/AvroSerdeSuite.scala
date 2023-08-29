@@ -22,7 +22,7 @@ import org.apache.avro.generic.GenericRecordBuilder
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.CORRECTED
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**

@@ -1,4 +1,4 @@
-#
+# mypy: ignore-errors
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -14,12 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from contextlib import contextmanager
 import os
+import shutil
 import sys
-from typing import Any, Tuple, Dict
+import textwrap
+from typing import Any, Callable, Dict, Tuple
 import unittest
 
+from pyspark import SparkConf, SparkContext
 from pyspark.ml.deepspeed.deepspeed_distributor import DeepspeedTorchDistributor
+from pyspark.sql import SparkSession
+from pyspark.ml.torch.tests.test_distributor import (
+    get_local_mode_conf,
+    set_up_test_dirs,
+    get_distributed_mode_conf,
+)
+
+have_deepspeed = True
+try:
+    import deepspeed  # noqa: F401
+except ImportError:
+    have_deepspeed = False
 
 
 class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
@@ -162,6 +178,120 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
                 input_params, train_file_path, *distributed_extra_args
             )
             self.assertEqual(distributed_cmd_args_expected, distributed_command_with_args)
+
+
+def _create_basic_function() -> Callable:
+    # TODO: swap out with better test function
+    # once Deepspeed better supports CPU
+    def pythagoras(leg1: float, leg2: float) -> float:
+        import deepspeed
+
+        print(deepspeed.__version__)
+        return (leg1 * leg1 + leg2 * leg2) ** 0.5
+
+    return pythagoras
+
+
+@contextmanager
+def _create_pytorch_training_test_file():
+    # Note: when Deepspeed CPU support becomes better,
+    # switch in more realistic training files using Deepspeed
+    # optimizations + constructs
+    str_to_write = textwrap.dedent(
+        """ 
+            import sys
+            def pythagorean_thm(x : int, y: int): # type: ignore 
+                import deepspeed # type: ignore
+                return (x*x + y*y)**0.5 # type: ignore
+            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))"""
+    )
+    cp_path = "/tmp/test_deepspeed_training_file.py"
+    with open(cp_path, "w") as f:
+        f.write(str_to_write)
+    yield cp_path
+    os.remove(cp_path)
+
+
+# The program and function that we use in the end-to-end tests
+# is very simple because in the Spark CI we only have access
+# to CPUs and at this point in time, CPU support is limited
+# in Deepspeed. Once Deepspeed better supports CPU training
+# and inference, the hope is to switch out the training
+# and file for the tests with more realistic testing
+# that use Deepspeed constructs.
+@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()  # noqa
+        # "loadDefaults" is set to False because if not, the SparkConf will
+        # use contain configurations from the LocalEndToEnd test,
+        # which causes the test to break.
+        conf = SparkConf(loadDefaults=False)
+        for k, v in get_distributed_mode_conf().items():
+            conf = conf.set(k, v)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
+        cls.spark = SparkSession(sc)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
+    def test_simple_function_e2e(self) -> None:
+        train_fn = _create_basic_function()
+        # Arguments for the pythagoras function train_fn
+        x = 3
+        y = 4
+        dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=False)
+        output = dist.run(train_fn, x, y)
+        self.assertEqual(output, 5)
+
+    def test_pytorch_file_e2e(self) -> None:
+        # TODO: change to better test script
+        # once Deepspeed CPU support is better
+        with _create_pytorch_training_test_file() as cp_path:
+            dist = DeepspeedTorchDistributor(numGpus=True, useGpu=False, localMode=False)
+            dist.run(cp_path, 2, 5)
+
+
+@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()  # noqa
+        conf = SparkConf()
+        for k, v in get_local_mode_conf().items():
+            conf = conf.set(k, v)
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
+        cls.spark = SparkSession(sc)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
+
+    def test_simple_function_e2e(self) -> None:
+        train_fn = _create_basic_function()
+        # Arguments for the pythagoras function train_fn
+        x = 3
+        y = 4
+        dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=True)
+        output = dist.run(train_fn, x, y)
+        self.assertEqual(output, 5)
+
+    def test_pytorch_file_e2e(self) -> None:
+        with _create_pytorch_training_test_file() as path_to_train_file:
+            dist = DeepspeedTorchDistributor(numGpus=2, useGpu=False, localMode=True)
+            dist.run(path_to_train_file, 2, 5)
 
 
 if __name__ == "__main__":

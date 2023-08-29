@@ -21,7 +21,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
@@ -723,7 +723,7 @@ class MicroBatchExecution(
     markMicroBatchExecutionStart()
 
     val nextBatch =
-      new Dataset(lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(lastExecution, ExpressionEncoder(lastExecution.analyzed.schema))
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] = reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(lastExecution) {

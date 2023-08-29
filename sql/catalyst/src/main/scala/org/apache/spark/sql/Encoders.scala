@@ -179,6 +179,13 @@ object Encoders {
   def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
 
   /**
+   * Creates a [[Row]] encoder for schema `schema`.
+   *
+   * @since 3.5.0
+   */
+  def row(schema: StructType): Encoder[Row] = ExpressionEncoder(schema)
+
+  /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
    * This encoder maps T into a single byte array (binary) field.
    *
