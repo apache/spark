@@ -655,7 +655,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
 
-          case global @ GlobalLimit(limit, local @ LocalLimit(localLimit, input)) =>
+          case Limit(limit, input) =>
             // LIMIT K (with potential ORDER BY) is decorrelated by computing K rows per every
             // domain value via a row_number() window function. For example, for a subquery
             // (SELECT T2.a FROM T2 WHERE T2.b = OuterReference(x) ORDER BY T2.c LIMIT 3)
@@ -665,8 +665,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // SELECT * FROM (
             //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
             // WHERE rn <= 3
-            assert(limit.equals(localLimit), s"Global and local limits should be the same: " +
-              s"$global, $local")
             val (child, ordering) = input match {
               case Sort(order, _, child) => (child, order)
               case _ => (input, Seq())
