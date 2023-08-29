@@ -981,7 +981,7 @@ private[spark] class Executor(
               try {
                 Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
                   if (thread.threadName == taskRunner.threadName) {
-                    logWarning(s"Thread dump from task $taskId:\n${thread.stackTrace}")
+                    logWarning(s"Thread dump from task $taskId:\n${thread.toString}")
                   }
                 }
               } catch {

@@ -2099,7 +2099,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {

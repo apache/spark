@@ -5885,11 +5885,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("CURRENT_SCHEMA()"), df.select(current_schema()))
   }
 
-  test("function current_user, user") {
+  test("function current_user, user, session_user") {
     val df = Seq((1, 2), (3, 1)).toDF("a", "b")
 
     checkAnswer(df.selectExpr("CURRENT_USER()"), df.select(current_user()))
     checkAnswer(df.selectExpr("USER()"), df.select(user()))
+    checkAnswer(df.selectExpr("SESSION_USER()"), df.select(session_user()))
   }
 
   test("named_struct function") {

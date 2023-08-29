@@ -1564,6 +1564,10 @@ class PlanGenerationTestSuite
     fn.user()
   }
 
+  functionTest("session_user") {
+    fn.session_user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -3232,14 +3236,15 @@ class PlanGenerationTestSuite
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
   test("from_protobuf messageClassName") {
-    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestProtoObj"))
   }
 
   test("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),
-        classOf[StorageLevel].getName,
+        "org.apache.spark.sql.protobuf.protos.TestProtoObj",
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 
