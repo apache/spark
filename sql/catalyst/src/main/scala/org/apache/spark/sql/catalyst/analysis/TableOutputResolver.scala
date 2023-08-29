@@ -86,9 +86,6 @@ object TableOutputResolver {
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
         tableName, actualExpectedCols.map(_.name), query)
-    } else if (actualExpectedCols.size > query.output.size && !byName) {
-      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-        tableName, actualExpectedCols.map(_.name), query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -103,6 +100,10 @@ object TableOutputResolver {
         errors += _,
         fillDefaultValue = true)
     } else {
+      if (actualExpectedCols.size > query.output.size) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tableName, actualExpectedCols.map(_.name), query)
+      }
       resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
