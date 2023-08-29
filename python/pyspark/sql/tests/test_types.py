@@ -1204,6 +1204,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
@@ -1322,6 +1324,15 @@ class DataTypeTests(unittest.TestCase):
 
         # test __repr__ with unicode values
         self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+
+    # SPARK-44643: test __repr__ with empty Row
+    def test_row_repr_with_empty_row(self):
+        self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
+        self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
+
+        EmptyRow = Row()
+        self.assertEqual(repr(Row(a=EmptyRow())), "Row(a=Row())")
+        self.assertEqual(repr(Row(EmptyRow())), "<Row(Row())>")
 
     def test_empty_row(self):
         row = Row()

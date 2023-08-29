@@ -28,7 +28,9 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config.{DRIVER_CORES, DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_MEMORY}
 import org.apache.spark.resource.ResourceUtils.AMOUNT
 
-class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
+class ResourceRequestHelperSuite extends SparkFunSuite
+    with Matchers
+    with ResourceRequestTestHelper {
 
   private val CUSTOM_RES_1 = "custom-resource-type-1"
   private val CUSTOM_RES_2 = "custom-resource-type-2"
@@ -104,17 +106,16 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       val requests = resources.map { case (rName, rValue, rUnit) =>
         (rName, rValue.toString + rUnit)
       }.toMap
+      withResourceTypes(resourceDefs) {
+        val resource = createResource()
+        setResourceRequests(requests, resource)
 
-      ResourceRequestTestHelper.initializeResourceTypes(resourceDefs)
-
-      val resource = createResource()
-      setResourceRequests(requests, resource)
-
-      resources.foreach { case (rName, rValue, rUnit) =>
-        val requested = resource.getResourceInformation(rName)
-        assert(requested.getName === rName)
-        assert(requested.getValue === rValue)
-        assert(requested.getUnits === rUnit)
+        resources.foreach { case (rName, rValue, rUnit) =>
+          val requested = resource.getResourceInformation(rName)
+          assert(requested.getName === rName)
+          assert(requested.getValue === rValue)
+          assert(requested.getUnits === rUnit)
+        }
       }
     }
   }
@@ -125,13 +126,13 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     ("invalid unit", CUSTOM_RES_1, "123ppp")
   ).foreach { case (name, key, value) =>
     test(s"invalid request: $name") {
-      ResourceRequestTestHelper.initializeResourceTypes(Seq(key))
-
-      val resource = createResource()
-      val thrown = intercept[IllegalArgumentException] {
-        setResourceRequests(Map(key -> value), resource)
+      withResourceTypes(Seq(key)) {
+        val resource = createResource()
+        val thrown = intercept[IllegalArgumentException] {
+          setResourceRequests(Map(key -> value), resource)
+        }
+        thrown.getMessage should include (key)
       }
-      thrown.getMessage should include (key)
     }
   }
 

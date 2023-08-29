@@ -25,6 +25,13 @@ shopt -s nullglob
 FWDIR="$(cd "$(dirname "$0")"/..; pwd)"
 cd "$FWDIR"
 
+# Clean ignored/untracked files that do not need
+# for pip packaging test. Machines in GitHub Action do not have
+# enough space, see also SPARK-44557.
+if [[ ! -z "${GITHUB_ACTIONS}" ]]; then
+  git clean -d -f -x -e assembly
+fi
+
 echo "Constructing virtual env for testing"
 VIRTUALENV_BASE=$(mktemp -d)
 

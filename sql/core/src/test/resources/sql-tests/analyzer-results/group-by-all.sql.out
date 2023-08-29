@@ -224,7 +224,7 @@ Aggregate [count(1) AS count(1)#xL]
 -- !query
 select id + count(*) from data group by all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42803",
@@ -241,7 +241,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select (id + id) / 2 + count(*) * 2 from data group by all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42803",
@@ -315,7 +315,7 @@ Aggregate [country#x, scalar-subquery#x [country#x]], [country#x, scalar-subquer
 -- !query
 select (select count(*) from data d1 where d1.country = d2.country) + count(id) from data d2 group by all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
   "sqlState" : "42803",
@@ -332,7 +332,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select non_exist from data group by all
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",

@@ -58,7 +58,7 @@ Project [map_contains_key(map(cast(1.0 as decimal(11,1)), a, cast(2 as decimal(1
 -- !query
 select map_contains_key(map('1', 'a', '2', 'b'), 1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -82,7 +82,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), '1')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_FUNCTION_DIFF_TYPES",
   "sqlState" : "42K09",

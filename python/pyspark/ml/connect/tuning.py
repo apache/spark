@@ -42,8 +42,7 @@ from pyspark.ml.connect.io_utils import (
 )
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasParallelism, HasSeed
-from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
-from pyspark.sql.types import BooleanType
+from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
 
@@ -178,11 +177,12 @@ def _parallelFitTasks(
 
     def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
         def single_task() -> Tuple[int, float]:
-            # Active session is thread-local variable, in background thread the active session
-            # is not set, the following line sets it as the main thread active session.
-            active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
-                active_session._jsparkSession  # type: ignore[union-attr]
-            )
+            if not is_remote():
+                # Active session is thread-local variable, in background thread the active session
+                # is not set, the following line sets it as the main thread active session.
+                active_session._jvm.SparkSession.setActiveSession(  # type: ignore[union-attr]
+                    active_session._jsparkSession  # type: ignore[union-attr]
+                )
 
             model = estimator.fit(train, param_map)
             metric = evaluator.evaluate(
@@ -476,23 +476,14 @@ class CrossValidator(
                 train = df.filter(~condition)
                 datasets.append((train, validation))
         else:
-            # Use user-specified fold numbers.
-            def checker(foldNum: int) -> bool:
-                if foldNum < 0 or foldNum >= nFolds:
-                    raise ValueError(
-                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum)
-                    )
-                return True
-
-            checker_udf = UserDefinedFunction(checker, BooleanType())
+            # TODO:
+            #  Add verification that foldCol column values are in range [0, nFolds)
             for i in range(nFolds):
-                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
-                validation = dataset.filter(
-                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i))
-                )
-                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                training = dataset.filter(col(foldCol) != lit(i))
+                validation = dataset.filter(col(foldCol) == lit(i))
+                if training.isEmpty():
                     raise ValueError("The training data at fold %s is empty." % i)
-                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                if validation.isEmpty():
                     raise ValueError("The validation data at fold %s is empty." % i)
                 datasets.append((training, validation))
 

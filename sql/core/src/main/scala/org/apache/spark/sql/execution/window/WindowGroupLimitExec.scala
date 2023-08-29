@@ -72,8 +72,6 @@ case class WindowGroupLimitExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-
     val evaluatorFactory =
       new WindowGroupLimitEvaluatorFactory(
         partitionSpec,
@@ -81,14 +79,14 @@ case class WindowGroupLimitExec(
         rankLikeFunction,
         limit,
         child.output,
-        numOutputRows)
+        longMetric("numOutputRows"))
 
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      child.execute().mapPartitionsInternal { iter =>
+      child.execute().mapPartitionsWithIndexInternal { (index, rowIterator) =>
         val evaluator = evaluatorFactory.createEvaluator()
-        evaluator.eval(0, iter)
+        evaluator.eval(index, rowIterator)
       }
     }
   }
@@ -170,6 +168,7 @@ case class RankLimitIterator(
   override def reset(): Unit = {
     rank = 0
     count = 0
+    currentRankRow = null
   }
 }
 
@@ -193,6 +192,7 @@ case class DenseRankLimitIterator(
 
   override def reset(): Unit = {
     rank = 0
+    currentRankRow = null
   }
 }
 

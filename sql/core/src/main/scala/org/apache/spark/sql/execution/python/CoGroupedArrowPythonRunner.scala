@@ -18,13 +18,12 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
-import java.net.Socket
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -60,14 +59,14 @@ class CoGroupedArrowPythonRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
-  protected def newWriterThread(
+  protected def newWriter(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
       partitionIndex: Int,
-      context: TaskContext): WriterThread = {
+      context: TaskContext): Writer = {
 
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
 
@@ -81,10 +80,10 @@ class CoGroupedArrowPythonRunner(
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
-      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
         // For each we first send the number of dataframes in each group then send
         // first df, then send second df.  End of data is marked by sending 0.
-        while (inputIterator.hasNext) {
+        if (inputIterator.hasNext) {
           val startData = dataOut.size()
           dataOut.writeInt(2)
           val (nextLeft, nextRight) = inputIterator.next()
@@ -93,8 +92,11 @@ class CoGroupedArrowPythonRunner(
 
           val deltaData = dataOut.size() - startData
           pythonMetrics("pythonDataSent") += deltaData
+          true
+        } else {
+          dataOut.writeInt(0)
+          false
         }
-        dataOut.writeInt(0)
       }
 
       private def writeGroup(

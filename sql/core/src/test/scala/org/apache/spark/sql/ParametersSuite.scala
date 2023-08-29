@@ -487,4 +487,46 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         start = 7,
         stop = 13))
   }
+
+  test("SPARK-44680: parameters in DEFAULT") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          "CREATE TABLE t11(c1 int default :parm) USING parquet",
+          args = Map("parm" -> 5))
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "default :parm",
+        start = 24,
+        stop = 36))
+  }
+
+  test("SPARK-44783: arrays as parameters") {
+    checkAnswer(
+      spark.sql("SELECT array_position(:arrParam, 'abc')", Map("arrParam" -> Array.empty[String])),
+      Row(0))
+    checkAnswer(
+      spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])),
+      Row(0))
+    checkAnswer(
+      spark.sql("SELECT array_contains(:arrParam, 10)", Map("arrParam" -> Array(10, 20, 30))),
+      Row(true))
+    checkAnswer(
+      spark.sql("SELECT array_contains(?, ?)", Array(Array("a", "b", "c"), "b")),
+      Row(true))
+    checkAnswer(
+      spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))),
+      Row(20))
+    checkAnswer(
+      spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)),
+      Row(1f))
+    checkAnswer(
+      spark.sql("SELECT :arr[0][1]", Map("arr" -> Array(Array(1, 2), Array(20), Array.empty[Int]))),
+      Row(2))
+    checkAnswer(
+      spark.sql("SELECT ?[?][?]", Array(Array(Array(1f, 2f), Array.empty[Float], Array(3f)), 0, 1)),
+      Row(2f))
+  }
 }

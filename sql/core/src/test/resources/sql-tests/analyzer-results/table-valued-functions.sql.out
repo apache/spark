@@ -206,9 +206,15 @@ Project [k#x, v#x]
 
 
 -- !query
+select * from explode(array(rand(0)))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select * from explode(null)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -232,7 +238,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from explode(null) t(c1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -256,7 +262,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from explode(1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -422,7 +428,7 @@ Project [col1#x, col2#x]
 -- !query
 select * from inline(null)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -535,7 +541,7 @@ Project [pos#x, k#x, v#x]
 -- !query
 select * from posexplode(1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -729,7 +735,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from json_tuple('{"a": 1}', 1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
   "sqlState" : "42K09",
@@ -750,7 +756,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from json_tuple('{"a": 1}', null)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
   "sqlState" : "42K09",
@@ -885,7 +891,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from stack(2, 1, '1.1', 'a', 2, 2.2, 'b')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
   "sqlState" : "42K09",

@@ -220,3 +220,24 @@ select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-
 Project [a#x, b#x]
 +- SubqueryAlias data
    +- LocalRelation [a#x, b#x]
+
+
+-- !query
+select * from values (try_add(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+select * from values (try_divide(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+select * from values (10 + try_divide(5, 0))
+-- !query analysis
+Project [col1#x]
++- LocalRelation [col1#x]

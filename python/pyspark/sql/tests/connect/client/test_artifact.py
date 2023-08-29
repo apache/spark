@@ -391,13 +391,19 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     @classmethod
+    def conf(cls):
+        return (
+            super().conf().set("spark.driver.memory", "512M").set("spark.executor.memory", "512M")
+        )
+
+    @classmethod
     def root(cls):
         # In local cluster, we can mimic the production usage.
         return "."
 
     @classmethod
     def master(cls):
-        return "local-cluster[2,2,1024]"
+        return "local-cluster[2,2,512]"
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 
 class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
@@ -58,5 +58,24 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       sql(s"DELETE FROM $tableNameAsString WHERE pk = 1")
     }
     assert(exception.message.contains("Row ID attributes cannot be nullable"))
+  }
+
+  test("delete with schema pruning") {
+    createAndInitTable("pk INT NOT NULL, id INT, country STRING, dep STRING",
+      """{ "pk": 1, "id": 1, "country": "uk", "dep": "hr" }
+        |{ "pk": 2, "id": 2, "country": "us", "dep": "software" }
+        |{ "pk": 3, "id": 3, "country": "canada", "dep": "hr" }
+        |""".stripMargin)
+
+    executeAndCheckScan(
+      s"DELETE FROM $tableNameAsString WHERE id <= 1",
+      // `pk` is used to encode deletes
+      // `id` is used in the condition
+      // `_partition` is used in the requested write distribution
+      expectedScanSchema = "pk INT, id INT, _partition STRING")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "us", "software") :: Row(3, 3, "canada", "hr") :: Nil)
   }
 }

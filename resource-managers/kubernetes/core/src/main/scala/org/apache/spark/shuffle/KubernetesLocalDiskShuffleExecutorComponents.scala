@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.FileExistsException
 
 import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
@@ -41,12 +42,15 @@ class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
       appId: String, execId: String, extraConfigs: java.util.Map[String, String]): Unit = {
     delegate.initializeExecutor(appId, execId, extraConfigs)
     blockManager = SparkEnv.get.blockManager
-    if (sparkConf.getBoolean("spark.kubernetes.driver.reusePersistentVolumeClaim", false)) {
+    if (sparkConf.getBoolean(KUBERNETES_DRIVER_REUSE_PVC.key, false)) {
+      logInfo("Try to recover shuffle data.")
       // Turn off the deletion of the shuffle data in order to reuse
       blockManager.diskBlockManager.deleteFilesOnStop = false
       Utils.tryLogNonFatalError {
         KubernetesLocalDiskShuffleExecutorComponents.recoverDiskStore(sparkConf, blockManager)
       }
+    } else {
+      logInfo(s"Skip recovery because ${KUBERNETES_DRIVER_REUSE_PVC.key} is disabled.")
     }
   }
 
@@ -80,7 +84,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
           .flatMap(_.listFiles).filter(_.isDirectory) // executor-xxx
           .flatMap(_.listFiles).filter(_.isDirectory) // blockmgr-xxx
           .flatMap(_.listFiles).filter(_.isDirectory) // 00
-          .flatMap(_.listFiles)
+          .flatMap(_.listFiles).filterNot(_.getName.contains(".checksum"))
         if (files != null) files.toSeq else Seq.empty
       }
 
@@ -91,14 +95,22 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     val level = StorageLevel.DISK_ONLY
     val (indexFiles, dataFiles) = files.partition(_.getName.endsWith(".index"))
     (dataFiles ++ indexFiles).foreach { f =>
+      logInfo(s"Try to recover ${f.getAbsolutePath}")
       try {
         val id = BlockId(f.getName)
-        val decryptedSize = f.length()
-        bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
+        // To make it sure to handle only shuffle blocks
+        if (id.isShuffle) {
+          val decryptedSize = f.length()
+          bm.TempFileBasedBlockStoreUpdater(id, level, classTag, f, decryptedSize).save()
+        } else {
+          logInfo("Ignore a non-shuffle block file.")
+        }
       } catch {
         case _: UnrecognizedBlockId =>
+          logInfo("Skip due to UnrecognizedBlockId.")
         case _: FileExistsException =>
           // This may happen due to recompute, but we continue to recover next files
+          logInfo("Ignore due to FileExistsException.")
       }
     }
   }

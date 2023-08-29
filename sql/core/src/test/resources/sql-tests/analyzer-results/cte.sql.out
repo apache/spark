@@ -20,7 +20,7 @@ CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalT
 -- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -41,7 +41,7 @@ org.apache.spark.sql.AnalysisException
 WITH r AS (SELECT (SELECT * FROM r))
 SELECT * FROM r
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -79,7 +79,7 @@ WithCTE
 -- !query
 WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -251,7 +251,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 WITH t AS (SELECT 1 FROM non_existing_table)
 SELECT 2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -430,7 +430,7 @@ WithCTE
 with cte as (select id as id_alias from t)
 select id from cte
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -453,7 +453,7 @@ with r1 as (select * from r2),
      r2 as (select 1)
 select 2
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -521,7 +521,7 @@ SELECT * FROM
   (WITH q AS (select 1 x) SELECT x+1 AS y FROM q),
   q
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -728,7 +728,7 @@ WithCTE
 -- !query
 with cte AS (SELECT * FROM va) SELECT * FROM cte
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -748,7 +748,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 with cte as (select * from cte) select * from cte
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

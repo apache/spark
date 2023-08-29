@@ -32,10 +32,13 @@ class AlterNamespaceSetLocationSuite extends v1.AlterNamespaceSetLocationSuiteBa
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER DATABASE $ns SET LOCATION 'loc'")
-      }
-      assert(e.getMessage.contains("does not support altering database location"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER DATABASE $ns SET LOCATION 'loc'")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1219",
+        parameters = Map.empty
+      )
     }
   }
 }

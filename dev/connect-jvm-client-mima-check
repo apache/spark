@@ -35,7 +35,7 @@ fi
 rm -f .connect-mima-check-result
 
 echo "Build required modules..."
-build/sbt "sql/package;connect-client-jvm/assembly;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
+build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
 
 CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
 SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
@@ -52,7 +52,7 @@ echo "finish connect-client-jvm module mima check ..."
 
 RESULT_SIZE=$(wc -l .connect-mima-check-result | awk '{print $1}')
 
-# The the file has no content if check passed.
+# The file has no content if check passed.
 if [[ $RESULT_SIZE -eq "0" ]]; then
   ERRORS=""
 else

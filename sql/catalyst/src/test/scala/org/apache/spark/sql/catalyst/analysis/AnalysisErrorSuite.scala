@@ -94,6 +94,28 @@ case class TestFunction(
     copy(children = newChildren)
 }
 
+case class TestFunctionWithTypeCheckFailure(
+    children: Seq[Expression],
+    inputTypes: Seq[AbstractDataType])
+  extends Expression with Unevaluable {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    for ((child, idx) <- children.zipWithIndex) {
+      val expectedDataType = inputTypes(idx)
+      if (child.dataType != expectedDataType) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"Expression must be a ${expectedDataType.simpleString}")
+      }
+    }
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = StringType
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
+}
+
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
 class AnalysisErrorSuite extends AnalysisTest {
@@ -167,6 +189,16 @@ class AnalysisErrorSuite extends AnalysisTest {
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
+
+  errorClassTest(
+    "SPARK-44477: type check failure",
+    testRelation.select(
+      TestFunctionWithTypeCheckFailure(dateLit :: Nil, BinaryType :: Nil).as("a")),
+    errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"testfunctionwithtypecheckfailure(NULL)\"",
+      "msg" -> "Expression must be a binary",
+      "hint" -> ""))
 
   errorClassTest(
     "invalid window function",
@@ -1105,13 +1137,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
-  errorTest(
+  errorClassTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
-      "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `c`, `d`, `b`, `e`]"
-      :: Nil)
+    errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+    messageParameters = Map(
+      "objectName" -> "`bad_column`",
+      "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorClassTest(
     "SPARK-39783: backticks in error message for candidate column with dots",

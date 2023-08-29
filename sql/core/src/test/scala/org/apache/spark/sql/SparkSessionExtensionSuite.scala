@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -51,7 +51,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -206,7 +206,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
       import session.implicits._
       val df = Seq((1, "a"), (2, "b")).toDF("i", "s")
       df.select("i").filter($"i" > 1).cache()
-      assert(df.filter($"i" > 1).select("i").queryExecution.executedPlan.find {
+      assert(find(df.filter($"i" > 1).select("i").queryExecution.executedPlan) {
         case _: org.apache.spark.sql.execution.columnar.InMemoryTableScanExec => true
         case _ => false
       }.isDefined)
@@ -279,40 +279,36 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
-      Seq(true, false).foreach { enableEvaluator =>
-        withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enableEvaluator.toString) {
-          assert(session.sessionState.columnarRules.contains(
-            MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-          import session.sqlContext.implicits._
-          // perform a join to inject a broadcast exchange
-          val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
-          val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
-          val data = left.join(right, $"l1" === $"r1")
-            // repartitioning avoids having the add operation pushed up into the LocalTableScan
-            .repartition(1)
-          val df = data.selectExpr("l2 + r2")
-          // execute the plan so that the final adaptive plan is available when AQE is on
-          df.collect()
-          val found = collectPlanSteps(df.queryExecution.executedPlan).sum
-          // 1 MyBroadcastExchangeExec
-          // 1 MyShuffleExchangeExec
-          // 1 ColumnarToRowExec
-          // 2 ColumnarProjectExec
-          // 1 ReplacedRowToColumnarExec
-          // so 11121 is expected.
-          assert(found == 11121)
+      assert(session.sessionState.columnarRules.contains(
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+      // perform a join to inject a broadcast exchange
+      val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
+      val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+        // repartitioning avoids having the add operation pushed up into the LocalTableScan
+        .repartition(1)
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available when AQE is on
+      df.collect()
+      val found = collectPlanSteps(df.queryExecution.executedPlan).sum
+      // 1 MyBroadcastExchangeExec
+      // 1 MyShuffleExchangeExec
+      // 1 ColumnarToRowExec
+      // 2 ColumnarProjectExec
+      // 1 ReplacedRowToColumnarExec
+      // so 11121 is expected.
+      assert(found == 11121)
 
-          // Verify that we get back the expected, wrong, result
-          val result = df.collect()
-          assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
-          assert(result(1).getLong(0) == 201L)
-          assert(result(2).getLong(0) == 301L)
+      // Verify that we get back the expected, wrong, result
+      val result = df.collect()
+      assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
+      assert(result(1).getLong(0) == 201L)
+      assert(result(2).getLong(0) == 301L)
 
-          withTempPath { path =>
-            val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
-            assert(e.getMessage == "columnar write")
-          }
-        }
+      withTempPath { path =>
+        val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
+        assert(e.getMessage == "columnar write")
       }
     }
   }
@@ -1003,7 +999,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
  * whether AQE is enabled.
  */
 case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends BroadcastExchangeLike {
-  override def runId: UUID = delegate.runId
+  override val runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
   override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob

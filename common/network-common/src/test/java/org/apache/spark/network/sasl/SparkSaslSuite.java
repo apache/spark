@@ -58,10 +58,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.util.ByteArrayWritableChannel;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.MapConfigProvider;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.

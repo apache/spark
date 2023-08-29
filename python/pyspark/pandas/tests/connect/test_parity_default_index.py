@@ -25,12 +25,6 @@ class DefaultIndexParityTests(
     DefaultIndexTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_default_index_sequence(self):
-        super().test_default_index_sequence()
-
-    @unittest.skip(
         "TODO(SPARK-43623): Enable DefaultIndexParityTests.test_index_distributed_sequence_cleanup."
     )
     def test_index_distributed_sequence_cleanup(self):

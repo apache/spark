@@ -47,11 +47,6 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     def test_register_java_udaf(self):
         super(PythonUDFArrowTests, self).test_register_java_udaf()
 
-    # TODO(SPARK-43903): Standardize ArrayType conversion for Python UDF
-    @unittest.skip("Inconsistent ArrayType conversion with/without Arrow.")
-    def test_nested_array(self):
-        super(PythonUDFArrowTests, self).test_nested_array()
-
     def test_complex_input_types(self):
         row = (
             self.spark.range(1)

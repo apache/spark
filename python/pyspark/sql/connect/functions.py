@@ -31,6 +31,7 @@ from typing import (
     overload,
     Optional,
     Tuple,
+    Type,
     Callable,
     ValuesView,
     cast,
@@ -50,8 +51,11 @@ from pyspark.sql.connect.expressions import (
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
+    CallFunction,
 )
 from pyspark.sql.connect.udf import _create_py_udf
+from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
@@ -67,6 +71,7 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
@@ -195,7 +200,7 @@ def _invoke_higher_order_function(
 
     :param name: Name of the expression
     :param cols: a list of columns
-    :param funs: a list of((*Column) -> Column functions.
+    :param funs: a list of (*Column) -> Column functions.
 
     :return: a Column
     """
@@ -739,6 +744,9 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
 pow.__doc__ = pysparkfuncs.pow.__doc__
 
 
+power = pow
+
+
 def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
@@ -819,7 +827,7 @@ def signum(col: "ColumnOrName") -> Column:
 signum.__doc__ = pysparkfuncs.signum.__doc__
 
 
-sigh = signum
+sign = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -1765,7 +1773,6 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
 forall.__doc__ = pysparkfuncs.forall.__doc__
 
 
-# TODO: support options
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
@@ -2648,13 +2655,6 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
-def chr(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("chr", col)
-
-
-chr.__doc__ = pysparkfuncs.chr.__doc__
-
-
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("contains", left, right)
 
@@ -2749,9 +2749,6 @@ mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
-# TODO(SPARK-41455): Resolve dtypes inconsistencies for:
-#     to_timestamp, from_utc_timestamp, to_utc_timestamp,
-#     timestamp_seconds, current_timestamp, date_trunc
 
 
 def curdate() -> Column:
@@ -3690,13 +3687,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function_over_columns("uuid")
-
-
-uuid.__doc__ = pysparkfuncs.uuid.__doc__
-
-
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
@@ -3806,18 +3796,6 @@ def stack(*cols: "ColumnOrName") -> Column:
 stack.__doc__ = pysparkfuncs.stack.__doc__
 
 
-def random(
-    seed: Optional["ColumnOrName"] = None,
-) -> Column:
-    if seed is not None:
-        return _invoke_function_over_columns("random", seed)
-    else:
-        return _invoke_function_over_columns("random")
-
-
-random.__doc__ = pysparkfuncs.random.__doc__
-
-
 def bitmap_bit_position(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_bit_position", col)
 
@@ -3891,8 +3869,24 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
-def call_function(udfName: str, *cols: "ColumnOrName") -> Column:
-    return _invoke_function(udfName, *[_to_col(c) for c in cols])
+def udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    else:
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
+
+
+udtf.__doc__ = pysparkfuncs.udtf.__doc__
+
+
+def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
+    expressions = [_to_col(c)._expr for c in cols]
+    return Column(CallFunction(funcName, expressions))
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
@@ -3905,9 +3899,6 @@ def _test() -> None:
     import pyspark.sql.connect.functions
 
     globs = pyspark.sql.connect.functions.__dict__.copy()
-
-    # Spark Connect does not support Spark Context but the test depends on that.
-    del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

@@ -16,22 +16,13 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.computation.test_combine import FrameCombineMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class FrameParityCombineTests(FrameCombineMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_append(self):
-        super().test_append()
+    pass
 
 
 if __name__ == "__main__":

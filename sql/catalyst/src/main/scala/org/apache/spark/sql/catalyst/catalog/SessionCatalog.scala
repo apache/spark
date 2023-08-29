@@ -909,11 +909,11 @@ class SessionCatalog(
       val viewText = metadata.viewText.get
       val userSpecifiedColumns =
         if (metadata.schema.fieldNames.toSeq == metadata.viewQueryColumnNames) {
-          ""
+          " "
         } else {
-          s"(${metadata.schema.fieldNames.mkString(", ")})"
+          s" (${metadata.schema.fieldNames.mkString(", ")}) "
         }
-      Some(s"CREATE OR REPLACE VIEW $viewName $userSpecifiedColumns AS $viewText")
+      Some(s"CREATE OR REPLACE VIEW $viewName${userSpecifiedColumns}AS $viewText")
     }
   }
 

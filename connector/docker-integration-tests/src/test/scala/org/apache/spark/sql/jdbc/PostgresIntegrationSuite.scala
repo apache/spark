@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Properties
 
 import org.apache.spark.sql.Column
@@ -147,6 +147,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       |('2013-04-05 12:01:02'),
       |('2013-04-05 18:01:02.123'),
       |('2013-04-05 18:01:02.123456')""".stripMargin).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE infinity_timestamp" +
+      "(id SERIAL PRIMARY KEY, timestamp_column TIMESTAMP);").executeUpdate()
+    conn.prepareStatement("INSERT INTO infinity_timestamp (timestamp_column)" +
+      " VALUES ('infinity'), ('-infinity');").executeUpdate()
 
     conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
     conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
@@ -431,5 +436,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).length === 2)
     assert(row(0).getSeq[String](0) == Seq("1", "fds", "fdsa"))
     assert(row(0).getString(1) == "fdasfasdf")
+  }
+
+  test("SPARK-44280: infinity timestamp test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
+    val row = df.collect()
+
+    assert(row.length == 2)
+    val infinity = row(0).getAs[Timestamp]("timestamp_column")
+    val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
+    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
+    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+
+    assert(infinity.getTime == maxTimestamp)
+    assert(negativeInfinity.getTime == minTimeStamp)
   }
 }

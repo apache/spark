@@ -86,4 +86,40 @@ class JobArtifactSetSuite extends SparkFunSuite with LocalSparkContext {
       assert(JobArtifactSet.getActiveOrDefault(sc).state.isEmpty)
     }
   }
+
+  test("SPARK-44476: JobArtifactState is not populated with all artifacts if none are " +
+    "explicitly added to it.") {
+    withTempDir { dir =>
+      val conf = new SparkConf()
+        .setAppName("test")
+        .setMaster("local")
+        .set("spark.repl.class.uri", "dummyUri")
+      sc = new SparkContext(conf)
+
+      val jarPath = File.createTempFile("testJar", ".jar", dir).getAbsolutePath
+      val filePath = File.createTempFile("testFile", ".txt", dir).getAbsolutePath
+      val fileToZip = File.createTempFile("testFile", "", dir).getAbsolutePath
+      val archivePath = s"$fileToZip.zip"
+      createZipFile(fileToZip, archivePath)
+
+      val otherJobArtifactState = JobArtifactState("other", Some("state"))
+
+      JobArtifactSet.withActiveJobArtifactState(otherJobArtifactState) {
+        sc.addJar(jarPath)
+        sc.addFile(filePath)
+        sc.addArchive(archivePath)
+      }
+
+      val artifactState = JobArtifactState("abc", Some("xyz"))
+      JobArtifactSet.withActiveJobArtifactState(artifactState) {
+        val jobArtifactSet = JobArtifactSet.getActiveOrDefault(sc)
+
+        // Artifacts from the other state must be not visible to this state.
+        assert(jobArtifactSet.state.contains(artifactState))
+        assert(jobArtifactSet.jars.isEmpty)
+        assert(jobArtifactSet.files.isEmpty)
+        assert(jobArtifactSet.archives.isEmpty)
+      }
+    }
+  }
 }

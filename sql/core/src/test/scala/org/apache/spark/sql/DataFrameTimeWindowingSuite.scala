@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
@@ -595,7 +595,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, ExpressionEncoder(
         StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
       val windowedProject = dfWithDesiredNullability

@@ -37,14 +37,13 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkFileUtils
 
 // scalastyle:off
 /**
@@ -131,7 +130,7 @@ class PlanGenerationTestSuite
 
   private def cleanOrphanedGoldenFile(): Unit = {
     val allTestNames = testNames.map(_.replace(' ', '_'))
-    val orphans = Utils
+    val orphans = SparkFileUtils
       .recursiveList(queryFilePath.toFile)
       .filter(g =>
         g.getAbsolutePath.endsWith(".proto.bin") ||
@@ -139,7 +138,7 @@ class PlanGenerationTestSuite
       .filter(g =>
         !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
           !allTestNames.contains(g.getName.stripSuffix(".json")))
-    orphans.foreach(Utils.deleteRecursively)
+    orphans.foreach(SparkFileUtils.deleteRecursively)
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -1563,6 +1562,10 @@ class PlanGenerationTestSuite
 
   functionTest("user") {
     fn.user()
+  }
+
+  functionTest("session_user") {
+    fn.session_user()
   }
 
   functionTest("md5") {
@@ -3233,14 +3236,15 @@ class PlanGenerationTestSuite
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
   test("from_protobuf messageClassName") {
-    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestProtoObj"))
   }
 
   test("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),
-        classOf[StorageLevel].getName,
+        "org.apache.spark.sql.protobuf.protos.TestProtoObj",
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 

@@ -40,10 +40,6 @@ class SeriesAsTypeMixin:
     def psser(self):
         return ps.from_pandas(self.pser)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43466): Enable SeriesTests.test_astype for pandas 2.0.0.",
-    )
     def test_astype(self):
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 
@@ -106,30 +102,22 @@ class SeriesAsTypeMixin:
         pser = pd.Series(["2020-10-27 00:00:01", None], name="x")
         psser = ps.Series(pser)
 
-        self.assert_eq(psser.astype(np.datetime64), pser.astype(np.datetime64))
         self.assert_eq(psser.astype("datetime64[ns]"), pser.astype("datetime64[ns]"))
-        self.assert_eq(psser.astype("M"), pser.astype("M"))
-        self.assert_eq(psser.astype("M").astype(str), pser.astype("M").astype(str))
-        # Comment out the below test cause because pandas returns `NaT` or `nan` randomly
-        # self.assert_eq(
-        #     psser.astype("M").dt.date.astype(str), pser.astype("M").dt.date.astype(str)
-        # )
+        self.assert_eq(
+            psser.astype("datetime64[ns]").astype(str), pser.astype("datetime64[ns]").astype(str)
+        )
 
         if extension_object_dtypes_available:
             from pandas import StringDtype
 
-            # The behavior of casting datetime to nullable string is changed from pandas 1.3.
-            if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-                self._check_extension(
-                    psser.astype("M").astype("string"), pser.astype("M").astype("string")
-                )
-                self._check_extension(
-                    psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
-                )
-            else:
-                expected = ps.Series(["2020-10-27 00:00:01", None], name="x", dtype="string")
-                self._check_extension(psser.astype("M").astype("string"), expected)
-                self._check_extension(psser.astype("M").astype(StringDtype()), expected)
+            self._check_extension(
+                psser.astype("datetime64[ns]").astype("string"),
+                pser.astype("datetime64[ns]").astype("string"),
+            )
+            self._check_extension(
+                psser.astype("datetime64[ns]").astype(StringDtype()),
+                pser.astype("datetime64[ns]").astype(StringDtype()),
+            )
 
         with self.assertRaisesRegex(TypeError, "not understood"):
             psser.astype("int63")

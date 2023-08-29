@@ -21,11 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
@@ -413,6 +414,21 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
  *   20
  * }}}
  */
+case class Explode(child: Expression) extends ExplodeBase {
+  override val position: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): Explode =
+    copy(child = newChild)
+}
+
+trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
+    assert(expressions.size == 1)
+    Explode(expressions(0))
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
@@ -421,15 +437,65 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       > SELECT _FUNC_(array(10, 20));
        10
        20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
+       10
+       20
   """,
   since = "1.0.0",
   group = "generator_funcs")
 // scalastyle:on line.size.limit
-case class Explode(child: Expression) extends ExplodeBase {
-  override val position: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): Explode =
-    copy(child = newChild)
+object ExplodeExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
+    Explode(expressions(0))
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT * FROM _FUNC_(collection => array(10, 20));
+       10
+       20
+  """,
+  since = "1.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit
+object ExplodeGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = false
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+  """,
+  since = "1.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit
+object ExplodeOuterGeneratorBuilder extends ExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = true
+}
+
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
@@ -446,6 +512,9 @@ case class Explode(child: Expression) extends ExplodeBase {
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
+       0	10
+       1	20
+      > SELECT * FROM _FUNC_(array(10,20));
        0	10
        1	20
   """,

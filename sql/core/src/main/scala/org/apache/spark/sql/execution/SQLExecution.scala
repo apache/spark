@@ -20,14 +20,20 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.{ErrorMessageFormat, SparkContext, SparkThrowable, SparkThrowableHelper}
+import scala.util.control.NonFatal
+
+import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
-object SQLExecution {
+object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
   val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
@@ -76,6 +82,11 @@ object SQLExecution {
     }
     val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
+    val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
+    if (originalInterruptOnCancel == null) {
+      val interruptOnCancel = sparkSession.conf.get(SQLConf.INTERRUPT_ON_CANCEL)
+      sc.setInterruptOnCancel(interruptOnCancel)
+    }
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -84,7 +95,7 @@ object SQLExecution {
 
       val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
           val redactedStr = Utils
@@ -97,13 +108,26 @@ object SQLExecution {
 
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
       val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
-        .filterNot(kv => globalConfigs.get(kv._1).contains(kv._2))
+        .filterNot { case (key, value) =>
+          key.startsWith(SPARK_DRIVER_PREFIX) ||
+            key.startsWith(SPARK_EXECUTOR_PREFIX) ||
+            globalConfigs.get(key).contains(value)
+        }
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
+          val planInfo = try {
+            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+          } catch {
+            case NonFatal(e) =>
+              logDebug("Failed to generate SparkPlanInfo", e)
+              // If the queryExecution already failed before this, we are not able to generate the
+              // the plan info, so we use and empty graphviz node to make the UI happy
+              SparkPlanInfo.EMPTY
+          }
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
             rootExecutionId = Some(rootExecutionId),
@@ -112,9 +136,11 @@ object SQLExecution {
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            sparkPlanInfo = planInfo,
             time = System.currentTimeMillis(),
-            redactedConfigs))
+            modifiedConfigs = redactedConfigs,
+            jobTags = sc.getJobTags()
+          ))
           body
         } catch {
           case e: Throwable =>
@@ -124,10 +150,9 @@ object SQLExecution {
           val endTime = System.nanoTime()
           val errorMessage = ex.map {
             case e: SparkThrowable =>
-              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.MINIMAL)
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
             case e =>
-              // unexpected behavior
-              SparkThrowableHelper.getMessage(e)
+              Utils.exceptionString(e)
           }
           val event = SparkListenerSQLExecutionEnd(
             executionId,
@@ -154,6 +179,7 @@ object SQLExecution {
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
         sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
       }
+      sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
   }
 

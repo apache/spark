@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
@@ -39,7 +39,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
 
   def generateRows(schema: StructType, numRows: Int): Array[InternalRow] = {
     val generator = RandomDataGenerator.forType(schema, nullable = false).get
-    val toRow = RowEncoder(schema).createSerializer()
+    val toRow = ExpressionEncoder(schema).createSerializer()
     (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
   }
 

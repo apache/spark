@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.CreatableRelationProvider
@@ -39,7 +39,7 @@ case class SaveIntoDataSourceCommand(
     query: LogicalPlan,
     dataSource: CreatableRelationProvider,
     options: Map[String, String],
-    mode: SaveMode) extends LeafRunnableCommand {
+    mode: SaveMode) extends LeafRunnableCommand with CTEInChildren {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
@@ -67,5 +67,9 @@ case class SaveIntoDataSourceCommand(
   // map.
   override def clone(): LogicalPlan = {
     SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

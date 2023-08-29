@@ -333,6 +333,32 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 For detailed usage, please see :meth:`PandasCogroupedOps.applyInPandas`
 
+Arrow Python UDFs
+-----------------
+
+Arrow Python UDFs are user defined functions that are executed row-by-row, utilizing Arrow for efficient batch data
+transfer and serialization. To define an Arrow Python UDF, you can use the :meth:`udf` decorator or wrap the function
+with the :meth:`udf` method, ensuring the ``useArrow`` parameter is set to True. Additionally, you can enable Arrow
+optimization for Python UDFs throughout the entire SparkSession by setting the Spark configuration ``spark.sql
+.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes effect only
+when ``useArrow`` is either not set or set to None.
+
+The type hints for Arrow Python UDFs should be specified in the same way as for default, pickled Python UDFs.
+
+Here's an example that demonstrates the usage of both a default, pickled Python UDF and an Arrow Python UDF:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
+    :language: python
+    :lines: 279-297
+    :dedent: 4
+
+Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
+type coercion poses challenges when the Python instances returned by UDFs do not align with the user-specified
+return type. The default, pickled Python UDFs' type coercion has certain limitations, such as relying on None as a
+fallback for type mismatches, leading to potential ambiguity and data loss. Additionally, converting date, datetime,
+and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
+capabilities to standardize type coercion and address these issues effectively.
+
 Usage Notes
 -----------
 

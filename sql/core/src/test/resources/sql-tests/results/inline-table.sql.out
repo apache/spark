@@ -242,3 +242,27 @@ select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-
 struct<a:timestamp,b:array<timestamp>>
 -- !query output
 1991-12-06 00:00:00	[1991-12-06 01:00:00,1991-12-06 12:00:00]
+
+
+-- !query
+select * from values (try_add(5, 0))
+-- !query schema
+struct<col1:int>
+-- !query output
+5
+
+
+-- !query
+select * from values (try_divide(5, 0))
+-- !query schema
+struct<col1:double>
+-- !query output
+NULL
+
+
+-- !query
+select * from values (10 + try_divide(5, 0))
+-- !query schema
+struct<col1:double>
+-- !query output
+NULL

@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
-import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
@@ -196,8 +195,9 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      new SparkConnectPlanner(SessionHolder.forTesting(spark))
-        .process(plan, "clientId", "sessionId", new MockObserver())
+      val executeHolder = buildExecutePlanHolder(plan)
+      new SparkConnectPlanner(executeHolder.sessionHolder)
+        .process(plan, new MockObserver(), executeHolder)
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }

@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
@@ -35,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -58,8 +57,9 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark))
-      .process(cmd, "clientId", "sessionId", new MockObserver())
+    val executeHolder = buildExecutePlanHolder(cmd)
+    new SparkConnectPlanner(executeHolder.sessionHolder)
+      .process(cmd, new MockObserver(), executeHolder)
   }
 
   def readRel: proto.Relation =
@@ -104,7 +104,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     val bytes = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
-        StructType.fromAttributes(attrs.map(_.toAttribute)),
+        DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
         null,
@@ -113,6 +113,29 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionHolder.userId)
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(command)
+      .build()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setSessionId(sessionHolder.sessionId)
+      .setUserContext(context)
+      .build()
+    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }
 
@@ -455,8 +478,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform LocalRelation") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = (0 until 10).map { i =>
       InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i))
     }
@@ -558,8 +579,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform UnresolvedStar and ExpressionString") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sql =
       "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
     val input = proto.Relation
@@ -596,8 +615,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform UnresolvedStar with target field") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = (0 until 10).map { i =>
       InternalRow(InternalRow(InternalRow(i, i + 1)))
     }

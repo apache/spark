@@ -101,6 +101,16 @@ DROP SCHEMA ident;
 CREATE TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg';
 DROP TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg');
 
+-- IDENTIFIER + variable
+DECLARE var = 'sometable';
+CREATE TABLE IDENTIFIER(var)(c1 INT) USING CSV;
+
+SET VAR var = 'c1';
+SELECT IDENTIFIER(var) FROM VALUES(1) AS T(c1);
+
+SET VAR var = 'some';
+DROP TABLE IDENTIFIER(var || 'table');
+
 -- Error conditions
 SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`);
 SELECT IDENTIFIER('') FROM VALUES(1) AS T(``);

@@ -34,7 +34,7 @@ object SparkConnectServer extends Logging {
     val session = SparkSession.builder.getOrCreate()
     try {
       try {
-        SparkConnectService.start()
+        SparkConnectService.start(session.sparkContext)
         SparkConnectService.server.getListenSockets.foreach { sa =>
           val isa = sa.asInstanceOf[InetSocketAddress]
           logInfo(
@@ -49,6 +49,7 @@ object SparkConnectServer extends Logging {
       SparkConnectService.server.awaitTermination()
     } finally {
       session.stop()
+      SparkConnectService.uiTab.foreach(_.detach())
     }
   }
 }

@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -125,10 +126,8 @@ private[sql] class RocksDBStateStoreProvider
         CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
         CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
         CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
-        CUSTOM_METRIC_WRITEBATCH_TIME -> commitLatencyMs("writeBatch"),
         CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
         CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
-        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pauseBg"),
         CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
         CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
         CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
@@ -190,15 +189,29 @@ private[sql] class RocksDBStateStoreProvider
   override def stateStoreId: StateStoreId = stateStoreId_
 
   override def getStore(version: Long): StateStore = {
-    require(version >= 0, "Version cannot be less than 0")
-    rocksDB.load(version)
-    new RocksDBStateStore(version)
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def getReadStore(version: Long): StateStore = {
-    require(version >= 0, "Version cannot be less than 0")
-    rocksDB.load(version, true)
-    new RocksDBStateStore(version)
+    try {
+      if (version < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+      }
+      rocksDB.load(version, true)
+      new RocksDBStateStore(version)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def doMaintenance(): Unit = {
@@ -255,14 +268,10 @@ object RocksDBStateStoreProvider {
     "rocksdbPutCount", "RocksDB: number of put calls")
 
   // Commit latency detailed breakdown
-  val CUSTOM_METRIC_WRITEBATCH_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitWriteBatchLatency", "RocksDB: commit - write batch time")
   val CUSTOM_METRIC_FLUSH_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitFlushLatency", "RocksDB: commit - flush time")
   val CUSTOM_METRIC_COMMIT_COMPACT_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitCompactLatency", "RocksDB: commit - compact time")
-  val CUSTOM_METRIC_PAUSE_TIME = StateStoreCustomTimingMetric(
-    "rocksdbCommitPauseLatency", "RocksDB: commit - pause bg time")
   val CUSTOM_METRIC_CHECKPOINT_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitCheckpointLatency", "RocksDB: commit - checkpoint time")
   val CUSTOM_METRIC_FILESYNC_TIME = StateStoreCustomTimingMetric(
@@ -317,8 +326,8 @@ object RocksDBStateStoreProvider {
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
-    CUSTOM_METRIC_WRITEBATCH_TIME, CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
-    CUSTOM_METRIC_PAUSE_TIME, CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
+    CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
+    CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
     CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,

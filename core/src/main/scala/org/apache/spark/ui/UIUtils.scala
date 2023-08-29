@@ -255,17 +255,14 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
-    <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.2.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -707,5 +704,31 @@ private[spark] object UIUtils extends Logging {
     } else {
       Seq.empty[Node]
     }
+  }
+
+  private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
+
+  def errorSummary(errorMessage: String): (String, Boolean) = {
+    var isMultiline = true
+    val maybeErrorClass =
+      ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
+    val errorClassOrBrief = if (maybeErrorClass.nonEmpty && maybeErrorClass.get.nonEmpty) {
+      maybeErrorClass.get
+    } else if (errorMessage.indexOf('\n') >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf('\n'))
+    } else if (errorMessage.indexOf(":") >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf(":"))
+    } else {
+      isMultiline = false
+      errorMessage
+    }
+
+    (errorClassOrBrief, isMultiline)
+  }
+
+  def errorMessageCell(errorMessage: String): Seq[Node] = {
+    val (summary, isMultiline) = errorSummary(errorMessage)
+    val details = detailsUINode(isMultiline, errorMessage)
+    <td>{summary}{details}</td>
   }
 }

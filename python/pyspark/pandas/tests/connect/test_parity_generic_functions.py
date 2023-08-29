@@ -24,11 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class GenericFunctionsParityTests(
     GenericFunctionsTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_interpolate(self):
-        super().test_interpolate()
+    pass
 
 
 if __name__ == "__main__":

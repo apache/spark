@@ -73,7 +73,7 @@ SELECT
   )
 FROM t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
@@ -99,7 +99,7 @@ SELECT
   )
 FROM t1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
@@ -123,7 +123,7 @@ t1a IN (SELECT t2a, t2b
         FROM t2
         WHERE t1a = t2a)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",
@@ -151,7 +151,7 @@ WHERE
                FROM t2
                WHERE t1a = t2a)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",
@@ -180,7 +180,7 @@ WHERE
                            t5c
                     FROM t5)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
   "sqlState" : "42K09",

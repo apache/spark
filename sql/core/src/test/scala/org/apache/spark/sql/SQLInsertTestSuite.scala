@@ -214,10 +214,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           processInsert("t1", df, overwrite = false, byName = true)
         },
         v1ErrorClass = "_LEGACY_ERROR_TEMP_1186",
-        v2ErrorClass = "_LEGACY_ERROR_TEMP_1204",
+        v2ErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
         v1Parameters = Map.empty[String, String],
-        v2Parameters = Map("tableName" -> "testcat.t1",
-          "errors" -> "Cannot find data for output column 'c1'")
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`", "colName" -> "`c1`")
       )
       val df2 = Seq((3, 2, 1, 0)).toDF(Seq("c3", "c2", "c1", "c0"): _*)
       checkV1AndV2Error(

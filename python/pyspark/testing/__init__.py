@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 
-__all__ = ["assertDataFrameEqual"]
+from pyspark.testing.pandasutils import assertPandasOnSparkEqual
+
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "assertPandasOnSparkEqual"]

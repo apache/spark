@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
 
@@ -110,9 +113,17 @@ case class BitmapCount(child: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
-      TypeCheckResult.TypeCheckFailure("Bitmap must be a BinaryType")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckSuccess
     }
   }
 
@@ -175,18 +186,18 @@ case class BitmapConstructAgg(child: Expression,
 
   override def nullable: Boolean = false
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+
+  // The aggregation buffer is a fixed size binary.
+  private val bitmapAttr = AttributeReference("bitmap", BinaryType, nullable = false)()
 
   override def aggBufferAttributes: Seq[AttributeReference] = bitmapAttr :: Nil
 
   override def defaultResult: Option[Literal] =
     Option(Literal(Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)))
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] =
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
-
-  // The aggregation buffer is a fixed size binary.
-  private val bitmapAttr = AttributeReference("bitmap", BinaryType, nullable = false)()
 
   override def initialize(buffer: InternalRow): Unit = {
     buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0))
@@ -247,9 +258,17 @@ case class BitmapOrAgg(child: Expression,
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
-      TypeCheckResult.TypeCheckFailure("Bitmap must be a BinaryType")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckSuccess
     }
   }
 
@@ -268,18 +287,18 @@ case class BitmapOrAgg(child: Expression,
 
   override def nullable: Boolean = false
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+
+  // The aggregation buffer is a fixed size binary.
+  private val bitmapAttr = AttributeReference("bitmap", BinaryType, false)()
 
   override def aggBufferAttributes: Seq[AttributeReference] = bitmapAttr :: Nil
 
   override def defaultResult: Option[Literal] =
     Option(Literal(Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)))
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] =
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
-
-  // The aggregation buffer is a fixed size binary.
-  private val bitmapAttr = AttributeReference("bitmap", BinaryType, false)()
 
   override def initialize(buffer: InternalRow): Unit = {
     buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0))

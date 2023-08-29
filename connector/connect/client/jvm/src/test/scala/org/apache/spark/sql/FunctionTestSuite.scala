@@ -21,9 +21,9 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -248,6 +248,8 @@ class FunctionTestSuite extends ConnectFunSuite {
     "to_protobuf",
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes(), Map.empty[String, String].asJava),
     pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
+
+  testEquals("call_udf", callUDF("bob", lit(1)), call_udf("bob", lit(1)))
 
   test("assert_true no message") {
     val e = assert_true(a).expr
