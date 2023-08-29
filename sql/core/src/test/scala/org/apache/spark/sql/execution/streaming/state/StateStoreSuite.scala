@@ -1377,6 +1377,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { _ =>
+          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
           val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
           val storeConf = StateStoreConf(sqlConf)
 
