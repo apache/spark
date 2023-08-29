@@ -3428,8 +3428,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.isin` function.
 
-        >>> import pyspark.sql.functions as sf
-        >>> df.filter(sf.col("name").isin("Alice", "Bob")).show()
+        >>> df.filter(df.name.isin("Alice", "Bob")).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
@@ -3437,10 +3436,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|Physics|
         +---+-----+-------+
 
+        Filter by a list of values using the :func:`Column.isin` function.
+
+        >>> df.filter(df.subject.isin(["Math", "Physics"])).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
+
+        Filter using the `~` operator to exclude certain values.
+
+        >>> df.filter(~df.name.isin(["Alice", "Charlie"])).show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+
         Filter using the :func:`Column.isNotNull` function.
 
-        >>> import pyspark.sql.functions as sf
-        >>> df.filter(sf.col("name").isNotNull()).show()
+        >>> df.filter(df.name.isNotNull()).show()
         +---+-------+---------+
         |age|   name|  subject|
         +---+-------+---------+
@@ -3451,8 +3468,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.like` function.
 
-        >>> import pyspark.sql.functions as sf
-        >>> df.filter(sf.col("name").like("Al%")).show()
+        >>> df.filter(df.name.like("Al%")).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
@@ -3461,8 +3477,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.contains` function.
 
-        >>> import pyspark.sql.functions as sf
-        >>> df.filter(sf.col("name").contains("i")).show()
+        >>> df.filter(df.name.contains("i")).show()
         +---+-------+---------+
         |age|   name|  subject|
         +---+-------+---------+
@@ -3472,8 +3487,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.between` function.
 
-        >>> import pyspark.sql.functions as sf
-        >>> df.filter(sf.col("age").between(2, 5)).show()
+        >>> df.filter(df.age.between(2, 5)).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
