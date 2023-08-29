@@ -575,6 +575,12 @@ SQLSTATE: none assigned
 
 A column cannot have both a default value and a generation expression but column `<colName>` has default value: (`<defaultValue>`) and generation expression: (`<genExpr>`).
 
+### GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION
+
+SQLSTATE: none assigned
+
+Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
+
 ### GRAPHITE_SINK_INVALID_PROTOCOL
 
 SQLSTATE: none assigned
@@ -2014,12 +2020,6 @@ The feature is not supported:
 
 For more details see [UNSUPPORTED_FEATURE](sql-error-conditions-unsupported-feature-error-class.html)
 
-### UNSUPPORTED_FUNCTION_BY_HIVE_VERSION
-
-SQLSTATE: none assigned
-
-Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
-
 ### [UNSUPPORTED_GENERATOR](sql-error-conditions-unsupported-generator-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2180,3 +2180,5 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+
