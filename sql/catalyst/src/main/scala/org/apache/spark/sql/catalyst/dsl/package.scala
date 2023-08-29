@@ -134,7 +134,7 @@ package object dsl {
         expr
       } else {
         val cast = Cast(expr, to)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
       }
     }

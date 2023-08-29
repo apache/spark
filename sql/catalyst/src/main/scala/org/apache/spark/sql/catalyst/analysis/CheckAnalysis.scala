@@ -51,8 +51,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
-  val INVALID_FORMAT_ERROR = TreeNodeTag[Boolean]("invalidFormatError")
+  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
+  val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
 
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
@@ -247,7 +247,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 hof.dataTypeMismatch(hof, checkRes)
               case checkRes: TypeCheckResult.InvalidFormat =>
-                hof.setTagValue(INVALID_FORMAT_ERROR, true)
+                hof.setTagValue(INVALID_FORMAT_ERROR, ())
                 hof.invalidFormat(checkRes)
             }
 
@@ -273,10 +273,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
                 e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
                 val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
                   errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
@@ -285,7 +285,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "msg" -> message,
                     "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
-                e.setTagValue(INVALID_FORMAT_ERROR, true)
+                e.setTagValue(INVALID_FORMAT_ERROR, ())
                 e.invalidFormat(checkRes)
             }
 
@@ -858,7 +858,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
       var issueFixedIfAnsiOff = true
       getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
-        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
+        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).isDefined &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
             case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>

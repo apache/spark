@@ -1391,8 +1391,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     if (attr.hasPlanId) {
       expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
     }
-    if (attr.hasIsMetadataColumn) {
-      expr.setTagValue(LogicalPlan.IS_METADATA_COL, attr.getIsMetadataColumn)
+    if (attr.hasIsMetadataColumn && attr.getIsMetadataColumn) {
+      expr.setTagValue(LogicalPlan.IS_METADATA_COL, ())
     }
     expr
   }
