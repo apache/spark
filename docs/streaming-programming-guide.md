@@ -68,7 +68,7 @@ operations on other DStreams. Internally, a DStream is represented as a sequence
 [RDDs](api/scala/org/apache/spark/rdd/RDD.html).
 
 This guide shows you how to start writing Spark Streaming programs with DStreams. You can
-write Spark Streaming programs in Scala, Java or Python (introduced in Spark 1.2),
+write Spark Streaming programs in Python (introduced in Spark 1.2), Scala or Java,
 all of which are presented in this guide.
 You will find tabs throughout this guide that let you choose between code snippets of
 different languages.
@@ -762,9 +762,9 @@ DStreams can be created with data streams received through custom receivers. See
 For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
 For more details on streams from sockets and files, see the API documentations of the relevant functions in
-[StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for
-Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
-for Java, and [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) for Python.
+[StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) for Python,
+[StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) for Scala,
+and [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html) for Java.
 
 ### Advanced Sources
 {:.no_toc}
@@ -1265,12 +1265,12 @@ JavaPairDStream<String, String> joinedStream = windowedStream.transform(rdd -> r
 
 In fact, you can also dynamically change the dataset you want to join against. The function provided to `transform` is evaluated every batch interval and therefore will use the current dataset that `dataset` reference points to.
 
-The complete list of DStream transformations is available in the API documentation. For the Scala API,
-see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
+The complete list of DStream transformations is available in the API documentation. For the Python API,
+see [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream).
+For the Scala API, see [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
 and [PairDStreamFunctions](api/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.html).
 For the Java API, see [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html)
 and [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html).
-For the Python API, see [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream).
 
 ***
 
@@ -2150,7 +2150,7 @@ application left off. Note that this can be done only with input sources that su
 (like Kafka) as data needs to be buffered while the previous application was down and
 the upgraded application is not yet up. And restarting from earlier checkpoint
 information of pre-upgrade code cannot be done. The checkpoint information essentially
-contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
+contains serialized Python/Scala/Java objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
 
@@ -2564,6 +2564,8 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Custom Receiver Guide](streaming-custom-receivers.html)
 * Third-party DStream data sources can be found in [Third Party Projects](https://spark.apache.org/third-party-projects.html)
 * API documentation
+  - Python docs
+    * [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) and [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream)
   - Scala docs
     * [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) and
   [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
@@ -2575,10 +2577,8 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html)
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
     [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
-  - Python docs
-    * [StreamingContext](api/python/reference/api/pyspark.streaming.StreamingContext.html#pyspark.streaming.StreamingContext) and [DStream](api/python/reference/api/pyspark.streaming.DStream.html#pyspark.streaming.DStream)
 
-* More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
+* More examples in [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
+  and [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
-  and [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
 * [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and [video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.

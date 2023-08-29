@@ -208,7 +208,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API.
 As of Spark 2.3, the DataFrame-based API in `spark.ml` and `pyspark.ml` has complete coverage.
 
-ML persistence works across Scala, Java and Python.  However, R currently uses a modified format,
+ML persistence works across Python, Scala and Java. However, R currently uses a modified format,
 so models saved in R can only be loaded back in R; this should be fixed in the future and is
 tracked in [SPARK-15572](https://issues.apache.org/jira/browse/SPARK-15572).
 
@@ -238,9 +238,9 @@ notes, then it should be treated as a bug to be fixed.
 
 This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
-([Scala](api/scala/org/apache/spark/ml/package.html),
-[Java](api/java/org/apache/spark/ml/package-summary.html),
-and [Python](api/python/reference/pyspark.ml.html)).
+([Python](api/python/reference/pyspark.ml.html),
+[Scala](api/scala/org/apache/spark/ml/package.html),
+and [Java](api/java/org/apache/spark/ml/package-summary.html)).
 
 ## Example: Estimator, Transformer, and Param
 
