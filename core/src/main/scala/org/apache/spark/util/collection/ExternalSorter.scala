@@ -102,8 +102,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
-  private val shouldPartition = numPartitions > 1
-  private val actualPartitioner = if (shouldPartition) partitioner.get else new ConstantPartitioner
+  private val actualPartitioner = if (numPartitions > 1) partitioner.get else new ConstantPartitioner
   private def getPartition(key: K): Int = actualPartitioner.getPartition(key)
 
   private val blockManager = SparkEnv.get.blockManager
