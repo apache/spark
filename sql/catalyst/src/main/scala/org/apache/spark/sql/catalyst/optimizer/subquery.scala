@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -158,6 +159,50 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
+    // This case takes care of predicate subqueries in join conditions that are not pushed down
+    // to the children nodes by [[PushDownPredicates]].
+    case j: Join if j.condition.exists(cond =>
+      SubqueryExpression.hasInOrCorrelatedExistsSubquery(cond)) &&
+      conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+      var (newLeft, newRight) = (j.left, j.right)
+      val (withSubquery, withoutSubquery) = splitConjunctivePredicates(j.condition.get)
+        .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
+      // Using `transformUp` (instead of `transformDown`) is important here because we throw an
+      // exception if `expr` references both join inputs.
+      // For example, (x1 = y1) OR x2 in (...) references both sides.
+      // `transformUp` will tranform the subquery first, while `transformDown` will try to transform
+      // the OR expression first and throw exception.
+      val newSubqueryPredicates = withSubquery.map(_.transformUp {
+        case expr =>
+          val referenceLeft = expr.references.intersect(j.left.outputSet).nonEmpty
+          val referenceRight = expr.references.intersect(j.right.outputSet).nonEmpty
+          if (referenceLeft && referenceRight &&
+            SubqueryExpression.hasInOrCorrelatedExistsSubquery(expr)) {
+            throw new IllegalStateException(
+              s"Unable to optimize predicate subquery in join condition references both " +
+                s"join children.")
+          } else if (referenceLeft) {
+            val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(expr), newLeft)
+            newLeft = newInputPlan
+            newCond.get
+          } else if (referenceRight) {
+            val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(expr), newRight)
+            newRight = newInputPlan
+            newCond.get
+          } else {
+            expr
+          }
+      })
+      val withoutSubqueryPredicate = withoutSubquery.reduceOption(And)
+      val withSubqueryPredicate = newSubqueryPredicates.reduceOption(And)
+      val newCondition = (withoutSubqueryPredicate, withSubqueryPredicate) match {
+        case (Some(a), Some(b)) => Some(And(a, b))
+        case (Some(a), None) => Some(a)
+        case (None, Some(b)) => Some(b)
+        case (None, None) => None
+      }
+      // Remove unwanted exists columns from new existence joins
+      Project(j.output, j.copy(left = newLeft, right = newRight, condition = newCondition))
 
     case u: UnaryNode if u.expressions.exists(
         SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
@@ -371,6 +416,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       } else {
         newPlan
       }
+    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+      rewriteSubQueries(j)
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q)
