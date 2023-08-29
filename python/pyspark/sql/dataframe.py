@@ -4877,7 +4877,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> quantiles
         [1.0, 3.0, 4.0]
 
-        Example 4: Calculating quantiles with different target precision
+        Example 4: Calculating quantiles with low precision
 
         >>> data = [(1,), (2,), (3,), (4,), (5,)]
         >>> df = spark.createDataFrame(data, ["values"])
