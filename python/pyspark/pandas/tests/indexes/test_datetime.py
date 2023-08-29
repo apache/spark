@@ -271,6 +271,12 @@ class DatetimeIndexTestsMixin:
 
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    def test_properties(self):
+        super(DatetimeIndexTests, self).test_properties()
+
+    def test_indexer_between_time(self):
+        super(DatetimeIndexTests, self).test_indexer_between_time()
+
     pass
 
 
