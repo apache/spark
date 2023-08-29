@@ -148,28 +148,17 @@ object SchemaConverters {
             existingRecordNames,
             avroOptions).copy(nullable = true)
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
-          case Seq(t1) =>
+          case Seq(t1)
             // If spark.sql.avro.alwaysConvertUnionToStructType is set to false (default),
             // we convert Avro union with a single primitive type into a primitive Spark type
             // instead of a StructType.
-            if (!SQLConf.get.avroAlwaysConvertUnionToStruct) {
-              toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, avroOptions)
-            } else {
-              val singleton = avroSchema.getTypes.get(0)
-              val schemaType = toSqlTypeHelper(singleton, existingRecordNames, avroOptions)
-              val fieldName = if (avroOptions.useStableIdForUnionType) {
-                s"member_${singleton.getName.toLowerCase(Locale.ROOT)}"
-              } else {
-                s"member0"
-              }
-              // All fields are nullable because only one of them is set at a time
-              val field = StructField(fieldName, schemaType.dataType, nullable = true)
-              val structType = StructType(Seq(field))
-              SchemaType(structType, nullable = false)
-            }
-          case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
+            if !SQLConf.get.avroAlwaysConvertUnionToStruct =>
+            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, avroOptions)
+          case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) &&
+            !SQLConf.get.avroAlwaysConvertUnionToStruct =>
             SchemaType(LongType, nullable = false)
-          case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
+          case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) &&
+            !SQLConf.get.avroAlwaysConvertUnionToStruct =>
             SchemaType(DoubleType, nullable = false)
           case _ =>
             // When avroOptions.useStableIdForUnionType is false, convert complex unions to struct
