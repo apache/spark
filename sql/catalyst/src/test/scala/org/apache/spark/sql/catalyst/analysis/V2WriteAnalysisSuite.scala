@@ -394,8 +394,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "_LEGACY_ERROR_TEMP_1186",
-      expectedMessageParameters = Map.empty
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -409,8 +409,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "_LEGACY_ERROR_TEMP_1186",
-      expectedMessageParameters = Map.empty
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
     )
   }
 
@@ -468,6 +468,21 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       StructField("y", FloatType, nullable = false))))
 
     val parsedPlan = byName(requiredTable, query)
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+    )
+  }
+
+  test("byName: missing optional columns cause failure and are identified by name") {
+    // missing optional field x
+    val query = TestRelation(StructType(Seq(
+      StructField("y", FloatType))))
+
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(

@@ -408,7 +408,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         expectedColumns,
         query,
         byName = hasColumnList || insert.byName,
-        conf)
+        conf,
+        supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||

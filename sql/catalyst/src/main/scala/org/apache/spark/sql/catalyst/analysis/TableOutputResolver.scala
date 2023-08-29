@@ -77,7 +77,9 @@ object TableOutputResolver {
       expected: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf,
+      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
+      supportColDefaultValue: Boolean = false): LogicalPlan = {
 
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
@@ -98,7 +100,7 @@ object TableOutputResolver {
         actualExpectedCols,
         conf,
         errors += _,
-        fillDefaultValue = true)
+        fillDefaultValue = supportColDefaultValue)
     } else {
       if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
