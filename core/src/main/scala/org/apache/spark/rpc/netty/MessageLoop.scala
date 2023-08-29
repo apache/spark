@@ -53,7 +53,7 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
     synchronized {
       if (!stopped) {
         setActive(MessageLoop.PoisonPill)
-        threadpool.shutdown()
+        threadpool.shutdownNow()
         stopped = true
       }
     }
