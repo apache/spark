@@ -346,6 +346,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     } catch {
       case _: FileNotFoundException =>
+        logWarning(s"Log file ${attempt.logPath} not found.")
         return None
     }
 
@@ -1265,6 +1266,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         hybridStore = store
       } catch {
+        case f: FileNotFoundException =>
+          store.close()
+          memoryManager.release(appId, attempt.info.attemptId)
+          throw f
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
@@ -1333,6 +1338,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
       } catch {
+        case f: FileNotFoundException =>
+          lease.rollback()
+          throw f
+
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
@@ -1360,6 +1369,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
         store = s
       } catch {
+        case f: FileNotFoundException =>
+          throw f
+
         case _: IOException if !retried =>
           // compaction may touch the file(s) which app rebuild wants to read
           // compaction wouldn't run in short interval, so try again...
