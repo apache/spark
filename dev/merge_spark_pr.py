@@ -611,9 +611,9 @@ def main():
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
     # Merged pull requests don't appear as merged in the GitHub API;
-    # Instead, they're closed by asfgit.
+    # Instead, they're closed by committers.
     merge_commits = [
-        e for e in pr_events if e["actor"]["login"] == "asfgit" and e["event"] == "closed"
+        e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None
     ]
 
     if merge_commits:
