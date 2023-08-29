@@ -4867,7 +4867,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame(data, ["col1", "col2"])
         >>> quantiles = df.approxQuantile(["col1", "col2"], [0.0, 0.5, 1.0], 0.05)
         >>> quantiles
-        [[1.0, 10.0], [3.0, 30.0], [5.0, 50.0]]
+        [[1.0, 3.0, 5.0], [10.0, 30.0, 50.0]]
 
         Example 3: Handling null values
 
@@ -4881,9 +4881,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> data = [(1,), (2,), (3,), (4,), (5,)]
         >>> df = spark.createDataFrame(data, ["values"])
-        >>> quantiles = df.approxQuantile("values", [0.0, 0.5, 1.0], 0.2)
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.2, 1.0], 0.1)
         >>> quantiles
-        [1.0, 3.0, 5.0]  # (with a larger error bound)
+        [1.0, 1.0, 5.0]
         """
 
         if not isinstance(col, (str, list, tuple)):
