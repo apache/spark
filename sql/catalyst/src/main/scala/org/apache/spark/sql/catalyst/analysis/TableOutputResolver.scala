@@ -93,7 +93,8 @@ object TableOutputResolver {
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
       // If a top-level column does not have a corresponding value in the input query, fill with
-      // the column's default value.
+      // the column's default value. We need to pass `fillDefaultValue` as true here, if the
+      // `supportColDefaultValue` parameter is also true.
       reorderColumnsByName(
         tableName,
         query.output,
