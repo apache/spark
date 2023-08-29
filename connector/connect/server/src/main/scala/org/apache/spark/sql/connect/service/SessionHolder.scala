@@ -245,8 +245,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Stop all streaming listener threads, and removes all python process if applicable.
-   * Only called when session is expired.
+   * Stop all streaming listener threads, and removes all python process if applicable. Only
+   * called when session is expired.
    */
   private def removeAllListeners(): Unit = {
     listenerCache.forEach((id, listener) => {
