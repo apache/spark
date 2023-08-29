@@ -74,6 +74,8 @@ from pyspark.sql.connect.functions import (
     _invoke_function,
     col,
     lit,
+    udf,
+    struct,
     expr as sql_expression,
 )
 from pyspark.sql.pandas.types import from_arrow_schema
@@ -1584,7 +1586,6 @@ class DataFrame:
         elif name in [
             "rdd",
             "toJSON",
-            "foreach",
             "foreachPartition",
             "checkpoint",
             "localCheckpoint",
@@ -2004,6 +2005,18 @@ class DataFrame:
         return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier)
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
+
+    def foreach(self, f: Callable[[Row], None]) -> None:
+        assert self._plan is not None
+
+        def foreach_func(row: Any) -> None:
+            f(row)
+
+        self.select(struct(*self.schema.fieldNames()).alias("row")).select(
+            udf(foreach_func, StructType())("row")  # type: ignore[arg-type]
+        ).collect()
+
+    foreach.__doc__ = PySparkDataFrame.foreach.__doc__
 
     @property
     def writeStream(self) -> DataStreamWriter:
