@@ -1691,4 +1691,42 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(sql(query), expected)
     }
   }
+
+  test("SPARK-44251: Full outer USING join with null key value") {
+    withTempView("v1", "v2") {
+      sql("create or replace temp view v1 as values (1, 2), (null, 7) as (c1, c2)")
+      sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
+
+      val query =
+        """select explode(array(c1)) as x
+          |from v1
+          |full outer join v2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(null), Row(1), Row(2))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-44132: FULL OUTER JOIN by streamed column name fails with NPE") {
+    val dsA = Seq((1, "a")).toDF("id", "c1")
+    val dsB = Seq((2, "b")).toDF("id", "c2")
+    val dsC = Seq((3, "c")).toDF("id", "c3")
+    val joined = dsA.join(dsB, Stream("id"), "full_outer").join(dsC, Stream("id"), "full_outer")
+
+    val expected = Seq(Row(1, "a", null, null), Row(2, null, "b", null), Row(3, null, null, "c"))
+
+    checkAnswer(joined, expected)
+  }
+
+  test("SPARK-44132: FULL OUTER JOIN by streamed column name fails with invalid access") {
+    val ds = Seq((1, "a")).toDF("id", "c1")
+    val joined = ds.join(ds, Stream("id"), "full_outer").join(ds, Stream("id"), "full_outer")
+
+    val expected = Seq(Row(1, "a", "a", "a"))
+
+    checkAnswer(joined, expected)
+  }
 }

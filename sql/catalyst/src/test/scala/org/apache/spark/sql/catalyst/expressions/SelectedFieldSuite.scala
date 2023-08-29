@@ -58,7 +58,7 @@ class SelectedFieldSuite extends AnalysisTest {
           MapType(StringType, IntegerType, valueContainsNull = false)) :: Nil)) :: Nil)
 
   test("SelectedField should not match an attribute reference") {
-    val testRelation = LocalRelation(nestedComplex.toAttributes)
+    val testRelation = LocalRelation(nestedComplex)
     assertResult(None)(unapplySelect("col1", testRelation))
     assertResult(None)(unapplySelect("col1 as foo", testRelation))
     assertResult(None)(unapplySelect("col2", testRelation))
@@ -553,7 +553,7 @@ class SelectedFieldSuite extends AnalysisTest {
   }
 
   private def assertSelect(expr: String, expected: StructField, inputSchema: StructType): Unit = {
-    val relation = LocalRelation(inputSchema.toAttributes)
+    val relation = LocalRelation(inputSchema)
     unapplySelect(expr, relation) match {
       case Some(field) =>
         assertResult(expected)(field)(expr)

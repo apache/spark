@@ -619,3 +619,23 @@ SELECT t0a, (SELECT sum(d) FROM
   FROM   t2)
 )
 FROM t0;
+
+-- Correlated references in join predicates
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a and t1a = t2a))
+)
+FROM t0;
+
+
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 left join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a + 1 and t1a = t2a))
+)
+FROM t0;

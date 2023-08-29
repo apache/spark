@@ -17,7 +17,7 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.io.Source
@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import sbt._
-import sbt.Classpaths.publishTask
+import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.2"
+  val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.56.0"
 }
@@ -286,9 +286,7 @@ object SparkBuild extends PomBuild {
           // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
           // from the corresponding files when Scala 2.12 is no longer supported.
           "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
-          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-          "-Wconf:msg=Implicit definition should have explicit type:s"
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }
@@ -326,8 +324,10 @@ object SparkBuild extends PomBuild {
         .withLogging(ivyLoggingLevel.value),
     (MavenCompile / publishMavenStyle) := true,
     (SbtCompile / publishMavenStyle) := false,
-    (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
-    (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
+    (MavenCompile / publishLocal) := publishOrSkip((MavenCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
+    (SbtCompile / publishLocal) := publishOrSkip((SbtCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
@@ -425,6 +425,8 @@ object SparkBuild extends PomBuild {
   }
 
   /* Generate and pick the spark build info from extra-resources */
+  enable(CommonUtils.settings)(commonUtils)
+
   enable(Core.settings)(core)
 
   /* Unsafe settings */
@@ -448,8 +450,8 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Catalyst ANTLR generation settings */
-  enable(Catalyst.settings)(catalyst)
+  /* Sql-api ANTLR generation settings */
+  enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -626,11 +628,29 @@ object SparkParallelTestGrouping {
   )
 }
 
-object Core {
+object CommonUtils {
   import scala.sys.process.Process
-  import BuildCommons.protoVersion
   def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
   def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
+  lazy val settings = Seq(
+    (Compile / resourceGenerators) += Def.task {
+      val buildScript = baseDirectory.value + "/../../build/spark-build-info"
+      val targetDir = baseDirectory.value + "/target/extra-resources/"
+      // support Windows build under cygwin/mingw64, etc
+      val bash = buildenv match {
+        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
+        case _ => "bash"
+      }
+      val command = Seq(bash, buildScript, targetDir, version.value)
+      Process(command).!!
+      val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
+      Seq(propsFile)
+    }.taskValue
+  )
+}
+
+object Core {
+  import BuildCommons.protoVersion
   lazy val settings = Seq(
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
@@ -644,20 +664,7 @@ object Core {
     },
     (Compile / PB.targets) := Seq(
       PB.gens.java -> (Compile / sourceManaged).value
-    ),
-    (Compile / resourceGenerators) += Def.task {
-      val buildScript = baseDirectory.value + "/../build/spark-build-info"
-      val targetDir = baseDirectory.value + "/target/extra-resources/"
-      // support Windows build under cygwin/mingw64, etc
-      val bash = buildenv match {
-        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
-        case _ => "bash"
-      }
-      val command = Seq(bash, buildScript, targetDir, version.value)
-      Process(command).!!
-      val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
-      Seq(propsFile)
-    }.taskValue
+    )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {
@@ -758,7 +765,13 @@ object SparkConnectCommon {
 object SparkConnect {
   import BuildCommons.protoVersion
 
+  val rewriteJavaFile = TaskKey[Unit]("rewriteJavaFile",
+    "Rewrite the generated Java PB files.")
+  val genPBAndRewriteJavaFile = TaskKey[Unit]("genPBAndRewriteJavaFile",
+    "Generate Java PB files and overwrite their contents.")
+
   lazy val settings = Seq(
+    PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
@@ -769,7 +782,6 @@ object SparkConnect {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -789,6 +801,42 @@ object SparkConnect {
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
+
+    // SPARK-43646: The following 3 statements are used to make the connect module use the
+    // Spark-proto assembly jar when compiling and testing using SBT, which can be keep same
+    // behavior of Maven testing.
+    (Test / unmanagedJars) += (LocalProject("protobuf") / assembly).value,
+    (Test / fullClasspath) :=
+      (Test / fullClasspath).value.filterNot { f => f.toString.contains("spark-protobuf") },
+    (Test / fullClasspath) += (LocalProject("protobuf") / assembly).value,
+
+    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
+
+    (Test / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-test-sources",
+    ),
+
+    // SPARK-43646: Create a custom task to replace all `com.google.protobuf.` with
+    // `org.sparkproject.spark_protobuf.protobuf.` in the generated Java PB files.
+    // This is to generate Java files that can be used to test spark-protobuf functions
+    // in `ProtoToParsedPlanTestSuite`.
+    rewriteJavaFile := {
+      val protobufDir = target.value / "generated-test-sources"/"org"/"apache"/"spark"/"sql"/"protobuf"/"protos"
+      protobufDir.listFiles().foreach { f =>
+        if (f.getName.endsWith(".java")) {
+          val contents = Files.readAllLines(f.toPath, UTF_8)
+          val replaced = contents.asScala.map { line =>
+            line.replaceAll("com.google.protobuf.", "org.sparkproject.spark_protobuf.protobuf.")
+          }
+          Files.write(f.toPath, replaced.asJava, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
+        }
+      }
+    },
+    // SPARK-43646: `genPBAndRewriteJavaFile` is used to specify the execution order of `PB.generate`
+    // and `rewriteJavaFile`, and makes `Test / compile` dependent on `genPBAndRewriteJavaFile`
+    // being executed first.
+    genPBAndRewriteJavaFile := Def.sequential(Test / PB.generate, rewriteJavaFile).value,
+    (Test / compile) := (Test / compile).dependsOn(genPBAndRewriteJavaFile).value,
 
     (assembly / test) := { },
 
@@ -836,12 +884,14 @@ object SparkConnect {
       case _ => MergeStrategy.first
     }
   ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
       )
-    )
+    } else {
+      Seq.empty
+    }
   }
 }
 
@@ -861,7 +911,6 @@ object SparkConnectClient {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
-
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
@@ -919,14 +968,7 @@ object SparkConnectClient {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkProtobuf {
@@ -1164,7 +1206,7 @@ object OldDeps {
   )
 }
 
-object Catalyst {
+object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 
@@ -1603,6 +1645,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
+    (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",

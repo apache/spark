@@ -57,7 +57,7 @@ case class UrlEncode(child: Expression)
       StringType,
       "encode",
       Seq(child, Literal("UTF-8")),
-      Seq(StringType))
+      Seq(StringType, StringType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
@@ -94,7 +94,7 @@ case class UrlDecode(child: Expression)
       StringType,
       "decode",
       Seq(child, Literal("UTF-8")),
-      Seq(StringType))
+      Seq(StringType, StringType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)

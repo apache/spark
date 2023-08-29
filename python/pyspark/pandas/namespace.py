@@ -222,7 +222,6 @@ def read_csv(
     names: Optional[Union[str, List[str]]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     usecols: Optional[Union[List[int], List[str], Callable[[str], bool]]] = None,
-    squeeze: bool = False,
     mangle_dupe_cols: bool = True,
     dtype: Optional[Union[str, Dtype, Dict[str, Union[str, Dtype]]]] = None,
     nrows: Optional[int] = None,
@@ -262,11 +261,6 @@ def read_csv(
         from the document header row(s).
         If callable, the callable function will be evaluated against the column names,
         returning names where the callable function evaluates to `True`.
-    squeeze : bool, default False
-        If the parsed data only contains one column then return a Series.
-
-        .. deprecated:: 3.4.0
-
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X0', 'X1', ... 'XN', rather
         than 'X' ... 'X'. Passing in False will cause data to be overwritten if
@@ -466,10 +460,7 @@ def read_csv(
             for col in psdf.columns:
                 psdf[col] = psdf[col].astype(dtype)
 
-    if squeeze and len(psdf.columns) == 1:
-        return first_series(psdf)
-    else:
-        return psdf
+    return psdf
 
 
 def read_json(
@@ -912,7 +903,6 @@ def read_excel(
     names: Optional[List] = None,
     index_col: Optional[List[int]] = None,
     usecols: Optional[Union[int, str, List[Union[int, str]], Callable[[str], bool]]] = None,
-    squeeze: bool = False,
     dtype: Optional[Dict[str, Union[str, Dtype]]] = None,
     engine: Optional[str] = None,
     converters: Optional[Dict] = None,
@@ -985,11 +975,6 @@ def read_excel(
         * If list of string, then indicates list of column names to be parsed.
         * If callable, then evaluate each column name against it and parse the
           column if the callable returns ``True``.
-    squeeze : bool, default False
-        If the parsed data only contains one column then return a Series.
-
-        .. deprecated:: 3.4.0
-
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32}
         Use `object` to preserve data as stored in Excel and not interpret dtype.
@@ -1142,7 +1127,7 @@ def read_excel(
     """
 
     def pd_read_excel(
-        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None], sq: bool
+        io_or_bin: Any, sn: Union[str, int, List[Union[str, int]], None]
     ) -> pd.DataFrame:
         return pd.read_excel(
             io=BytesIO(io_or_bin) if isinstance(io_or_bin, (bytes, bytearray)) else io_or_bin,
@@ -1151,7 +1136,6 @@ def read_excel(
             names=names,
             index_col=index_col,
             usecols=usecols,
-            squeeze=sq,
             dtype=dtype,
             engine=engine,
             converters=converters,
@@ -1181,7 +1165,7 @@ def read_excel(
         io_or_bin = io
         single_file = True
 
-    pdf_or_psers = pd_read_excel(io_or_bin, sn=sheet_name, sq=squeeze)
+    pdf_or_psers = pd_read_excel(io_or_bin, sn=sheet_name)
 
     if single_file:
         if isinstance(pdf_or_psers, dict):
@@ -1208,9 +1192,7 @@ def read_excel(
             )
 
             def output_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                pdf = pd.concat(
-                    [pd_read_excel(bin, sn=sn, sq=False) for bin in pdf[pdf.columns[0]]]
-                )
+                pdf = pd.concat([pd_read_excel(bin, sn=sn) for bin in pdf[pdf.columns[0]]])
 
                 reset_index = pdf.reset_index()
                 for name, col in reset_index.items():
@@ -1231,11 +1213,7 @@ def read_excel(
                 .mapInPandas(lambda iterator: map(output_func, iterator), schema=return_schema)
             )
 
-            psdf = DataFrame(psdf._internal.with_new_sdf(sdf))
-            if squeeze and len(psdf.columns) == 1:
-                return first_series(psdf)
-            else:
-                return psdf
+            return DataFrame(psdf._internal.with_new_sdf(sdf))
 
         if isinstance(pdf_or_psers, dict):
             return {
@@ -1751,8 +1729,6 @@ def to_datetime(
     )
 
 
-# TODO(SPARK-42621): Add `inclusive` parameter and replace `closed`.
-# See https://github.com/pandas-dev/pandas/issues/40245
 def date_range(
     start: Union[str, Any] = None,
     end: Union[str, Any] = None,
@@ -1761,7 +1737,7 @@ def date_range(
     tz: Optional[Union[str, tzinfo]] = None,
     normalize: bool = False,
     name: Optional[str] = None,
-    closed: Optional[str] = None,
+    inclusive: str = "both",
     **kwargs: Any,
 ) -> DatetimeIndex:
     """
@@ -1785,11 +1761,10 @@ def date_range(
         Normalize start/end dates to midnight before generating date range.
     name : str, default None
         Name of the resulting DatetimeIndex.
-    closed : {None, 'left', 'right'}, optional
-        Make the interval closed with respect to the given frequency to
-        the 'left', 'right', or both sides (None, the default).
+    inclusive : {"both", "neither", "left", "right"}, default "both"
+        Include boundaries; Whether to set each bound as closed or open.
 
-        .. deprecated:: 3.4.0
+        .. versionadded:: 4.0.0
 
     **kwargs
         For compatibility. Has no effect on the result.
@@ -1875,36 +1850,31 @@ def date_range(
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
 
-    `closed` controls whether to include `start` and `end` that are on the
+    `inclusive` controls whether to include `start` and `end` that are on the
     boundary. The default includes boundary points on either end.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed=None
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive="both"
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
                    dtype='datetime64[ns]', freq=None)
 
-    Use ``closed='left'`` to exclude `end` if it falls on the boundary.
+    Use ``inclusive='left'`` to exclude `end` if it falls on the boundary.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='left'
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive='left'
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
 
-    Use ``closed='right'`` to exclude `start` if it falls on the boundary.
+    Use ``inclusive='right'`` to exclude `start` if it falls on the boundary.
 
     >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='right'
-    ... )  # doctest: +SKIP
+    ...     start='2017-01-01', end='2017-01-04', inclusive='right'
+    ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
-    if closed is not None:
-        warnings.warn(
-            "Argument `closed` is deprecated in 3.4.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
 
     return cast(
         DatetimeIndex,
@@ -1917,7 +1887,7 @@ def date_range(
                 tz=tz,
                 normalize=normalize,
                 name=name,
-                closed=closed,
+                inclusive=inclusive,
                 **kwargs,
             )
         ),
@@ -2365,7 +2335,6 @@ def concat(
 
     See Also
     --------
-    Series.append : Concatenate Series.
     DataFrame.join : Join DataFrames using indexes.
     DataFrame.merge : Merge DataFrames by indexes or columns.
 
@@ -3278,7 +3247,7 @@ def merge_asof(
     ...     quotes,
     ...     on="time",
     ...     by="ticker",
-    ...     tolerance=F.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
+    ...     tolerance=sf.expr("INTERVAL 2 MILLISECONDS")  # pd.Timedelta("2ms")
     ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
                          time ticker   price  quantity     bid     ask
     0 2016-05-25 13:30:00.023   MSFT   51.95        75   51.95   51.96
@@ -3296,7 +3265,7 @@ def merge_asof(
     ...     quotes,
     ...     on="time",
     ...     by="ticker",
-    ...     tolerance=F.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
+    ...     tolerance=sf.expr("INTERVAL 10 MILLISECONDS"),  # pd.Timedelta("10ms")
     ...     allow_exact_matches=False
     ... ).sort_values(["time", "ticker", "price"]).reset_index(drop=True)
                          time ticker   price  quantity     bid     ask
@@ -3776,6 +3745,7 @@ def _test() -> None:
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
+    globs["sf"] = F
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.namespace tests")

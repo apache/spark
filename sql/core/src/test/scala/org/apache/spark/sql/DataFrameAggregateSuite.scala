@@ -2074,6 +2074,34 @@ class DataFrameAggregateSuite extends QueryTest
       assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
     }
   }
+
+  test("hll_sketch_agg") {
+    val df = Seq(1, 1, 2, 2, 3).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_estimate(hll_sketch_agg(col, 12))"),
+      Seq(Row(3))
+    )
+    checkAnswer(
+      df.select(hll_sketch_estimate(hll_sketch_agg(col("col"), lit(12)))),
+      Seq(Row(3))
+    )
+  }
+
+  test("hll_union_agg") {
+    val df = Seq(1).toDF("col")
+    checkAnswer(
+      df.selectExpr("hll_sketch_agg(col) as sketch").unionAll(
+        df.selectExpr("hll_sketch_agg(col, 20) as sketch")).
+        selectExpr("hll_sketch_estimate(hll_union_agg(sketch, true))"),
+      Seq(Row(1))
+    )
+    checkAnswer(
+      df.select(hll_sketch_agg(col("col")).as("sketch")).unionAll(
+        df.select(hll_sketch_agg(col("col"), lit(20)).as("sketch"))).
+        select(hll_sketch_estimate(hll_union_agg(col("sketch"), lit(true)))),
+      Seq(Row(1))
+    )
+  }
 }
 
 case class B(c: Option[Double])

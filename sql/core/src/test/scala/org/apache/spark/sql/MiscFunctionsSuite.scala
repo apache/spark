@@ -48,15 +48,16 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("version()"), df.select(version()))
   }
 
-  test("SPARK-21957: get current_user in normal spark apps") {
+  test("SPARK-21957, SPARK-44860: get current_user, session_user in normal spark apps") {
     val user = spark.sparkContext.sparkUser
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val df = sql("select current_user(), current_user, user, user()")
-      checkAnswer(df, Row(user, user, user, user))
+      val df =
+        sql("select current_user(), current_user, user, user(), session_user(), session_user")
+      checkAnswer(df, Row(user, user, user, user, user, user))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
-      Seq("user", "current_user").foreach { func =>
+      Seq("user", "current_user", "session_user").foreach { func =>
         checkAnswer(sql(s"select $func"), Row(user))
         checkError(
           exception = intercept[ParseException](sql(s"select $func()")),
@@ -163,6 +164,36 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
      checkAnswer(
       df2.selectExpr("aes_decrypt(unhex(input), key)"),
       df2.select(aes_decrypt(unhex(col("input")), col("key"))))
+  }
+
+  test("try_aes_decrypt") {
+    val df = Seq(("AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+      "abcdefghijklmnop12345678ABCDEFGH", "GCM", "DEFAULT", "This is an AAD mixed into the input"
+    )).toDF("input", "key", "mode", "padding", "aad")
+
+    checkAnswer(
+      df.selectExpr("try_aes_decrypt(unbase64(input), key, mode, padding, aad)"),
+      df.select(try_aes_decrypt(unbase64(col("input")), col("key"),
+        col("mode"), col("padding"), col("aad"))))
+
+    val df1 = Seq(("AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=",
+      "abcdefghijklmnop12345678ABCDEFGH", "CBC", "DEFAULT"
+    )).toDF("input", "key", "mode", "padding")
+
+    checkAnswer(
+      df1.selectExpr("try_aes_decrypt(unbase64(input), key, mode, padding)"),
+      df1.select(try_aes_decrypt(unbase64(col("input")), col("key"),
+        col("mode"), col("padding"))))
+
+     checkAnswer(
+      df1.selectExpr("try_aes_decrypt(unbase64(input), key, mode)"),
+      df1.select(try_aes_decrypt(unbase64(col("input")), col("key"), col("mode"))))
+
+    val df2 = Seq(("83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94",
+      "0000111122223333")).toDF("input", "key")
+     checkAnswer(
+      df2.selectExpr("try_aes_decrypt(unhex(input), key)"),
+      df2.select(try_aes_decrypt(unhex(col("input")), col("key"))))
   }
 
   test("sha") {

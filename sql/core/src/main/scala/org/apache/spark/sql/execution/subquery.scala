@@ -81,7 +81,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      throw QueryExecutionErrors.multipleRowSubqueryError(getContextOrNull())
+      throw QueryExecutionErrors.multipleRowScalarSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,
@@ -100,8 +100,12 @@ case class ScalarSubquery(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    toLiteral.doGenCode(ctx, ev)
+  }
+
+  def toLiteral: Literal = {
     require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    Literal.create(result, dataType)
   }
 }
 
@@ -113,7 +117,7 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    shouldBroadcast: Boolean = false,
+    isDynamicPruning: Boolean = true,
     private var resultBroadcast: Broadcast[Array[Any]] = null,
     @transient private var result: Array[Any] = null)
   extends ExecSubqueryExpression with UnaryLike[Expression] with Predicate {
@@ -132,7 +136,7 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    if (shouldBroadcast) {
+    if (!isDynamicPruning) {
       resultBroadcast = plan.session.sparkContext.broadcast(result)
     }
   }
@@ -194,7 +198,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         }
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
-          exprId, shouldBroadcast = true)
+          exprId, isDynamicPruning = false)
     }
   }
 }

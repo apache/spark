@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 import numpy as np
-
 import pandas as pd
 from typing import Any, Union, List, Tuple
 
+from pyspark import keyword_only
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol
 from pyspark.ml.connect.base import Evaluator
@@ -35,6 +35,14 @@ class _TorchMetricEvaluator(Evaluator):
         "metric name for the regression evaluator, valid values are 'mse' and 'r2'",
         typeConverter=TypeConverters.toString,
     )
+
+    def getMetricName(self) -> str:
+        """
+        Gets the value of metricName or its default value.
+
+        .. versionadded:: 3.5.0
+        """
+        return self.getOrDefault(self.metricName)
 
     def _get_torch_metric(self) -> Any:
         raise NotImplementedError()
@@ -68,15 +76,48 @@ class _TorchMetricEvaluator(Evaluator):
         )
 
 
+def _get_rmse_torchmetric() -> Any:
+    import torch
+    import torcheval.metrics as torchmetrics
+
+    class _RootMeanSquaredError(torchmetrics.MeanSquaredError):
+        def compute(self: Any) -> torch.Tensor:
+            return torch.sqrt(super().compute())
+
+    return _RootMeanSquaredError()
+
+
 class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
     """
     Evaluator for Regression, which expects input columns prediction and label.
-    Supported metrics are 'mse' and 'r2'.
+    Supported metrics are 'rmse', 'mse' and 'r2'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import RegressionEvaluator
+    >>> eva = RegressionEvaluator(metricName='mse')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1.0, 2.0), (-1.0, -1.5)], schema=['label', 'prediction']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.625
+    >>> eva.isLargerBetter()
+    False
     """
 
-    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        metricName: str = "rmse",
+        labelCol: str = "label",
+        predictionCol: str = "prediction",
+    ) -> None:
+        """
+        __init__(self, *, metricName='rmse', labelCol='label', predictionCol='prediction') -> None:
+        """
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
 
@@ -89,6 +130,8 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
             return torchmetrics.MeanSquaredError()
         if metric_name == "r2":
             return torchmetrics.R2Score()
+        if metric_name == "rmse":
+            return _get_rmse_torchmetric()
 
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
@@ -102,6 +145,12 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
         return preds_tensor, labels_tensor
 
+    def isLargerBetter(self) -> bool:
+        if self.getOrDefault(self.metricName) == "r2":
+            return True
+
+        return False
+
 
 class BinaryClassificationEvaluator(
     _TorchMetricEvaluator, HasLabelCol, HasProbabilityCol, ParamsReadWrite
@@ -111,9 +160,38 @@ class BinaryClassificationEvaluator(
     Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator
+    >>> eva = BinaryClassificationEvaluator(metricName='areaUnderPR')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1, 0.6), (0, 0.55), (0, 0.1), (1, 0.6), (1, 0.4)],
+    ...     schema=['label', 'probability']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.9166666865348816
+    >>> eva.isLargerBetter()
+    True
     """
 
-    def __init__(self, metricName: str, labelCol: str, probabilityCol: str) -> None:
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        metricName: str = "areaUnderROC",
+        labelCol: str = "label",
+        probabilityCol: str = "probability",
+    ) -> None:
+        """
+        __init__(
+            self,
+            *,
+            metricName='rmse',
+            labelCol='label',
+            probabilityCol='probability'
+        ) -> None:
+        """
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, probabilityCol=probabilityCol)
 
@@ -142,6 +220,9 @@ class BinaryClassificationEvaluator(
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
         return preds_tensor, labels_tensor
 
+    def isLargerBetter(self) -> bool:
+        return True
+
 
 class MulticlassClassificationEvaluator(
     _TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite
@@ -151,9 +232,36 @@ class MulticlassClassificationEvaluator(
     Supported metrics are 'accuracy'.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.evaluation import MulticlassClassificationEvaluator
+    >>> eva = MulticlassClassificationEvaluator(metricName='accuracy')
+    >>> dataset = spark.createDataFrame(
+    ...     [(1, 1), (0, 0), (2, 2), (1, 0), (2, 1)],
+    ...     schema=['label', 'prediction']
+    ... )
+    >>> eva.evaluate(dataset)
+    0.6000000238418579
+    >>> eva.isLargerBetter()
+    True
     """
 
-    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
+    def __init__(
+        self,
+        metricName: str = "accuracy",
+        labelCol: str = "label",
+        predictionCol: str = "prediction",
+    ) -> None:
+        """
+        __init__(
+            self,
+            *,
+            metricName='accuracy',
+            labelCol='label',
+            predictionCol='prediction'
+        ) -> None:
+        """
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
 
@@ -178,3 +286,6 @@ class MulticlassClassificationEvaluator(
         preds_tensor = torch.tensor(dataset[self.getPredictionCol()].values)
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
         return preds_tensor, labels_tensor
+
+    def isLargerBetter(self) -> bool:
+        return True

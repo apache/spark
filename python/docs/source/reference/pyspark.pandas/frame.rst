@@ -79,7 +79,6 @@ Indexing, iteration
    DataFrame.iloc
    DataFrame.insert
    DataFrame.items
-   DataFrame.iteritems
    DataFrame.iterrows
    DataFrame.itertuples
    DataFrame.keys
@@ -155,7 +154,6 @@ Computations / Descriptive Stats
    DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
-   DataFrame.mad
    DataFrame.max
    DataFrame.mean
    DataFrame.min
@@ -252,7 +250,6 @@ Combining / joining / merging
 .. autosummary::
    :toctree: api/
 
-   DataFrame.append
    DataFrame.assign
    DataFrame.merge
    DataFrame.join

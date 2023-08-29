@@ -182,10 +182,14 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
+          Seq(true, false).foreach { enable =>
+            withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enable.toString) {
+              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+                makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
+          }
         }
       }
     }

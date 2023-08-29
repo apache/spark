@@ -395,7 +395,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("SPARK_JENKINS"):
+    if not os.environ.get("SPARK_JENKINS") and os.environ.get("SKIP_PACKAGING", "false") != "true":
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)

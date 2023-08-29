@@ -99,6 +99,7 @@ class Relation(google.protobuf.message.Message):
     HTML_STRING_FIELD_NUMBER: builtins.int
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
+    COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -188,6 +189,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def cached_remote_relation(self) -> global___CachedRemoteRelation: ...
     @property
+    def common_inline_user_defined_table_function(
+        self,
+    ) -> global___CommonInlineUserDefinedTableFunction: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -261,6 +266,8 @@ class Relation(google.protobuf.message.Message):
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
         cached_remote_relation: global___CachedRemoteRelation | None = ...,
+        common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
+        | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -297,6 +304,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_table_function",
+            b"common_inline_user_defined_table_function",
             "corr",
             b"corr",
             "cov",
@@ -406,6 +415,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_table_function",
+            b"common_inline_user_defined_table_function",
             "corr",
             b"corr",
             "cov",
@@ -533,6 +544,7 @@ class Relation(google.protobuf.message.Message):
         "html_string",
         "cached_local_relation",
         "cached_remote_relation",
+        "common_inline_user_defined_table_function",
         "fill_na",
         "drop_na",
         "replace",
@@ -967,25 +979,22 @@ class Join(google.protobuf.message.Message):
     class JoinDataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        IS_LEFT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
-        IS_RIGHT_FLATTENABLE_TO_ROW_FIELD_NUMBER: builtins.int
-        is_left_flattenable_to_row: builtins.bool
-        """If the left data type is a struct that can be flatten to a row."""
-        is_right_flattenable_to_row: builtins.bool
-        """If the right data type is a struct that can be flatten to a row."""
+        IS_LEFT_STRUCT_FIELD_NUMBER: builtins.int
+        IS_RIGHT_STRUCT_FIELD_NUMBER: builtins.int
+        is_left_struct: builtins.bool
+        """If the left data type is a struct."""
+        is_right_struct: builtins.bool
+        """If the right data type is a struct."""
         def __init__(
             self,
             *,
-            is_left_flattenable_to_row: builtins.bool = ...,
-            is_right_flattenable_to_row: builtins.bool = ...,
+            is_left_struct: builtins.bool = ...,
+            is_right_struct: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "is_left_flattenable_to_row",
-                b"is_left_flattenable_to_row",
-                "is_right_flattenable_to_row",
-                b"is_right_flattenable_to_row",
+                "is_left_struct", b"is_left_struct", "is_right_struct", b"is_right_struct"
             ],
         ) -> None: ...
 
@@ -3380,6 +3389,113 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ApplyInPandasWithState = ApplyInPandasWithState
+
+class CommonInlineUserDefinedTableFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    DETERMINISTIC_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    PYTHON_UDTF_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
+    """(Required) Name of the user-defined table function."""
+    deterministic: builtins.bool
+    """(Optional) Whether the user-defined table function is deterministic."""
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Function input arguments. Empty arguments are allowed."""
+    @property
+    def python_udtf(self) -> global___PythonUDTF: ...
+    def __init__(
+        self,
+        *,
+        function_name: builtins.str = ...,
+        deterministic: builtins.bool = ...,
+        arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+        python_udtf: global___PythonUDTF | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "python_udtf", b"python_udtf"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments",
+            b"arguments",
+            "deterministic",
+            b"deterministic",
+            "function",
+            b"function",
+            "function_name",
+            b"function_name",
+            "python_udtf",
+            b"python_udtf",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["python_udtf"] | None: ...
+
+global___CommonInlineUserDefinedTableFunction = CommonInlineUserDefinedTableFunction
+
+class PythonUDTF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RETURN_TYPE_FIELD_NUMBER: builtins.int
+    EVAL_TYPE_FIELD_NUMBER: builtins.int
+    COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
+    @property
+    def return_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Return type of the Python UDTF."""
+    eval_type: builtins.int
+    """(Required) EvalType of the Python UDTF."""
+    command: builtins.bytes
+    """(Required) The encoded commands of the Python UDTF."""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
+    def __init__(
+        self,
+        *,
+        return_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        eval_type: builtins.int = ...,
+        command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_return_type", b"_return_type", "return_type", b"return_type"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_return_type",
+            b"_return_type",
+            "command",
+            b"command",
+            "eval_type",
+            b"eval_type",
+            "python_ver",
+            b"python_ver",
+            "return_type",
+            b"return_type",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_return_type", b"_return_type"]
+    ) -> typing_extensions.Literal["return_type"] | None: ...
+
+global___PythonUDTF = PythonUDTF
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""

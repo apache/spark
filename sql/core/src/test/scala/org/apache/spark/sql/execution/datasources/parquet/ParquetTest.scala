@@ -35,6 +35,7 @@ import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -164,6 +165,8 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   protected def getResourceParquetFilePath(name: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
+
+  protected def schemaFor[T: TypeTag]: StructType = ScalaReflection.encoderFor[T].schema
 
   def withAllParquetReaders(code: => Unit): Unit = {
     // test the row-based reader

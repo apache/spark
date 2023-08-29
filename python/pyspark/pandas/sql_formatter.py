@@ -25,7 +25,6 @@ import pandas as pd
 
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
-from pyspark.sql.functions import lit
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
@@ -265,7 +264,10 @@ class PandasSQLStringFormatter(string.Formatter):
             val._to_spark().createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            return lit(val)._jc.expr().sql()  # for escaped characters.
+            # This is matched to behavior from JVM implementation.
+            # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
+            # sql/catalyst/expressions/literals.scala`
+            return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
         else:
             return val
 

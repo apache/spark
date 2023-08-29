@@ -17,9 +17,10 @@
 
 package org.apache.spark.shuffle
 
-import java.io.{Closeable, IOException, OutputStream}
+import java.io.{Closeable, OutputStream}
 import java.util.zip.Checksum
 
+import org.apache.spark.SparkException
 import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
@@ -53,7 +54,7 @@ private[spark] class ShufflePartitionPairsWriter(
 
   override def write(key: Any, value: Any): Unit = {
     if (isClosed) {
-      throw new IOException("Partition pairs writer is already closed.")
+      throw SparkException.internalError("Partition pairs writer is already closed.", "SHUFFLE")
     }
     if (objOut == null) {
       open()

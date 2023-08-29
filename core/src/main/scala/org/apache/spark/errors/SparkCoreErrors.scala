@@ -17,7 +17,7 @@
 
 package org.apache.spark.errors
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
@@ -465,6 +465,15 @@ private[spark] object SparkCoreErrors {
       Map(
         "requestedBytes" -> requestedBytes.toString,
         "receivedBytes" -> receivedBytes.toString).asJava)
+  }
+
+  def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {
+    new SparkException(
+      errorClass = "FAILED_RENAME_TEMP_FILE",
+      messageParameters = Map(
+        "srcPath" -> srcFile.toString,
+        "dstPath" -> dstFile.toString),
+      cause = null)
   }
 
   def addLocalDirectoryError(path: Path): Throwable = {

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.collection.OpenHashMap
@@ -164,11 +165,8 @@ abstract class PercentileBase
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = accumulatedCounts.last._2 - 1
 
-    percentages.map { percentile =>
-      getPercentile(accumulatedCounts, maxPosition * percentile)
-    }
+    percentages.map(getPercentile(accumulatedCounts, _))
   }
 
   private def generateOutput(percentiles: Seq[Double]): Any = {
@@ -191,8 +189,11 @@ abstract class PercentileBase
    * This function has been based upon similar function from HIVE
    * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  private def getPercentile(
-      accumulatedCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+  protected def getPercentile(
+      accumulatedCounts: Seq[(AnyRef, Long)],
+      percentile: Double): Double = {
+    val position = (accumulatedCounts.last._2 - 1) * percentile
+
     // We may need to do linear interpolation to get the exact percentile
     val lower = position.floor.toLong
     val higher = position.ceil.toLong
@@ -215,6 +216,7 @@ abstract class PercentileBase
     }
 
     if (discrete) {
+      // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toDoubleValue(lowerKey)
     } else {
       // Linear interpolation to get the exact percentile
@@ -384,7 +386,9 @@ case class PercentileDisc(
     percentageExpression: Expression,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends PercentileBase with BinaryLike[Expression] {
+    inputAggBufferOffset: Int = 0,
+    legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
+  extends PercentileBase with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 
@@ -412,4 +416,25 @@ case class PercentileDisc(
     child = newLeft,
     percentageExpression = newRight
   )
+
+  override protected def getPercentile(
+      accumulatedCounts: Seq[(AnyRef, Long)],
+      percentile: Double): Double = {
+    if (legacyCalculation) {
+      super.getPercentile(accumulatedCounts, percentile)
+    } else {
+      // `percentile_disc(p)` returns the value with the smallest `cume_dist()` value given that is
+      // greater than or equal to `p` so `position` here is `p` adjusted by max position.
+      val position = accumulatedCounts.last._2 * percentile
+
+      val higher = position.ceil.toLong
+
+      // Use binary search to find the higher position.
+      val countsArray = accumulatedCounts.map(_._2).toArray[Long]
+      val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher)
+      val higherKey = accumulatedCounts(higherIndex)._1
+
+      toDoubleValue(higherKey)
+    }
+  }
 }

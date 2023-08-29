@@ -123,6 +123,10 @@ The `<functionName>` does not support ordering on type `<dataType>`.
 
 `<errors>`
 
+## INVALID_XML_MAP_KEY_TYPE
+
+Input schema `<schema>` can only contain STRING as a key type for a MAP.
+
 ## IN_SUBQUERY_DATA_TYPE_MISMATCH
 
 The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [`<mismatchedColumns>`], left side: [`<leftType>`], right side: [`<rightType>`].
@@ -233,6 +237,10 @@ The input of `<functionName>` can't be `<dataType>` type data.
 ## VALUE_OUT_OF_RANGE
 
 The `<exprName>` must be between `<valueRange>` (current value = `<currentValue>`).
+
+## WRONG_NUM_ARG_TYPES
+
+The expression requires `<expectedNum>` argument types but the actual number is `<actualNum>`.
 
 ## WRONG_NUM_ENDPOINTS
 

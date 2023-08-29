@@ -25,6 +25,7 @@ import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedProjection, JoinedRow, Literal, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -70,7 +71,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
     SimpleTextRelation.pushedFilters = filters.toSet
 
     val fieldTypes = dataSchema.map(_.dataType)
-    val inputAttributes = dataSchema.toAttributes
+    val inputAttributes = DataTypeUtils.toAttributes(dataSchema)
     val outputAttributes = requiredSchema.flatMap { field =>
       inputAttributes.find(_.name == field.name)
     }
@@ -106,7 +107,8 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
         }.filter(predicate.eval).map(projection)
 
       // Appends partition values
-      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      val fullOutput = DataTypeUtils.toAttributes(requiredSchema) ++
+        DataTypeUtils.toAttributes(partitionSchema)
       val joinedRow = new JoinedRow()
       val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
 

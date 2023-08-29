@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.artifact
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import java.util.UUID
 
 import org.apache.commons.io.FileUtils
 
@@ -49,20 +50,6 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   override def afterEach(): Unit = {
     artifactManager.cleanUpResources()
     super.afterEach()
-  }
-
-  test("Jar artifacts are added to spark session") {
-    val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
-    val stagingPath = copyDir.resolve("smallJar.jar")
-    val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(remotePath, stagingPath, None)
-
-    val expectedPath = SparkConnectArtifactManager.artifactRootPath
-      .resolve(s"$sessionUUID/jars/smallJar.jar")
-    assert(expectedPath.toFile.exists())
-    val jars = artifactManager.jobArtifactSet.jars
-    assert(jars.exists(_._1.contains(remotePath.toString)))
   }
 
   test("Class artifacts are added to the correct directory.") {
@@ -110,7 +97,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
 
-    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession("c1", "session")
+    val sessionHolder =
+      SparkConnectService.getOrCreateIsolatedSession("c1", UUID.randomUUID.toString())
     sessionHolder.addArtifact(remotePath, stagingPath, None)
 
     val movedClassFile = SparkConnectArtifactManager.artifactRootPath
@@ -222,9 +210,11 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   }
 
   test("Classloaders for spark sessions are isolated") {
-    val holder1 = SparkConnectService.getOrCreateIsolatedSession("c1", "session1")
-    val holder2 = SparkConnectService.getOrCreateIsolatedSession("c2", "session2")
-    val holder3 = SparkConnectService.getOrCreateIsolatedSession("c3", "session3")
+    // use same sessionId - different users should still make it isolated.
+    val sessionId = UUID.randomUUID.toString()
+    val holder1 = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId)
+    val holder2 = SparkConnectService.getOrCreateIsolatedSession("c2", sessionId)
+    val holder3 = SparkConnectService.getOrCreateIsolatedSession("c3", sessionId)
 
     def addHelloClass(holder: SessionHolder): Unit = {
       val copyDir = Utils.createTempDir().toPath
@@ -281,7 +271,8 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
 
-    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession("c1", "session")
+    val sessionHolder =
+      SparkConnectService.getOrCreateIsolatedSession("c1", UUID.randomUUID.toString)
     sessionHolder.addArtifact(remotePath, stagingPath, None)
 
     val sessionDirectory =

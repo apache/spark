@@ -96,6 +96,32 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
+jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+  "executor-id-asc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(a) - parseFloat(b);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return -1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return 1;
+    } else {
+      return a.localeCompare(b);
+    }
+  },
+
+  "executor-id-desc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(b) - parseFloat(a);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return 1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return -1;
+    } else {
+      return b.localeCompare(a);
+    }
+  }
+});
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
   $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
@@ -403,9 +429,8 @@ $(document).ready(function () {
           "data": response,
           "columns": [
             {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
-              }
+              data: "id",
+              type: "executor-id"
             },
             {data: 'hostPort'},
             {

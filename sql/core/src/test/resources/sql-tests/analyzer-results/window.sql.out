@@ -140,7 +140,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
 SELECT val_long, cate, sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
 ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "sqlState" : "42K09",
@@ -376,7 +376,7 @@ SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_da
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, val_date
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
@@ -416,7 +416,7 @@ Sort [cate#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
 SELECT val, cate, count(val) OVER(PARTITION BY cate
 ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "sqlState" : "42K09",
@@ -439,7 +439,7 @@ org.apache.spark.sql.AnalysisException
 SELECT val, cate, count(val) OVER(PARTITION BY cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
@@ -460,7 +460,7 @@ org.apache.spark.sql.AnalysisException
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val, cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
   "sqlState" : "42K09",
@@ -482,7 +482,7 @@ org.apache.spark.sql.AnalysisException
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY current_timestamp
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
@@ -505,7 +505,7 @@ org.apache.spark.sql.AnalysisException
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
   "sqlState" : "42K09",
@@ -1257,7 +1257,7 @@ SELECT
 FROM
 	basic_pays
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1004",
   "messageParameters" : {
@@ -1272,10 +1272,141 @@ SELECT
 FROM
 	basic_pays
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_1004",
   "messageParameters" : {
     "windowName" : "w"
   }
 }
+
+
+-- !query
+create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2)
+-- !query analysis
+CreateViewCommand `t1`, [(p,None), (o,None)], values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2), false, true, LocalTempView, true
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from (select *, dense_rank() over (partition by p order by o) as rnk from t1) where rnk = 1
+-- !query analysis
+Project [p#x, o#x, rnk#x]
++- Filter (rnk#x = 1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [p#x, o#x, rnk#x]
+         +- Project [p#x, o#x, rnk#x, rnk#x]
+            +- Window [dense_rank(o#x) windowspecdefinition(p#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#x], [p#x], [o#x ASC NULLS FIRST]
+               +- Project [p#x, o#x]
+                  +- SubqueryAlias t1
+                     +- View (`t1`, [p#x,o#x])
+                        +- Project [cast(col1#x as int) AS p#x, cast(col2#x as int) AS o#x]
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x = 1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x <= 2)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x = 1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [dense_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x <= 2)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [dense_rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x = 1)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [row_number() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2
+-- !query analysis
+Project [cate#x, val#x, r#x]
++- Filter (r#x <= 2)
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [cate#x, val#x, r#x]
+         +- Project [cate#x, val#x, r#x, r#x]
+            +- Window [row_number() windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+               +- Project [cate#x, val#x]
+                  +- SubqueryAlias testdata
+                     +- View (`testData`, [val#x,val_long#xL,val_double#x,val_date#x,val_timestamp#x,cate#x])
+                        +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                           +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                              +- SubqueryAlias testData
+                                 +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]

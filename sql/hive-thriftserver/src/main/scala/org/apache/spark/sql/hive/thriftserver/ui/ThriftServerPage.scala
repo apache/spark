@@ -23,8 +23,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
@@ -272,21 +270,6 @@ private[ui] class SqlStatsPagedTable(
       </td>
       {errorMessageCell(sqlStatsTableRow.detail)}
     </tr>
-  }
-
-
-  private def errorMessageCell(errorMessage: String): Seq[Node] = {
-    val isMultiline = errorMessage.indexOf('\n') >= 0
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        errorMessage.substring(0, errorMessage.indexOf('\n'))
-      } else {
-        errorMessage
-      })
-    val details = detailsUINode(isMultiline, errorMessage)
-    <td>
-      {errorSummary}{details}
-    </td>
   }
 
   private def jobURL(request: HttpServletRequest, jobId: String): String =

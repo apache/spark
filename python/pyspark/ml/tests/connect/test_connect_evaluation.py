@@ -17,7 +17,7 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 have_torcheval = True
 try:
@@ -25,8 +25,14 @@ try:
 except ImportError:
     have_torcheval = False
 
+if should_test_connect:
+    from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
 
-@unittest.skipIf(not have_torcheval, "torcheval is required")
+
+@unittest.skipIf(
+    not should_test_connect or not have_torcheval,
+    connect_requirement_message or "torcheval is required",
+)
 class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.remote("local[2]").getOrCreate()

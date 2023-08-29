@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
@@ -850,11 +851,43 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
+   * Saves the content of the `DataFrame` in XML format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("xml").save(path)
+   * }}}
+   *
+   * Note that writing a XML file from `DataFrame` having a field `ArrayType` with
+   * its element as `ArrayType` would have an additional nested field for the element.
+   * For example, the `DataFrame` having a field below,
+   *
+   *    {@code fieldA [[data1], [data2]]}
+   *
+   * would produce a XML file below.
+   *    {@code
+   *    <fieldA>
+   *        <item>data1</item>
+   *    </fieldA>
+   *    <fieldA>
+   *        <item>data2</item>
+   *    </fieldA>}
+   *
+   * Namely, roundtrip in writing and reading can end up in different schema structure.
+   *
+   * You can find the XML-specific options for writing XML files in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   */
+  def xml(path: String): Unit = {
+    format("xml").save(path)
+  }
+
+  /**
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    val qe = session.sessionState.executePlan(command)
+    val qe = new QueryExecution(session, command, df.queryExecution.tracker)
     qe.assertCommandExecuted()
   }
 

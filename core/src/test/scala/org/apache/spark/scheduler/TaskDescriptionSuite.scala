@@ -66,8 +66,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
 
     val artifacts = new JobArtifactSet(
-      uuid = None,
-      replClassDirUri = None,
+      None,
       jars = Map(originalJars.toSeq: _*),
       files = Map(originalFiles.toSeq: _*),
       archives = Map(originalArchives.toSeq: _*)

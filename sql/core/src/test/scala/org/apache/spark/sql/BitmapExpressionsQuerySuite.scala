@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions.{bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, hex, lit, substring, to_binary}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
@@ -44,6 +45,16 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
       checkAnswer(df, expected)
     }
+
+    val df = Seq(1, 2, 3).toDF("a")
+    checkAnswer(
+      df.selectExpr("substring(hex(bitmap_construct_agg(bitmap_bit_position(a))), 0, 6)"),
+      Seq(Row("070000"))
+    )
+    checkAnswer(
+      df.select(substring(hex(bitmap_construct_agg(bitmap_bit_position(col("a")))), 0, 6)),
+      Seq(Row("070000"))
+    )
   }
 
   test("grouping bitmap_construct_agg") {
@@ -147,5 +158,97 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
            |""".stripMargin)
       checkAnswer(df, expected)
     }
+  }
+
+  test("bitmap_bit_position") {
+    val df = Seq(123).toDF("a")
+    checkAnswer(
+      df.selectExpr("bitmap_bit_position(a)"),
+      Seq(Row(122))
+    )
+    checkAnswer(
+      df.select(bitmap_bit_position(col("a"))),
+      Seq(Row(122))
+    )
+  }
+
+  test("bitmap_bucket_number") {
+    val df = Seq(123).toDF("a")
+    checkAnswer(
+      df.selectExpr("bitmap_bucket_number(a)"),
+      Seq(Row(1))
+    )
+    checkAnswer(
+      df.select(bitmap_bucket_number(col("a"))),
+      Seq(Row(1))
+    )
+  }
+
+  test("bitmap_count") {
+    val df = Seq("FFFF").toDF("a")
+    checkAnswer(
+      df.selectExpr("bitmap_count(to_binary(a, 'hex'))"),
+      Seq(Row(16))
+    )
+    checkAnswer(
+      df.select(bitmap_count(to_binary(col("a"), lit("hex")))),
+      Seq(Row(16))
+    )
+  }
+
+  test("bitmap_or_agg") {
+    val df = Seq("10", "20", "40").toDF("a")
+    checkAnswer(
+      df.selectExpr("substring(hex(bitmap_or_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("700000"))
+    )
+    checkAnswer(
+      df.select(substring(hex(bitmap_or_agg(to_binary(col("a"), lit("hex")))), 0, 6)),
+      Seq(Row("700000"))
+    )
+  }
+
+  test("bitmap_count called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_count(a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_count(a)\"",
+        "paramIndex" -> "0",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_count(a)",
+        start = 0,
+        stop = 14
+      )
+    )
+  }
+
+  test("bitmap_or_agg called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_or_agg(a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_or_agg(a)\"",
+        "paramIndex" -> "0",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_or_agg(a)",
+        start = 0,
+        stop = 15
+      )
+    )
   }
 }

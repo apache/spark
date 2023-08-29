@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
-
 import pandas as pd
 from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.ml.connect.base import Estimator, Model, Transformer
-from pyspark.ml.connect.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
+from pyspark.ml.connect.io_utils import (
+    ParamsReadWrite,
+    MetaAlgorithmReadWrite,
+)
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -32,6 +33,14 @@ if TYPE_CHECKING:
 
 
 class _PipelineReadWrite(MetaAlgorithmReadWrite):
+    def _get_child_stages(self) -> List[Any]:
+        if isinstance(self, Pipeline):
+            return list(self.getStages())
+        elif isinstance(self, PipelineModel):
+            return list(self.stages)
+        else:
+            raise ValueError(f"Unknown type {self.__class__}")
+
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
@@ -47,36 +56,20 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
         elif isinstance(self, PipelineModel):
             stages = self.stages
         else:
-            raise ValueError()
+            raise ValueError(f"Unknown type {self.__class__}")
 
         for stage_index, stage in enumerate(stages):
-            stage_name = f"pipeline_stage_{stage_index}"
-            node_path.append(stage_name)
-            if isinstance(stage, MetaAlgorithmReadWrite):
-                stage_metadata = stage._save_meta_algorithm(root_path, node_path)
-            else:
-                stage_metadata = stage._get_metadata_to_save()  # type: ignore[attr-defined]
-                if isinstance(stage, CoreModelReadWrite):
-                    core_model_path = ".".join(node_path + [stage._get_core_model_filename()])
-                    stage._save_core_model(os.path.join(root_path, core_model_path))
-                    stage_metadata["core_model_path"] = core_model_path
-
+            stage_node_path = node_path + [f"pipeline_stage_{stage_index}"]
+            stage_metadata = stage._save_to_node_path(  # type: ignore[attr-defined]
+                root_path, stage_node_path
+            )
             metadata["stages"].append(stage_metadata)
-            node_path.pop()
         return metadata
 
     def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
-            stage = ParamsReadWrite._load_from_metadata(stage_meta)
-
-            if isinstance(stage, MetaAlgorithmReadWrite):
-                stage._load_meta_algorithm(root_path, stage_meta)
-
-            if isinstance(stage, CoreModelReadWrite):
-                core_model_path = stage_meta["core_model_path"]
-                stage._load_core_model(os.path.join(root_path, core_model_path))
-
+            stage = ParamsReadWrite._load_instance_from_metadata(stage_meta, root_path)
             stages.append(stage)
 
         if isinstance(self, Pipeline):
@@ -107,6 +100,34 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     identity transformer.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect import Pipeline
+    >>> from pyspark.ml.connect.classification import LogisticRegression
+    >>> from pyspark.ml.connect.feature import StandardScaler
+    >>> scaler = StandardScaler(inputCol='features', outputCol='scaled_features')
+    >>> lor = LogisticRegression(maxIter=20, learningRate=0.01)
+    >>> pipeline=Pipeline(stages=[scaler, lor])
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0], 1),
+    ...     ([2.0, -1.0], 1),
+    ...     ([-3.0, -2.0], 0),
+    ...     ([-1.0, -2.0], 0),
+    ... ], schema=['features', 'label'])
+    >>> pipeline_model = pipeline.fit(dataset)
+    >>> transformed_dataset = pipeline_model.transform(dataset)
+    >>> transformed_dataset.show()
+    +------------+-----+--------------------+----------+--------------------+
+    |    features|label|     scaled_features|prediction|         probability|
+    +------------+-----+--------------------+----------+--------------------+
+    |  [1.0, 2.0]|    1|[0.56373452100212...|         1|[0.02423273026943...|
+    | [2.0, -1.0]|    1|[1.01472213780381...|         1|[0.09334788471460...|
+    |[-3.0, -2.0]|    0|[-1.2402159462046...|         0|[0.99808156490325...|
+    |[-1.0, -2.0]|    0|[-0.3382407126012...|         0|[0.96210002899169...|
+    +------------+-----+--------------------+----------+--------------------+
+    >>> pipeline_model.saveToLocal("/tmp/pipeline")
+    >>> loaded_pipeline_model = PipelineModel.loadFromLocal("/tmp/pipeline")
     """
 
     stages: Param[List[Params]] = Param(
@@ -221,9 +242,9 @@ class PipelineModel(Model, _PipelineReadWrite):
         super(PipelineModel, self).__init__()
         self.stages = stages  # type: ignore[assignment]
 
-    def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
+    def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:
-            dataset = t.transform(dataset)  # type: ignore[attr-defined]
+            dataset = t.transform(dataset)
         return dataset
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "PipelineModel":

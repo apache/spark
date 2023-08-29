@@ -49,6 +49,10 @@ Partition key `<partKey>` must set value.
 
 Expected a column reference for transform `<transform>`: `<expr>`.
 
+## INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES
+
+Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument `<argumentName>`; please surround this with parentheses and try again.
+
 ## INVALID_TABLE_VALUED_FUNC_NAME
 
 Table valued function cannot specify database name: `<funcName>`.
@@ -92,5 +96,10 @@ Cannot resolve window reference `<windowName>`.
 ## UNSUPPORTED_FUNC_NAME
 
 Unsupported function name `<funcName>`.
+
+## VARIABLE_TYPE_OR_DEFAULT_REQUIRED
+
+The definition of a SQL variable requires either a datatype or a DEFAULT clause.
+For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`.
 
 

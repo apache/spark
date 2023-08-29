@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, DenseRank, Expression, Rank, RowNumber, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -72,27 +72,22 @@ case class WindowGroupLimitExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    rankLikeFunction match {
-      case _: RowNumber if partitionSpec.isEmpty =>
-        child.execute().mapPartitionsInternal(SimpleLimitIterator(_, limit, numOutputRows))
-      case _: RowNumber =>
-        child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-          (input: Iterator[InternalRow]) => SimpleLimitIterator(input, limit, numOutputRows)))
-      case _: Rank if partitionSpec.isEmpty =>
-        child.execute().mapPartitionsInternal(
-          RankLimitIterator(output, _, orderSpec, limit, numOutputRows))
-      case _: Rank =>
-        child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-          (input: Iterator[InternalRow]) =>
-            RankLimitIterator(output, input, orderSpec, limit, numOutputRows)))
-      case _: DenseRank if partitionSpec.isEmpty =>
-        child.execute().mapPartitionsInternal(
-          DenseRankLimitIterator(output, _, orderSpec, limit, numOutputRows))
-      case _: DenseRank =>
-        child.execute().mapPartitionsInternal(new GroupedLimitIterator(_, output, partitionSpec,
-          (input: Iterator[InternalRow]) =>
-            DenseRankLimitIterator(output, input, orderSpec, limit, numOutputRows)))
+    val evaluatorFactory =
+      new WindowGroupLimitEvaluatorFactory(
+        partitionSpec,
+        orderSpec,
+        rankLikeFunction,
+        limit,
+        child.output,
+        longMetric("numOutputRows"))
+
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, rowIterator) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, rowIterator)
+      }
     }
   }
 
@@ -173,6 +168,7 @@ case class RankLimitIterator(
   override def reset(): Unit = {
     rank = 0
     count = 0
+    currentRankRow = null
   }
 }
 
@@ -196,6 +192,7 @@ case class DenseRankLimitIterator(
 
   override def reset(): Unit = {
     rank = 0
+    currentRankRow = null
   }
 }
 

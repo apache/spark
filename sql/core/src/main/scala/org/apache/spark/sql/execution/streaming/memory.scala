@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
@@ -55,7 +56,7 @@ object MemoryStream {
  */
 abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
   val encoder = encoderFor[A]
-  protected val attributes = encoder.schema.toAttributes
+  protected val attributes = toAttributes(encoder.schema)
 
   protected lazy val toRow: ExpressionEncoder.Serializer[A] = encoder.createSerializer()
 

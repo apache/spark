@@ -37,6 +37,10 @@ supports 16-byte CBC IVs and 12-byte GCM IVs, but got `<actualLength>` bytes for
 
 expects a binary value with 16, 24 or 32 bytes, but got `<actualLength>` bytes.
 
+## BINARY_FORMAT
+
+expects one of binary formats 'base64', 'hex', 'utf-8', but got `<invalidFormat>`.
+
 ## DATETIME_UNIT
 
 expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal `<invalidValue>`.

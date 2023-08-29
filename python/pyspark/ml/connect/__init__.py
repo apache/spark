@@ -16,6 +16,9 @@
 #
 
 """Spark Connect Python Client - ML module"""
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 from pyspark.ml.connect.base import (
     Estimator,
@@ -26,6 +29,7 @@ from pyspark.ml.connect.base import (
 from pyspark.ml.connect import (
     feature,
     evaluation,
+    tuning,
 )
 
 from pyspark.ml.connect.pipeline import Pipeline, PipelineModel
@@ -39,4 +43,5 @@ __all__ = [
     "evaluation",
     "Pipeline",
     "PipelineModel",
+    "tuning",
 ]

@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -64,7 +65,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
       intercept[IllegalStateException] {
         DataSourceV2Relation(
-          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
       }
     }
   }
@@ -557,14 +562,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
@@ -577,14 +584,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "5", "numTarget" -> "4")
+    )
   }
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
@@ -599,14 +608,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 1; number of columns: 4."))
-    assertAnalysisError(
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "1", "numTarget" -> "4")
+    )
+    assertAnalysisErrorClass(
       joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
-      Seq("Number of column aliases does not match number of columns. " +
-        "Number of column aliases: 5; number of columns: 4."))
+        "ASSIGNMENT_ARITY_MISMATCH",
+        Map("numExpr" -> "5", "numTarget" -> "4")
+      )
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
@@ -646,7 +657,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val flatMapGroupsInPandas = FlatMapGroupsInPandas(
       Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
@@ -663,7 +674,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
     val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
@@ -686,7 +697,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       true)
-    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val output = DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType])
     val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val mapInPandas = MapInPandas(
       pythonUdf,
@@ -748,9 +759,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-matching column alias") {
-    assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
-      Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
-        "2; number of columns: 1."))
+    assertAnalysisErrorClass(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+      "ASSIGNMENT_ARITY_MISMATCH",
+      Map("numExpr" -> "2", "numTarget" -> "1"),
+      Array(ExpectedContext("t(x, y) AS (SELECT 1)", 5, 25))
+    )
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
@@ -1643,6 +1656,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           Seq())
         .where($"x" === 1)
       plan.join(plan).analyze
+    }
+  }
+
+  test("IDENTIFIER with alias and RuntimeReplaceable") {
+    val name = Literal("a").as("name")
+    val replaceable = new Nvl(Literal("a"), Literal("b"))
+    withClue("IDENTIFIER as column") {
+      val ident = ExpressionWithUnresolvedIdentifier(name, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident), testRelation.select($"a").analyze)
+      val ident2 = ExpressionWithUnresolvedIdentifier(replaceable, UnresolvedAttribute.apply)
+      checkAnalysis(testRelation.select(ident2), testRelation.select($"a").analyze)
+    }
+    withClue("IDENTIFIER as table") {
+      val ident = PlanWithUnresolvedIdentifier(name, _ => testRelation)
+      checkAnalysis(ident.select($"a"), testRelation.select($"a").analyze)
+      val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
+      checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,7 +32,6 @@ import scala.reflect.ClassTag
 import scala.reflect.classTag
 
 import com.esotericsoftware.kryo.KryoException
-import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
 import org.scalatest.PrivateMethodTester
@@ -131,7 +131,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       None
     }
     val bmSecurityMgr = new SecurityManager(bmConf, encryptionKey)
-    val serializerManager = new SerializerManager(serializer, bmConf)
+    val serializerManager = new SerializerManager(serializer, bmConf, encryptionKey)
     val transfer = transferService.getOrElse(new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1))
     val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
@@ -1887,7 +1887,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 
@@ -2033,10 +2033,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
-  private def testShuffleBlockDecommissioning(maxShuffleSize: Option[Int], willReject: Boolean) = {
+  private def testShuffleBlockDecommissioning(
+      maxShuffleSize: Option[Int], willReject: Boolean, enableIoEncryption: Boolean) = {
     maxShuffleSize.foreach{ size =>
       conf.set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE.key, s"${size}b")
     }
+    conf.set(IO_ENCRYPTION_ENABLED, enableIoEncryption)
+
     val shuffleManager1 = makeSortShuffleManager(Some(conf))
     val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
     shuffleManager1.shuffleBlockResolver._blockManager = bm1
@@ -2095,15 +2098,30 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("test migration of shuffle blocks during decommissioning - no limit") {
-    testShuffleBlockDecommissioning(None, true)
+    testShuffleBlockDecommissioning(None, true, false)
+  }
+
+  test("test migration of shuffle blocks during decommissioning - no limit - " +
+      "io.encryption enabled") {
+    testShuffleBlockDecommissioning(None, true, true)
   }
 
   test("test migration of shuffle blocks during decommissioning - larger limit") {
-    testShuffleBlockDecommissioning(Some(10000), true)
+    testShuffleBlockDecommissioning(Some(10000), true, false)
+  }
+
+  test("test migration of shuffle blocks during decommissioning - larger limit - " +
+      "io.encryption enabled") {
+    testShuffleBlockDecommissioning(Some(10000), true, true)
   }
 
   test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit") {
-    testShuffleBlockDecommissioning(Some(1), false)
+    testShuffleBlockDecommissioning(Some(1), false, false)
+  }
+
+  test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit -" +
+      " io.encryption enabled") {
+    testShuffleBlockDecommissioning(Some(1), false, true)
   }
 
   test("SPARK-32919: Shuffle push merger locations should be bounded with in" +
@@ -2256,7 +2274,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
       }
 
-      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val candidatePort = ThreadLocalRandom.current().nextInt(1024, 65536)
       val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
         newShuffleServer, conf, "ShuffleServer")
 

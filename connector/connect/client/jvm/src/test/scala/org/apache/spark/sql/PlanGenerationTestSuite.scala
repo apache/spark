@@ -37,14 +37,13 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
-import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkFileUtils
 
 // scalastyle:off
 /**
@@ -131,7 +130,7 @@ class PlanGenerationTestSuite
 
   private def cleanOrphanedGoldenFile(): Unit = {
     val allTestNames = testNames.map(_.replace(' ', '_'))
-    val orphans = Utils
+    val orphans = SparkFileUtils
       .recursiveList(queryFilePath.toFile)
       .filter(g =>
         g.getAbsolutePath.endsWith(".proto.bin") ||
@@ -139,7 +138,7 @@ class PlanGenerationTestSuite
       .filter(g =>
         !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
           !allTestNames.contains(g.getName.stripSuffix(".json")))
-    orphans.foreach(Utils.deleteRecursively)
+    orphans.foreach(SparkFileUtils.deleteRecursively)
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -1565,6 +1564,10 @@ class PlanGenerationTestSuite
     fn.user()
   }
 
+  functionTest("session_user") {
+    fn.session_user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -1977,6 +1980,26 @@ class PlanGenerationTestSuite
 
   functionTest("row_number") {
     fn.row_number().over(Window.partitionBy(Column("a")).orderBy(Column("id")))
+  }
+
+  functionTest("bitmap_bucket_number") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_bit_position") {
+    fn.bitmap_bit_position(fn.col("id"))
+  }
+
+  functionTest("bitmap_construct_agg") {
+    fn.bitmap_construct_agg(fn.col("id"))
+  }
+
+  test("function bitmap_count") {
+    binary.select(fn.bitmap_count(fn.col("bytes")))
+  }
+
+  test("function bitmap_or_agg") {
+    binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
@@ -2530,6 +2553,10 @@ class PlanGenerationTestSuite
     fn.to_char(fn.col("b"), lit("$99.99"))
   }
 
+  functionTest("to_varchar") {
+    fn.to_varchar(fn.col("b"), lit("$99.99"))
+  }
+
   functionTest("to_number") {
     fn.to_number(fn.col("g"), lit("$99.99"))
   }
@@ -2801,6 +2828,22 @@ class PlanGenerationTestSuite
     fn.aes_decrypt(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("try_aes_decrypt with mode padding aad") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode padding") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt with mode") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_aes_decrypt") {
+    fn.try_aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
   functionTest("sha") {
     fn.sha(fn.col("g"))
   }
@@ -2831,6 +2874,50 @@ class PlanGenerationTestSuite
 
   functionTest("random with seed") {
     fn.random(lit(1))
+  }
+
+  functionTest("call_function") {
+    fn.call_function("lower", fn.col("g"))
+  }
+
+  test("hll_sketch_agg with column lgConfigK") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
+  }
+
+  test("hll_sketch_agg with column lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes"), 0))
+  }
+
+  test("hll_sketch_agg with columnName lgConfigK_int") {
+    binary.select(fn.hll_sketch_agg("bytes", 0))
+  }
+
+  test("hll_sketch_agg") {
+    binary.select(fn.hll_sketch_agg(fn.col("bytes")))
+  }
+
+  test("hll_sketch_agg with columnName") {
+    binary.select(fn.hll_sketch_agg("bytes"))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), lit(false)))
+  }
+
+  test("hll_union_agg with column allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg(fn.col("bytes"), false))
+  }
+
+  test("hll_union_agg with columnName allowDifferentLgConfigK_boolean") {
+    binary.select(fn.hll_union_agg("bytes", false))
+  }
+
+  test("hll_union_agg") {
+    binary.select(fn.hll_union_agg(fn.col("bytes")))
+  }
+
+  test("hll_union_agg with columnName") {
+    binary.select(fn.hll_union_agg("bytes"))
   }
 
   test("groupby agg") {
@@ -3149,14 +3236,15 @@ class PlanGenerationTestSuite
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
   test("from_protobuf messageClassName") {
-    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+    binary.select(
+      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestProtoObj"))
   }
 
   test("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),
-        classOf[StorageLevel].getName,
+        "org.apache.spark.sql.protobuf.protos.TestProtoObj",
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 

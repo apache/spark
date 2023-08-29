@@ -30,31 +30,39 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 
 /**
+ * :: DeveloperApi ::
+ *
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
  * parse configuration keys, similar to the manner in which Spark's SecurityManager parses SSL
  * options for different components.
+ *
+ * This can be used to implement new ExternalClusterManagers.
+ *
+ * @since 4.0.0
  */
-private[spark] object SparkKubernetesClientFactory extends Logging {
+@Stable
+@DeveloperApi
+object SparkKubernetesClientFactory extends Logging {
 
+  @Since("4.0.0")
   def createKubernetesClient(
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
       clientType: ClientType.Value,
       sparkConf: SparkConf,
-      defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
-      .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     KubernetesUtils.requireNandDefined(
       oauthTokenFile,

@@ -67,6 +67,7 @@ from pyspark.sql.types import (
     Row,
     StructType,
     TimestampType,
+    NullType,
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
@@ -492,8 +493,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes  # doctest: +SKIP
-        [Int64Index([0, 1, 2], dtype='int64')]
+        >>> psser.axes
+        [Index([0, 1, 2], dtype='int64')]
         """
         return [self.index]
 
@@ -3584,71 +3585,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.sort_values(ascending=False).head(n)
 
-    def append(
-        self, to_append: "Series", ignore_index: bool = False, verify_integrity: bool = False
-    ) -> "Series":
-        """
-        Concatenate two or more Series.
-
-        .. deprecated:: 3.4.0
-
-        Parameters
-        ----------
-        to_append : Series or list/tuple of Series
-        ignore_index : boolean, default False
-            If True, do not use the index labels.
-        verify_integrity : boolean, default False
-            If True, raise Exception on creating index with duplicates
-
-        Returns
-        -------
-        appended : Series
-
-        Examples
-        --------
-        >>> s1 = ps.Series([1, 2, 3])
-        >>> s2 = ps.Series([4, 5, 6])
-        >>> s3 = ps.Series([4, 5, 6], index=[3,4,5])
-
-        >>> s1.append(s2)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        0    4
-        1    5
-        2    6
-        dtype: int64
-
-        >>> s1.append(s3)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        3    4
-        4    5
-        5    6
-        dtype: int64
-
-        With ignore_index set to True:
-
-        >>> s1.append(s2, ignore_index=True)  # doctest: +SKIP
-        0    1
-        1    2
-        2    3
-        3    4
-        4    5
-        5    6
-        dtype: int64
-        """
-        warnings.warn(
-            "The Series.append method is deprecated "
-            "and will be removed in 4.0.0. "
-            "Use pyspark.pandas.concat instead.",
-            FutureWarning,
-        )
-        return first_series(
-            self.to_frame().append(to_append.to_frame(), ignore_index, verify_integrity)
-        ).rename(self.name)
-
     def sample(
         self,
         n: Optional[int] = None,
@@ -4089,7 +4025,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
-                if isinstance(spark_type, (BooleanType, NumericType)):
+                if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
                     raise TypeError(
@@ -4124,7 +4060,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
+            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
+            False is not supported. This parameter is mainly for pandas compatibility.
 
         Returns
         -------
@@ -4192,18 +4129,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
-            return ps.Series([], dtype="float64", name=self.name)
+            raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
             return self._rank(method, ascending).spark.analyzed
 
@@ -5939,37 +5868,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 pdf.columns = pd.Index(where)
                 return first_series(DataFrame(pdf.transpose())).rename(self.name)
 
-    def mad(self) -> float:
-        """
-        Return the mean absolute deviation of values.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> s = ps.Series([1, 2, 3, 4])
-        >>> s
-        0    1
-        1    2
-        2    3
-        3    4
-        dtype: int64
-
-        >>> s.mad()
-        1.0
-        """
-        warnings.warn(
-            "The 'mad' method is deprecated and will be removed in 4.0.0. "
-            "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
-            FutureWarning,
-        )
-        sdf = self._internal.spark_frame
-        spark_column = self.spark.column
-        avg = unpack_scalar(sdf.select(F.avg(spark_column)))
-        mad = unpack_scalar(sdf.select(F.avg(F.abs(spark_column - avg))))
-
-        return mad
-
     def unstack(self, level: int = -1) -> DataFrame:
         """
         Unstack, a.k.a. pivot, Series with MultiIndex to produce DataFrame.
@@ -6083,7 +5981,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         This method returns an iterable tuple (index, value). This is
         convenient if you want to create a lazy iterator.
 
-        .. note:: Unlike pandas', the iteritems in pandas-on-Spark returns generator rather
+        .. note:: Unlike pandas', the itmes in pandas-on-Spark returns generator rather
             zip object
 
         Returns
@@ -6122,20 +6020,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             extract_kv_from_spark_row, self._internal.resolved_copy.spark_frame.toLocalIterator()
         ):
             yield k, v
-
-    def iteritems(self) -> Iterable[Tuple[Name, Any]]:
-        """
-        This is an alias of ``items``.
-
-        .. deprecated:: 3.4.0
-            iteritems is deprecated and will be removed in a future version.
-            Use .items instead.
-        """
-        warnings.warn(
-            "Deprecated in 3.4, and will be removed in 4.0.0. Use Series.items instead.",
-            FutureWarning,
-        )
-        return self.items()
 
     def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":
         """
@@ -6828,14 +6712,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
-    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
-    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
         end_time: Union[datetime.time, str],
-        include_start: bool = True,
-        include_end: bool = True,
+        inclusive: str = "both",
         axis: Axis = 0,
     ) -> "Series":
         """
@@ -6850,15 +6731,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Initial time as a time filter limit.
         end_time : datetime.time or str
             End time as a time filter limit.
-        include_start : bool, default True
-            Whether the start time needs to be included in the result.
+        inclusive : {"both", "neither", "left", "right"}, default "both"
+            Include boundaries; whether to set each bound as closed or open.
 
-            .. deprecated:: 3.4.0
-
-        include_end : bool, default True
-            Whether the end time needs to be included in the result.
-
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
@@ -6897,7 +6773,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         return first_series(
-            self.to_frame().between_time(start_time, end_time, include_start, include_end, axis)
+            self.to_frame().between_time(start_time, end_time, inclusive, axis)
         ).rename(self.name)
 
     def at_time(

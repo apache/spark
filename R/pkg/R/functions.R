@@ -1390,6 +1390,18 @@ setMethod("log",
           })
 
 #' @details
+#' \code{ln}: Alias for \code{log}.
+#'
+#' @rdname column_math_functions
+#' @aliases ln ln,Column-method
+#' @note ln since 3.5.0
+setMethod("ln",
+          signature(x = "Column"),
+          function(x) {
+            log(x)
+          })
+
+#' @details
 #' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
 #' @rdname column_math_functions
@@ -1674,6 +1686,54 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{negative}: Alias for \code{negate}.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases negative negative,Column-method
+#' @note negative since 3.5.0
+setMethod("negative",
+          signature(x = "Column"),
+          function(x) {
+            negate(x)
+          })
+
+#' @details
+#' \code{positive}: Unary plus, i.e. return the expression.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases positive positive,Column-method
+#' @note positive since 3.5.0
+setMethod("positive",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "positive", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{width_bucket} Returns the bucket number into which the value of this expression would
+#' fall after being evaluated. Note that input arguments must follow conditions listed below;
+#' otherwise, the method will return null.
+#'
+#' @param v value to compute a bucket number in the histogram.
+#' @param min minimum value of the histogram
+#' @param max maximum value of the histogram
+#' @param numBucket the number of buckets
+#'
+#' @rdname column_math_functions
+#' @aliases width_bucket width_bucket,Column-method
+#' @note width_bucket since 3.5.0
+setMethod("width_bucket",
+          signature(v = "Column", min = "Column", max = "Column", numBucket = "Column"),
+          function(v, min, max, numBucket) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "width_bucket",
+              v@jc, min@jc, max@jc, numBucket@jc
+            )
             column(jc)
           })
 
@@ -2029,6 +2089,18 @@ setMethod("stddev",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{std}: Alias for \code{stddev}.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases std std,Column-method
+#' @note std since 3.5.0
+setMethod("std",
+          signature(x = "Column"),
+          function(x) {
+            stddev(x)
           })
 
 #' @details

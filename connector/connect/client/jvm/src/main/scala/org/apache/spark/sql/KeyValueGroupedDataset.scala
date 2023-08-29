@@ -979,6 +979,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       outputEncoder = outputEncoder)
     udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
   }
+
+  /**
+   * We cannot deserialize a connect [[KeyValueGroupedDataset]] because of a class clash on the
+   * server side. We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
 
 private object KeyValueGroupedDatasetImpl {
@@ -988,15 +994,15 @@ private object KeyValueGroupedDatasetImpl {
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     val gf = ScalarUserDefinedFunction(
       function = groupingFunc,
-      inputEncoders = ds.encoder :: Nil, // Using the original value and key encoders
+      inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
     new KeyValueGroupedDatasetImpl(
       ds.sparkSession,
       ds.plan,
       kEncoder,
       kEncoder,
-      ds.encoder,
-      ds.encoder,
+      ds.agnosticEncoder,
+      ds.agnosticEncoder,
       Arrays.asList(gf.apply(col("*")).expr),
       UdfUtils.identical(),
       () => ds.map(groupingFunc)(kEncoder))
