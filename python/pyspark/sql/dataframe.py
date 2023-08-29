@@ -3428,19 +3428,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.isin` function.
 
-        >>> from pyspark.sql.functions import col
-        >>> df.filter(col("name").isin("Alice", "Bob")).show()
+        >>> import pyspark.sql.functions as sf
+        >>> df.filter(sf.col("name").isin("Alice", "Bob")).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
         |  2|Alice|   Math|
         |  5|  Bob|Physics|
         +---+-----+-------+
-        
+
         Filter using the :func:`Column.isNotNull` function.
 
-        >>> from pyspark.sql.functions import col
-        >>> df.filter(col("name").isNotNull()).show()
+        >>> import pyspark.sql.functions as sf
+        >>> df.filter(sf.col("name").isNotNull()).show()
         +---+-------+---------+
         |age|   name|  subject|
         +---+-------+---------+
@@ -3451,8 +3451,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.like` function.
 
-        >>> from pyspark.sql.functions import col
-        >>> df.filter(col("name").like("Al%")).show()
+        >>> import pyspark.sql.functions as sf
+        >>> df.filter(sf.col("name").like("Al%")).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
@@ -3461,8 +3461,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.contains` function.
 
-        >>> from pyspark.sql.functions import col
-        >>> df.filter(col("name").contains("i")).show()
+        >>> import pyspark.sql.functions as sf
+        >>> df.filter(sf.col("name").contains("i")).show()
         +---+-------+---------+
         |age|   name|  subject|
         +---+-------+---------+
@@ -3472,8 +3472,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Filter using the :func:`Column.between` function.
 
-        >>> from pyspark.sql.functions import col
-        >>> df.filter(col("age").between(2, 5)).show()
+        >>> import pyspark.sql.functions as sf
+        >>> df.filter(sf.col("age").between(2, 5)).show()
         +---+-----+-------+
         |age| name|subject|
         +---+-----+-------+
