@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DatetimeType, Decimal, DecimalType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
@@ -209,6 +209,10 @@ case class TryToNumber(left: Expression, right: Expression)
           wrapped by angle brackets if the input value is negative.
           ('<1>').
       If `expr` is a datetime, `format` shall be a valid datetime pattern, see <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+      If `expr` is a binary, it is converted to a string in one of the formats:
+        'base64': a base 64 string.
+        'hex': a string in the hexadecimal format.
+        'utf-8': the input binary is decoded to UTF-8 string.
   """,
   examples = """
     Examples:
@@ -224,6 +228,12 @@ case class TryToNumber(left: Expression, right: Expression)
        12,454.8-
       > SELECT _FUNC_(date'2016-04-08', 'y');
        2016
+      > SELECT _FUNC_(x'537061726b2053514c', 'base64');
+       U3BhcmsgU1FM
+      > SELECT _FUNC_(x'537061726b2053514c', 'hex');
+       537061726B2053514C
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
   """,
   since = "3.4.0",
   group = "string_funcs")
@@ -232,10 +242,20 @@ object ToCharacterBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (expressions.length == 2) {
-      val inputExpr = expressions.head
+      val (inputExpr, format) = (expressions(0), expressions(1))
       inputExpr.dataType match {
-        case _: DatetimeType => DateFormatClass(inputExpr, expressions(1))
-        case _ => ToCharacter(inputExpr, expressions(1))
+        case _: DatetimeType => DateFormatClass(inputExpr, format)
+        case _: BinaryType =>
+          if (!(format.dataType == StringType && format.foldable)) {
+            throw QueryCompilationErrors.requireLiteralParameter(funcName, "format", "string")
+          }
+          format.eval().asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT).trim match {
+            case "base64" => Base64(inputExpr)
+            case "hex" => Hex(inputExpr)
+            case "utf-8" => new Decode(Seq(inputExpr, format))
+            case invalid => throw QueryCompilationErrors.binaryFormatError(funcName, invalid)
+          }
+        case _ => ToCharacter(inputExpr, format)
       }
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)

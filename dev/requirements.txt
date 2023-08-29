@@ -42,7 +42,7 @@ docutils<0.18.0
 markupsafe==2.0.1
 
 # Development scripts
-jira
+jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
