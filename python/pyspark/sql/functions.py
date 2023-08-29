@@ -660,7 +660,8 @@ column = col
 @try_remote_functions
 def asc(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the ascending order of the given column name.
+    Returns a sort expression for the target column in ascending order.
+    This function is used in `sort` and `orderBy` functions.
 
     .. versionadded:: 1.3.0
 
@@ -670,42 +671,67 @@ def asc(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to sort by in the ascending order.
+        Target column to sort by in the ascending order.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column specifying the order.
+        The column specifying the sort order.
 
     Examples
     --------
-    Sort by the column 'id' in the descending order.
+    Example 1: Sort DataFrame by 'id' column in ascending order.
 
-    >>> df = spark.range(5)
-    >>> df = df.sort(desc("id"))
-    >>> df.show()
-    +---+
-    | id|
-    +---+
-    |  4|
-    |  3|
-    |  2|
-    |  1|
-    |  0|
-    +---+
+    >>> from pyspark.sql.functions import asc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(asc("id")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  3|    A|
+    |  4|    B|
+    +---+-----+
 
-    Sort by the column 'id' in the ascending order.
+    Example 2: Use `asc` in `orderBy` function to sort the DataFrame.
 
-    >>> df.orderBy(asc("id")).show()
-    +---+
-    | id|
-    +---+
-    |  0|
-    |  1|
-    |  2|
-    |  3|
-    |  4|
-    +---+
+    >>> from pyspark.sql.functions import asc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.orderBy(asc("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  3|    A|
+    |  4|    B|
+    |  2|    C|
+    +---+-----+
+
+    Example 3: Combine `asc` with `desc` to sort by multiple columns.
+
+    >>> from pyspark.sql.functions import asc, desc
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df.sort(asc("group"), desc("value")).show()
+    +---+-----+-----+
+    | id|group|value|
+    +---+-----+-----+
+    |  2|    A|    4|
+    |  3|    A|    2|
+    |  1|    B|    3|
+    +---+-----+-----+
+
+    Example 4: Implement `asc` from column expression.
+
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(df.id.asc()).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  3|    A|
+    |  4|    B|
+    +---+-----+
     """
     return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
@@ -713,7 +739,8 @@ def asc(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def desc(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given column name.
+    Returns a sort expression for the target column in descending order.
+    This function is used in `sort` and `orderBy` functions.
 
     .. versionadded:: 1.3.0
 
@@ -723,27 +750,67 @@ def desc(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to sort by in the descending order.
+        Target column to sort by in the descending order.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column specifying the order.
+        The column specifying the sort order.
 
     Examples
     --------
-    Sort by the column 'id' in the descending order.
+    Example 1: Sort DataFrame by 'id' column in descending order.
 
-    >>> spark.range(5).orderBy(desc("id")).show()
-    +---+
-    | id|
-    +---+
-    |  4|
-    |  3|
-    |  2|
-    |  1|
-    |  0|
-    +---+
+    >>> from pyspark.sql.functions import desc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(desc("id")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  4|    B|
+    |  3|    A|
+    |  2|    C|
+    +---+-----+
+
+    Example 2: Use `desc` in `orderBy` function to sort the DataFrame.
+
+    >>> from pyspark.sql.functions import desc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.orderBy(desc("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  4|    B|
+    |  3|    A|
+    +---+-----+
+
+    Example 3: Combine `asc` with `desc` to sort by multiple columns.
+
+    >>> from pyspark.sql.functions import asc, desc
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df.sort(desc("group"), asc("value")).show()
+    +---+-----+-----+
+    | id|group|value|
+    +---+-----+-----+
+    |  1|    B|    3|
+    |  3|    A|    2|
+    |  2|    A|    4|
+    +---+-----+-----+
+
+    Example 4: Implement `desc` from column expression.
+
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(df.id.desc()).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  4|    B|
+    |  3|    A|
+    |  2|    C|
+    +---+-----+
     """
     return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
