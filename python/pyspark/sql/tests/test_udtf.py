@@ -27,7 +27,7 @@ from pyspark.errors import (
     PythonException,
     PySparkTypeError,
     AnalysisException,
-    PySparkRuntimeError,
+    PySparkPicklingError,
 )
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
@@ -872,7 +872,7 @@ class BaseUDTFTestsMixin:
                     file_obj
                     yield 1,
 
-            with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+            with self.assertRaisesRegex(PySparkPicklingError, "UDTF_SERIALIZATION_ERROR"):
                 TestUDTF().collect()
 
     def test_udtf_access_spark_session(self):
@@ -884,7 +884,7 @@ class BaseUDTFTestsMixin:
                 df.collect()
                 yield 1,
 
-        with self.assertRaisesRegex(PySparkRuntimeError, "UDTF_SERIALIZATION_ERROR"):
+        with self.assertRaisesRegex(PySparkPicklingError, "UDTF_SERIALIZATION_ERROR"):
             TestUDTF().collect()
 
     def test_udtf_no_eval(self):
@@ -1947,7 +1947,7 @@ class BaseUDTFTestsMixin:
                 TestUDTF(a=lit(10)),
             ]
         ):
-            with self.subTest(query_no=i):
+            with self.subTest(with_b=False, query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b=100)])
 
         # with "b"
@@ -1961,7 +1961,7 @@ class BaseUDTFTestsMixin:
                 TestUDTF(b=lit("z"), a=lit(10)),
             ]
         ):
-            with self.subTest(query_no=i):
+            with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b="z")])
 
     def test_udtf_with_table_argument_and_partition_by(self):

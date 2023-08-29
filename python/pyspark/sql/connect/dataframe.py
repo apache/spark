@@ -1573,15 +1573,10 @@ class DataFrame:
 
     sampleBy.__doc__ = PySparkDataFrame.sampleBy.__doc__
 
-    def _get_alias(self) -> Optional[str]:
-        p = self._plan
-        while p is not None:
-            if isinstance(p, plan.Project) and p.alias:
-                return p.alias
-            p = p._child
-        return None
-
     def __getattr__(self, name: str) -> "Column":
+        if self._plan is None:
+            raise SparkConnectException("Cannot analyze on empty plan.")
+
         if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
@@ -1604,7 +1599,10 @@ class DataFrame:
                 "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
             )
 
-        return self[name]
+        return _to_col_with_plan_id(
+            col=name,
+            plan_id=self._plan._plan_id,
+        )
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
@@ -1618,8 +1616,6 @@ class DataFrame:
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
         if isinstance(item, str):
-            # Check for alias
-            alias = self._get_alias()
             if self._plan is None:
                 raise SparkConnectException("Cannot analyze on empty plan.")
 
@@ -1628,7 +1624,7 @@ class DataFrame:
                 self.select(item).isLocal()
 
             return _to_col_with_plan_id(
-                col=alias if alias is not None else item,
+                col=item,
                 plan_id=self._plan._plan_id,
             )
         elif isinstance(item, Column):

@@ -50,6 +50,19 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean) {
 
   def builder(e: Seq[Expression]): Expression = {
+    if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
+        || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF) {
+      /*
+       * Check if the named arguments:
+       * - don't have duplicated names
+       * - don't contain positional arguments after named arguments
+       */
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+    } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(name)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic)
     } else {
@@ -104,7 +117,7 @@ case class UserDefinedPythonTableFunction(
     /*
      * Check if the named arguments:
      * - don't have duplicated names
-     * - don't contain positional arguments
+     * - don't contain positional arguments after named arguments
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
 

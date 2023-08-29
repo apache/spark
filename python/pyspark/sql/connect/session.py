@@ -64,7 +64,8 @@ from pyspark.sql.connect.plan import (
     CachedRemoteRelation,
 )
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -883,6 +884,14 @@ class SparkSession:
                 PySparkSession(
                     SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
                 )
+
+                # Lastly remove all static configurations that are not allowed to set in the regular
+                # Spark Connect session.
+                jvm = SparkContext._jvm
+                utl = jvm.org.apache.spark.sql.api.python.PythonSQLUtils  # type: ignore[union-attr]
+                for conf_set in utl.listStaticSQLConfigs():
+                    opts.pop(conf_set._1(), None)
+
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote

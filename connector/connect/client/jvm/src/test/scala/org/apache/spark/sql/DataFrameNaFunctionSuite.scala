@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {

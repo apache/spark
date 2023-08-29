@@ -79,6 +79,436 @@ if has_numpy:
 # since it requires making every single overridden definition.
 
 
+__all__ = [
+    "abs",
+    "acos",
+    "acosh",
+    "add_months",
+    "aes_decrypt",
+    "aes_encrypt",
+    "aggregate",
+    "any_value",
+    "approxCountDistinct",
+    "approx_count_distinct",
+    "approx_percentile",
+    "array",
+    "array_agg",
+    "array_append",
+    "array_compact",
+    "array_contains",
+    "array_distinct",
+    "array_except",
+    "array_insert",
+    "array_intersect",
+    "array_join",
+    "array_max",
+    "array_min",
+    "array_position",
+    "array_prepend",
+    "array_remove",
+    "array_repeat",
+    "array_size",
+    "array_sort",
+    "array_union",
+    "arrays_overlap",
+    "arrays_zip",
+    "asc",
+    "asc_nulls_first",
+    "asc_nulls_last",
+    "ascii",
+    "asin",
+    "asinh",
+    "assert_true",
+    "atan",
+    "atan2",
+    "atanh",
+    "avg",
+    "base64",
+    "bin",
+    "bit_and",
+    "bit_count",
+    "bit_get",
+    "bit_length",
+    "bit_or",
+    "bit_xor",
+    "bitmap_bit_position",
+    "bitmap_bucket_number",
+    "bitmap_construct_agg",
+    "bitmap_count",
+    "bitmap_or_agg",
+    "bitwiseNOT",
+    "bitwise_not",
+    "bool_and",
+    "bool_or",
+    "broadcast",
+    "bround",
+    "btrim",
+    "bucket",
+    "call_function",
+    "call_udf",
+    "cardinality",
+    "cast",
+    "cbrt",
+    "ceil",
+    "ceiling",
+    "char",
+    "char_length",
+    "character_length",
+    "coalesce",
+    "col",
+    "collect_list",
+    "collect_set",
+    "column",
+    "concat",
+    "concat_ws",
+    "contains",
+    "conv",
+    "convert_timezone",
+    "corr",
+    "cos",
+    "cosh",
+    "cot",
+    "count",
+    "countDistinct",
+    "count_distinct",
+    "count_if",
+    "count_min_sketch",
+    "covar_pop",
+    "covar_samp",
+    "crc32",
+    "create_map",
+    "csc",
+    "cume_dist",
+    "curdate",
+    "current_catalog",
+    "current_database",
+    "current_date",
+    "current_schema",
+    "current_timestamp",
+    "current_timezone",
+    "current_user",
+    "date_add",
+    "date_diff",
+    "date_format",
+    "date_from_unix_date",
+    "date_part",
+    "date_sub",
+    "date_trunc",
+    "dateadd",
+    "datediff",
+    "datepart",
+    "day",
+    "dayofmonth",
+    "dayofweek",
+    "dayofyear",
+    "days",
+    "decode",
+    "degrees",
+    "dense_rank",
+    "desc",
+    "desc_nulls_first",
+    "desc_nulls_last",
+    "e",
+    "element_at",
+    "elt",
+    "encode",
+    "endswith",
+    "equal_null",
+    "every",
+    "exists",
+    "exp",
+    "explode",
+    "explode_outer",
+    "expm1",
+    "expr",
+    "extract",
+    "factorial",
+    "filter",
+    "find_in_set",
+    "first",
+    "first_value",
+    "flatten",
+    "floor",
+    "forall",
+    "format_number",
+    "format_string",
+    "from_csv",
+    "from_json",
+    "from_unixtime",
+    "from_utc_timestamp",
+    "get",
+    "get_json_object",
+    "getbit",
+    "greatest",
+    "grouping",
+    "grouping_id",
+    "hash",
+    "hex",
+    "histogram_numeric",
+    "hll_sketch_agg",
+    "hll_sketch_estimate",
+    "hll_union",
+    "hll_union_agg",
+    "hour",
+    "hours",
+    "hypot",
+    "ifnull",
+    "ilike",
+    "initcap",
+    "inline",
+    "inline_outer",
+    "input_file_block_length",
+    "input_file_block_start",
+    "input_file_name",
+    "instr",
+    "isnan",
+    "isnotnull",
+    "isnull",
+    "java_method",
+    "json_array_length",
+    "json_object_keys",
+    "json_tuple",
+    "kurtosis",
+    "lag",
+    "last",
+    "last_day",
+    "last_value",
+    "lcase",
+    "lead",
+    "least",
+    "left",
+    "length",
+    "levenshtein",
+    "like",
+    "lit",
+    "ln",
+    "localtimestamp",
+    "locate",
+    "log",
+    "log10",
+    "log1p",
+    "log2",
+    "lower",
+    "lpad",
+    "ltrim",
+    "make_date",
+    "make_dt_interval",
+    "make_interval",
+    "make_timestamp",
+    "make_timestamp_ltz",
+    "make_timestamp_ntz",
+    "make_ym_interval",
+    "map_concat",
+    "map_contains_key",
+    "map_entries",
+    "map_filter",
+    "map_from_arrays",
+    "map_from_entries",
+    "map_keys",
+    "map_values",
+    "map_zip_with",
+    "mask",
+    "max",
+    "max_by",
+    "md5",
+    "mean",
+    "median",
+    "min",
+    "min_by",
+    "minute",
+    "mode",
+    "monotonically_increasing_id",
+    "month",
+    "months",
+    "months_between",
+    "named_struct",
+    "nanvl",
+    "negate",
+    "negative",
+    "next_day",
+    "now",
+    "nth_value",
+    "ntile",
+    "nullif",
+    "nvl",
+    "nvl2",
+    "octet_length",
+    "overlay",
+    "overload",
+    "parse_url",
+    "percent_rank",
+    "percentile",
+    "percentile_approx",
+    "pi",
+    "pmod",
+    "posexplode",
+    "posexplode_outer",
+    "position",
+    "positive",
+    "pow",
+    "power",
+    "printf",
+    "product",
+    "quarter",
+    "radians",
+    "raise_error",
+    "rand",
+    "randn",
+    "rank",
+    "reduce",
+    "reflect",
+    "regexp",
+    "regexp_count",
+    "regexp_extract",
+    "regexp_extract_all",
+    "regexp_instr",
+    "regexp_like",
+    "regexp_replace",
+    "regexp_substr",
+    "regr_avgx",
+    "regr_avgy",
+    "regr_count",
+    "regr_intercept",
+    "regr_r2",
+    "regr_slope",
+    "regr_sxx",
+    "regr_sxy",
+    "regr_syy",
+    "repeat",
+    "replace",
+    "reverse",
+    "right",
+    "rint",
+    "rlike",
+    "round",
+    "row_number",
+    "rpad",
+    "rtrim",
+    "schema_of_csv",
+    "schema_of_json",
+    "sec",
+    "second",
+    "sentences",
+    "sequence",
+    "session_window",
+    "sha",
+    "sha1",
+    "sha2",
+    "shiftLeft",
+    "shiftRight",
+    "shiftRightUnsigned",
+    "shiftleft",
+    "shiftright",
+    "shiftrightunsigned",
+    "shuffle",
+    "sign",
+    "signum",
+    "sin",
+    "sinh",
+    "size",
+    "skewness",
+    "slice",
+    "some",
+    "sort_array",
+    "soundex",
+    "spark_partition_id",
+    "split",
+    "split_part",
+    "sqrt",
+    "stack",
+    "startswith",
+    "std",
+    "stddev",
+    "stddev_pop",
+    "stddev_samp",
+    "str_to_map",
+    "struct",
+    "substr",
+    "substring",
+    "substring_index",
+    "sum",
+    "sumDistinct",
+    "sum_distinct",
+    "tan",
+    "tanh",
+    "timestamp_micros",
+    "timestamp_millis",
+    "timestamp_seconds",
+    "toDegrees",
+    "toRadians",
+    "to_binary",
+    "to_char",
+    "to_csv",
+    "to_date",
+    "to_json",
+    "to_number",
+    "to_timestamp",
+    "to_timestamp_ltz",
+    "to_timestamp_ntz",
+    "to_unix_timestamp",
+    "to_utc_timestamp",
+    "to_varchar",
+    "transform",
+    "transform_keys",
+    "transform_values",
+    "translate",
+    "trim",
+    "trunc",
+    "try_add",
+    "try_aes_decrypt",
+    "try_avg",
+    "try_divide",
+    "try_element_at",
+    "try_multiply",
+    "try_subtract",
+    "try_sum",
+    "try_to_binary",
+    "try_to_number",
+    "try_to_timestamp",
+    "typeof",
+    "ucase",
+    "udf",
+    "udtf",
+    "unbase64",
+    "unhex",
+    "unix_date",
+    "unix_micros",
+    "unix_millis",
+    "unix_seconds",
+    "unix_timestamp",
+    "unwrap_udt",
+    "upper",
+    "url_decode",
+    "url_encode",
+    "user",
+    "var_pop",
+    "var_samp",
+    "variance",
+    "version",
+    "weekday",
+    "weekofyear",
+    "when",
+    "width_bucket",
+    "window",
+    "window_time",
+    "xpath",
+    "xpath_boolean",
+    "xpath_double",
+    "xpath_float",
+    "xpath_int",
+    "xpath_long",
+    "xpath_number",
+    "xpath_short",
+    "xpath_string",
+    "xxhash64",
+    "year",
+    "years",
+    "zip_with",
+    "pandas_udf",
+    "PandasUDFType",
+]
+
+
 def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
     """
     Retrieves JVM function identified by name from
@@ -7826,9 +8256,6 @@ def to_unix_timestamp(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7842,12 +8269,6 @@ def to_unix_timestamp(
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=1460098800)]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
-
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
-    [Row(r=None)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
@@ -7867,9 +8288,6 @@ def to_timestamp_ltz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7879,17 +8297,15 @@ def to_timestamp_ltz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
@@ -7908,9 +8324,6 @@ def to_timestamp_ntz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7920,17 +8333,15 @@ def to_timestamp_ntz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
@@ -14495,13 +14906,16 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |    2.0|
     +-------+
     >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    ... # doctest: +SKIP
     >>> df.select(call_function("custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
     |                               102.0|
     +------------------------------------+
     >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
@@ -15422,6 +15836,9 @@ def udf(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     f : function
@@ -15454,6 +15871,20 @@ def udf(
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
+
+    UDF can use keyword arguments:
+
+    >>> @udf(returnType=IntegerType())
+    ... def calc(a, b):
+    ...     return a + 10 * b
+    ...
+    >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+    +-----------------------------+
+    |calc(b => (id * 10), a => id)|
+    +-----------------------------+
+    |                            0|
+    |                          101|
+    +-----------------------------+
 
     Notes
     -----

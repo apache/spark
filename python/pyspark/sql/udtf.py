@@ -26,7 +26,7 @@ from typing import Any, Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
-from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -80,7 +80,7 @@ def _create_udtf(
     returnType: Optional[Union[StructType, str]],
     name: Optional[str] = None,
     evalType: int = PythonEvalType.SQL_TABLE_UDF,
-    deterministic: bool = True,
+    deterministic: bool = False,
 ) -> "UserDefinedTableFunction":
     """Create a Python UDTF with the given eval type."""
     udtf_obj = UserDefinedTableFunction(
@@ -234,7 +234,7 @@ class UserDefinedTableFunction:
             wrapped_func = _wrap_function(sc, func)
         except pickle.PicklingError as e:
             if "CONTEXT_ONLY_VALID_ON_DRIVER" in str(e):
-                raise PySparkRuntimeError(
+                raise PySparkPicklingError(
                     error_class="UDTF_SERIALIZATION_ERROR",
                     message_parameters={
                         "name": self._name,
@@ -244,7 +244,7 @@ class UserDefinedTableFunction:
                         "and try again.",
                     },
                 ) from None
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,

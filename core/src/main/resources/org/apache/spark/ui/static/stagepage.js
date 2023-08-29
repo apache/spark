@@ -846,12 +846,7 @@ $(document).ready(function () {
             }
           },
           "columns": [
-            {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-              },
-              name: "Index"
-            },
+            {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
             {data : "status", name: "Status"},

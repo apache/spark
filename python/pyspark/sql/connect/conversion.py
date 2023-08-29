@@ -117,7 +117,11 @@ class LocalDataToArrowConversion:
                     ), f"{type(value)} {value}"
 
                     _dict = {}
-                    if not isinstance(value, Row) and hasattr(value, "__dict__"):
+                    if (
+                        not isinstance(value, Row)
+                        and not isinstance(value, tuple)  # inherited namedtuple
+                        and hasattr(value, "__dict__")
+                    ):
                         value = value.__dict__
                     if isinstance(value, dict):
                         for i, field in enumerate(field_names):
@@ -274,7 +278,11 @@ class LocalDataToArrowConversion:
         pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+            if (
+                not isinstance(item, Row)
+                and not isinstance(item, tuple)  # inherited namedtuple
+                and hasattr(item, "__dict__")
+            ):
                 item = item.__dict__
             if isinstance(item, dict):
                 for i, col in enumerate(column_names):
