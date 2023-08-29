@@ -1309,7 +1309,8 @@ object TransposeWindow extends Rule[LogicalPlan] {
     w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.expressions.forall(_.deterministic) &&
       w2.expressions.forall(_.deterministic) &&
-      compatiblePartitions(w1.partitionSpec, w2.partitionSpec)
+      compatiblePartitions(w1.partitionSpec, w2.partitionSpec) &&
+      w1.orderSpec.isEmpty && w2.orderSpec.isEmpty
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(

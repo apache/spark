@@ -287,6 +287,13 @@ WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d = t1.t1d) as tmp);
 
+-- Same as above but with LIMIT/ORDER BY instead of MAX
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d = t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
 
 -- SPARK-44549: window function in the correlated subquery with non-equi predicate.
 SELECT 1
@@ -294,6 +301,14 @@ FROM t1
 WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d <= t1.t1d) as tmp);
+
+-- Same as above but with LIMIT/ORDER BY
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d <= t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
 
 -- SPARK-44549: window function in the correlated subquery over joins.
 SELECT t1b
