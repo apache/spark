@@ -115,7 +115,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("SPARK-21957: get current_user through thrift server") {
+  test("SPARK-21957: get current_user, user, session_user through thrift server") {
     val clientUser = "storm_earth_fire_heed_my_call"
     val sql = "select current_user()"
 
@@ -126,7 +126,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
 
-      val userFuncs = Seq("user", "current_user")
+      val userFuncs = Seq("user", "current_user", "session_user")
       userFuncs.foreach { func =>
         val opHandle1 = exec(s"select $func(), $func")
         val rowSet1 = client.fetchResults(opHandle1)
