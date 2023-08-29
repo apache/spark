@@ -143,7 +143,7 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = new Array[Long](names.length)
     val mxBeans = ManagementFactory.getGarbageCollectorMXBeans.asScala
-    gcMetrics(6) = mxBeans.map(_.getCollectionTime).sum
+    gcMetrics(4) = mxBeans.map(_.getCollectionTime).sum
     mxBeans.foreach { mxBean =>
       if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(0) = mxBean.getCollectionCount
@@ -152,8 +152,8 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
         gcMetrics(2) = mxBean.getCollectionCount
         gcMetrics(3) = mxBean.getCollectionTime
       } else if (BUILTIN_CONCURRENT_GARBAGE_COLLECTOR.equals(mxBean.getName)) {
-        gcMetrics(4) = mxBean.getCollectionCount
-        gcMetrics(5) = mxBean.getCollectionTime
+        gcMetrics(5) = mxBean.getCollectionCount
+        gcMetrics(6) = mxBean.getCollectionTime
       } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
         nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
         // log it when first seen
