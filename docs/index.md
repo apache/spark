@@ -163,8 +163,7 @@ options for deployment:
 * AMP Camps: a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](https://www.youtube.com/user/BerkeleyAMPLab/search?query=amp%20camp),
   are available online for free.
-* [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark (
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+* [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r))
