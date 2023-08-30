@@ -3415,6 +3415,7 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
+@try_remote_functions
 def width_bucket(
     v: "ColumnOrName",
     min: "ColumnOrName",
@@ -6939,6 +6940,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+@try_remote_functions
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     Parses the `col` with the `format` to a timestamp. The function always
@@ -10329,6 +10331,7 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
+@try_remote_functions
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -13637,6 +13640,7 @@ def map_zip_with(
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
 
+@try_remote_functions
 def str_to_map(
     text: "ColumnOrName",
     pairDelim: Optional["ColumnOrName"] = None,
@@ -14062,6 +14066,7 @@ def make_interval(
     )
 
 
+@try_remote_functions
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14133,6 +14138,7 @@ def make_timestamp(
         )
 
 
+@try_remote_functions
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14203,6 +14209,7 @@ def make_timestamp_ltz(
         )
 
 
+@try_remote_functions
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14256,6 +14263,7 @@ def make_timestamp_ntz(
     )
 
 
+@try_remote_functions
 def make_ym_interval(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
