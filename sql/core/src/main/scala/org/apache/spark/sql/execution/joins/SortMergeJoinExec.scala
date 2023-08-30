@@ -54,6 +54,8 @@ case class SortMergeJoinExec(
     case _: InnerLike =>
       val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
       val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering, false)
+      // The streamed side of InnerLike always be the left side, keep all the left side orderings.
+      // The buffered size may spill, so we should not keep the right side orderings.
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
         // Also add expressions from right side sort order
         val sameOrderExpressions = ExpressionSet(lKey.sameOrderExpressions ++ rKey.children)
