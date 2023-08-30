@@ -24,6 +24,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
 
+  private def isInStorage(name: String): Boolean =
+    spark.sparkContext.getRDDStorageInfo.exists(_.name.contains(s"In-memory table $name"))
+
   test("SPARK-44199: isSubDirectory tests") {
     val cacheManager = spark.sharedState.cacheManager
     val testCases = Map[(String, String), Boolean](
@@ -36,5 +39,33 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
       val result = cacheManager.isSubDir(new Path(test._1._1), new Path(test._1._2))
       assert(result == test._2)
     }
+  }
+
+  test("SPARK-XXXXX: Cached table name should be the complete identifier in existing table") {
+    val db = "dbtest"
+    spark.sql(s"CREATE DATABASE $db")
+    spark.sql(s"USE $db")
+    try {
+      val t = "t1"
+      spark.sql(s"CREATE TABLE $t USING parquet AS SELECT 1 AS id")
+      spark.sql(s"CACHE TABLE $t")
+      assert(isInStorage(s"$db.$t"))
+      spark.sql(s"UNCACHE TABLE $t")
+      assert(!isInStorage(s"$db.$t"))
+      spark.sql(s"CACHE TABLE $db.$t")
+      assert(isInStorage(s"$db.$t"))
+      spark.sql(s"UNCACHE TABLE $t")
+      assert(!isInStorage(s"$db.$t"))
+    } finally {
+      spark.sql(s"DROP DATABASE $db CASCADE")
+    }
+  }
+
+  test("SPARK-XXXXX: Cached table as select name should be the name of the temporary table") {
+    val view = "v1"
+    spark.sql(s"CACHE TABLE $view AS SELECT 1 AS id")
+    assert(isInStorage(view))
+    spark.sql(s"UNCACHE TABLE $view")
+    assert(!isInStorage(view))
   }
 }
