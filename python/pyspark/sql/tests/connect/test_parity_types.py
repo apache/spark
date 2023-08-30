@@ -86,6 +86,10 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
+    @unittest.skip("SPARK-45018: should support CalendarIntervalType")
+    def test_calendar_interval_type(self):
+        super().test_calendar_interval_type()
+
 
 if __name__ == "__main__":
     import unittest
