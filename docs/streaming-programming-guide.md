@@ -2570,7 +2570,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     * [StreamingContext](api/scala/org/apache/spark/streaming/StreamingContext.html) and
   [DStream](api/scala/org/apache/spark/streaming/dstream/DStream.html)
     * [KafkaUtils](api/scala/org/apache/spark/streaming/kafka/KafkaUtils$.html),
-    [KinesisUtils](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html),
+    [KinesisUtils](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
