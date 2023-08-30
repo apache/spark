@@ -239,7 +239,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def removeCachedListener(id: String): Unit = {
     Option(listenerCache.remove(id)) match {
-      case pyListener: PythonStreamingQueryListener => pyListener.stopListenerProcess()
+      case Some(pyListener: PythonStreamingQueryListener) => pyListener.stopListenerProcess()
       case _ => // do nothing
     }
   }
