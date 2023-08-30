@@ -557,7 +557,8 @@ def main():
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     # Assumes branch names can be sorted lexicographically
-    latest_branch = sorted(branch_names, reverse=True)[0]
+    branch_names = sorted(branch_names, reverse=True)
+    branch_iter = iter(branch_names)
 
     pr_num = input("Which pull request would you like to merge? (e.g. 34): ")
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
@@ -627,7 +628,7 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        cherry_pick(pr_num, merge_hash, latest_branch)
+        cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -647,7 +648,9 @@ def main():
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while input("\n%s (y/n): " % pick_prompt).lower() == "y":
-        merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
+        merged_refs = merged_refs + [
+            cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
+        ]
 
     if asf_jira is not None:
         continue_maybe("Would you like to update an associated JIRA?")
