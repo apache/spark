@@ -818,7 +818,7 @@ jobs:
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
-    needs: precondition
+    needs: [precondition, infra-image]
     if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-22.04
