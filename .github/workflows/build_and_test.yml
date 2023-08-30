@@ -127,6 +127,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
@@ -342,6 +343,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     strategy:
@@ -478,6 +480,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     container:
       image: ${{ needs.precondition.outputs.image_url }}
     env:
@@ -586,6 +589,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
@@ -767,6 +771,7 @@ jobs:
           - 17
           - 21-ea
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -817,6 +822,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -865,6 +871,7 @@ jobs:
     name: Run TPC-DS queries with SF=1
     # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
     runs-on: ubuntu-20.04
+    timeout-minutes: 300
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -963,6 +970,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -1029,6 +1037,7 @@ jobs:
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-22.04
+    timeout-minutes: 300
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v3
