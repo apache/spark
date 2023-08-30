@@ -179,7 +179,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val referenceRight = expr.references.intersect(j.right.outputSet).nonEmpty
           if (referenceLeft && referenceRight &&
             SubqueryExpression.hasInOrCorrelatedExistsSubquery(expr)) {
-            throw new QueryCompilationErrors.unsupportedCorrelatedSubqueryInJoinConditionError(expr)
+            throw QueryCompilationErrors.unsupportedCorrelatedSubqueryInJoinConditionError(expr)
           } else if (referenceLeft) {
             val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(expr), newLeft)
             newLeft = newInputPlan
