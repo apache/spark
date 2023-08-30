@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.TimeZone
+import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 
@@ -423,6 +424,17 @@ object QueryTest extends Assertions {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
+  }
+
+  def getCurrentClassCallSitePattern: String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
 

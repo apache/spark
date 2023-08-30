@@ -1207,7 +1207,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               },
               errorClass = "DIVIDE_BY_ZERO",
               parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
-              context = new ExpectedContext(
+              context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = s"$SESSION_CATALOG_NAME.default.v5",
                 fragment = "1/0",
@@ -1226,7 +1226,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           },
           errorClass = "DIVIDE_BY_ZERO",
           parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
-          context = new ExpectedContext(
+          context = ExpectedContext(
             objectType = "VIEW",
             objectName = s"$SESSION_CATALOG_NAME.default.v1",
             fragment = "1/0",

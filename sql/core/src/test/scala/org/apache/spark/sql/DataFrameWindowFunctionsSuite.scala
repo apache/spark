@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.QueryTest.getCurrentClassCallSitePattern
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
@@ -412,7 +413,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
-        "proposal" -> "`value`, `key`"))
+        "proposal" -> "`value`, `key`"),
+      context = ExpectedContext(code = "count", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {

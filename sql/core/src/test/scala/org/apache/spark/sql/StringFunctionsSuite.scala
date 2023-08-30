@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
+import org.apache.spark.sql.QueryTest.getCurrentClassCallSitePattern
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
@@ -879,7 +880,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "funcName" -> s"`$funcName`",
           "paramName" -> "`format`",
-          "paramType" -> "\"STRING\""))
+          "paramType" -> "\"STRING\""),
+        context =
+          ExpectedContext(code = funcName, callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           df2.select(func(col("input"), lit("invalid_format"))).collect()
@@ -888,7 +891,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "parameter" -> "`format`",
           "functionName" -> s"`$funcName`",
-          "invalidFormat" -> "'invalid_format'"))
+          "invalidFormat" -> "'invalid_format'"),
+        context =
+          ExpectedContext(code = funcName, callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"select $funcName('a', 'b', 'c')")

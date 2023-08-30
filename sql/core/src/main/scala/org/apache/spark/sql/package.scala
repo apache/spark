@@ -18,6 +18,8 @@
 package org.apache.spark
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.execution.SparkStrategy
 
 /**
@@ -73,4 +75,24 @@ package object sql {
    * with rebasing.
    */
   private[sql] val SPARK_LEGACY_INT96_METADATA_KEY = "org.apache.spark.legacyINT96"
+
+  private[sql] def withOrigin[T](f: => T, framesToDrop: Int = 0): T = {
+    CurrentOrigin.withOrigin(Origin.fromCurrentStackTrace(framesToDrop + 1))(f)
+  }
+
+  private[sql] def withExpr(f: => Expression, framesToDrop: Int = 0) = {
+    withOrigin(Column(f), framesToDrop + 1)
+  }
+
+  private[sql] def litImpl(literal: Any): Column = literal match {
+    case c: Column => c
+    case s: Symbol => new ColumnName(s.name)
+    case _ =>
+      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
+      // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this
+      // method, `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence,
+      // we can just manually call `Literal.apply` to skip the expensive `ScalaReflection` code.
+      // This is significantly better when there are many threads calling `lit` concurrently.
+      Column(Literal(literal))
+  }
 }

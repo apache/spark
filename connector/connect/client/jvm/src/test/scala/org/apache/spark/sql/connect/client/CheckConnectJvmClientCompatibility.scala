@@ -209,6 +209,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
 
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.withExprTyped"),
+
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),

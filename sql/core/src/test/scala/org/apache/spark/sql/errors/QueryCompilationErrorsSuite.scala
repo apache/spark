@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.QueryTest.getCurrentClassCallSitePattern
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -696,7 +697,9 @@ class QueryCompilationErrorsSuite
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
-      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""))
+      parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
+      context =
+        ExpectedContext(code = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {

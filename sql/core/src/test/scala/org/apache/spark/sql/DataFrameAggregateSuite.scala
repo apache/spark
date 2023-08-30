@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.QueryTest.getCurrentClassCallSitePattern
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -632,7 +633,9 @@ class DataFrameAggregateSuite extends QueryTest
         "functionName" -> "`collect_set`",
         "dataType" -> "\"MAP\"",
         "sqlExpr" -> "\"collect_set(b)\""
-      )
+      ),
+      context =
+        ExpectedContext(code = "collect_set", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -705,7 +708,8 @@ class DataFrameAggregateSuite extends QueryTest
         testData.groupBy(sum($"key")).count()
       },
       errorClass = "GROUP_BY_AGGREGATE",
-      parameters = Map("sqlExpr" -> "sum(key)")
+      parameters = Map("sqlExpr" -> "sum(key)"),
+      context = ExpectedContext(code = "sum", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 

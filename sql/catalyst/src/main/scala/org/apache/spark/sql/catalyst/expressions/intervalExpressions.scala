@@ -22,8 +22,8 @@ import java.util.Locale
 
 import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MONTHS_PER_YEAR
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -604,7 +604,7 @@ trait IntervalDivide {
       minValue: Any,
       num: Expression,
       numValue: Any,
-      context: SQLQueryContext): Unit = {
+      context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
         throw QueryExecutionErrors.intervalArithmeticOverflowError(
@@ -616,7 +616,7 @@ trait IntervalDivide {
   def divideByZeroCheck(
       dataType: DataType,
       num: Any,
-      context: SQLQueryContext): Unit = dataType match {
+      context: QueryContext): Unit = dataType match {
     case _: DecimalType =>
       if (num.asInstanceOf[Decimal].isZero) {
         throw QueryExecutionErrors.intervalDividedByZeroError(context)

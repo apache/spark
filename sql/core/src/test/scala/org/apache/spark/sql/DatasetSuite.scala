@@ -2561,6 +2561,23 @@ class DatasetSuite extends QueryTest
 
     checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
   }
+
+  test("SPARK-45022: exact DatasetQueryContext call site") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq(1).toDS
+      var callSitePattern: String = null
+      checkError(
+        exception = intercept[AnalysisException] {
+          callSitePattern = QueryTest.getNextLineCallSitePattern()
+          val c = col("a")
+          df.select(c)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
+        context = ExpectedContext(code = "col", callSitePattern = callSitePattern))
+    }
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
