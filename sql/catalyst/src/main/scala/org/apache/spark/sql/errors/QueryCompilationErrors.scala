@@ -3752,13 +3752,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = cause)
   }
 
-  def unsupportedCorrelatedSubqueryExpressionInJoinConditionError(
-      unsupportedSubqueryExpression: Expression,
-      origin: Origin): Throwable = {
+  def unsupportedCorrelatedSubqueryInJoinConditionError(
+      unsupportedSubqueryExpression: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
         "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
-      origin = origin,
       messageParameters = Map("subqueryExpression" -> unsupportedSubqueryExpression.sql))
   }
 }
