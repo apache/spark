@@ -661,7 +661,9 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       if: inputs.branch != 'branch-3.3'
-      run: ./dev/connect-jvm-client-mima-check
+      run: |
+        rm -rf ~/.m2
+        ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies for branch-3.3
       if: inputs.branch == 'branch-3.3'
       run: |
@@ -867,6 +869,7 @@ jobs:
         java-version: 8
     - name: Build with SBT
       run: |
+        rm -rf ~/.m2
         ./dev/change-scala-version.sh 2.13
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile Test/compile
 
