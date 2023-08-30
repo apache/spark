@@ -823,6 +823,8 @@ jobs:
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-22.04
     timeout-minutes: 300
+    container:
+      image: ${{ needs.precondition.outputs.image_url }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
