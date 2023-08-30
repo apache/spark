@@ -247,7 +247,7 @@ object ToCharacterBuilder extends ExpressionBuilder {
         case _: DatetimeType => DateFormatClass(inputExpr, format)
         case _: BinaryType =>
           if (!(format.dataType == StringType && format.foldable)) {
-            throw QueryCompilationErrors.requireLiteralParameter(funcName, "format", "string")
+            throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format", StringType)
           }
           format.eval().asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT).trim match {
             case "base64" => Base64(inputExpr)
