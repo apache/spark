@@ -910,8 +910,8 @@ pyspark_ml_connect = Module(
 )
 
 
-pyspark_pandas_connect = Module(
-    name="pyspark-pandas-connect",
+pyspark_pandas_connect_part0 = Module(
+    name="pyspark-pandas-connect-part0",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
@@ -990,8 +990,8 @@ pyspark_pandas_connect = Module(
 )
 
 
-pyspark_pandas_slow_connect_part1 = Module(
-    name="pyspark-pandas-slow-connect-part1",
+pyspark_pandas_connect_part1 = Module(
+    name="pyspark-pandas-connect-part1",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
@@ -1051,8 +1051,8 @@ pyspark_pandas_slow_connect_part1 = Module(
 )
 
 
-pyspark_pandas_slow_connect_part2 = Module(
-    name="pyspark-pandas-slow-connect-part2",
+pyspark_pandas_connect_part2 = Module(
+    name="pyspark-pandas-connect-part2",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
