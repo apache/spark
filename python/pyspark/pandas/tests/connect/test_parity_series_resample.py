@@ -28,7 +28,7 @@ class SeriesResampleParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_resample import *  # noqa: F401
+    from pyspark.pandas.tests.connect.test_parity_series_resample import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -122,7 +122,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1',
-     'pyspark-pandas-connect-part2' 'pyspark-pandas-slow', 'pyspark-sql', 'pyspark-testing',
+     'pyspark-pandas-connect-part2', 'pyspark-pandas-slow', 'pyspark-sql', 'pyspark-testing',
      'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])

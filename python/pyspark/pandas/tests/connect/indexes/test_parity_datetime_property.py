@@ -28,7 +28,7 @@ class DatetimeIndexParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_datetime_property import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

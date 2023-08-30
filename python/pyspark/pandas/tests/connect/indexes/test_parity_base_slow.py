@@ -31,7 +31,7 @@ class IndexesSlowParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_base import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_base_slow import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

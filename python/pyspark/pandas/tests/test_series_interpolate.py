@@ -85,7 +85,7 @@ class SeriesInterpolateTests(SeriesInterpolateTestsMixin, PandasOnSparkTestCase,
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_generic_functions import *  # noqa: F401
+    from pyspark.pandas.tests.test_series_interpolate import *  # noqa: F401
 
     try:
         import xmlrunner

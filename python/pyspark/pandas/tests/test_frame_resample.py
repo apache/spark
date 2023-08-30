@@ -147,7 +147,7 @@ class FrameResampleTests(FrameResampleTestsMixin, PandasOnSparkTestCase, TestUti
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.test_resample import *  # noqa: F401
+    from pyspark.pandas.tests.test_frame_resample import *  # noqa: F401
 
     try:
         import xmlrunner

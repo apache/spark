@@ -108,7 +108,7 @@ class DatetimeIndexPropertyTests(DatetimeIndexPropertyTestsMixin, PandasOnSparkT
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.indexes.test_datetime import *  # noqa: F401
+    from pyspark.pandas.tests.indexes.test_datetime_property import *  # noqa: F401
 
     try:
         import xmlrunner
