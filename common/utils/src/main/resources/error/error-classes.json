@@ -4030,11 +4030,6 @@
       "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1100" : {
-    "message" : [
-      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1103" : {
     "message" : [
       "Unsupported component type <clz> in arrays."
