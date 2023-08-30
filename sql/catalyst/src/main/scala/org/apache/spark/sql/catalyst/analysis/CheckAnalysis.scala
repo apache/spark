@@ -168,8 +168,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     try {
       checkAnalysis0(inlinedPlan)
     } catch {
-    case e: AnalysisException =>
-      throw new ExtendedAnalysisException(e, inlinedPlan)
+      case e: AnalysisException =>
+        throw new ExtendedAnalysisException(e, inlinedPlan)
     }
     plan.setAnalyzed()
   }
