@@ -197,20 +197,6 @@ class SeriesDateTimeTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.dt.nanosecond)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-42617): Support `isocalendar`",
-    )
-    def test_week(self):
-        self.check_func(lambda x: x.dt.week)
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-42617): Support `isocalendar`",
-    )
-    def test_weekofyear(self):
-        self.check_func(lambda x: x.dt.weekofyear)
-
     def test_dayofweek(self):
         self.check_func(lambda x: x.dt.dayofweek)
 

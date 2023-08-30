@@ -233,29 +233,6 @@ class DatetimeIndex(Index):
         )
         return Index(self.to_series().dt.microsecond)
 
-    @property
-    def week(self) -> Index:
-        """
-        The week ordinal of the year.
-
-        .. deprecated:: 3.5.0
-        """
-        warnings.warn(
-            "`week` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.week)
-
-    @property
-    def weekofyear(self) -> Index:
-        warnings.warn(
-            "`weekofyear` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.weekofyear)
-
-    weekofyear.__doc__ = week.__doc__
-
     def isocalendar(self) -> DataFrame:
         return self.to_series().dt.isocalendar()
 

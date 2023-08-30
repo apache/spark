@@ -121,7 +121,7 @@ class DatetimeMethods:
         """
         Calculate year, week, and day according to the ISO 8601 standard.
 
-            .. versionadded:: 3.5.0
+            .. versionadded:: 4.0.0
 
         Returns
         -------
