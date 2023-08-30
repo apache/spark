@@ -24,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
+import scala.collection.concurrent
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.{FilenameUtils, FileUtils}
@@ -208,12 +209,38 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
         s"sessionId: ${sessionHolder.sessionId}")
 
     // Clean up added files
-    sessionHolder.session.sparkContext.addedFiles.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedArchives.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedJars.remove(state.uuid)
+    val fileserver = SparkEnv.get.rpcEnv.fileServer
+    val sparkContext = sessionHolder.session.sparkContext
+
+    sparkContext.synchronized {
+      val allAddedFiles = sparkContext.allAddedFiles.keys
+      val allAddedArchives = sparkContext.allAddedArchives.keys
+      val allAddedJars = sparkContext.allAddedJars.keys
+
+      val removedFiles = sparkContext.addedFiles.remove(state.uuid)
+      val removedArchives = sparkContext.addedArchives.remove(state.uuid)
+      val removedJars = sparkContext.addedJars.remove(state.uuid)
+
+      // In case there are duplicate files added by other sessions.
+      removedFiles.foreach {
+        _.keys.foreach { key =>
+          if (!allAddedFiles.exists(_ == key)) fileserver.removeFile(key)
+        }
+      }
+      removedArchives.foreach {
+        _.keys.foreach { key =>
+          if (!allAddedArchives.exists(_ == key)) fileserver.removeFile(key)
+        }
+      }
+      removedJars.foreach {
+        _.keys.foreach { key =>
+          if (!allAddedJars.exists(_ == key)) fileserver.removeJar(key)
+        }
+      }
+    }
 
     // Clean up cached relations
-    val blockManager = sessionHolder.session.sparkContext.env.blockManager
+    val blockManager = sparkContext.env.blockManager
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder
