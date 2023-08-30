@@ -4831,10 +4831,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             .. versionchanged:: 2.2.0
                Added support for multiple columns.
-        probabilities : list or tuple
+        probabilities : list or tuple of floats
             a list of quantile probabilities
-            Each number must belong to [0, 1].
-            For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+            Each number must be a float in the range [0, 1].
+            For example 0.0 is the minimum, 0.5 is the median, 1.0 is the maximum.
         relativeError : float
             The relative target precision to achieve
             (>= 0). If set to zero, the exact quantiles are computed, which
@@ -4856,6 +4856,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -----
         Null values will be ignored in numerical columns before calculation.
         For columns only containing null values, an empty list is returned.
+
+        Examples
+        --------
+        Example 1: Calculating quantiles for a single column
+
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [1.0, 3.0, 5.0]
+
+        Example 2: Calculating quantiles for multiple columns
+
+        >>> data = [(1, 10), (2, 20), (3, 30), (4, 40), (5, 50)]
+        >>> df = spark.createDataFrame(data, ["col1", "col2"])
+        >>> quantiles = df.approxQuantile(["col1", "col2"], [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [[1.0, 3.0, 5.0], [10.0, 30.0, 50.0]]
+
+        Example 3: Handling null values
+
+        >>> data = [(1,), (None,), (3,), (4,), (None,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.5, 1.0], 0.05)
+        >>> quantiles
+        [1.0, 3.0, 4.0]
+
+        Example 4: Calculating quantiles with low precision
+
+        >>> data = [(1,), (2,), (3,), (4,), (5,)]
+        >>> df = spark.createDataFrame(data, ["values"])
+        >>> quantiles = df.approxQuantile("values", [0.0, 0.2, 1.0], 0.1)
+        >>> quantiles
+        [1.0, 1.0, 5.0]
         """
 
         if not isinstance(col, (str, list, tuple)):
