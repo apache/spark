@@ -705,6 +705,8 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_ewm",
         "pyspark.pandas.tests.test_frame_spark",
         "pyspark.pandas.tests.test_generic_functions",
+        "pyspark.pandas.tests.test_frame_interpolate",
+        "pyspark.pandas.tests.test_series_interpolate",
         "pyspark.pandas.tests.test_indexops_spark",
         "pyspark.pandas.tests.test_internal",
         "pyspark.pandas.tests.test_namespace",
@@ -713,6 +715,8 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
         "pyspark.pandas.tests.test_repr",
         "pyspark.pandas.tests.test_resample",
+        "pyspark.pandas.tests.test_frame_resample",
+        "pyspark.pandas.tests.test_series_resample",
         "pyspark.pandas.tests.test_reshape",
         "pyspark.pandas.tests.test_rolling",
         "pyspark.pandas.tests.test_scalars",
@@ -742,7 +746,9 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.series",
         # unittests
         "pyspark.pandas.tests.indexes.test_base",
+        "pyspark.pandas.tests.indexes.test_base_slow",
         "pyspark.pandas.tests.indexes.test_datetime",
+        "pyspark.pandas.tests.indexes.test_datetime_property",
         "pyspark.pandas.tests.indexes.test_align",
         "pyspark.pandas.tests.indexes.test_indexing",
         "pyspark.pandas.tests.indexes.test_reindex",
@@ -904,8 +910,8 @@ pyspark_ml_connect = Module(
 )
 
 
-pyspark_pandas_connect = Module(
-    name="pyspark-pandas-connect",
+pyspark_pandas_connect_part0 = Module(
+    name="pyspark-pandas-connect-part0",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
@@ -921,7 +927,6 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_datetime_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_null_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops",
-        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_arithmetic",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_reverse",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_string_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_udt_ops",
@@ -940,21 +945,15 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.test_parity_dataframe_conversion",
         "pyspark.pandas.tests.connect.test_parity_dataframe_spark_io",
         "pyspark.pandas.tests.connect.test_parity_default_index",
-        "pyspark.pandas.tests.connect.test_parity_expanding",
         "pyspark.pandas.tests.connect.test_parity_extension",
-        "pyspark.pandas.tests.connect.test_parity_ewm",
         "pyspark.pandas.tests.connect.test_parity_frame_spark",
         "pyspark.pandas.tests.connect.test_parity_generic_functions",
         "pyspark.pandas.tests.connect.test_parity_indexops_spark",
         "pyspark.pandas.tests.connect.test_parity_internal",
         "pyspark.pandas.tests.connect.test_parity_namespace",
         "pyspark.pandas.tests.connect.test_parity_numpy_compat",
-        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_expanding",
-        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_rolling",
         "pyspark.pandas.tests.connect.test_parity_repr",
         "pyspark.pandas.tests.connect.test_parity_resample",
-        "pyspark.pandas.tests.connect.test_parity_reshape",
-        "pyspark.pandas.tests.connect.test_parity_rolling",
         "pyspark.pandas.tests.connect.test_parity_scalars",
         "pyspark.pandas.tests.connect.test_parity_series_conversion",
         "pyspark.pandas.tests.connect.test_parity_series_datetime",
@@ -982,7 +981,6 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.computation.test_parity_describe",
         "pyspark.pandas.tests.connect.computation.test_parity_eval",
         "pyspark.pandas.tests.connect.computation.test_parity_melt",
-        "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
         "pyspark.pandas.tests.connect.computation.test_parity_pivot",
     ],
     excluded_python_implementations=[
@@ -992,8 +990,8 @@ pyspark_pandas_connect = Module(
 )
 
 
-pyspark_pandas_slow_connect = Module(
-    name="pyspark-pandas-slow-connect",
+pyspark_pandas_connect_part1 = Module(
+    name="pyspark-pandas-connect-part1",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
@@ -1045,6 +1043,36 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.series.test_parity_sort",
         "pyspark.pandas.tests.connect.series.test_parity_stat",
         "pyspark.pandas.tests.connect.test_parity_stats",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_pandas_connect_part2 = Module(
+    name="pyspark-pandas-connect-part2",
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
+    source_file_regexes=[
+        "python/pyspark/pandas",
+    ],
+    python_test_goals=[
+        # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.indexes.test_parity_base_slow",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_property",
+        "pyspark.pandas.tests.connect.test_parity_frame_interpolate",
+        "pyspark.pandas.tests.connect.test_parity_series_interpolate",
+        "pyspark.pandas.tests.connect.test_parity_frame_resample",
+        "pyspark.pandas.tests.connect.test_parity_series_resample",
+        "pyspark.pandas.tests.connect.test_parity_reshape",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_arithmetic",
+        "pyspark.pandas.tests.connect.test_parity_ewm",
+        "pyspark.pandas.tests.connect.test_parity_rolling",
+        "pyspark.pandas.tests.connect.test_parity_expanding",
+        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_expanding",
+        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_rolling",
+        "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
