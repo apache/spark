@@ -1277,7 +1277,7 @@ class TypesTestsMixin:
     def test_calendar_interval_type_constructor(self):
         self.assertEqual(CalendarIntervalType().simpleString(), "interval")
 
-        with self.assertRaisesRegex(TypeError, "DataTypeSingleton.__call__() takes 1"):
+        with self.assertRaisesRegex(TypeError, "takes 1 positional argument but 2 were given"):
             CalendarIntervalType(3)
 
     def test_calendar_interval_type(self):
