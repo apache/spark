@@ -1183,7 +1183,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             // name and storage level.
             spark.catalog.cacheTable("cachedTable", MEMORY_AND_DISK_2)
             assertCached(spark.table("cachedTable"),
-              s"spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
+              "spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached.")
 
@@ -1193,7 +1193,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             // storage level 'MEMORY_AND_DISK', instead of 'MEMORY_AND_DISK2'.
             spark.catalog.refreshTable("cachedTable")
             assertCached(spark.table("cachedTable"),
-              s"spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
+              "spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refreshing with its unqualified name.")
 
@@ -1205,7 +1205,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             activateDatabase(db) {
               spark.catalog.refreshTable("default.cachedTable")
               assertCached(spark.table("default.cachedTable"),
-                s"spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
+                "spark_catalog.default.cachedTable", MEMORY_AND_DISK_2)
               assert(spark.catalog.isCached("default.cachedTable"),
                 "Table 'cachedTable' should be cached after refreshing with its qualified name.")
             }
