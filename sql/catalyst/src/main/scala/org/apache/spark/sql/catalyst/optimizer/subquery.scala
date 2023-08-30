@@ -159,6 +159,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
+
     // This case takes care of predicate subqueries in join conditions that are not pushed down
     // to the children nodes by [[PushDownPredicates]].
     case j: Join if j.condition.exists(cond =>
@@ -178,9 +179,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val referenceRight = expr.references.intersect(j.right.outputSet).nonEmpty
           if (referenceLeft && referenceRight &&
             SubqueryExpression.hasInOrCorrelatedExistsSubquery(expr)) {
-            throw new IllegalStateException(
-              s"Unable to optimize predicate subquery in join condition references both " +
-                s"join children.")
+            throw new QueryCompilationErrors
+            .unsupportedCorrelatedSubqueryExpressionInJoinConditionError(expr, j.origin)
           } else if (referenceLeft) {
             val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(expr), newLeft)
             newLeft = newInputPlan

@@ -3751,4 +3751,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "supported" -> "constant expressions"),
       cause = cause)
   }
+
+  def unsupportedCorrelatedSubqueryExpressionInJoinConditionError(
+      unsupportedSubqueryExpression: Expression,
+      origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+      origin = origin,
+      messageParameters = Map("subqueryExpression" -> unsupportedSubqueryExpression.sql))
+  }
 }
