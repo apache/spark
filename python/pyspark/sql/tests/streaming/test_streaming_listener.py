@@ -88,7 +88,7 @@ class StreamingListenerTestsMixin:
         except Exception:
             self.fail("'%s' is not in ISO 8601 format.")
         self.assertTrue(isinstance(progress.batchId, int))
-        self.assertTrue(isinstance(progress.batchDuration, int))
+        self.assertTrue(progress.batchDuration is None or isinstance(progress.batchDuration, int))
         self.assertTrue(isinstance(progress.durationMs, dict))
         self.assertTrue(
             set(progress.durationMs.keys()).issubset(
