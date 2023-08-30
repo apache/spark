@@ -213,7 +213,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] with AliasHe
           )
         }
 
-      case aggOriginal@ Aggregate(groupingExpressions, _, _)
+      case aggOriginal @ Aggregate(groupingExpressions, _, _)
         if ruleApplicableOnOperator(aggOriginal, aggOriginal.aggregateExpressions)
           && aggOriginal.aggregateExpressions.exists(
             _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))
