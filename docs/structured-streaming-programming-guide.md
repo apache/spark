@@ -23,7 +23,7 @@ license: |
 {:toc}
 
 # Overview
-Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. You can express your streaming computation the same way you would express a batch computation on static data. The Spark SQL engine will take care of running it incrementally and continuously and updating the final result as streaming data continues to arrive. You can use the [Dataset/DataFrame API](sql-programming-guide.html) in Python, Scala, Java or R to express streaming aggregations, event-time windows, stream-to-batch joins, etc. The computation is executed on the same optimized Spark SQL engine. Finally, the system ensures end-to-end exactly-once fault-tolerance guarantees through checkpointing and Write-Ahead Logs. In short, *Structured Streaming provides fast, scalable, fault-tolerant, end-to-end exactly-once stream processing without the user having to reason about streaming.*
+Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. You can express your streaming computation the same way you would express a batch computation on static data. The Spark SQL engine will take care of running it incrementally and continuously and updating the final result as streaming data continues to arrive. You can use the [Dataset/DataFrame API](sql-programming-guide.html) in Scala, Java, Python or R to express streaming aggregations, event-time windows, stream-to-batch joins, etc. The computation is executed on the same optimized Spark SQL engine. Finally, the system ensures end-to-end exactly-once fault-tolerance guarantees through checkpointing and Write-Ahead Logs. In short, *Structured Streaming provides fast, scalable, fault-tolerant, end-to-end exactly-once stream processing without the user having to reason about streaming.*
 
 Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able to choose the mode based on your application requirements.
 
@@ -2868,7 +2868,7 @@ and custom logic on the output of each micro-batch. Let's understand their usage
 
 ###### ForeachBatch
 `foreachBatch(...)` allows you to specify a function that is executed on
-the output data of every micro-batch of a streaming query. Since Spark 2.4, this is supported in Python, Scala and Java.
+the output data of every micro-batch of a streaming query. Since Spark 2.4, this is supported in Scala, Java and Python.
 It takes two parameters: a DataFrame or Dataset that has the output data of a micro-batch and the unique ID of the micro-batch.
 
 <div class="codetabs">
@@ -2955,7 +2955,7 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 If `foreachBatch` is not an option (for example, corresponding batch data writer does not exist, or
 continuous processing mode), then you can express your custom writer logic using `foreach`.
 Specifically, you can express the data writing logic by dividing it into three methods: `open`, `process`, and `close`.
-Since Spark 2.4, `foreach` is available in Python, Scala and Java.
+Since Spark 2.4, `foreach` is available in Scala, Java and Python.
 
 <div class="codetabs">
 

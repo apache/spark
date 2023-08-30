@@ -28,8 +28,8 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Python, Scala,
-Java, R and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
+Python, R and SQL.
 
 You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
 [Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
@@ -129,6 +129,6 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Python, Scala, Java, R and SQL API docs, run `SKIP_API=1
+NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
 to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.

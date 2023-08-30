@@ -68,7 +68,7 @@ operations on other DStreams. Internally, a DStream is represented as a sequence
 [RDDs](api/scala/org/apache/spark/rdd/RDD.html).
 
 This guide shows you how to start writing Spark Streaming programs with DStreams. You can
-write Spark Streaming programs in Python (introduced in Spark 1.2), Scala or Java,
+write Spark Streaming programs in Scala, Java or Python (introduced in Spark 1.2),
 all of which are presented in this guide.
 You will find tabs throughout this guide that let you choose between code snippets of
 different languages.
@@ -2150,7 +2150,7 @@ application left off. Note that this can be done only with input sources that su
 (like Kafka) as data needs to be buffered while the previous application was down and
 the upgraded application is not yet up. And restarting from earlier checkpoint
 information of pre-upgrade code cannot be done. The checkpoint information essentially
-contains serialized Python/Scala/Java objects and trying to deserialize objects with new,
+contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
 
