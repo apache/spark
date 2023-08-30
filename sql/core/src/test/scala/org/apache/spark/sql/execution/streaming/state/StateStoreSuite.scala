@@ -21,6 +21,7 @@ import java.io.{File, IOException}
 import java.net.URI
 import java.util
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -48,7 +49,14 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
+  import FakeStateStoreProviderWithMaintenanceError._
   private var id: StateStoreId = null
+
+  private val exceptionHandler = new Thread.UncaughtExceptionHandler() {
+    override def uncaughtException(t: Thread, e: Throwable): Unit = {
+      errorOnMaintenance.set(true)
+    }
+  }
 
   override def init(
       stateStoreId: StateStoreId,
@@ -67,8 +75,13 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   override def getStore(version: Long): StateStore = null
 
   override def doMaintenance(): Unit = {
+    Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
     throw new RuntimeException("Intentional maintenance failure")
   }
+}
+
+private object FakeStateStoreProviderWithMaintenanceError {
+  val errorOnMaintenance = new AtomicBoolean(false)
 }
 
 @ExtendedSQLTest
@@ -1364,6 +1377,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { _ =>
+          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
           val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
           val storeConf = StateStoreConf(sqlConf)
 
@@ -1373,6 +1387,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           eventually(timeout(30.seconds)) {
             assert(!StateStore.isMaintenanceRunning)
           }
+
+          // SPARK-45002: The maintenance task thread failure should not invoke the
+          // SparkUncaughtExceptionHandler which could lead to the executor process
+          // getting killed.
+          assert(!FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.get)
+
           StateStore.stop()
         }
       }
