@@ -12066,7 +12066,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     buf=buf,
                     max_cols=max_cols,
                     memory_usage=False,
-                    show_counts=show_counts,
+                    show_counts=show_counts,  # type: ignore
                 )
             finally:
                 del self._data
