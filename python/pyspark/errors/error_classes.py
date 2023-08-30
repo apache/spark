@@ -745,17 +745,17 @@ ERROR_CLASSES_JSON = """
   },
   "UDTF_INVALID_OUTPUT_ROW_TYPE" : {
     "message" : [
-        "The type of an individual output row in the UDTF is invalid. Each row should be a tuple, list, or dict, but got '<type>'. Please make sure that the output rows are of the correct type."
+        "The type of an individual output row in the '<func>' method of the UDTF is invalid. Each row should be a tuple, list, or dict, but got '<type>'. Please make sure that the output rows are of the correct type."
     ]
   },
   "UDTF_RETURN_NOT_ITERABLE" : {
     "message" : [
-      "The return value of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
+      "The return value of the '<func>' method of the UDTF is invalid. It should be an iterable (e.g., generator or list), but got '<type>'. Please make sure that the UDTF returns one of these types."
     ]
   },
   "UDTF_RETURN_SCHEMA_MISMATCH" : {
     "message" : [
-      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the function have the same number of columns as specified in the output schema."
+      "The number of columns in the result does not match the specified schema. Expected column count: <expected>, Actual column count: <actual>. Please make sure the values returned by the '<func>' method have the same number of columns as specified in the output schema."
     ]
   },
   "UDTF_RETURN_TYPE_MISMATCH" : {
