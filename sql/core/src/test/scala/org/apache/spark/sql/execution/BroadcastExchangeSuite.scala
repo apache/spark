@@ -85,12 +85,12 @@ class BroadcastExchangeSuite extends SparkPlanTest
 
   test("set broadcastTimeout to -1") {
     withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> "-1") {
-      val df = spark.range(1).toDF()
+      val df = spark.range(2).toDF()
       val joinDF = df.join(broadcast(df), "id")
       val broadcastExchangeExec = collect(
         joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
-      assert(joinDF.collect().length == 1)
+      assert(joinDF.collect().length == 2)
     }
   }
 }
