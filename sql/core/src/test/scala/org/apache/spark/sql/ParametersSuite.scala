@@ -531,7 +531,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       Row(2f))
   }
 
-  test("SPARK-XXXXX: maps as parameters") {
+  test("SPARK-45033: maps as parameters") {
     def fromArr(keys: Array[_], values: Array[_]): Column = {
       map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
     }
