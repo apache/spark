@@ -1217,22 +1217,94 @@ def max(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column on which the maximum value is computed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        column for computed results.
+        A column that contains the maximum value computed.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.min`
+    :meth:`pyspark.sql.functions.avg`
+    :meth:`pyspark.sql.functions.sum`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - NaN values are larger than any other numeric value.
 
     Examples
     --------
+    Example 1: Compute the maximum value of a numeric column
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(10)
-    >>> df.select(max(col("id"))).show()
+    >>> df.select(sf.max(df.id)).show()
     +-------+
     |max(id)|
     +-------+
     |      9|
     +-------+
+
+    Example 2: Compute the maximum value of a string column
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("A",), ("B",), ("C",)], ["value"])
+    >>> df.select(sf.max(df.value)).show()
+    +----------+
+    |max(value)|
+    +----------+
+    |         C|
+    +----------+
+
+    Example 3: Compute the maximum value of a column in a grouped DataFrame
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("A", 1), ("A", 2), ("B", 3), ("B", 4)], ["key", "value"])
+    >>> df.groupBy("key").agg(sf.max(df.value)).show()
+    +---+----------+
+    |key|max(value)|
+    +---+----------+
+    |  A|         2|
+    |  B|         4|
+    +---+----------+
+
+    Example 4: Compute the maximum value of multiple columns in a grouped DataFrame
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("A", 1, 2), ("A", 2, 3), ("B", 3, 4), ("B", 4, 5)], ["key", "value1", "value2"])
+    >>> df.groupBy("key").agg(sf.max("value1"), sf.max("value2")).show()
+    +---+-----------+-----------+
+    |key|max(value1)|max(value2)|
+    +---+-----------+-----------+
+    |  A|          2|          3|
+    |  B|          4|          5|
+    +---+-----------+-----------+
+
+    Example 5: Compute the maximum value of a column with null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (None,)], ["value"])
+    >>> df.select(sf.max(df.value)).show()
+    +----------+
+    |max(value)|
+    +----------+
+    |         2|
+    +----------+
+
+    Example 6: Compute the maximum value of a column with "NaN" values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1.1,), (float("nan"),), (3.3,)], ["value"])
+    >>> df.select(sf.max(df.value)).show()
+    +----------+
+    |max(value)|
+    +----------+
+    |       NaN|
+    +----------+
     """
     return _invoke_function_over_columns("max", col)
 
