@@ -159,12 +159,15 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
     @udtf(returnType="cnt: int")
     class CountUDTF:
         def __init__(self):
+            # Initialize the counter to 0 when an instance of the class is created.
             self.count = 0
 
         def eval(self, x: int):
+            # Increment the counter by 1 for each input value received.
             self.count += 1
 
         def terminate(self):
+            # Yield the final count when the UDTF is done processing.
             yield self.count,
 
     spark.udtf.register("count_udtf", CountUDTF)
@@ -173,6 +176,13 @@ def python_udtf_terminate_example(spark: SparkSession) -> None:
     # | id|cnt|
     # +---+---+
     # |  9| 10|
+    # +---+---+
+    spark.sql("SELECT * FROM range(0, 10, 1, 2), LATERAL count_udtf(id)").show()
+    # +---+---+
+    # | id|cnt|
+    # +---+---+
+    # |  4|  5|
+    # |  9|  5|
     # +---+---+
 
 
