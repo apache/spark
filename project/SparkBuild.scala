@@ -17,7 +17,7 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, StandardOpenOption}
+import java.nio.file.Files
 import java.util.Locale
 
 import scala.io.Source
@@ -765,13 +765,7 @@ object SparkConnectCommon {
 object SparkConnect {
   import BuildCommons.protoVersion
 
-  val rewriteJavaFile = TaskKey[Unit]("rewriteJavaFile",
-    "Rewrite the generated Java PB files.")
-  val genPBAndRewriteJavaFile = TaskKey[Unit]("genPBAndRewriteJavaFile",
-    "Generate Java PB files and overwrite their contents.")
-
   lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
@@ -801,42 +795,6 @@ object SparkConnect {
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
-
-    // SPARK-43646: The following 3 statements are used to make the connect module use the
-    // Spark-proto assembly jar when compiling and testing using SBT, which can be keep same
-    // behavior of Maven testing.
-    (Test / unmanagedJars) += (LocalProject("protobuf") / assembly).value,
-    (Test / fullClasspath) :=
-      (Test / fullClasspath).value.filterNot { f => f.toString.contains("spark-protobuf") },
-    (Test / fullClasspath) += (LocalProject("protobuf") / assembly).value,
-
-    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
-
-    (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources",
-    ),
-
-    // SPARK-43646: Create a custom task to replace all `com.google.protobuf.` with
-    // `org.sparkproject.spark_protobuf.protobuf.` in the generated Java PB files.
-    // This is to generate Java files that can be used to test spark-protobuf functions
-    // in `ProtoToParsedPlanTestSuite`.
-    rewriteJavaFile := {
-      val protobufDir = target.value / "generated-test-sources"/"org"/"apache"/"spark"/"sql"/"protobuf"/"protos"
-      protobufDir.listFiles().foreach { f =>
-        if (f.getName.endsWith(".java")) {
-          val contents = Files.readAllLines(f.toPath, UTF_8)
-          val replaced = contents.asScala.map { line =>
-            line.replaceAll("com.google.protobuf.", "org.sparkproject.spark_protobuf.protobuf.")
-          }
-          Files.write(f.toPath, replaced.asJava, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
-        }
-      }
-    },
-    // SPARK-43646: `genPBAndRewriteJavaFile` is used to specify the execution order of `PB.generate`
-    // and `rewriteJavaFile`, and makes `Test / compile` dependent on `genPBAndRewriteJavaFile`
-    // being executed first.
-    genPBAndRewriteJavaFile := Def.sequential(Test / PB.generate, rewriteJavaFile).value,
-    (Test / compile) := (Test / compile).dependsOn(genPBAndRewriteJavaFile).value,
 
     (assembly / test) := { },
 
@@ -883,16 +841,7 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
-      Seq(
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq.empty
-    }
-  }
+  )
 }
 
 object SparkConnectClient {
