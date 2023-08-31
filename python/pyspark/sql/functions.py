@@ -863,36 +863,54 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
-    >>> df.select(try_add(df.birth, df.age).alias('r')).collect()
-    [Row(r=1997), Row(r=1992)]
+    Example 1: Integer plus Integer.
 
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-    >>> schema = StructType([
-    ...     StructField("i", IntegerType(), True),
-    ...     StructField("d", StringType(), True),
-    ... ])
-    >>> df = spark.createDataFrame([(1, '2015-09-30')], schema)
-    >>> df = df.select(df.i, to_date(df.d).alias('d'))
-    >>> df.select(try_add(df.d, df.i).alias('r')).collect()
-    [Row(r=datetime.date(2015, 10, 1))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_add("birth", "age")).show()
+    +-------------------+
+    |try_add(birth, age)|
+    +-------------------+
+    |               1997|
+    |               1992|
+    +-------------------+
 
-    >>> df.select(try_add(df.d, make_interval(df.i)).alias('r')).collect()
-    [Row(r=datetime.date(2016, 9, 30))]
+    Example 2: Date plus Integer.
 
-    >>> df.select(
-    ...     try_add(df.d, make_interval(lit(0), lit(0), lit(0), df.i)).alias('r')
-    ... ).collect()
-    [Row(r=datetime.date(2015, 10, 1))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30')) AS TAB(date)"
+    ... ).select(sf.try_add("date", sf.lit(1))).show()
+    +----------------+
+    |try_add(date, 1)|
+    +----------------+
+    |      2015-10-01|
+    +----------------+
 
-    >>> df.select(
-    ...     try_add(make_interval(df.i), make_interval(df.i)).alias('r')
-    ... ).show(truncate=False)
-    +-------+
-    |r      |
-    +-------+
-    |2 years|
-    +-------+
+    Example 3: Date plus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
+    ... ).select(sf.try_add("date", "i")).show()
+    +----------------+
+    |try_add(date, i)|
+    +----------------+
+    |      2016-09-30|
+    +----------------+
+
+    Example 4: Interval plus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
+    ... ).select(sf.try_add("i", "j")).show()
+    +-----------------+
+    |    try_add(i, j)|
+    +-----------------+
+    |INTERVAL '3' YEAR|
+    +-----------------+
     """
     return _invoke_function_over_columns("try_add", left, right)
 
@@ -910,9 +928,15 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
-    >>> df.select(try_avg(df.age).alias('r')).collect()
-    [Row(r=8.5)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_avg("age").alias("age_avg")).show()
+    +-------+
+    |age_avg|
+    +-------+
+    |    8.5|
+    +-------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -934,37 +958,34 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_divide(df.a, df.b).alias('r')).collect()
-    [Row(r=400.0), Row(r=995.0)]
+    Example 1: Integer divided by Integer.
 
-    >>> df = spark.createDataFrame([(1, 2)], ["year", "month"])
-    >>> df.select(
-    ...     try_divide(make_interval(df.year), df.month).alias('r')
-    ... ).show(truncate=False)
-    +--------+
-    |r       |
-    +--------+
-    |6 months|
-    +--------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (1990, 2), (1234, 0)], ["a", "b"]
+    ... ).select(sf.try_divide("a", "b")).show()
+    +----------------+
+    |try_divide(a, b)|
+    +----------------+
+    |           400.0|
+    |           995.0|
+    |            NULL|
+    +----------------+
 
-    >>> df.select(
-    ...     try_divide(make_interval(df.year, df.month), lit(2)).alias('r')
-    ... ).show(truncate=False)
-    +--------+
-    |r       |
-    +--------+
-    |7 months|
-    +--------+
+    Example 2: Interval divided by Integer.
 
-    >>> df.select(
-    ...     try_divide(make_interval(df.year, df.month), lit(0)).alias('r')
-    ... ).show(truncate=False)
-    +----+
-    |r   |
-    +----+
-    |NULL|
-    +----+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select(
+    ...     sf.try_divide(sf.make_interval(sf.lit(1)), "id")
+    ... ).show()
+    +--------------------------------------------------+
+    |try_divide(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
+    +--------------------------------------------------+
+    |                                              NULL|
+    |                                           1 years|
+    |                                          6 months|
+    |                                          4 months|
+    +--------------------------------------------------+
     """
     return _invoke_function_over_columns("try_divide", left, right)
 
@@ -986,17 +1007,35 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_multiply(df.a, df.b).alias('r')).collect()
-    [Row(r=90000), Row(r=3980)]
+    Example 1: Integer multiplied by Integer.
 
-    >>> df = spark.createDataFrame([(2, 3),], ["a", "b"])
-    >>> df.select(try_multiply(make_interval(df.a), df.b).alias('r')).show(truncate=False)
-    +-------+
-    |r      |
-    +-------+
-    |6 years|
-    +-------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (1990, 2)], ["a", "b"]
+    ... ).select(sf.try_multiply("a", "b")).show()
+    +------------------+
+    |try_multiply(a, b)|
+    +------------------+
+    |             90000|
+    |              3980|
+    +------------------+
+
+    Example 2: Interval multiplied by Integer.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(
+    ...     sf.try_multiply(sf.make_interval(sf.lit(0), sf.lit(3)), "id")
+    ... ).show()
+    +----------------------------------------------------+
+    |try_multiply(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
+    +----------------------------------------------------+
+    |                                           0 seconds|
+    |                                            3 months|
+    |                                            6 months|
+    |                                            9 months|
+    |                                             1 years|
+    |                                    1 years 3 months|
+    +----------------------------------------------------+
     """
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -1016,36 +1055,54 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_subtract(df.a, df.b).alias('r')).collect()
-    [Row(r=5985), Row(r=1988)]
+    Example 1: Integer minus Integer.
 
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-    >>> schema = StructType([
-    ...     StructField("i", IntegerType(), True),
-    ...     StructField("d", StringType(), True),
-    ... ])
-    >>> df = spark.createDataFrame([(1, '2015-09-30')], schema)
-    >>> df = df.select(df.i, to_date(df.d).alias('d'))
-    >>> df.select(try_subtract(df.d, df.i).alias('r')).collect()
-    [Row(r=datetime.date(2015, 9, 29))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_subtract("birth", "age")).show()
+    +------------------------+
+    |try_subtract(birth, age)|
+    +------------------------+
+    |                    1967|
+    |                    1988|
+    +------------------------+
 
-    >>> df.select(try_subtract(df.d, make_interval(df.i)).alias('r')).collect()
-    [Row(r=datetime.date(2014, 9, 30))]
+    Example 2: Date minus Integer.
 
-    >>> df.select(
-    ...     try_subtract(df.d, make_interval(lit(0), lit(0), lit(0), df.i)).alias('r')
-    ... ).collect()
-    [Row(r=datetime.date(2015, 9, 29))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-10-01')) AS TAB(date)"
+    ... ).select(sf.try_subtract("date", sf.lit(1))).show()
+    +---------------------+
+    |try_subtract(date, 1)|
+    +---------------------+
+    |           2015-09-30|
+    +---------------------+
 
-    >>> df.select(
-    ...     try_subtract(make_interval(df.i), make_interval(df.i)).alias('r')
-    ... ).show(truncate=False)
-    +---------+
-    |r        |
-    +---------+
-    |0 seconds|
-    +---------+
+    Example 3: Date minus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
+    ... ).select(sf.try_subtract("date", "i")).show()
+    +---------------------+
+    |try_subtract(date, i)|
+    +---------------------+
+    |           2014-09-30|
+    +---------------------+
+
+    Example 4: Interval minus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
+    ... ).select(sf.try_subtract("i", "j")).show()
+    +------------------+
+    |try_subtract(i, j)|
+    +------------------+
+    |INTERVAL '-1' YEAR|
+    +------------------+
     """
     return _invoke_function_over_columns("try_subtract", left, right)
 
@@ -1063,9 +1120,13 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(try_sum(df["id"]).alias('r')).collect()
-    [Row(r=45)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(10).select(sf.try_sum("id").alias("sum")).show()
+    +---+
+    |sum|
+    +---+
+    | 45|
+    +---+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -3913,6 +3974,7 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
+@try_remote_functions
 def width_bucket(
     v: "ColumnOrName",
     min: "ColumnOrName",
@@ -7484,6 +7546,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+@try_remote_functions
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     Parses the `col` with the `format` to a timestamp. The function always
@@ -10868,6 +10931,7 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
+@try_remote_functions
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -14176,6 +14240,7 @@ def map_zip_with(
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
 
+@try_remote_functions
 def str_to_map(
     text: "ColumnOrName",
     pairDelim: Optional["ColumnOrName"] = None,
@@ -14601,6 +14666,7 @@ def make_interval(
     )
 
 
+@try_remote_functions
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14672,6 +14738,7 @@ def make_timestamp(
         )
 
 
+@try_remote_functions
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14742,6 +14809,7 @@ def make_timestamp_ltz(
         )
 
 
+@try_remote_functions
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14795,6 +14863,7 @@ def make_timestamp_ntz(
     )
 
 
+@try_remote_functions
 def make_ym_interval(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
