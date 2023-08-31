@@ -355,7 +355,7 @@ private[spark] class MemoryStore(
     val valuesHolder = new SerializedValuesHolder[T](blockId, chunkSize, classTag,
       memoryMode, serializerManager)
 
-    putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
+    val res = putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         Left(new PartiallySerializedBlock(
@@ -370,6 +370,9 @@ private[spark] class MemoryStore(
           values,
           classTag))
     }
+
+    Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+    res
   }
 
   def getBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
