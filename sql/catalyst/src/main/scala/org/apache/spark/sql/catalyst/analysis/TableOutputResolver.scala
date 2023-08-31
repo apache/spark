@@ -103,22 +103,11 @@ object TableOutputResolver {
         errors += _,
         fillDefaultValue = supportColDefaultValue)
     } else {
-      // If the target table needs more columns than the input query, fill them with
-      // the columns' default values, if the `supportColDefaultValue` parameter is true.
-      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
-      val queryOutputCols = if (fillDefaultValue) {
-        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-        }
-      } else {
-        query.output
-      }
-      if (actualExpectedCols.size > queryOutputCols.size) {
+      if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
           tableName, actualExpectedCols.map(_.name), query)
       }
-
-      resolveColumnsByPosition(tableName, queryOutputCols, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
     if (errors.nonEmpty) {

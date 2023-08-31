@@ -18,6 +18,8 @@ package org.apache.spark.util
 
 import org.apache.xbean.asm9.{ClassWriter, Opcodes}
 
+import org.apache.spark.internal.Logging
+
 /**
  * [[ClassLoader]] that replaces missing classes with stubs, if the cannot be found. It will only
  * do this for classes that are marked for stubbing.
@@ -27,11 +29,12 @@ import org.apache.xbean.asm9.{ClassWriter, Opcodes}
  * the class and therefor is safe to replace by a stub.
  */
 class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
-  extends ClassLoader(parent) {
+  extends ClassLoader(parent) with Logging {
   override def findClass(name: String): Class[_] = {
     if (!shouldStub(name)) {
       throw new ClassNotFoundException(name)
     }
+    logDebug(s"Generating stub for $name")
     val bytes = StubClassLoader.generateStub(name)
     defineClass(name, bytes, 0, bytes.length)
   }

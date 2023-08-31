@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.test.QueryTest
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -215,33 +215,31 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreachPartition") {
-    val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
+      val sum = new AtomicLong()
       f.foreach(v => sum.addAndGet(v))
-      // The value should be 45
-      assert(sum.get() == -1)
+      throw new Exception("Success, processed records: " + sum.get())
     }
     val exception = intercept[Exception] {
       spark.range(10).repartition(1).foreachPartition(func)
     }
-    assert(exception.getMessage.contains("45 did not equal -1"))
+    assert(exception.getMessage.contains("Success, processed records: 45"))
   }
 
   test("Dataset foreachPartition - java") {
     val sum = new AtomicLong()
     val exception = intercept[Exception] {
       spark
-        .range(10)
+        .range(11)
         .repartition(1)
         .foreachPartition(new ForeachPartitionFunction[JLong] {
           override def call(t: JIterator[JLong]): Unit = {
             t.asScala.foreach(v => sum.addAndGet(v))
-            // The value should be 45
-            assert(sum.get() == -1)
+            throw new Exception("Success, processed records: " + sum.get())
           }
         })
     }
-    assert(exception.getMessage.contains("45 did not equal -1"))
+    assert(exception.getMessage.contains("Success, processed records: 55"))
   }
 
   test("Dataset foreach: change not visible to client") {
@@ -329,5 +327,20 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       },
       IntegerType)
     checkDataset(session.range(2).select(fn($"id", $"id" + 2)).as[Int], 3, 5)
+  }
+
+  test("nullified SparkSession/Dataset/KeyValueGroupedDataset in UDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = session.range(0, 10, 1, 1)
+    val kvgds = df.groupByKey(_ / 2)
+    val f = udf { (i: Long) =>
+      assert(session == null)
+      assert(df == null)
+      assert(kvgds == null)
+      i + 1
+    }
+    val result = df.select(f($"id")).as[Long].head
+    assert(result == 1L)
   }
 }

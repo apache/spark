@@ -14,26 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import unittest
 
-from pyspark.sql.tests.streaming.test_streaming_foreachBatch import StreamingTestsForeachBatchMixin
+from pyspark import pandas as ps
+from pyspark.pandas.tests.indexes.test_base_slow import IndexesSlowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
-class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
-    @unittest.skip("SPARK-44463: Error handling needs improvement in connect foreachBatch")
-    def test_streaming_foreachBatch_propagates_python_errors(self):
-        super().test_streaming_foreachBatch_propagates_python_errors
-
-    @unittest.skip("This seems specific to py4j and pinned threads. The intention is unclear")
-    def test_streaming_foreachBatch_graceful_stop(self):
-        super().test_streaming_foreachBatch_graceful_stop()
+class IndexesSlowParityTests(
+    IndexesSlowTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+):
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_foreachBatch import *  # noqa: F401,E501
+    from pyspark.pandas.tests.connect.indexes.test_parity_base_slow import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

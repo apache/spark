@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
@@ -51,8 +52,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
 
-  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
-  val INVALID_FORMAT_ERROR = TreeNodeTag[Boolean]("invalidFormatError")
+  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
+  val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
 
   /**
    * Fails the analysis at the point where a specific tree node was parsed using a provided
@@ -154,10 +155,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
-      if (refCount == 0) checkAnalysis0(relation.child)
+      try {
+        if (refCount == 0) checkAnalysis0(relation.child)
+      } catch {
+        case e: AnalysisException =>
+          throw new ExtendedAnalysisException(e, relation.child)
+      }
+
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    checkAnalysis0(inlineCTE(plan))
+    val inlinedPlan = inlineCTE(plan)
+    try {
+      checkAnalysis0(inlinedPlan)
+    } catch {
+      case e: AnalysisException =>
+        throw new ExtendedAnalysisException(e, inlinedPlan)
+    }
     plan.setAnalyzed()
   }
 
@@ -247,7 +260,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 hof.dataTypeMismatch(hof, checkRes)
               case checkRes: TypeCheckResult.InvalidFormat =>
-                hof.setTagValue(INVALID_FORMAT_ERROR, true)
+                hof.setTagValue(INVALID_FORMAT_ERROR, ())
                 hof.invalidFormat(checkRes)
             }
 
@@ -273,10 +286,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
                 e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
                 val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
                   errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
@@ -285,7 +298,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                     "msg" -> message,
                     "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
-                e.setTagValue(INVALID_FORMAT_ERROR, true)
+                e.setTagValue(INVALID_FORMAT_ERROR, ())
                 e.invalidFormat(checkRes)
             }
 
@@ -858,7 +871,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
       var issueFixedIfAnsiOff = true
       getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
-        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
+        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).isDefined &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
             case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>

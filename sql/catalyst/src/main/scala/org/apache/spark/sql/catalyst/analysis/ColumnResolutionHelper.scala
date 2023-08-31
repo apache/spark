@@ -95,12 +95,13 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-    // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     ("user", () => CurrentUser(), toPrettySQL),
+    ("session_user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 
@@ -511,7 +512,7 @@ trait ColumnResolutionHelper extends Logging {
     }
     val plan = planOpt.get
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).contains(true)
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
     try {
       if (!isMetadataAccess) {
         plan.resolve(u.nameParts, conf.resolver)

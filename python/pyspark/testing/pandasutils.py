@@ -19,11 +19,10 @@ import functools
 import shutil
 import tempfile
 import warnings
-import pandas as pd
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 import decimal
-from typing import Any, Union
+from typing import Any, Union, TYPE_CHECKING
 
 import pyspark.pandas as ps
 from pyspark.pandas.frame import DataFrame
@@ -57,6 +56,13 @@ except ImportError as e:
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+    require_minimum_pandas_version()
+    import pandas as pd
+except ImportError:
+    pass
 
 __all__ = ["assertPandasOnSparkEqual"]
 

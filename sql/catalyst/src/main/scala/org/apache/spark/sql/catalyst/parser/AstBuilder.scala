@@ -2099,7 +2099,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
@@ -2118,12 +2118,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
         val cast = Cast(expression(ctx.expression), dataType)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
 
       case SqlBaseParser.TRY_CAST =>
         val cast = Cast(expression(ctx.expression), dataType, evalMode = EvalMode.TRY)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
     }
   }

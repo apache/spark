@@ -169,7 +169,7 @@ This index type should be avoided when the data is large. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([0, 1, 2], dtype='int64')
+    Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
@@ -195,7 +195,7 @@ index has to be used. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([0, 1, 2], dtype='int64')
+    Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
@@ -219,7 +219,7 @@ have any penalty compared to other index types. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([25769803776, 60129542144, 94489280512], dtype='int64')
+    Index([25769803776, 60129542144, 94489280512], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
