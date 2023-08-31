@@ -5445,6 +5445,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         Example 1: Drop a column by name.
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.drop('age').show()
@@ -5457,6 +5458,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+
 
         Example 2: Drop a column by :class:`Column` object.
+
         >>> df.drop(df.age).show()
         +-----+
         | name|
@@ -5467,6 +5469,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+
 
         Example 3: Drop the column that joined both DataFrames on.
+
         >>> df2 = spark.createDataFrame([(80, "Tom"), (85, "Bob")], ["height", "name"])
         >>> df.join(df2, df.name == df2.name).drop('name').sort('age').show()
         +---+------+
@@ -5490,6 +5493,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+------+----+
 
         Example 4: Drop two column by the same name.
+
         >>> df3.drop("name").show()
         +---+------+
         |age|height|
@@ -5503,15 +5507,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+
 
         Example 5: Can not drop col('name') due to ambiguous reference.
-        >>> from pyspark.sql.functions import col
-        >>> df3.drop(col("name")).show()
+
+        >>> from pyspark.sql import functions as sf
+        >>> df3.drop(sf.col("name")).show()
         Traceback (most recent call last):
         ...
         pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
 
         Example 6: Can not find a column matching the expression "a.b.c".
-        >>> from pyspark.sql.functions import lit
-        >>> df4 = df.withColumn("a.b.c", lit(1))
+
+        >>> from pyspark.sql import functions as sf
+        >>> df4 = df.withColumn("a.b.c", sf.lit(1))
         >>> df4.show()
         +---+-----+-----+
         |age| name|a.b.c|
@@ -5530,7 +5536,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-        >>> df4.drop(col("a.b.c")).show()
+        >>> df4.drop(sf.col("a.b.c")).show()
         +---+-----+-----+
         |age| name|a.b.c|
         +---+-----+-----+
