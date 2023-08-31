@@ -208,12 +208,14 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
         s"sessionId: ${sessionHolder.sessionId}")
 
     // Clean up added files
-    sessionHolder.session.sparkContext.addedFiles.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedArchives.remove(state.uuid)
-    sessionHolder.session.sparkContext.addedJars.remove(state.uuid)
+    val fileserver = SparkEnv.get.rpcEnv.fileServer
+    val sparkContext = sessionHolder.session.sparkContext
+    sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+    sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+    sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
 
     // Clean up cached relations
-    val blockManager = sessionHolder.session.sparkContext.env.blockManager
+    val blockManager = sparkContext.env.blockManager
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder
