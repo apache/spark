@@ -2215,6 +2215,12 @@
     ],
     "sqlState" : "42607"
   },
+  "NON_FOLDABLE_ARGUMENT" : {
+    "message" : [
+      "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
+    ],
+    "sqlState" : "22024"
+  },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
@@ -4027,11 +4033,6 @@
   "_LEGACY_ERROR_TEMP_1099" : {
     "message" : [
       "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1100" : {
-    "message" : [
-      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {

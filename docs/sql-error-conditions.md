@@ -1305,6 +1305,12 @@ Cannot call function `<functionName>` because named argument references are not 
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
+### NON_FOLDABLE_ARGUMENT
+
+[SQLSTATE: 22024](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The function `<funcName>` requires the parameter `<paramName>` to be a foldable expression of the type `<paramType>`, but the actual argument is a non-foldable.
+
 ### NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
