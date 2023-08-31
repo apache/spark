@@ -5416,7 +5416,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
-        """Returns a new :class:`DataFrame` without specified columns.
+        """
+        Returns a new :class:`DataFrame` without specified columns.
         This is a no-op if the schema doesn't contain the given column name(s).
 
         .. versionadded:: 1.4.0
@@ -5427,28 +5428,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols: str or :class:`Column`
-            a name of the column, or the :class:`Column` to drop
+            A name of the column, or the :class:`Column` to be dropped.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame without given columns.
+            A new :class:`DataFrame` without the specified columns.
 
         Notes
         -----
-        When an input is a column name, it is treated literally without further interpretation.
-        Otherwise, will try to match the equivalent expression.
-        So that dropping column by its name `drop(colName)` has different semantic with directly
-        dropping the column `drop(col(colName))`.
+        - When an input is a column name, it is treated literally without further interpretation.
+          Otherwise, it will try to match the equivalent expression.
+          So dropping a column by its name `drop(colName)` has a different semantic
+          with directly dropping the column `drop(col(colName))`.
 
         Examples
         --------
-        >>> from pyspark.sql import Row
-        >>> from pyspark.sql.functions import col, lit
+        Example 1: Drop a column by name.
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-
         >>> df.drop('age').show()
         +-----+
         | name|
@@ -5457,6 +5455,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|
         |  Bob|
         +-----+
+
+        Example 2: Drop a column by :class:`Column` object.
         >>> df.drop(df.age).show()
         +-----+
         | name|
@@ -5466,9 +5466,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|
         +-----+
 
-        Drop the column that joined both DataFrames on.
-
-        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').sort('age').show()
+        Example 3: Drop the column that joined both DataFrames on.
+        >>> df2 = spark.createDataFrame([(80, "Tom"), (85, "Bob")], ["height", "name"])
+        >>> df.join(df2, df.name == df2.name).drop('name').sort('age').show()
         +---+------+
         |age|height|
         +---+------+
@@ -5489,8 +5489,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|    85| Bob|
         +---+-----+------+----+
 
-        Drop two column by the same name.
-
+        Example 4: Drop two column by the same name.
         >>> df3.drop("name").show()
         +---+------+
         |age|height|
@@ -5503,13 +5502,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|    85|
         +---+------+
 
-        Can not drop col('name') due to ambiguous reference.
-
+        Example 5: Can not drop col('name') due to ambiguous reference.
+        >>> from pyspark.sql.functions import col
         >>> df3.drop(col("name")).show()
         Traceback (most recent call last):
         ...
         pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
 
+        Example 6: Can not find a column matching the expression "a.b.c".
+        >>> from pyspark.sql.functions import lit
         >>> df4 = df.withColumn("a.b.c", lit(1))
         >>> df4.show()
         +---+-----+-----+
@@ -5528,8 +5529,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
-
-        Can not find a column matching the expression "a.b.c".
 
         >>> df4.drop(col("a.b.c")).show()
         +---+-----+-----+
