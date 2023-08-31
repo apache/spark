@@ -209,13 +209,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
-      try {
-        checkAnalysis(analyzed)
-        analyzed
-      } catch {
-        case e: AnalysisException =>
-          throw new ExtendedAnalysisException(e, analyzed)
-      }
+      checkAnalysis(analyzed)
+      analyzed
     }
   }
 
