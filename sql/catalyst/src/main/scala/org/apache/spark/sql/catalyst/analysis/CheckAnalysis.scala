@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
@@ -154,10 +155,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
-      if (refCount == 0) checkAnalysis0(relation.child)
+      try {
+        if (refCount == 0) checkAnalysis0(relation.child)
+      } catch {
+        case e: AnalysisException =>
+          throw new ExtendedAnalysisException(e, relation.child)
+      }
+
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    checkAnalysis0(inlineCTE(plan))
+    val inlinedPlan = inlineCTE(plan)
+    try {
+      checkAnalysis0(inlinedPlan)
+    } catch {
+      case e: AnalysisException =>
+        throw new ExtendedAnalysisException(e, inlinedPlan)
+    }
     plan.setAnalyzed()
   }
 
