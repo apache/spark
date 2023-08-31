@@ -18,15 +18,22 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, DataType}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
 import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.",
+  usage = """
+    _FUNC_(col[, deterministicResult]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency then either any of values is returned if 'deterministicResult' is false or is not defined, or the lowest value is returned if 'deterministicResult' is true.""",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -35,6 +42,10 @@ import org.apache.spark.util.collection.OpenHashMap
        0-10
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10), (null), (null), (null) AS tab(col);
        10
+      > SELECT _FUNC_(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
+       0
+      > SELECT _FUNC_(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
+       -10
   """,
   group = "agg_funcs",
   since = "3.4.0")
@@ -42,17 +53,46 @@ import org.apache.spark.util.collection.OpenHashMap
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+    inputAggBufferOffset: Int = 0,
+    deterministicResult: Expression = Literal.FalseLiteral)
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, deterministicResult: Expression) = {
+    this(child, 0, 0, deterministicResult)
+  }
+
+  override def left: Expression = child
+
+  override def right: Expression = deterministicResult
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+    if (!deterministicResult.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "deterministicResult",
+          "inputType" -> toSQLType(deterministicResult.dataType),
+          "inputExpr" -> toSQLExpr(deterministicResult)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
 
   override def prettyName: String = "mode"
 
@@ -81,7 +121,16 @@ case class Mode(
       return null
     }
 
-    buffer.maxBy(_._2)._1
+    (if (right.eval().asInstanceOf[Boolean]) {
+      // When deterministic result is rquired but multiple keys have the same greatest frequency
+      // then let's select the lowest.
+      val defaultKeyOrdering =
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering.reverse)
+      buffer.maxBy { case (key, count) => (count, key) }(ordering)
+    } else {
+      buffer.maxBy(_._2)
+    })._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -90,8 +139,8 @@ case class Mode(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Mode =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+    copy(child = newLeft, deterministicResult = newRight)
 }
 
 /**
