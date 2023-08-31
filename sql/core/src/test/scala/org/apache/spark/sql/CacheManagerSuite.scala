@@ -41,7 +41,7 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("SPARK-XXXXX: Cached table name should be the complete identifier in existing table") {
+  test("SPARK-45039: Cached table name should be the complete identifier in existing table") {
     val db = "dbtest"
     spark.sql(s"CREATE DATABASE $db")
     spark.sql(s"USE $db")
@@ -66,7 +66,7 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("SPARK-XXXXX: Cached table as select name should be the name of the temporary table") {
+  test("SPARK-45039: Cached table as select name should be the name of the temporary table") {
     val view = "v1"
     spark.sql(s"CACHE TABLE $view AS SELECT 1 AS id")
     assert(isInStorage(view))
