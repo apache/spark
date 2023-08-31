@@ -487,6 +487,15 @@ class WindowPandasUDFTestsMixin:
                             )
                         ).show()
 
+                    with self.assertRaisesRegex(
+                        PythonException, r"weighted_mean\(\) got multiple values for argument 'v'"
+                    ):
+                        self.spark.sql(
+                            base_sql.format(
+                                func_call="weighted_mean(v, v => w)", window_spec=window_spec
+                            )
+                        ).show()
+
     def test_kwargs(self):
         df = self.data
 
@@ -510,24 +519,49 @@ class WindowPandasUDFTestsMixin:
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
+            base_sql = "SELECT id, {func_call} OVER ({window_spec}) as wm FROM v"
+
             for w in [
                 "ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING",
                 "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
             ]:
                 window_spec = f"PARTITION BY id ORDER BY v {w}"
-                for i, func_call in enumerate(
-                    [
-                        "weighted_mean(v => v, w => w)",
-                        "weighted_mean(w => w, v => v)",
-                    ]
-                ):
-                    with self.subTest(window_spec=window_spec, query_no=i):
-                        assertDataFrameEqual(
-                            self.spark.sql(
-                                f"SELECT id, {func_call} OVER ({window_spec}) as wm FROM v"
-                            ),
-                            self.spark.sql(f"SELECT id, mean(v) OVER ({window_spec}) as wm FROM v"),
-                        )
+                with self.subTest(window_spec=window_spec):
+                    for i, func_call in enumerate(
+                        [
+                            "weighted_mean(v => v, w => w)",
+                            "weighted_mean(w => w, v => v)",
+                        ]
+                    ):
+                        with self.subTest(query_no=i):
+                            assertDataFrameEqual(
+                                self.spark.sql(
+                                    base_sql.format(func_call=func_call, window_spec=window_spec)
+                                ),
+                                self.spark.sql(
+                                    base_sql.format(func_call="mean(v)", window_spec=window_spec)
+                                ),
+                            )
+
+                    # negative
+                    with self.assertRaisesRegex(
+                        AnalysisException,
+                        "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+                    ):
+                        self.spark.sql(
+                            base_sql.format(
+                                func_call="weighted_mean(v => v, v => w)", window_spec=window_spec
+                            )
+                        ).show()
+
+                    with self.assertRaisesRegex(
+                        AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"
+                    ):
+                        self.spark.sql(
+                            base_sql.format(
+                                func_call="weighted_mean(v => v, w)", window_spec=window_spec
+                            )
+                        ).show()
 
 
 class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):

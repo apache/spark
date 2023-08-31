@@ -628,6 +628,13 @@ class GroupedAggPandasUDFTestsMixin:
                     "SELECT id, weighted_mean(v => v, x => w) as wm FROM v GROUP BY id"
                 ).show()
 
+            with self.assertRaisesRegex(
+                PythonException, r"weighted_mean\(\) got multiple values for argument 'v'"
+            ):
+                self.spark.sql(
+                    "SELECT id, weighted_mean(v, v => w) as wm FROM v GROUP BY id"
+                ).show()
+
     def test_kwargs(self):
         df = self.data
 
@@ -655,6 +662,20 @@ class GroupedAggPandasUDFTestsMixin:
             ):
                 with self.subTest(query_no=i):
                     assertDataFrameEqual(aggregated, df.groupby("id").agg(mean(df.v).alias("wm")))
+
+            # negative
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql(
+                    "SELECT id, weighted_mean(v => v, v => w) as wm FROM v GROUP BY id"
+                ).show()
+
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql(
+                    "SELECT id, weighted_mean(v => v, w) as wm FROM v GROUP BY id"
+                ).show()
 
     def test_named_arguments_and_defaults(self):
         df = self.data
