@@ -454,8 +454,7 @@ class JacksonParser(
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
-            val value = fieldConverters(index).apply(parser)
-            row.update(index, value)
+            row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
             bitmask(index) = false
           } catch {
