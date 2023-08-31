@@ -120,7 +120,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val completeTableName = tableName.map { table =>
         import spark.sessionState.analyzer.CatalogAndIdentifier
         spark.sessionState.sqlParser.parseMultipartIdentifier(table) match {
-          case Seq(_) if spark.catalog.getTable(table).isTemporary => table
+          case Seq(t) if spark.catalog.getTable(t).isTemporary => table
 
           case CatalogAndIdentifier(cat, ident) => s"${cat.name()}.${ident.toString}"
         }
