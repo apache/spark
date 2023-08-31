@@ -1284,6 +1284,10 @@ class TypesTestsMixin:
         schema1 = self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").schema
         self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
 
+    def test_calendar_interval_type_with_sf(self):
+        schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055

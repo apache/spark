@@ -86,7 +86,7 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
-    @unittest.skip("SPARK-45018: should support CalendarIntervalType")
+    @unittest.skip("SPARK-45026: spark.sql should support datatypes not compatible with arrow")
     def test_calendar_interval_type(self):
         super().test_calendar_interval_type()
 
