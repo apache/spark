@@ -2115,62 +2115,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
-                var pythonUDTF = Option.empty[PythonUDTF]
-                var pythonUDTFAnalyzeResult = Option.empty[PythonUDTFAnalyzeResult]
-                resolvedFunc match {
-                  case Generate(p: PythonUDTF, _, _, _, _, _) =>
-                    pythonUDTF = Some(p)
-                    pythonUDTFAnalyzeResult = p.analyzeResult
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this clause")
-                }
+                val (
+                  pythonUDTFName: String,
+                  pythonUDTFAnalyzeResult: Option[PythonUDTFAnalyzeResult]) =
+                  resolvedFunc match {
+                    case Generate(p: PythonUDTF, _, _, _, _, _) =>
+                      (p.name,
+                        p.analyzeResult)
+                    case _ =>
+                      assert(!t.hasRepartitioning,
+                        "Cannot evaluate the table-valued function call because it included the " +
+                          "PARTITION BY clause, but only Python table functions support this " +
+                          "clause")
+                      ("", None)
+                  }
                 // Check if this is a call to a Python user-defined table function whose polymorphic
                 // 'analyze' method returned metadata indicated requested partitioning and/or
                 // ordering properties of the input relation. In that event, make sure that the UDTF
                 // call did not include any explicit PARTITION BY and/or ORDER BY clauses for the
                 // corresponding TABLE argument, and then update the TABLE argument representation
                 // to apply the requested partitioning and/or ordering.
-                pythonUDTFAnalyzeResult.map { a =>
-                  if (a.withSinglePartition && a.partitionByExpressions.nonEmpty) {
-                    throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
-                      functionName = pythonUDTF.get.name,
-                      reason = "the 'with_single_partition' field cannot be assigned to true " +
-                        "if the 'partition_by' list is non-empty")
-                  } else if (a.orderByExpressions.nonEmpty && !a.withSinglePartition &&
-                    a.partitionByExpressions.isEmpty) {
-                    throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
-                      functionName = pythonUDTF.get.name,
-                      reason = "the 'order_by' field cannot be non-empty unless the " +
-                        "'with_single_partition' field is set to true or the 'partition_by' list " +
-                        "is non-empty")
-                  } else if (a.hasRepartitioning && t.hasRepartitioning) {
-                    throw QueryCompilationErrors
-                      .tableValuedFunctionRequiredMetadataIncompatibleWithCall(
-                        functionName = pythonUDTF.get.name,
-                        requestedMetadata =
-                          "specified its own required partitioning of the input table",
-                        invalidFunctionCallProperty =
-                          "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
-                            "please remove these clauses and retry the query again.")
-                  }
-                  var withSinglePartition = t.withSinglePartition
-                  var partitionByExpressions = t.partitionByExpressions
-                  var orderByExpressions = t.orderByExpressions
-                  if (a.withSinglePartition) {
-                    withSinglePartition = true
-                  }
-                  if (a.partitionByExpressions.nonEmpty) {
-                    partitionByExpressions = a.partitionByExpressions
-                  }
-                  if (a.orderByExpressions.nonEmpty) {
-                    orderByExpressions = a.orderByExpressions
-                  }
-                  val newTableArgument = t.copy(
-                    withSinglePartition = withSinglePartition,
-                    partitionByExpressions = partitionByExpressions,
-                    orderByExpressions = orderByExpressions)
+                pythonUDTFAnalyzeResult.map { analyzeResult =>
+                  val newTableArgument: FunctionTableSubqueryArgumentExpression =
+                    analyzeResult.applyToTableArgument(pythonUDTFName, t)
                   tableArgs.append(SubqueryAlias(alias, newTableArgument.evaluable))
                   functionTableSubqueryArgs.append(newTableArgument)
                 }.getOrElse {

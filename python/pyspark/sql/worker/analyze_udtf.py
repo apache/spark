@@ -138,6 +138,12 @@ def main(infile: IO, outfile: IO) -> None:
         for ordering_col in result.order_by:
             write_with_length(ordering_col.name.encode("utf-8"), outfile)
             write_int(1 if ordering_col.ascending else 0, outfile)
+            if ordering_col.overrideNullsFirst is None:
+                write_int(0, outfile)
+            elif ordering_col.overrideNullsFirst:
+                write_int(1, outfile)
+            else:
+                write_int(2, outfile)
 
     except BaseException as e:
         try:

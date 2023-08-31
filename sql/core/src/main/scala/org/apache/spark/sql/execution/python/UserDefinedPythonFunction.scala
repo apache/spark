@@ -30,12 +30,11 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorker, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -84,7 +83,7 @@ case class UserDefinedPythonTableFunction(
     func: PythonFunction,
     returnType: Option[StructType],
     pythonEvalType: Int,
-    udfDeterministic: Boolean) extends Logging {
+    udfDeterministic: Boolean) {
 
   def this(
       name: String,
@@ -153,7 +152,7 @@ case class UserDefinedPythonTableFunction(
   }
 }
 
-object UserDefinedPythonTableFunction extends Logging {
+object UserDefinedPythonTableFunction {
 
   private[this] val workerModule = "pyspark.sql.worker.analyze_udtf"
 
@@ -297,8 +296,16 @@ object UserDefinedPythonTableFunction extends Logging {
         val obj = new Array[Byte](length)
         dataIn.readFully(obj)
         val columnName = new String(obj, StandardCharsets.UTF_8)
-        val ascending = if (dataIn.readInt() == 1) Ascending else Descending
-        orderBy.append(SortOrder(UnresolvedAttribute(columnName), ascending))
+        val direction = if (dataIn.readInt() == 1) Ascending else Descending
+        val overrideNullsFirst = dataIn.readInt()
+        overrideNullsFirst match {
+          case 0 =>
+            orderBy.append(SortOrder(UnresolvedAttribute(columnName), direction))
+          case 1 => orderBy.append(
+            SortOrder(UnresolvedAttribute(columnName), direction, NullsFirst, Seq.empty))
+          case 2 => orderBy.append(
+            SortOrder(UnresolvedAttribute(columnName), direction, NullsLast, Seq.empty))
+        }
       }
 
       PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)

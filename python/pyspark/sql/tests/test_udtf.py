@@ -1989,7 +1989,7 @@ class BaseUDTFTestsMixin:
         # This is a basic example.
         func = udtf(TestUDTF, returnType="partition_col: int, total: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -2010,7 +2010,7 @@ class BaseUDTFTestsMixin:
             ("123", "456", 123, 456),
             ("123", "NULL", None, 123),
         ):
-            self.assertEqual(
+            assertDataFrameEqual(
                 self.spark.sql(
                     f"""
                     WITH t AS (
@@ -2032,7 +2032,7 @@ class BaseUDTFTestsMixin:
         # Combine a lateral join with a TABLE argument with PARTITION BY .
         func = udtf(TestUDTF, returnType="partition_col: int, total: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -2077,7 +2077,7 @@ class BaseUDTFTestsMixin:
             ("input DESC", 1),
             ("input - 1 DESC", 1),
         ):
-            self.assertEqual(
+            assertDataFrameEqual(
                 self.spark.sql(
                     f"""
                     WITH t AS (
@@ -2117,7 +2117,7 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="count: int, total: int, last: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -2130,7 +2130,9 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(count=40, total=60, last=2)],
+            [
+                Row(count=40, total=60, last=2),
+            ]
         )
 
     def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
@@ -2167,7 +2169,7 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
@@ -2182,7 +2184,7 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [
                 Row(count=40, total=60, last=2),
-            ],
+            ]
         )
 
     def test_udtf_with_table_argument_with_partition_by_and_order_by_from_analyze(self):
@@ -2202,8 +2204,10 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partition_by=[PartitioningColumn("partition_col")],
-                    order_by=[OrderingColumn("input")],
+                    partition_by=[
+                        PartitioningColumn("partition_col")],
+                    order_by=[
+                        OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)],
                 )
 
             def eval(self, row: Row):
@@ -2215,34 +2219,44 @@ class BaseUDTFTestsMixin:
                         + f"value was {row['partition_col']}"
                     )
                 # Make sure that the rows arrive in the expected order.
-                if self._last is not None and self._last > row["input"]:
+                if (self._last is not None and
+                    row["input"] is not None and
+                    self._last > row["input"]):
                     raise Exception(
                         f"self._last was {self._last} but the row value was {row['input']}"
                     )
                 self._partition_col = row["partition_col"]
                 self._count += 1
                 self._last = row["input"]
-                self._sum += row["input"]
+                if row["input"] is not None:
+                    self._sum += row["input"]
 
             def terminate(self):
                 yield self._partition_col, self._count, self._sum, self._last
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
-        self.assertEqual(
+        assertDataFrameEqual(
             self.spark.sql(
                 """
                 WITH t AS (
                   SELECT id AS partition_col, 1 AS input FROM range(1, 21)
                   UNION ALL
                   SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+                  UNION ALL
+                  SELECT 42 AS partition_col, NULL AS input
+                  UNION ALL
+                  SELECT 42 AS partition_col, 1 AS input
+                  UNION ALL
+                  SELECT 42 AS partition_col, 2 AS input
                 )
                 SELECT partition_col, count, total, last
                 FROM test_udtf(TABLE(t))
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)],
+            [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)] +
+            [Row(partition_col=42, count=3, total=3, last=None)]
         )
 
 

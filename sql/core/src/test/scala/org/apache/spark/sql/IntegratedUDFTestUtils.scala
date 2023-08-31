@@ -580,10 +580,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |    def analyze(self):
         |        return AnalyzeResult(
         |            schema=StructType()
-        |            .add("partition_col", IntegerType())
-        |            .add("count", IntegerType())
-        |            .add("total", IntegerType())
-        |            .add("last", IntegerType()),
+        |                .add("partition_col", IntegerType())
+        |                .add("count", IntegerType())
+        |                .add("total", IntegerType())
+        |                .add("last", IntegerType()),
         |            partition_by=[
         |                PartitioningColumn("partition_col")
         |            ],
@@ -627,7 +627,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |    def analyze(self):
          |        return AnalyzeResult(
          |            schema=StructType()
-         |            .add("last", IntegerType()),
+         |                .add("last", IntegerType()),
          |            with_single_partition=True,
          |            partition_by=[
          |                PartitioningColumn("partition_col")
@@ -667,7 +667,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |    def analyze(self):
          |        return AnalyzeResult(
          |            schema=StructType()
-         |            .add("last", IntegerType()),
+         |                .add("last", IntegerType()),
          |            order_by=[
          |                OrderingColumn("input")
          |            ])
