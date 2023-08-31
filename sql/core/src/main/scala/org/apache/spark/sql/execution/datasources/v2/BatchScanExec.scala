@@ -146,7 +146,7 @@ case class BatchScanExec(
           // within a partition.
           if (spjParams.commonPartitionValues.isDefined && spjParams.applyPartialClustering) {
             // A mapping from the common partition values to how many splits the partition
-            // should contain. Note this no longer maintain the partition key ordering.
+            // should contain.
             val commonPartValuesMap = spjParams.commonPartitionValues
                 .get
                 .map(t => (InternalRowComparableWrapper(t._1, p.expressions), t._2))
