@@ -477,7 +477,7 @@ class StreamingQueryProgress:
             name=j["name"],
             timestamp=j["timestamp"],
             batchId=j["batchId"],
-            batchDuration=j["batchDuration"],
+            batchDuration=j.get("batchDuration", None),
             durationMs=dict(j["durationMs"]) if "durationMs" in j else {},
             eventTime=dict(j["eventTime"]) if "eventTime" in j else {},
             stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
