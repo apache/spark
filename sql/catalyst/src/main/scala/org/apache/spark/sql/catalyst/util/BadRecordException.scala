@@ -23,17 +23,20 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.types.UTF8String
 
+abstract class PartialValueException(val cause: Throwable) extends Exception(cause) {
+  def partialResult: Serializable
+  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
+  override def fillInStackTrace(): Throwable = this
+}
+
 /**
- * Exception thrown when the underlying parser returns a partial result of parsing.
+ * Exception thrown when the underlying parser returns a partial result of parsing an object/row.
  * @param partialResult the partial result of parsing a bad record.
  * @param cause the actual exception about why the parser cannot return full result.
  */
 case class PartialResultException(
-    partialResult: InternalRow,
-    cause: Throwable) extends Exception(cause) {
-  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
-  override def fillInStackTrace(): Throwable = this
-}
+    override val partialResult: InternalRow,
+    override val cause: Throwable) extends PartialValueException(cause)
 
 /**
  * Exception thrown when the underlying parser returns a partial array result.
@@ -41,11 +44,8 @@ case class PartialResultException(
  * @param cause the actual exception about why the parser cannot return full result.
  */
 case class PartialArrayDataResultException(
-    partialResult: ArrayData,
-    cause: Throwable) extends Exception(cause) {
-  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
-  override def fillInStackTrace(): Throwable = this
-}
+    override val partialResult: ArrayData,
+    override val cause: Throwable) extends PartialValueException(cause)
 
 /**
  * Exception thrown when the underlying parser returns a partial map result.
@@ -53,11 +53,8 @@ case class PartialArrayDataResultException(
  * @param cause the actual exception about why the parser cannot return full result.
  */
 case class PartialMapDataResultException(
-    partialResult: MapData,
-    cause: Throwable) extends Exception(cause) {
-  override def getStackTrace(): Array[StackTraceElement] = cause.getStackTrace()
-  override def fillInStackTrace(): Throwable = this
-}
+    override val partialResult: MapData,
+    override val cause: Throwable) extends PartialValueException(cause)
 
 /**
  * Exception thrown when the underlying parser returns partial result list of parsing.

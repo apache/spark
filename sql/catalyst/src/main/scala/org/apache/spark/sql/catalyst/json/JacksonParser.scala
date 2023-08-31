@@ -454,24 +454,17 @@ class JacksonParser(
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
-            val value = try {
-              fieldConverters(index).apply(parser)
-            } catch {
-              case PartialResultException(partialResult, e) if enablePartialResults =>
-                badRecordException = badRecordException.orElse(Some(e))
-                partialResult
-              case PartialArrayDataResultException(partialResult, e) if enablePartialResults =>
-                badRecordException = badRecordException.orElse(Some(e))
-                partialResult
-              case PartialMapDataResultException(partialResult, e) if enablePartialResults =>
-                badRecordException = badRecordException.orElse(Some(e))
-                partialResult
-            }
+            val value = fieldConverters(index).apply(parser)
             row.update(index, value)
             skipRow = structFilters.skipRow(row, index)
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case err: PartialValueException if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(err.cause))
+              row.update(index, err.partialResult)
+              skipRow = structFilters.skipRow(row, index)
+              bitmask(index) = false
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
