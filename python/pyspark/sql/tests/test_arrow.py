@@ -23,8 +23,7 @@ import unittest
 import warnings
 from distutils.version import LooseVersion
 from typing import cast
-
-import numpy as np
+from collections import namedtuple
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -183,6 +182,8 @@ class ArrowTestsMixin:
 
     @property
     def create_np_arrs(self):
+        import numpy as np
+
         int_dtypes = ["int8", "int16", "int32", "int64"]
         float_dtypes = ["float32", "float64"]
         return (
@@ -584,6 +585,8 @@ class ArrowTestsMixin:
                 self.check_createDataFrame_with_ndarray(arrow_enabled)
 
     def check_createDataFrame_with_ndarray(self, arrow_enabled):
+        import numpy as np
+
         dtypes = ["tinyint", "smallint", "int", "bigint", "float", "double"]
         expected_dtypes = (
             [[("value", t)] for t in dtypes]
@@ -1207,6 +1210,29 @@ class ArrowTestsMixin:
         expected = pd.DataFrame.from_records(data, columns=schema.names)
 
         assert_frame_equal(pdf, expected)
+
+    def test_create_dataframe_namedtuples(self):
+        # SPARK-44980: Inherited namedtuples in createDataFrame
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_create_dataframe_namedtuples(arrow_enabled)
+
+    def check_create_dataframe_namedtuples(self, arrow_enabled):
+        MyTuple = namedtuple("MyTuple", ["a", "b", "c"])
+
+        class MyInheritedTuple(MyTuple):
+            pass
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            df = self.spark.createDataFrame([MyInheritedTuple(1, 2, 3)])
+            self.assertEqual(df.first(), Row(a=1, b=2, c=3))
+
+            df = self.spark.createDataFrame([MyInheritedTuple(1, 2, MyInheritedTuple(1, 2, 3))])
+            self.assertEqual(df.first(), Row(a=1, b=2, c=Row(a=1, b=2, c=3)))
 
 
 @unittest.skipIf(

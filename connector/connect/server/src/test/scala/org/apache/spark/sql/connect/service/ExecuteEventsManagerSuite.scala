@@ -184,6 +184,19 @@ class ExecuteEventsManagerSuite
           Some(100)))
   }
 
+  test("SPARK-43923: post finished with extra tags") {
+    val events = setupEvents(ExecuteStatus.Started)
+    events.postFinished(Some(100), Map("someEvent" -> "true"))
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(
+        SparkListenerConnectOperationFinished(
+          events.executeHolder.jobTag,
+          DEFAULT_QUERY_ID,
+          DEFAULT_CLOCK.getTimeMillis(),
+          Some(100),
+          Map("someEvent" -> "true")))
+  }
+
   test("SPARK-43923: post closed") {
     val events = setupEvents(ExecuteStatus.Finished)
     events.postClosed()

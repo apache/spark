@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.test
 
 import java.io.File
 import java.util.UUID
 
 import org.scalatest.Assertions.fail
 
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.util.{SparkErrorUtils, SparkFileUtils}
 
 trait SQLHelper {

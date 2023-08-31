@@ -84,9 +84,9 @@ def chain(f, g):
 def wrap_udf(f, return_type):
     if return_type.needConversion():
         toInternal = return_type.toInternal
-        return lambda *a: toInternal(f(*a))
+        return lambda *a, **kw: toInternal(f(*a, **kw))
     else:
-        return lambda *a: f(*a)
+        return lambda *a, **kw: f(*a, **kw)
 
 
 def wrap_scalar_pandas_udf(f, return_type):
@@ -115,8 +115,10 @@ def wrap_scalar_pandas_udf(f, return_type):
             )
         return result
 
-    return lambda *a: (
-        verify_result_length(verify_result_type(f(*a)), len(a[0])),
+    return lambda *a, **kw: (
+        verify_result_length(
+            verify_result_type(f(*a, **kw)), len((list(a) + list(kw.values()))[0])
+        ),
         arrow_return_type,
     )
 
@@ -137,8 +139,17 @@ def wrap_arrow_batch_udf(f, return_type):
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
-    def evaluate(*args: pd.Series) -> pd.Series:
-        return pd.Series(result_func(f(*a)) for a in zip(*args))
+    def evaluate(*args: pd.Series, **kwargs: pd.Series) -> pd.Series:
+        keys = list(kwargs.keys())
+        len_args = len(args)
+        return pd.Series(
+            [
+                result_func(
+                    f(*row[:len_args], **{key: row[len_args + i] for i, key in enumerate(keys)})
+                )
+                for row in zip(*args, *[kwargs[key] for key in keys])
+            ]
+        )
 
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
@@ -163,8 +174,10 @@ def wrap_arrow_batch_udf(f, return_type):
             )
         return result
 
-    return lambda *a: (
-        verify_result_length(verify_result_type(evaluate(*a)), len(a[0])),
+    return lambda *a, **kw: (
+        verify_result_length(
+            verify_result_type(evaluate(*a, **kw)), len((list(a) + list(kw.values()))[0])
+        ),
         arrow_return_type,
     )
 
@@ -517,7 +530,27 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
 
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
-    arg_offsets = [read_int(infile) for i in range(num_arg)]
+
+    if eval_type in (
+        PythonEvalType.SQL_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        # The below doesn't support named argument, but shares the same protocol.
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+    ):
+        args_offsets = []
+        kwargs_offsets = {}
+        for _ in range(num_arg):
+            offset = read_int(infile)
+            if read_bool(infile):
+                name = utf8_deserializer.loads(infile)
+                kwargs_offsets[name] = offset
+            else:
+                args_offsets.append(offset)
+    else:
+        args_offsets = [read_int(infile) for i in range(num_arg)]
+        kwargs_offsets = {}
+
     chained_func = None
     for i in range(read_int(infile)):
         f, return_type = read_command(pickleSer, infile)
@@ -535,31 +568,32 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
+        udf = wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        return arg_offsets, wrap_arrow_batch_udf(func, return_type)
+        udf = wrap_arrow_batch_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
+        udf = wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_pandas_batch_iter_udf(func, return_type)
+        udf = wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return arg_offsets, wrap_arrow_batch_iter_udf(func, return_type)
+        udf = wrap_arrow_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        udf = wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        return arg_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
+        udf = wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        udf = wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
+        udf = wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type, runner_conf, udf_index)
+        udf = wrap_window_agg_pandas_udf(func, return_type, runner_conf, udf_index)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return arg_offsets, wrap_udf(func, return_type)
+        udf = wrap_udf(func, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
+    return args_offsets, kwargs_offsets, udf
 
 
 # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
@@ -984,7 +1018,9 @@ def read_udfs(pickleSer, infile, eval_type):
         if is_map_arrow_iter:
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
-        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, _, udf = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0
+        )
 
         def func(_, iterator):
             num_input_rows = 0
@@ -1074,7 +1110,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         # Create function like this:
@@ -1091,7 +1127,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
@@ -1125,7 +1161,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -1142,7 +1178,10 @@ def read_udfs(pickleSer, infile, eval_type):
             udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
 
         def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for (arg_offsets, f) in udfs)
+            result = tuple(
+                f(*[a[o] for o in args_offsets], **{k: a[o] for k, o in kwargs_offsets.items()})
+                for args_offsets, kwargs_offsets, f in udfs
+            )
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:

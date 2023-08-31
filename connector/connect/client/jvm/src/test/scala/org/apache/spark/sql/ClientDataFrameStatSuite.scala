@@ -22,7 +22,7 @@ import java.util.Random
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.test.RemoteSparkSession
 
 class ClientDataFrameStatSuite extends RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
