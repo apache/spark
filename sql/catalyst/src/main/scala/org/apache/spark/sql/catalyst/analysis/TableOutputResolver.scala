@@ -279,7 +279,7 @@ object TableOutputResolver {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"${toSQLId(col.name)}").mkString(", ")
         if (colPath.isEmpty) {
-          throw QueryCompilationErrors.incompatibleDataToTableExtraFieldsError(tableName,
+          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
             extraCols)
         } else {
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(

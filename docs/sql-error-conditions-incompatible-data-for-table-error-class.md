@@ -37,9 +37,9 @@ Cannot find data for the output column `<colName>`.
 
 Cannot safely cast `<colName>` `<srcType>` to `<targetType>`.
 
-## EXTRA_FIELDS
+## EXTRA_COLUMNS
 
-Cannot write extra fields `<colName>`.
+Cannot write extra columns `<extraColumns>`.
 
 ## EXTRA_STRUCT_FIELDS
 

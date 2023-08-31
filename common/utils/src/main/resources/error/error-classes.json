@@ -1025,9 +1025,9 @@
           "Cannot safely cast <colName> <srcType> to <targetType>."
         ]
       },
-      "EXTRA_FIELDS" : {
+      "EXTRA_COLUMNS" : {
         "message" : [
-          "Cannot write extra fields <colName>."
+          "Cannot write extra columns <extraColumns>."
         ]
       },
       "EXTRA_STRUCT_FIELDS" : {

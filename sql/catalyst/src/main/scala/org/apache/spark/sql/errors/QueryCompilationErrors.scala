@@ -2191,13 +2191,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def incompatibleDataToTableExtraFieldsError(
-      tableName: String, colName: String): Throwable = {
+  def incompatibleDataToTableExtraColumnsError(
+      tableName: String, extraColumns: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_FIELDS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "extraColumns" -> extraColumns
       )
     )
   }
