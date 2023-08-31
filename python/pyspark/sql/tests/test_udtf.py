@@ -2132,7 +2132,7 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [
                 Row(count=40, total=60, last=2),
-            ]
+            ],
         )
 
     def test_udtf_with_table_argument_with_single_partition_from_analyze(self):
@@ -2184,7 +2184,7 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [
                 Row(count=40, total=60, last=2),
-            ]
+            ],
         )
 
     def test_udtf_with_table_argument_with_partition_by_and_order_by_from_analyze(self):
@@ -2204,10 +2204,10 @@ class BaseUDTFTestsMixin:
                     .add("count", IntegerType())
                     .add("total", IntegerType())
                     .add("last", IntegerType()),
-                    partition_by=[
-                        PartitioningColumn("partition_col")],
+                    partition_by=[PartitioningColumn("partition_col")],
                     order_by=[
-                        OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)],
+                        OrderingColumn(name="input", ascending=True, overrideNullsFirst=False)
+                    ],
                 )
 
             def eval(self, row: Row):
@@ -2219,9 +2219,11 @@ class BaseUDTFTestsMixin:
                         + f"value was {row['partition_col']}"
                     )
                 # Make sure that the rows arrive in the expected order.
-                if (self._last is not None and
-                    row["input"] is not None and
-                    self._last > row["input"]):
+                if (
+                    self._last is not None
+                    and row["input"] is not None
+                    and self._last > row["input"]
+                ):
                     raise Exception(
                         f"self._last was {self._last} but the row value was {row['input']}"
                     )
@@ -2255,8 +2257,8 @@ class BaseUDTFTestsMixin:
                 ORDER BY 1, 2
                 """
             ).collect(),
-            [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)] +
-            [Row(partition_col=42, count=3, total=3, last=None)]
+            [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
+            + [Row(partition_col=42, count=3, total=3, last=None)],
         )
 
 
