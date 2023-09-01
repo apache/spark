@@ -3345,7 +3345,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
-class SparkConnectSessionWithOptionsTest(ReusedConnectTestCase):
+class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             PySparkSession.builder.config("string", "foo")
