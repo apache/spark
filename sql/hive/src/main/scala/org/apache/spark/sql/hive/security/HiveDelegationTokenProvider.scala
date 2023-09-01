@@ -41,6 +41,8 @@ import org.apache.spark.util.Utils
 private[spark] class HiveDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
 
+  private val tokenSignature = "spark.delegation.token";
+
   override def serviceName: String = "hive"
 
   private val classNotFoundErrorStr = s"You are attempting to use the " +
@@ -75,7 +77,8 @@ private[spark] class HiveDelegationTokenProvider
     // either has a TGT, in which case it does not need tokens, or it has a token created
     // elsewhere, in which case it cannot create new ones. The check for an existing token avoids
     // printing an exception to the logs in the latter case.
-    val currentToken = UserGroupInformation.getCurrentUser().getCredentials().getToken(tokenAlias)
+    val currentToken = UserGroupInformation.getCurrentUser().getCredentials()
+      .getToken(tokenAlias(hiveConf(hadoopConf)))
     currentToken == null && UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty &&
       (SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser()) ||
@@ -105,8 +108,9 @@ private[spark] class HiveDelegationTokenProvider
 
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
+        hive2Token.setService(tokenAlias(conf))
         logDebug(s"Get Token from hive metastore: ${hive2Token.toString}")
-        creds.addToken(tokenAlias, hive2Token)
+        creds.addToken(tokenAlias(conf), hive2Token)
       }
 
       None
@@ -143,5 +147,9 @@ private[spark] class HiveDelegationTokenProvider
     }
   }
 
-  private def tokenAlias: Text = new Text("hive.server2.delegation.token")
+  private def tokenAlias(hiveConf: Configuration): Text = {
+    val newTokenSignature = hiveConf.get("hive.metastore.token.signature",
+      tokenSignature);
+    new Text(newTokenSignature)
+  }
 }
