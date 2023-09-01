@@ -60,7 +60,7 @@ class UnivocityGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
-  private lazy val nullAsQuotedEmptyString =
+  private val nullAsQuotedEmptyString =
     SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
 
   @scala.annotation.tailrec
