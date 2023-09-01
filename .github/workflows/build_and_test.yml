@@ -283,7 +283,7 @@ jobs:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
@@ -470,7 +470,7 @@ jobs:
         name: test-results-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
         name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
@@ -961,7 +961,7 @@ jobs:
         name: test-results-tpcds--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
         name: unit-tests-log-tpcds--8-${{ inputs.hadoop }}-hive2.3
@@ -1028,7 +1028,7 @@ jobs:
         name: test-results-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
-      if: failure()
+      if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
         name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
@@ -1103,7 +1103,7 @@ jobs:
           eval $(minikube docker-env)
           build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
-        if: failure()
+        if: ${{ !success() }}
         uses: actions/upload-artifact@v3
         with:
           name: spark-on-kubernetes-it-log
