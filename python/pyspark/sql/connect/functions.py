@@ -1333,7 +1333,7 @@ variance.__doc__ = pysparkfuncs.variance.__doc__
 
 
 def every(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("bool_and", col)
+    return _invoke_function_over_columns("every", col)
 
 
 every.__doc__ = pysparkfuncs.every.__doc__
@@ -1347,7 +1347,7 @@ bool_and.__doc__ = pysparkfuncs.bool_and.__doc__
 
 
 def some(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("bool_or", col)
+    return _invoke_function_over_columns("some", col)
 
 
 some.__doc__ = pysparkfuncs.some.__doc__

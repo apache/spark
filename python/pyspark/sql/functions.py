@@ -932,12 +932,12 @@ def try_avg(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
-    ... ).select(sf.try_avg("age").alias("age_avg")).show()
-    +-------+
-    |age_avg|
-    +-------+
-    |    8.5|
-    +-------+
+    ... ).select(sf.try_avg("age")).show()
+    +------------+
+    |try_avg(age)|
+    +------------+
+    |         8.5|
+    +------------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -1122,12 +1122,12 @@ def try_sum(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(10).select(sf.try_sum("id").alias("sum")).show()
-    +---+
-    |sum|
-    +---+
-    | 45|
-    +---+
+    >>> spark.range(10).select(sf.try_sum("id")).show()
+    +-----------+
+    |try_sum(id)|
+    +-----------+
+    |         45|
+    +-----------+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -3378,25 +3378,27 @@ def every(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
     >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |          true|
-    +--------------+
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |       true|
+    +-----------+
+
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |         false|
-    +--------------+
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |      false|
+    +-----------+
+
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |         false|
-    +--------------+
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |      false|
+    +-----------+
     """
     return _invoke_function_over_columns("every", col)
 
@@ -3466,25 +3468,27 @@ def some(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
     >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
+    +----------+
+    |some(flag)|
+    +----------+
+    |      true|
+    +----------+
+
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
+    +----------+
+    |some(flag)|
+    +----------+
+    |      true|
+    +----------+
+
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |        false|
-    +-------------+
+    +----------+
+    |some(flag)|
+    +----------+
+    |     false|
+    +----------+
     """
     return _invoke_function_over_columns("some", col)
 
