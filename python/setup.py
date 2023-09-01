@@ -326,6 +326,7 @@ try:
                 "grpcio-status>=%s" % _minimum_grpc_version,
                 "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
                 "numpy>=1.15",
+                "uuid6==2023.5.2",
             ],
         },
         python_requires=">=3.8",

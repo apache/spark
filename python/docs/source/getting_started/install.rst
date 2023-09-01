@@ -162,6 +162,7 @@ Package                    Supported version Note
 `grpcio`                   >=1.48,<1.57              Required for Spark Connect
 `grpcio-status`            >=1.48,<1.57              Required for Spark Connect
 `googleapis-common-protos` ==1.56.4                  Required for Spark Connect
+`uuid6`                    ==2023.5.2                Required for Spark Connect
 ========================== ========================= ======================================================================================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  

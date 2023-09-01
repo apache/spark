@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import warnings
-import uuid
+import uuid6
 from collections.abc import Generator
 from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
 from multiprocessing.pool import ThreadPool
@@ -67,11 +67,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if request.operation_id:
             self._operation_id = request.operation_id
         else:
-            # Add operation id, if not present.
+            # Add UUIDv7 operation id, if not present.
             # with operationId set by the client, the client can use it to try to reattach on error
             # even before getting the first response. If the operation in fact didn't even reach the
             # server, that will end with INVALID_HANDLE.OPERATION_NOT_FOUND error.
-            self._operation_id = str(uuid.uuid4())
+            self._operation_id = str(uuid6.uuid7())
 
         self._stub = stub
         request.request_options.append(

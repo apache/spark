@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.UUID
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import com.fasterxml.uuid.Generators.timeBasedEpochGenerator
+import com.fasterxml.uuid.impl.UUIDUtil
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
@@ -42,15 +43,16 @@ private[connect] class ExecuteHolder(
 
   val operationId = if (request.hasOperationId) {
     try {
-      UUID.fromString(request.getOperationId).toString
+        UUIDUtil.uuid(request.getOperationId).toString
     } catch {
-      case _: IllegalArgumentException =>
+      case _: NumberFormatException =>
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.FORMAT",
           messageParameters = Map("handle" -> request.getOperationId))
     }
   } else {
-    UUID.randomUUID().toString
+    // use UUIDv7 as operationId
+    timeBasedEpochGenerator().generate().toString
   }
 
   /**

@@ -16,10 +16,9 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.util.UUID
-
 import scala.util.control.NonFatal
 
+import com.fasterxml.uuid.Generators.timeBasedEpochGenerator
 import io.grpc.{ManagedChannel, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
@@ -56,11 +55,11 @@ class ExecutePlanResponseReattachableIterator(
   val operationId = if (request.hasOperationId) {
     request.getOperationId
   } else {
-    // Add operation id, if not present.
+    // Add an UUIDv7 operation id, if not present.
     // with operationId set by the client, the client can use it to try to reattach on error
     // even before getting the first response. If the operation in fact didn't even reach the
     // server, that will end with INVALID_HANDLE.OPERATION_NOT_FOUND error.
-    UUID.randomUUID.toString
+    timeBasedEpochGenerator().generate().toString
   }
 
   // Need raw stubs, don't want retry handling or error conversion done by the custom stubs.

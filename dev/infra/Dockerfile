@@ -68,7 +68,7 @@ RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
 RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
-RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
+RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status uuid6==2023.5.2
 
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
