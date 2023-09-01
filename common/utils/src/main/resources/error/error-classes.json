@@ -1035,6 +1035,11 @@
           "Cannot safely cast <colName> <srcType> to <targetType>."
         ]
       },
+      "EXTRA_COLUMNS" : {
+        "message" : [
+          "Cannot write extra columns <extraColumns>."
+        ]
+      },
       "EXTRA_STRUCT_FIELDS" : {
         "message" : [
           "Cannot write extra fields <extraFields> to the struct <colName>."
