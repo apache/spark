@@ -26,14 +26,18 @@ object PythonStreamingQueryListener {
       listener: SimplePythonFunction,
       sessionHolder: SessionHolder): PythonStreamingQueryListener = {
     new PythonStreamingQueryListener(
-      listener, sessionHolder, "pyspark.sql.connect.streaming.worker.listener_worker")
+      listener,
+      sessionHolder,
+      "pyspark.sql.connect.streaming.worker.listener_worker")
   }
 
   def forTesting(
       listener: SimplePythonFunction,
       sessionHolder: SessionHolder): PythonStreamingQueryListener = {
     new PythonStreamingQueryListener(
-      listener, sessionHolder, "pyspark.sql.tests.connect.streaming.worker_for_testing")
+      listener,
+      sessionHolder,
+      "pyspark.sql.tests.connect.streaming.worker_for_testing")
   }
 }
 
@@ -45,13 +49,13 @@ object PythonStreamingQueryListener {
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
     sessionHolder: SessionHolder,
-    module: String) extends StreamingQueryListener {
+    module: String)
+    extends StreamingQueryListener {
 
   private val port = SparkConnectService.localPort
   private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-  private[connect] val runner = StreamingPythonRunner(
-    listener, connectUrl, sessionHolder.sessionId, module
-  )
+  private[connect] val runner =
+    StreamingPythonRunner(listener, connectUrl, sessionHolder.sessionId, module)
 
   val (dataOut, _) = runner.init()
 

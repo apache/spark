@@ -24,7 +24,6 @@ import os
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     write_int,
-    read_long,
     UTF8Deserializer,
     CPickleSerializer,
 )
@@ -42,8 +41,7 @@ def main(infile: IO, outfile: IO) -> None:
     session_id = utf8_deserializer.loads(infile)
 
     print(
-        "Streaming test worker is starting with "
-        f"url {connect_url} and sessionId {session_id}."
+        "Streaming test worker is starting with " f"url {connect_url} and sessionId {session_id}."
     )
 
     write_int(0, outfile)  # Indicate successful initialization

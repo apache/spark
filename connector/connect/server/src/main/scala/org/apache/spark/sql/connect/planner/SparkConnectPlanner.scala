@@ -1596,7 +1596,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     }
   }
 
-  private[connect] def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+  private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -2900,9 +2900,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-        query,
-        cleaner)
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
     }
     executeHolder.eventsManager.postFinished()
 
@@ -3133,10 +3131,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
         val listener = if (command.getAddListener.hasPythonListenerPayload) {
-          PythonStreamingQueryListener(
+          new PythonStreamingQueryListener(
             transformPythonFunction(command.getAddListener.getPythonListenerPayload),
-            sessionHolder
-          )
+            sessionHolder,
+            pythonExec)
         } else {
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](

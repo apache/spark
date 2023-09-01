@@ -95,8 +95,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // Needed because pythonPath in PythonWorkerFactory doesn't include test spark home
     val sparkPythonPath = PythonUtils.mergePythonPaths(
       Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
-      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator)
-    )
+      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator))
 
     SimplePythonFunction(
       command = Array.emptyByteArray,
@@ -118,8 +117,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val (fn2, cleaner2) =
       StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
 
-    val query1 = sessionHolder.session
-      .readStream
+    val query1 = sessionHolder.session.readStream
       .format("rate")
       .load()
       .writeStream
@@ -128,8 +126,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       .foreachBatch(fn1)
       .start()
 
-    val query2 = sessionHolder.session
-      .readStream
+    val query2 = sessionHolder.session.readStream
       .format("rate")
       .load()
       .writeStream
@@ -138,15 +135,12 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       .foreachBatch(fn2)
       .start()
 
-
     sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
       query1,
-      cleaner1
-    )
+      cleaner1)
     sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
       query2,
-      cleaner2
-    )
+      cleaner2)
 
     assert(cleaner1.runner.pythonWorker.isDefined)
     val worker1 = cleaner1.runner.pythonWorker.get
