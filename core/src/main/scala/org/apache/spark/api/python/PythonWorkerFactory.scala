@@ -174,7 +174,6 @@ private[spark] class PythonWorkerFactory(
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
-      println(s"===wei pythonPath: $pythonPath")
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
       workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocketChannel.socket().getLocalPort
@@ -184,19 +183,14 @@ private[spark] class PythonWorkerFactory(
         workerEnv.put("SPARK_PREFER_IPV6", "True")
       }
 
-      println("wei===== before starting python process")
       val workerProcess = pb.start()
 
-      println("wei===== 1")
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(workerProcess.getInputStream, workerProcess.getErrorStream)
-      println("wei===== 2")
       // Wait for it to connect to our socket, and validate the auth secret.
       serverSocketChannel.socket().setSoTimeout(11)
-      println("wei===== 3")
       try {
         val socketChannel = serverSocketChannel.accept()
-        println("wei===== 4")
         authHelper.authClient(socketChannel.socket())
         // TODO: When we drop JDK 8, we can just use workerProcess.pid()
         val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()

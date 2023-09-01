@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.connect.service
 
-import scala.collection.JavaConverters._
+import java.io.File
 
-import com.google.common.collect.{Lists, Maps}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
+import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.api.python.SimplePythonFunction
+import org.apache.spark.api.python.{PythonUtils, SimplePythonFunction}
+import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
-import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
+import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, StreamingForeachBatchHelper}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
@@ -87,108 +91,85 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  // create python process and run cloudpickle,
-  // also possible to pass the temp file to the python process
-
-//  private def pythonProcessTestFcn(pidPath: Path, functionPath: Path): Unit = {
-//    val pb = new ProcessBuilder()
-//    val pythonScript =
-//      s"""
-//         |import os
-//         |from pyspark.serializers import CloudPickleSerializer
-//         |
-//         |def func():
-//         |    with open("${pidPath.toString}"), 'w') as f:
-//         |        f.write(str(os.getpid()))
-//         |
-//         |bytes = CloudPickleSerializer().dumps(func)
-//         |with open("${functionPath.toString}"), 'w') as f:
-//         |    f.write(bytes)
-//         |
-//         |exit()
-//         |""".stripMargin
-//    pb.command(pythonExec, "-c", pythonScript)
-//    pb.environment().put(
-//      "PYTHONPATH",
-//      PythonUtils.sparkPythonPath
-//    )
-//    val process = pb.start()
-//    process.waitFor()
-//  }
-
   private def dummyPythonFunction(sessionHolder: SessionHolder): SimplePythonFunction = {
+    // Needed because pythonPath in PythonWorkerFactory doesn't consider test spark home
+    val sparkPythonPath = PythonUtils.mergePythonPaths(
+      Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
+      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator)
+    )
+
     SimplePythonFunction(
       command = Array.emptyByteArray,
-      envVars = Maps.newHashMap(),
+      envVars = mutable.Map("PYTHONPATH" -> sparkPythonPath).asJava,
       pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
-      pythonExec = sys.env.getOrElse("PYSPARK_PYTHON",
-        sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3")),
-      pythonVer = "3.9",
+      pythonExec = IntegratedUDFTestUtils.pythonExec,
+      pythonVer = IntegratedUDFTestUtils.pythonVer,
       broadcastVars = Lists.newArrayList(),
       accumulator = null)
   }
 
   test("foreachBatch process: process terminates after query is stopped") {
     val sessionHolder = SessionHolder.forTesting(spark)
-
-//
-//    val query1 = sessionHolder.session
-//      .readStream
-//      .format("rate")
-//      .load()
-//      .writeStream
-//      .format("memory")
-//      .queryName("foreachBatchterminationtest1")
-//      .start()
-//
-//    eventually(timeout(30.seconds)) {
-//      assert(query1.status.isDataAvailable)
-//      assert(query1.recentProgress.nonEmpty) // Query made progress.
-//    }
-//
-//    println("====wei query1 made progress")
-
     SparkConnectService.start(spark.sparkContext)
+
     val pythonFn = dummyPythonFunction(sessionHolder)
-    val (fn, cleaner) =
+    val (fn1, cleaner1) =
+      StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+    val (fn2, cleaner2) =
       StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
 
-    println("====wei before query creation====")
-
-    val query = sessionHolder.session
+    val query1 = sessionHolder.session
       .readStream
       .format("rate")
       .load()
       .writeStream
       .format("memory")
-      .queryName("foreachBatch_termination_test")
-      .foreachBatch(fn)
+      .queryName("foreachBatch_termination_test_q1")
+      .foreachBatch(fn1)
       .start()
 
-    println("====wei query created====")
+    val query2 = sessionHolder.session
+      .readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("memory")
+      .queryName("foreachBatch_termination_test_q2")
+      .foreachBatch(fn2)
+      .start()
+
 
     sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-      query,
-      cleaner
+      query1,
+      cleaner1
+    )
+    sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+      query2,
+      cleaner2
     )
 
-    println("====wei query cleaner registered====")
+    assert(cleaner1.runner.pythonWorker.isDefined)
+    val worker1 = cleaner1.runner.pythonWorker.get
+    assert(cleaner2.runner.pythonWorker.isDefined)
+    val worker2 = cleaner2.runner.pythonWorker.get
 
-    // assert one microbatch is ran
+    // assert both python processes are running
+    assert(!worker1.isStopped())
+    assert(!worker2.isStopped())
+    // stop query1
+    query1.stop()
+    // assert query1's python process is not running
     eventually(timeout(30.seconds)) {
-      assert(query.status.isDataAvailable)
-//      assert(query.recentProgress.nonEmpty) // Query made progress.
+      assert(worker1.isStopped())
+      assert(!worker2.isStopped())
     }
-    println("====wei query made progress====")
-    // assert python process is running
-    assert(StreamingForeachBatchHelper.pythonRunner.isDefined)
-    assert(StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.isDefined)
-    val worker = StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.get
-    assert(!worker.isStopped())
-    // stop query
-    query.stop()
-    // assert python process is not running
-    assert(worker.isStopped())
+
+    // stop query2
+    query2.stop()
+    // assert query2's python process is not running
+    eventually(timeout(30.seconds)) {
+      assert(worker2.isStopped())
+    }
   }
 
   test("listener process: process terminates after listener is dropped") {
@@ -197,29 +178,40 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
     val pythonFn = dummyPythonFunction(sessionHolder)
 
-    val query = sessionHolder.session
-      .readStream
-      .format("rate")
-      .load()
-      .writeStream
-      .format("memory")
-      .queryName("listener_removeListener_test")
-      .start()
+    val id1 = "listener_removeListener_test_1"
+    val id2 = "listener_removeListener_test_2"
+    val listener1 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
+    val listener2 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
 
-    // assert one microbatch is ran
+    sessionHolder.cacheListenerById(id1, listener1)
+    sessionHolder.session.streams.addListener(listener1)
+    sessionHolder.cacheListenerById(id2, listener2)
+    sessionHolder.session.streams.addListener(listener2)
+
+    assert(listener1.runner.pythonWorker.isDefined)
+    val worker1 = listener1.runner.pythonWorker.get
+    assert(listener2.runner.pythonWorker.isDefined)
+    val worker2 = listener2.runner.pythonWorker.get
+
+    // assert both python processes are running
+    assert(!worker1.isStopped())
+    assert(!worker2.isStopped())
+
+    // remove listener1
+    sessionHolder.session.streams.removeListener(listener1)
+    sessionHolder.removeCachedListener(id1)
+    // assert listener1's python process is not running
     eventually(timeout(30.seconds)) {
-      assert(query.status.isDataAvailable)
-      assert(query.recentProgress.nonEmpty) // Query made progress.
+      assert(worker1.isStopped())
+      assert(!worker2.isStopped())
     }
-    println("====wei query made progress====")
-    // assert python process is running
-    assert(StreamingForeachBatchHelper.pythonRunner.isDefined)
-    assert(StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.isDefined)
-    val worker = StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.get
-    assert(!worker.isStopped())
-    // stop query
-    query.stop()
-    // assert python process is not running
-    assert(worker.isStopped())
+
+    // remove listener2
+    sessionHolder.session.streams.removeListener(listener2)
+    sessionHolder.removeCachedListener(id2)
+    // assert listener2's python process is not running
+    eventually(timeout(30.seconds)) {
+      assert(worker2.isStopped())
+    }
   }
 }

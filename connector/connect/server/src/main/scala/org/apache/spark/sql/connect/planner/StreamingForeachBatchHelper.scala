@@ -38,8 +38,6 @@ object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
-  var pythonRunner: Option[StreamingPythonRunner] = None
-
   case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
     override def close(): Unit = {
       try runner.stop()
@@ -115,7 +113,7 @@ object StreamingForeachBatchHelper extends Logging {
     pythonForeachBatchWrapperImpl(
       pythonFn,
       sessionHolder,
-      "pyspark.sql.tests.connect.streaming.test_worker")
+      "pyspark.sql.tests.connect.streaming.worker_for_testing")
   }
 
   private def pythonForeachBatchWrapperImpl(
@@ -125,13 +123,11 @@ object StreamingForeachBatchHelper extends Logging {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-    println(s"wei===================== $connectUrl")
     val runner = StreamingPythonRunner(
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
       module)
-    pythonRunner = Some(runner)
     val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {

@@ -46,18 +46,11 @@ def main(infile: IO, outfile: IO) -> None:
         f"url {connect_url} and sessionId {session_id}."
     )
 
-    print('before return value written')
-
     write_int(0, outfile)  # Indicate successful initialization
     outfile.flush()
 
-    print('return value written')
-
     while True:
-        utf8_deserializer.loads(infile)
-        read_long(infile)
-        write_int(0, outfile)
-        outfile.flush()
+        continue
 
 
 if __name__ == "__main__":

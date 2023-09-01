@@ -33,7 +33,7 @@ object PythonStreamingQueryListener {
       listener: SimplePythonFunction,
       sessionHolder: SessionHolder): PythonStreamingQueryListener = {
     new PythonStreamingQueryListener(
-      listener, sessionHolder, "pyspark.sql.tests.connect.streaming.test_worker")
+      listener, sessionHolder, "pyspark.sql.tests.connect.streaming.worker_for_testing")
   }
 }
 
