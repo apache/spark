@@ -12,6 +12,7 @@
 .ammonite
 .bloop
 .bsp/
+.dasdas
 .cache
 .classpath
 .ensime
