@@ -160,4 +160,18 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, correctAnswer.analyze)
   }
 
+  test("two windows with overlapping project/order by lists") {
+    // Parent orders by the window expression of the child, no reordering.
+    val sum_a_2 = sum(c).as('sum_a_2)
+    val parentOrderSpec = Seq(d.asc, sum_a_2.toAttribute.asc)
+    val query = testRelation
+      .window(Seq(sum_a_2),
+        partitionSpec4, orderSpec2)
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec3,
+        parentOrderSpec)
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+    comparePlans(optimized, analyzed)
+  }
+
 }
