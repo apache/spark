@@ -3361,48 +3361,145 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         condition : :class:`Column` or str
-            a :class:`Column` of :class:`types.BooleanType`
+            A :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expressions.
 
         Returns
         -------
         :class:`DataFrame`
-            Filtered DataFrame.
+            A new DataFrame with rows that satisfy the condition.
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        ...     (2, "Alice", "Math"), (5, "Bob", "Physics"), (7, "Charlie", "Chemistry")],
+        ...     schema=["age", "name", "subject"])
 
         Filter by :class:`Column` instances.
 
         >>> df.filter(df.age > 3).show()
-        +---+----+
-        |age|name|
-        +---+----+
-        |  5| Bob|
-        +---+----+
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
         >>> df.where(df.age == 2).show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        +---+-----+
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
 
         Filter by SQL expression in a string.
 
         >>> df.filter("age > 3").show()
-        +---+----+
-        |age|name|
-        +---+----+
-        |  5| Bob|
-        +---+----+
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
         >>> df.where("age = 2").show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        +---+-----+
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
+
+        Filter by multiple conditions.
+
+        >>> df.filter((df.age > 3) & (df.subject == "Physics")).show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+        >>> df.filter((df.age == 2) | (df.subject == "Chemistry")).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter by multiple conditions using SQL expression.
+
+        >>> df.filter("age > 3 AND name = 'Bob'").show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+
+        Filter using the :func:`Column.isin` function.
+
+        >>> df.filter(df.name.isin("Alice", "Bob")).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
+
+        Filter by a list of values using the :func:`Column.isin` function.
+
+        >>> df.filter(df.subject.isin(["Math", "Physics"])).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
+
+        Filter using the `~` operator to exclude certain values.
+
+        >>> df.filter(~df.name.isin(["Alice", "Charlie"])).show()
+        +---+----+-------+
+        |age|name|subject|
+        +---+----+-------+
+        |  5| Bob|Physics|
+        +---+----+-------+
+
+        Filter using the :func:`Column.isNotNull` function.
+
+        >>> df.filter(df.name.isNotNull()).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  5|    Bob|  Physics|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter using the :func:`Column.like` function.
+
+        >>> df.filter(df.name.like("Al%")).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        +---+-----+-------+
+
+        Filter using the :func:`Column.contains` function.
+
+        >>> df.filter(df.name.contains("i")).show()
+        +---+-------+---------+
+        |age|   name|  subject|
+        +---+-------+---------+
+        |  2|  Alice|     Math|
+        |  7|Charlie|Chemistry|
+        +---+-------+---------+
+
+        Filter using the :func:`Column.between` function.
+
+        >>> df.filter(df.age.between(2, 5)).show()
+        +---+-----+-------+
+        |age| name|subject|
+        +---+-----+-------+
+        |  2|Alice|   Math|
+        |  5|  Bob|Physics|
+        +---+-----+-------+
         """
         if isinstance(condition, str):
             jdf = self._jdf.filter(condition)
