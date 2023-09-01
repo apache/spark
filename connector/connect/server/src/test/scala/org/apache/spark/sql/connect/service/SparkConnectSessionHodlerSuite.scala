@@ -92,7 +92,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   private def dummyPythonFunction(sessionHolder: SessionHolder): SimplePythonFunction = {
-    // Needed because pythonPath in PythonWorkerFactory doesn't consider test spark home
+    // Needed because pythonPath in PythonWorkerFactory doesn't include test spark home
     val sparkPythonPath = PythonUtils.mergePythonPaths(
       Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
       Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator)
@@ -108,7 +108,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       accumulator = null)
   }
 
-  test("foreachBatch process: process terminates after query is stopped") {
+  test("python foreachBatch process: process terminates after query is stopped") {
     val sessionHolder = SessionHolder.forTesting(spark)
     SparkConnectService.start(spark.sparkContext)
 
@@ -172,7 +172,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  test("listener process: process terminates after listener is dropped") {
+  test("python listener process: process terminates after listener is removed") {
     val sessionHolder = SessionHolder.forTesting(spark)
     SparkConnectService.start(spark.sparkContext)
 
@@ -212,6 +212,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // assert listener2's python process is not running
     eventually(timeout(30.seconds)) {
       assert(worker2.isStopped())
+      assert(sessionHolder.session.streams.listListeners().isEmpty)
     }
   }
 }
