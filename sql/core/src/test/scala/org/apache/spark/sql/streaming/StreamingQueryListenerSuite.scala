@@ -331,9 +331,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
-        // `recentProgress` should not receive any events
+        // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.isEmpty
+          q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
         testStream(input.toDS)(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
@@ -524,7 +524,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
-          // checkProgressEvent(1),
           AdvanceManualClock(10),
           checkProgressEvent(1),
           AdvanceManualClock(90),
