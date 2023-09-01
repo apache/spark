@@ -123,11 +123,13 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
-      case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case NameParameterizedQuery(child, args)
+        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_._2.resolved) =>
         checkArgs(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
-      case p @ PosParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case PosParameterizedQuery(child, args)
+        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved) =>
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
