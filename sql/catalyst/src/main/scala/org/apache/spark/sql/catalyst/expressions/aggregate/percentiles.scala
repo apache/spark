@@ -369,9 +369,9 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
 
-  /* override def checkInputDataTypes(): TypeCheckResult = {
+  override def checkInputDataTypes(): TypeCheckResult = {
     percentile.checkInputDataTypes()
-  } */
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
