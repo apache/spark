@@ -21,6 +21,22 @@ import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPy
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
+object PythonStreamingQueryListener {
+  def apply(
+      listener: SimplePythonFunction,
+      sessionHolder: SessionHolder): PythonStreamingQueryListener = {
+    new PythonStreamingQueryListener(
+      listener, sessionHolder, "pyspark.sql.connect.streaming.worker.listener_worker")
+  }
+
+  def forTesting(
+      listener: SimplePythonFunction,
+      sessionHolder: SessionHolder): PythonStreamingQueryListener = {
+    new PythonStreamingQueryListener(
+      listener, sessionHolder, "pyspark.sql.tests.connect.streaming.worker_for_testing")
+  }
+}
+
 /**
  * A helper class for handling StreamingQueryListener related functionality in Spark Connect. Each
  * instance of this class starts a python process, inside which has the python handling logic.
@@ -29,16 +45,13 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
     sessionHolder: SessionHolder,
-    pythonExec: String)
-    extends StreamingQueryListener {
+    module: String) extends StreamingQueryListener {
 
   private val port = SparkConnectService.localPort
   private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-  private val runner = StreamingPythonRunner(
-    listener,
-    connectUrl,
-    sessionHolder.sessionId,
-    "pyspark.sql.connect.streaming.worker.listener_worker")
+  private[connect] val runner = StreamingPythonRunner(
+    listener, connectUrl, sessionHolder.sessionId, module
+  )
 
   val (dataOut, _) = runner.init()
 

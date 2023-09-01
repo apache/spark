@@ -101,6 +101,25 @@ object StreamingForeachBatchHelper extends Logging {
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
       sessionHolder: SessionHolder): (ForeachBatchFnType, RunnerCleaner) = {
+    pythonForeachBatchWrapperImpl(
+      pythonFn,
+      sessionHolder,
+      "pyspark.sql.connect.streaming.worker.foreachBatch_worker")
+  }
+
+  private[connect] def testPythonForeachBatchWrapper(
+      pythonFn: SimplePythonFunction,
+      sessionHolder: SessionHolder): (ForeachBatchFnType, RunnerCleaner) = {
+    pythonForeachBatchWrapperImpl(
+      pythonFn,
+      sessionHolder,
+      "pyspark.sql.tests.connect.streaming.worker_for_testing")
+  }
+
+  private def pythonForeachBatchWrapperImpl(
+      pythonFn: SimplePythonFunction,
+      sessionHolder: SessionHolder,
+      module: String): (ForeachBatchFnType, RunnerCleaner) = {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
@@ -108,7 +127,7 @@ object StreamingForeachBatchHelper extends Logging {
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
-      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
+      module)
     val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {

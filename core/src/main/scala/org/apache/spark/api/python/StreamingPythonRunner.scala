@@ -49,7 +49,8 @@ private[spark] class StreamingPythonRunner(
 
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[PythonWorker] = None
+  // scoped for testing
+  private[spark] var pythonWorker: Option[PythonWorker] = None
   private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
@@ -108,11 +109,17 @@ private[spark] class StreamingPythonRunner(
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    pythonWorker.foreach { worker =>
-      pythonWorkerFactory.foreach { factory =>
-        factory.stopWorker(worker)
-        factory.stop()
+    logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
+
+//    try {
+      pythonWorker.foreach { worker =>
+        pythonWorkerFactory.foreach { factory =>
+          factory.stopWorker(worker)
+          factory.stop()
+        }
       }
+//    } except {
+//      case e: Exception =>
+//        logWarning("Exception while stopping streaming runner.", e)
     }
-  }
 }
