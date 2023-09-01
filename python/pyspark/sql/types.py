@@ -77,6 +77,7 @@ __all__ = [
     "LongType",
     "DayTimeIntervalType",
     "YearMonthIntervalType",
+    "CalendarIntervalType",
     "Row",
     "ShortType",
     "ArrayType",
@@ -491,6 +492,20 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
+
+
+class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
+    """The data type representing calendar intervals.
+
+    The calendar interval is stored internally in three components:
+    - an integer value representing the number of `months` in this interval.
+    - an integer value representing the number of `days` in this interval.
+    - a long value representing the number of `microseconds` in this interval.
+    """
+
+    @classmethod
+    def typeName(cls) -> str:
+        return "interval"
 
 
 class ArrayType(DataType):
@@ -1402,6 +1417,8 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif json_value == "interval":
+            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1564,6 +1581,8 @@ def _infer_type(
         return DayTimeIntervalType()
     if dataType is YearMonthIntervalType:
         return YearMonthIntervalType()
+    if dataType is CalendarIntervalType:
+        return CalendarIntervalType()
     elif dataType is not None:
         return dataType()
 

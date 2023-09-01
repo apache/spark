@@ -46,7 +46,7 @@ from collections.abc import Iterable
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.observation import Observation
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -63,6 +63,7 @@ from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
+from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
@@ -74,6 +75,8 @@ from pyspark.sql.connect.functions import (
     _invoke_function,
     col,
     lit,
+    udf,
+    struct,
     expr as sql_expression,
 )
 from pyspark.sql.pandas.types import from_arrow_schema
@@ -1584,8 +1587,6 @@ class DataFrame:
         elif name in [
             "rdd",
             "toJSON",
-            "foreach",
-            "foreachPartition",
             "checkpoint",
             "localCheckpoint",
         ]:
@@ -1662,8 +1663,6 @@ class DataFrame:
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
         assert schema is not None and isinstance(schema, StructType)
-
-        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 
         return ArrowTableToRowsConversion.convert(table, schema)
 
@@ -1906,8 +1905,6 @@ class DataFrame:
         return self.storageLevel != StorageLevel.NONE
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
-        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
-
         if self._plan is None:
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
@@ -2004,6 +2001,44 @@ class DataFrame:
         return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier)
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
+
+    def foreach(self, f: Callable[[Row], None]) -> None:
+        assert self._plan is not None
+
+        def foreach_func(row: Any) -> None:
+            f(row)
+
+        self.select(struct(*self.schema.fieldNames()).alias("row")).select(
+            udf(foreach_func, StructType())("row")  # type: ignore[arg-type]
+        ).collect()
+
+    foreach.__doc__ = PySparkDataFrame.foreach.__doc__
+
+    def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
+        assert self._plan is not None
+
+        schema = self.schema
+        field_converters = [
+            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+        ]
+
+        def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+            def flatten() -> Iterator[Row]:
+                for table in itr:
+                    columnar_data = [column.to_pylist() for column in table.columns]
+                    for i in range(0, table.num_rows):
+                        values = [
+                            field_converters[j](columnar_data[j][i])
+                            for j in range(table.num_columns)
+                        ]
+                        yield _create_row(fields=schema.fieldNames(), values=values)
+
+            f(flatten())
+            return iter([])
+
+        self.mapInArrow(foreach_partition_func, schema=StructType()).collect()
+
+    foreachPartition.__doc__ = PySparkDataFrame.foreachPartition.__doc__
 
     @property
     def writeStream(self) -> DataStreamWriter:

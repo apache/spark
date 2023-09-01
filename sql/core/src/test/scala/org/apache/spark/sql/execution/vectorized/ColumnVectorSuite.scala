@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.vectorized
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.columnar.ColumnAccessor
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.types.UTF8String
 
-class ColumnVectorSuite extends SparkFunSuite {
+class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
   private def withVector(
       vector: WritableColumnVector)(
       block: WritableColumnVector => Unit): Unit = {
@@ -584,6 +586,34 @@ class ColumnVectorSuite extends SparkFunSuite {
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)
+      }
+    }
+  }
+
+  test("SPARK-44239: Test column vector reserve policy") {
+    withSQLConf(
+      SQLConf.VECTORIZED_HUGE_VECTOR_THRESHOLD.key -> "300",
+      SQLConf.VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key -> "1.2") {
+      val dataType = ByteType
+
+      Array(new OnHeapColumnVector(80, dataType),
+        new OffHeapColumnVector(80, dataType)).foreach { vector =>
+        try {
+          // The new capacity of small vector = request capacity * 2 and will not be reset
+          vector.appendBytes(100, 0)
+          assert(vector.capacity == 200)
+          vector.reset()
+          assert(vector.capacity == 200)
+
+          // The new capacity of huge vector = (request capacity - HUGE_VECTOR_THRESHOLD) * 1.2 +
+          // HUGE_VECTOR_THRESHOLD * 2 = 300 * 1.2 and will be reset.
+          vector.appendBytes(300, 0)
+          assert(vector.capacity == 360)
+          vector.reset()
+          assert(vector.capacity == 80)
+        } finally {
+          vector.close()
+        }
       }
     }
   }

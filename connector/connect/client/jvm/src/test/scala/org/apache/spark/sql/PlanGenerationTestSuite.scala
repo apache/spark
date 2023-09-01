@@ -3235,16 +3235,19 @@ class PlanGenerationTestSuite
   private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
-  test("from_protobuf messageClassName") {
-    binary.select(
-      pbFn.from_protobuf(fn.col("bytes"), "org.apache.spark.sql.protobuf.protos.TestProtoObj"))
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName") {
+    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
   }
 
-  test("from_protobuf messageClassName options") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),
-        "org.apache.spark.sql.protobuf.protos.TestProtoObj",
+        classOf[StorageLevel].getName,
         Map("recursive.fields.max.depth" -> "2").asJava))
   }
 

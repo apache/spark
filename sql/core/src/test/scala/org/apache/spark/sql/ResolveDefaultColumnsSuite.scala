@@ -35,9 +35,15 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
       // INSERT without user-defined columns
       sql("truncate table t")
-      sql("insert into t values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
-        sql("select timestamp'2020-12-31', null").collect().head)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t values (timestamp'2020-12-31')")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableColumns" -> "`c1`, `c2`",
+          "dataColumns" -> "`col1`"))
     }
   }
 
@@ -57,9 +63,15 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
       // INSERT without user-defined columns
       sql("truncate table t")
-      sql("insert into t values (timestamp'2020-12-31')")
-      checkAnswer(spark.table("t"),
-        sql("select timestamp'2020-12-31', timestamp'2020-01-01'").collect().head)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("insert into t values (timestamp'2020-12-31')")
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "tableColumns" -> "`c1`, `c2`",
+          "dataColumns" -> "`col1`"))
     }
   }
 
@@ -67,8 +79,15 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     sql("create table t(c1 int, c2 int, c3 int, c4 int) using parquet partitioned by (c3, c4)")
 
     // INSERT without static partitions
-    sql("insert into t values (1, 2, 3)")
-    checkAnswer(spark.table("t"), Row(1, 2, 3, null))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("insert into t values (1, 2, 3)")
+      },
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`t`",
+        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+        "dataColumns" -> "`col1`, `col2`, `col3`"))
 
     // INSERT without static partitions but with column list
     sql("truncate table t")
@@ -77,8 +96,16 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
     // INSERT with static partitions
     sql("truncate table t")
-    sql("insert into t partition(c3=3, c4=4) values (1)")
-    checkAnswer(spark.table("t"), Row(1, null, 3, 4))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("insert into t partition(c3=3, c4=4) values (1)")
+      },
+      errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`t`",
+        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+        "dataColumns" -> "`col1`",
+        "staticPartCols" -> "`c3`, `c4`"))
 
     // INSERT with static partitions and with column list
     sql("truncate table t")
@@ -87,8 +114,16 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
 
     // INSERT with partial static partitions
     sql("truncate table t")
-    sql("insert into t partition(c3=3, c4) values (1, 2)")
-    checkAnswer(spark.table("t"), Row(1, 2, 3, null))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("insert into t partition(c3=3, c4) values (1, 2)")
+      },
+      errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+      parameters = Map(
+        "tableName" -> "`spark_catalog`.`default`.`t`",
+        "tableColumns" -> "`c1`, `c2`, `c3`, `c4`",
+        "dataColumns" -> "`col1`, `col2`",
+        "staticPartCols" -> "`c3`"))
 
     // INSERT with partial static partitions and with column list is not allowed
     intercept[AnalysisException](sql("insert into t partition(c3=3, c4) (c1) values (1, 4)"))
