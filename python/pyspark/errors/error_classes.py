@@ -644,7 +644,7 @@ ERROR_CLASSES_JSON = """
   },
   "PYTHON_VERSION_MISMATCH" : {
     "message" : [
-      "Python in worker has different version <worker_version> than that in driver <driver_version>, PySpark cannot run with different minor versions.",
+      "Python in worker has different version: <worker_version> than that in driver: <driver_version>, PySpark cannot run with different minor versions.",
       "Please check environment variables PYSPARK_PYTHON and PYSPARK_DRIVER_PYTHON are correctly set."
     ]
   },
