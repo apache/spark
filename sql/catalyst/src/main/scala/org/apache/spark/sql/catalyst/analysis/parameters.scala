@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, LeafExpression, Literal, MapFromArrays, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, Expression, LeafExpression, Literal, MapFromArrays, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
@@ -97,7 +97,7 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
     def isNotAllowed(expr: Expression): Boolean = expr.exists {
-      case _: Literal | _: CreateArray | _: MapFromArrays => false
+      case _: Literal | _: CreateArray | _: MapFromArrays | _: CreateMap => false
       case _ => true
     }
     args.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>

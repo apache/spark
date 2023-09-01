@@ -21,7 +21,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.functions.{array, lit, map_from_arrays}
+import org.apache.spark.sql.functions.{array, lit, map, map_from_arrays}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -535,27 +535,33 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     def fromArr(keys: Array[_], values: Array[_]): Column = {
       map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
     }
-    checkAnswer(
-      spark.sql("SELECT map_contains_key(:mapParam, 0)",
-        Map("mapParam" -> fromArr(Array.empty[Int], Array.empty[String]))),
-      Row(false))
-    checkAnswer(
-      spark.sql("SELECT map_contains_key(?, 'a')",
-        Array(fromArr(Array.empty[String], Array.empty[Double]))),
-      Row(false))
-    checkAnswer(
-      spark.sql("SELECT element_at(:mapParam, 'a')",
-        Map("mapParam" -> fromArr(Array("a"), Array(0)))),
-      Row(0))
-    checkAnswer(
-      spark.sql("SELECT element_at(?, 'a')", Array(fromArr(Array("a"), Array(0)))),
-      Row(0))
-    checkAnswer(
-      spark.sql("SELECT :m[10]", Map("m" -> fromArr(Array(10, 20, 30), Array(0, 1, 2)))),
-      Row(0))
-    checkAnswer(
-      spark.sql("SELECT ?[?]", Array(fromArr(Array(1f, 2f, 3f), Array(1, 2, 3)), 2f)),
-      Row(2))
+    def createMap(keys: Array[_], values: Array[_]): Column = {
+      val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
+      map(zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+    }
+    Seq(fromArr(_, _), createMap(_, _)).foreach { f =>
+      checkAnswer(
+        spark.sql("SELECT map_contains_key(:mapParam, 0)",
+          Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
+        Row(false))
+      checkAnswer(
+        spark.sql("SELECT map_contains_key(?, 'a')",
+          Array(f(Array.empty[String], Array.empty[Double]))),
+        Row(false))
+      checkAnswer(
+        spark.sql("SELECT element_at(:mapParam, 'a')",
+          Map("mapParam" -> f(Array("a"), Array(0)))),
+        Row(0))
+      checkAnswer(
+        spark.sql("SELECT element_at(?, 'a')", Array(f(Array("a"), Array(0)))),
+        Row(0))
+      checkAnswer(
+        spark.sql("SELECT :m[10]", Map("m" -> f(Array(10, 20, 30), Array(0, 1, 2)))),
+        Row(0))
+      checkAnswer(
+        spark.sql("SELECT ?[?]", Array(f(Array(1f, 2f, 3f), Array(1, 2, 3)), 2f)),
+        Row(2))
+    }
     checkAnswer(
       spark.sql("SELECT :m['a'][1]",
         Map("m" ->
