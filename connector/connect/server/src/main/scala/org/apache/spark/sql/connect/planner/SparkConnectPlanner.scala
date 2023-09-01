@@ -1596,7 +1596,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     }
   }
 
-  private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+  private[connect] def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -3133,10 +3133,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
         val listener = if (command.getAddListener.hasPythonListenerPayload) {
-          new PythonStreamingQueryListener(
+          PythonStreamingQueryListener(
             transformPythonFunction(command.getAddListener.getPythonListenerPayload),
-            sessionHolder,
-            pythonExec)
+            sessionHolder
+          )
         } else {
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](

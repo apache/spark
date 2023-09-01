@@ -17,7 +17,14 @@
 
 package org.apache.spark.sql.connect.service
 
+import scala.collection.JavaConverters._
+
+import com.google.common.collect.{Lists, Maps}
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
@@ -78,5 +85,141 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assertThrows[InvalidPlanInput] {
       sessionHolder.getDataFrameOrThrow(key1)
     }
+  }
+
+  // create python process and run cloudpickle,
+  // also possible to pass the temp file to the python process
+
+//  private def pythonProcessTestFcn(pidPath: Path, functionPath: Path): Unit = {
+//    val pb = new ProcessBuilder()
+//    val pythonScript =
+//      s"""
+//         |import os
+//         |from pyspark.serializers import CloudPickleSerializer
+//         |
+//         |def func():
+//         |    with open("${pidPath.toString}"), 'w') as f:
+//         |        f.write(str(os.getpid()))
+//         |
+//         |bytes = CloudPickleSerializer().dumps(func)
+//         |with open("${functionPath.toString}"), 'w') as f:
+//         |    f.write(bytes)
+//         |
+//         |exit()
+//         |""".stripMargin
+//    pb.command(pythonExec, "-c", pythonScript)
+//    pb.environment().put(
+//      "PYTHONPATH",
+//      PythonUtils.sparkPythonPath
+//    )
+//    val process = pb.start()
+//    process.waitFor()
+//  }
+
+  private def dummyPythonFunction(sessionHolder: SessionHolder): SimplePythonFunction = {
+    SimplePythonFunction(
+      command = Array.emptyByteArray,
+      envVars = Maps.newHashMap(),
+      pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
+      pythonExec = sys.env.getOrElse("PYSPARK_PYTHON",
+        sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3")),
+      pythonVer = "3.9",
+      broadcastVars = Lists.newArrayList(),
+      accumulator = null)
+  }
+
+  test("foreachBatch process: process terminates after query is stopped") {
+    val sessionHolder = SessionHolder.forTesting(spark)
+
+//
+//    val query1 = sessionHolder.session
+//      .readStream
+//      .format("rate")
+//      .load()
+//      .writeStream
+//      .format("memory")
+//      .queryName("foreachBatchterminationtest1")
+//      .start()
+//
+//    eventually(timeout(30.seconds)) {
+//      assert(query1.status.isDataAvailable)
+//      assert(query1.recentProgress.nonEmpty) // Query made progress.
+//    }
+//
+//    println("====wei query1 made progress")
+
+    SparkConnectService.start(spark.sparkContext)
+    val pythonFn = dummyPythonFunction(sessionHolder)
+    val (fn, cleaner) =
+      StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+
+    println("====wei before query creation====")
+
+    val query = sessionHolder.session
+      .readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("memory")
+      .queryName("foreachBatch_termination_test")
+      .foreachBatch(fn)
+      .start()
+
+    println("====wei query created====")
+
+    sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+      query,
+      cleaner
+    )
+
+    println("====wei query cleaner registered====")
+
+    // assert one microbatch is ran
+    eventually(timeout(30.seconds)) {
+      assert(query.status.isDataAvailable)
+//      assert(query.recentProgress.nonEmpty) // Query made progress.
+    }
+    println("====wei query made progress====")
+    // assert python process is running
+    assert(StreamingForeachBatchHelper.pythonRunner.isDefined)
+    assert(StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.isDefined)
+    val worker = StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.get
+    assert(!worker.isStopped())
+    // stop query
+    query.stop()
+    // assert python process is not running
+    assert(worker.isStopped())
+  }
+
+  test("listener process: process terminates after listener is dropped") {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    SparkConnectService.start(spark.sparkContext)
+
+    val pythonFn = dummyPythonFunction(sessionHolder)
+
+    val query = sessionHolder.session
+      .readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("memory")
+      .queryName("listener_removeListener_test")
+      .start()
+
+    // assert one microbatch is ran
+    eventually(timeout(30.seconds)) {
+      assert(query.status.isDataAvailable)
+      assert(query.recentProgress.nonEmpty) // Query made progress.
+    }
+    println("====wei query made progress====")
+    // assert python process is running
+    assert(StreamingForeachBatchHelper.pythonRunner.isDefined)
+    assert(StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.isDefined)
+    val worker = StreamingForeachBatchHelper.pythonRunner.get.pythonWorker.get
+    assert(!worker.isStopped())
+    // stop query
+    query.stop()
+    // assert python process is not running
+    assert(worker.isStopped())
   }
 }
