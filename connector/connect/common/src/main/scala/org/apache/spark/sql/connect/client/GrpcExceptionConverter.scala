@@ -107,7 +107,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
-    val fallbackEx = new SparkException(status.getMessage, ex.getCause)
+    val fallbackEx = new SparkException(ex.toString, ex.getCause)
 
     val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))
