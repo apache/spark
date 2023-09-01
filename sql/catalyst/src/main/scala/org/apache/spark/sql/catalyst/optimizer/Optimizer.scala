@@ -1310,8 +1310,6 @@ object TransposeWindow extends Rule[LogicalPlan] {
   private def compatibleOrderBy(w1: Window, w2: Window): Boolean = {
     val childWindowExprs = w2.windowExpressions.map(x => x.toAttribute)
     val parentOrder = w1.orderSpec.flatMap(x => x.references)
-
-    println(s"PARENT ORDER ${parentOrder}")
     childWindowExprs.intersect(parentOrder).isEmpty
   }
 
