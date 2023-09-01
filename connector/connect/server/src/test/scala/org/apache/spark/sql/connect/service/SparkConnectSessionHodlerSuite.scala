@@ -136,12 +136,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         .foreachBatch(fn2)
         .start()
 
-      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(
-        query1,
-        cleaner1)
-      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(
-        query2,
-        cleaner2)
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query1, cleaner1)
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query2, cleaner2)
 
       assert(cleaner1.runner.pythonWorker.isDefined)
       val worker1 = cleaner1.runner.pythonWorker.get
