@@ -182,13 +182,13 @@ private[spark] class PythonWorkerFactory(
       if (Utils.preferIPv6) {
         workerEnv.put("SPARK_PREFER_IPV6", "True")
       }
-
       val workerProcess = pb.start()
 
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(workerProcess.getInputStream, workerProcess.getErrorStream)
       // Wait for it to connect to our socket, and validate the auth secret.
-      serverSocketChannel.socket().setSoTimeout(11)
+      serverSocketChannel.socket().setSoTimeout(10000)
+      
       try {
         val socketChannel = serverSocketChannel.accept()
         authHelper.authClient(socketChannel.socket())
