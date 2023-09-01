@@ -939,6 +939,11 @@ class BaseUDFTestsMixin(object):
         ):
             self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
+        with self.assertRaisesRegex(
+            PythonException, r"test_udf\(\) got multiple values for argument 'a'"
+        ):
+            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
+
     def test_kwargs(self):
         @udf("int")
         def test_udf(**kwargs):
@@ -956,6 +961,16 @@ class BaseUDFTestsMixin(object):
         ):
             with self.subTest(query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
+
+        # negative
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
     def test_named_arguments_and_defaults(self):
         @udf("int")

@@ -1848,6 +1848,11 @@ class BaseUDTFTestsMixin:
         ):
             self.spark.sql("SELECT * FROM test_udtf(c => 'x')").show()
 
+        with self.assertRaisesRegex(
+            PythonException, r"eval\(\) got multiple values for argument 'a'"
+        ):
+            self.spark.sql("SELECT * FROM test_udtf(10, a => 100)").show()
+
     def test_udtf_with_kwargs(self):
         @udtf(returnType="a: int, b: string")
         class TestUDTF:
@@ -1866,6 +1871,16 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b="x")])
+
+        # negative
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT * FROM test_udtf(a => 10, a => 100)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
     def test_udtf_with_analyze_kwargs(self):
         @udtf
