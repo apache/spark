@@ -82,7 +82,7 @@ class OrderingColumn:
     # If this is None, use the default behavior to sort NULL values first when sorting in ascending
     # order, or last when sorting in descending order. Otherwise, if this is True or False, override
     # the default behavior accordingly.
-    overrideNullsFirst: bool = None
+    overrideNullsFirst: Optional[bool] = None
 
 
 @dataclass(frozen=True)
