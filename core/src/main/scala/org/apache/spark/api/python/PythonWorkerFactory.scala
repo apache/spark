@@ -42,7 +42,7 @@ case class PythonWorker(channel: SocketChannel, selector: Selector, selectionKey
   }
 
   def isStopped(): Boolean = {
-    !channel.isOpen()
+    !channel.isOpen() && !selector.isOpen()
   }
 }
 
