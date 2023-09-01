@@ -109,104 +109,118 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   test("python foreachBatch process: process terminates after query is stopped") {
     val sessionHolder = SessionHolder.forTesting(spark)
-    SparkConnectService.start(spark.sparkContext)
+    try {
+      SparkConnectService.start(spark.sparkContext)
 
-    val pythonFn = dummyPythonFunction(sessionHolder)
-    val (fn1, cleaner1) =
-      StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
-    val (fn2, cleaner2) =
-      StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+      val pythonFn = dummyPythonFunction(sessionHolder)
+      val (fn1, cleaner1) =
+        StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+      val (fn2, cleaner2) =
+        StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
 
-    val query1 = sessionHolder.session.readStream
-      .format("rate")
-      .load()
-      .writeStream
-      .format("memory")
-      .queryName("foreachBatch_termination_test_q1")
-      .foreachBatch(fn1)
-      .start()
+      val query1 = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("foreachBatch_termination_test_q1")
+        .foreachBatch(fn1)
+        .start()
 
-    val query2 = sessionHolder.session.readStream
-      .format("rate")
-      .load()
-      .writeStream
-      .format("memory")
-      .queryName("foreachBatch_termination_test_q2")
-      .foreachBatch(fn2)
-      .start()
+      val query2 = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("foreachBatch_termination_test_q2")
+        .foreachBatch(fn2)
+        .start()
 
-    sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-      query1,
-      cleaner1)
-    sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
-      query2,
-      cleaner2)
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(
+        query1,
+        cleaner1)
+      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(
+        query2,
+        cleaner2)
 
-    assert(cleaner1.runner.pythonWorker.isDefined)
-    val worker1 = cleaner1.runner.pythonWorker.get
-    assert(cleaner2.runner.pythonWorker.isDefined)
-    val worker2 = cleaner2.runner.pythonWorker.get
+      assert(cleaner1.runner.pythonWorker.isDefined)
+      val worker1 = cleaner1.runner.pythonWorker.get
+      assert(cleaner2.runner.pythonWorker.isDefined)
+      val worker2 = cleaner2.runner.pythonWorker.get
 
-    // assert both python processes are running
-    assert(!worker1.isStopped())
-    assert(!worker2.isStopped())
-    // stop query1
-    query1.stop()
-    // assert query1's python process is not running
-    eventually(timeout(30.seconds)) {
-      assert(worker1.isStopped())
+      // assert both python processes are running
+      assert(!worker1.isStopped())
       assert(!worker2.isStopped())
-    }
+      // stop query1
+      query1.stop()
+      // assert query1's python process is not running
+      eventually(timeout(30.seconds)) {
+        assert(worker1.isStopped())
+        assert(!worker2.isStopped())
+      }
 
-    // stop query2
-    query2.stop()
-    // assert query2's python process is not running
-    eventually(timeout(30.seconds)) {
-      assert(worker2.isStopped())
+      // stop query2
+      query2.stop()
+      eventually(timeout(30.seconds)) {
+        // assert query2's python process is not running
+        assert(worker2.isStopped())
+      }
+
+      assert(spark.streams.active.isEmpty) // no running query
+      assert(spark.streams.listListeners().length == 1) // only process termination listener
+    } finally {
+      SparkConnectService.stop()
+      // remove process termination listener
+      spark.streams.removeListener(spark.streams.listListeners()(0))
     }
   }
 
   test("python listener process: process terminates after listener is removed") {
     val sessionHolder = SessionHolder.forTesting(spark)
-    SparkConnectService.start(spark.sparkContext)
+    try {
+      SparkConnectService.start(spark.sparkContext)
 
-    val pythonFn = dummyPythonFunction(sessionHolder)
+      val pythonFn = dummyPythonFunction(sessionHolder)
 
-    val id1 = "listener_removeListener_test_1"
-    val id2 = "listener_removeListener_test_2"
-    val listener1 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
-    val listener2 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
+      val id1 = "listener_removeListener_test_1"
+      val id2 = "listener_removeListener_test_2"
+      val listener1 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
+      val listener2 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
 
-    sessionHolder.cacheListenerById(id1, listener1)
-    sessionHolder.session.streams.addListener(listener1)
-    sessionHolder.cacheListenerById(id2, listener2)
-    sessionHolder.session.streams.addListener(listener2)
+      sessionHolder.cacheListenerById(id1, listener1)
+      spark.streams.addListener(listener1)
+      sessionHolder.cacheListenerById(id2, listener2)
+      spark.streams.addListener(listener2)
 
-    assert(listener1.runner.pythonWorker.isDefined)
-    val worker1 = listener1.runner.pythonWorker.get
-    assert(listener2.runner.pythonWorker.isDefined)
-    val worker2 = listener2.runner.pythonWorker.get
+      assert(listener1.runner.pythonWorker.isDefined)
+      val worker1 = listener1.runner.pythonWorker.get
+      assert(listener2.runner.pythonWorker.isDefined)
+      val worker2 = listener2.runner.pythonWorker.get
 
-    // assert both python processes are running
-    assert(!worker1.isStopped())
-    assert(!worker2.isStopped())
-
-    // remove listener1
-    sessionHolder.session.streams.removeListener(listener1)
-    sessionHolder.removeCachedListener(id1)
-    // assert listener1's python process is not running
-    eventually(timeout(30.seconds)) {
-      assert(worker1.isStopped())
+      // assert both python processes are running
+      assert(!worker1.isStopped())
       assert(!worker2.isStopped())
-    }
 
-    // remove listener2
-    sessionHolder.session.streams.removeListener(listener2)
-    sessionHolder.removeCachedListener(id2)
-    // assert listener2's python process is not running
-    eventually(timeout(30.seconds)) {
-      assert(worker2.isStopped())
-      assert(sessionHolder.session.streams.listListeners().isEmpty)
+      // remove listener1
+      spark.streams.removeListener(listener1)
+      sessionHolder.removeCachedListener(id1)
+      // assert listener1's python process is not running
+      eventually(timeout(30.seconds)) {
+        assert(worker1.isStopped())
+        assert(!worker2.isStopped())
+      }
+
+      // remove listener2
+      spark.streams.removeListener(listener2)
+      sessionHolder.removeCachedListener(id2)
+      eventually(timeout(30.seconds)) {
+        // assert listener2's python process is not running
+        assert(worker2.isStopped())
+        // all listeners are removed
+        assert(spark.streams.listListeners().isEmpty)
+      }
+    } finally {
+      SparkConnectService.stop()
     }
   }
 }

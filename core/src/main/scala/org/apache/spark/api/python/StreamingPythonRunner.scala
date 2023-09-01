@@ -111,15 +111,13 @@ private[spark] class StreamingPythonRunner(
   def stop(): Unit = {
     logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
 
-//    try {
+    try {
       pythonWorker.foreach { worker =>
-        pythonWorkerFactory.foreach { factory =>
-          factory.stopWorker(worker)
-          factory.stop()
-        }
+        pythonWorkerFactory.foreach(_.stopWorker(worker))
       }
-//    } except {
-//      case e: Exception =>
-//        logWarning("Exception while stopping streaming runner.", e)
+    } catch {
+      case e: Exception =>
+        logError("Exception when trying to kill worker", e)
     }
+  }
 }

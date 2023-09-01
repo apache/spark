@@ -49,8 +49,7 @@ object PythonStreamingQueryListener {
 class PythonStreamingQueryListener(
     listener: SimplePythonFunction,
     sessionHolder: SessionHolder,
-    module: String)
-    extends StreamingQueryListener {
+    module: String) extends StreamingQueryListener {
 
   private val port = SparkConnectService.localPort
   private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
