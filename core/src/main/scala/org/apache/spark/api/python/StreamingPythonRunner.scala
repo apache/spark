@@ -113,7 +113,10 @@ private[spark] class StreamingPythonRunner(
 
     try {
       pythonWorker.foreach { worker =>
-        pythonWorkerFactory.foreach(_.stopWorker(worker))
+        pythonWorkerFactory.foreach { factory =>
+          factory.stopWorker(worker)
+          factory.stop()
+        }
       }
     } catch {
       case e: Exception =>

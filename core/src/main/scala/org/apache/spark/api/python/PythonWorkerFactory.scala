@@ -188,7 +188,7 @@ private[spark] class PythonWorkerFactory(
       redirectStreamsToStderr(workerProcess.getInputStream, workerProcess.getErrorStream)
       // Wait for it to connect to our socket, and validate the auth secret.
       serverSocketChannel.socket().setSoTimeout(10000)
-      
+
       try {
         val socketChannel = serverSocketChannel.accept()
         authHelper.authClient(socketChannel.socket())
