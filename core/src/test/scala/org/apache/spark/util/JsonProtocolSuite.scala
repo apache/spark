@@ -58,21 +58,21 @@ class JsonProtocolSuite extends SparkFunSuite {
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
-        0, 0, 0, 0, 80001L)),
+        0, 0, 0, 0, 80001L, 3, 3)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
         hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
-        0, 0, 0, 0, 80001L)),
+        0, 0, 0, 0, 80001L, 3, 3)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
         hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
-        0, 0, 0, 0, 80001L)),
+        0, 0, 0, 0, 80001L, 3, 3)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
         hasHadoopInput = true, hasOutput = true))
     val jobStart = {
@@ -136,7 +136,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       val executorUpdates = new ExecutorMetrics(
         Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L,
-          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L))
+          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L, 3, 3))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Map((0, 0) -> executorUpdates))
     }
@@ -147,7 +147,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L,
-          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L)))
+          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L, 3, 3)))
     val rprofBuilder = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests()
       .cpus(1)
@@ -1754,7 +1754,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
       |    "MajorGCTime" : 0,
-      |    "TotalGCTime" : 80001
+      |    "TotalGCTime": 80001,
+      |    "ConcurrentGCCount" : 3,
+      |    "ConcurrentGCTime" : 3
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -1893,7 +1895,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
       |    "MajorGCTime" : 0,
-      |    "TotalGCTime" : 80001
+      |    "TotalGCTime": 80001,
+      |    "ConcurrentGCCount" : 3,
+      |    "ConcurrentGCTime" : 3
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -2032,7 +2036,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
       |    "MajorGCTime" : 0,
-      |    "TotalGCTime" : 80001
+      |    "TotalGCTime": 80001,
+      |    "ConcurrentGCCount" : 3,
+      |    "ConcurrentGCTime" : 3
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -2933,7 +2939,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "MinorGCTime": 90,
       |        "MajorGCCount": 2,
       |        "MajorGCTime": 20,
-      |        "TotalGCTime" : 80001
+      |        "TotalGCTime": 80001,
+      |        "ConcurrentGCCount" : 3,
+      |        "ConcurrentGCTime" : 3
       |      }
       |    }
       |  ]
@@ -2968,7 +2976,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCTime": 90,
       |    "MajorGCCount": 2,
       |    "MajorGCTime": 20,
-      |    "TotalGCTime" : 80001
+      |    "TotalGCTime": 80001,
+      |    "ConcurrentGCCount" : 3,
+      |    "ConcurrentGCTime" : 3
       |  }
       |}
     """.stripMargin
