@@ -141,9 +141,9 @@ case class BatchScanExec(
             (splits.head.asInstanceOf[HasPartitionKey].partitionKey(), splits)
           })
 
-          // This means the input partitions are not grouped by partition values. We'll need to
-          // check `groupByPartitionValues` and decide whether to group and replicate splits
-          // within a partition.
+          // When partially clustered, the input partitions are not grouped by partition
+          // values. Here we'll need to check `commonPartitionValues` and decide how to group
+          // and replicate splits within a partition.
           if (spjParams.commonPartitionValues.isDefined && spjParams.applyPartialClustering) {
             // A mapping from the common partition values to how many splits the partition
             // should contain.
