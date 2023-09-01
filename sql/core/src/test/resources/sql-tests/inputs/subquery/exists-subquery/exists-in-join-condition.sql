@@ -3,7 +3,7 @@
 -- Permutations of the test:
 -- 1. Exists / Not Exists
 -- 2. Reference left / right child
--- 3. Join type: inner / left outer
+-- 3. Join type: inner / left outer / right outer / full outer / left semi / left anti
 -- 4. AND or OR for the join condition
 
 CREATE TEMP VIEW x(x1, x2) AS VALUES
@@ -35,25 +35,49 @@ select * from x inner join y on x1 = y1 and exists (select * from z where z2 = x
 -- Correlated NOT EXISTS, REFERENCE LEFT, INNER JOIN
 select * from x inner join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
 
--- Correlated EXISTS, REFERENCE LEFT, LEFT OUTER JOIN
-select * from x left join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
-
--- Correlated NOT EXISTS, REFERENCE LEFT, LEFT OUTER JOIN
-select * from x left join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
-
 -- Correlated EXISTS, REFERENCE RIGHT, INNER JOIN
 select * from x inner join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
 
 -- Correlated NOT EXISTS, REFERENCE RIGHT, INNER JOIN
 select * from x inner join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
 
--- Correlated EXISTS, REFERENCE RIGHT, LEFT OUTER JOIN
+-- Same as above, but for left outer join
+select * from x left join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x left join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
-
--- Correlated NOT EXISTS, REFERENCE RIGHT, LEFT OUTER JOIN
 select * from x left join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
 
--- Queries below are same as above, but with OR inside of AND in the join condition
+-- Same as above, but for right outer join
+select * from x right join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+
+-- Same as above, but for full outer join
+select * from x right join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+select * from x right join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+
+-- Same as above, but for left semi join
+select * from x left semi join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x left semi join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x left semi join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+select * from x left semi join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+
+-- Same as above, but for left anti join
+select * from x left anti join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x left anti join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x left anti join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+select * from x left anti join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+
+-- Same as above, but for full outer join
+select * from x full outer join y on x1 = y1 and exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x full outer join y on x1 = y1 and not exists (select * from z where z2 = x2) order by x1, x2, y1, y2;
+select * from x full outer join y on x1 = y1 and exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+select * from x full outer join y on x1 = y1 and not exists (select * from z where z2 = y2) order by x1, x2, y1, y2;
+
+-- OR instead of AND in the join condition
 select * from x inner join y on x1 = y1 or exists (select * from z where z1 = x1) order by x1, x2, y1, y2;
 select * from x inner join y on x1 = y1 or not exists (select * from z where z1 = x1) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 or exists (select * from z where z1 = x1) order by x1, x2, y1, y2;
@@ -63,8 +87,7 @@ select * from x inner join y on x1 = y1 or not exists (select * from z where z1 
 select * from x left join y on x1 = y1 or exists (select * from z where z1 = y1) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 or not exists (select * from z where z1 = y1) order by x1, x2, y1, y2;
 
--- Queries below are same as above, but with transitive predicates to test if inferring filters
--- can cause issues.
+-- Transitive predicates to test if inferring filters can cause issues.
 select * from x inner join y on x1 = y1 and exists (select * from z where z1 = x1) order by x1, x2, y1, y2;
 select * from x inner join y on x1 = y1 and not exists (select * from z where z1 = x1) order by x1, x2, y1, y2;
 select * from x left join y on x1 = y1 and exists (select * from z where z1 = x1) order by x1, x2, y1, y2;

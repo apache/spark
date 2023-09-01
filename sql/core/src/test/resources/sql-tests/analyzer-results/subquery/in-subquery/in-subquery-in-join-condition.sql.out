@@ -99,50 +99,6 @@ Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC
 
 
 -- !query
-select * from x left join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
--- !query analysis
-Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
-+- Project [x1#x, x2#x, y1#x, y2#x]
-   +- Join LeftOuter, ((x1#x = y1#x) AND x2#x IN (list#x [x2#x]))
-      :  +- Project [z1#x]
-      :     +- Filter (z2#x = outer(x2#x))
-      :        +- SubqueryAlias z
-      :           +- View (`z`, [z1#x,z2#x])
-      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
-      :                 +- LocalRelation [col1#x, col2#x]
-      :- SubqueryAlias x
-      :  +- View (`x`, [x1#x,x2#x])
-      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
-      :        +- LocalRelation [col1#x, col2#x]
-      +- SubqueryAlias y
-         +- View (`y`, [y1#x,y2#x])
-            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
-               +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-select * from x left join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
--- !query analysis
-Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
-+- Project [x1#x, x2#x, y1#x, y2#x]
-   +- Join LeftOuter, ((x1#x = y1#x) AND NOT x2#x IN (list#x [x2#x]))
-      :  +- Project [z1#x]
-      :     +- Filter (z2#x = outer(x2#x))
-      :        +- SubqueryAlias z
-      :           +- View (`z`, [z1#x,z2#x])
-      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
-      :                 +- LocalRelation [col1#x, col2#x]
-      :- SubqueryAlias x
-      :  +- View (`x`, [x1#x,x2#x])
-      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
-      :        +- LocalRelation [col1#x, col2#x]
-      +- SubqueryAlias y
-         +- View (`y`, [y1#x,y2#x])
-            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
-               +- LocalRelation [col1#x, col2#x]
-
-
--- !query
 select * from x inner join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
 -- !query analysis
 Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
@@ -187,6 +143,50 @@ Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC
 
 
 -- !query
+select * from x left join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join LeftOuter, ((x1#x = y1#x) AND x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x left join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join LeftOuter, ((x1#x = y1#x) AND NOT x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 select * from x left join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
 -- !query analysis
 Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
@@ -214,6 +214,350 @@ select * from x left join y on x1 = y1 and y2 not IN (select z1 from z where z2 
 Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
 +- Project [x1#x, x2#x, y1#x, y2#x]
    +- Join LeftOuter, ((x1#x = y1#x) AND NOT y2#x IN (list#x [y2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(y2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x right join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join RightOuter, ((x1#x = y1#x) AND x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x right join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join RightOuter, ((x1#x = y1#x) AND NOT x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x right join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join RightOuter, ((x1#x = y1#x) AND y2#x IN (list#x [y2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(y2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x right join y on x1 = y1 and y2 not IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join RightOuter, ((x1#x = y1#x) AND NOT y2#x IN (list#x [y2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(y2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x left semi join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 106,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left semi join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 110,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left semi join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 106,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left semi join y on x1 = y1 and y2 not IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 110,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left anti join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 106,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left anti join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 110,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left anti join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 106,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x left anti join y on x1 = y1 and y2 not IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y1`",
+    "proposal" : "`x1`, `x2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 109,
+    "stopIndex" : 110,
+    "fragment" : "y1"
+  } ]
+}
+
+
+-- !query
+select * from x full outer join y on x1 = y1 and x2 IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join FullOuter, ((x1#x = y1#x) AND x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x full outer join y on x1 = y1 and x2 not IN (select z1 from z where z2 = x2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join FullOuter, ((x1#x = y1#x) AND NOT x2#x IN (list#x [x2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(x2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x full outer join y on x1 = y1 and y2 IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join FullOuter, ((x1#x = y1#x) AND y2#x IN (list#x [y2#x]))
+      :  +- Project [z1#x]
+      :     +- Filter (z2#x = outer(y2#x))
+      :        +- SubqueryAlias z
+      :           +- View (`z`, [z1#x,z2#x])
+      :              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+      :                 +- LocalRelation [col1#x, col2#x]
+      :- SubqueryAlias x
+      :  +- View (`x`, [x1#x,x2#x])
+      :     +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+      :        +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias y
+         +- View (`y`, [y1#x,y2#x])
+            +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from x full outer join y on x1 = y1 and y2 not IN (select z1 from z where z2 = y2) order by x1, x2, y1, y2
+-- !query analysis
+Sort [x1#x ASC NULLS FIRST, x2#x ASC NULLS FIRST, y1#x ASC NULLS FIRST, y2#x ASC NULLS FIRST], true
++- Project [x1#x, x2#x, y1#x, y2#x]
+   +- Join FullOuter, ((x1#x = y1#x) AND NOT y2#x IN (list#x [y2#x]))
       :  +- Project [z1#x]
       :     +- Filter (z2#x = outer(y2#x))
       :        +- SubqueryAlias z
