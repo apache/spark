@@ -403,11 +403,19 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       insert.query
     }
     val newQuery = try {
+      val byName = hasColumnList || insert.byName
+      if (!byName && expectedColumns.size == query.output.size &&
+        expectedColumns.forall(e => query.output.exists(p => conf.resolver(p.name, e.name))) &&
+        expectedColumns.zip(query.output).exists(e => !conf.resolver(e._1.name, e._2.name))) {
+        logWarning("The query columns and the table columns have same names but different " +
+          "orders. You can use INSERT INTO BY NAME to reorder the query columns to align with " +
+          "the table columns.")
+      }
       TableOutputResolver.resolveOutputColumns(
         tblName,
         expectedColumns,
         query,
-        byName = hasColumnList || insert.byName,
+        byName,
         conf,
         supportColDefaultValue = true)
     } catch {
