@@ -43,7 +43,7 @@ private[connect] class ExecuteHolder(
 
   val operationId = if (request.hasOperationId) {
     try {
-        UUIDUtil.uuid(request.getOperationId).toString
+      UUIDUtil.uuid(request.getOperationId).toString
     } catch {
       case _: NumberFormatException =>
         throw new SparkSQLException(
