@@ -2115,6 +2115,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.typeName))
   }
 
+  def unsupportedCorrelatedSubqueryInJoinConditionError(
+      unsupportedSubqueryExpression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+      messageParameters = Map("subqueryExpression" -> unsupportedSubqueryExpression.sql))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
@@ -3750,13 +3758,5 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "key" -> key,
         "supported" -> "constant expressions"),
       cause = cause)
-  }
-
-  def unsupportedCorrelatedSubqueryInJoinConditionError(
-      unsupportedSubqueryExpression: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-        "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
-      messageParameters = Map("subqueryExpression" -> unsupportedSubqueryExpression.sql))
   }
 }
