@@ -1758,9 +1758,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.range(10)
-        >>> df.coalesce(1).rdd.getNumPartitions()
-        1
+        >>> spark.range(10).coalesce(1).explain()
+        == Physical Plan ==
+        Coalesce 1
+        +- ... Range (0, 10, step=1, splits=...)
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
@@ -1809,18 +1810,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Repartition the data into 10 partitions.
 
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
+        >>> df.repartition(10).explain()
+        == Physical Plan ==
+        AdaptiveSparkPlan isFinalPlan=false
+        +- Exchange RoundRobinPartitioning(10), REPARTITION_BY_NUM, ...
+        ...
 
         Repartition the data into 7 partitions by 'age' column.
 
-        >>> df.repartition(7, "age").rdd.getNumPartitions()
-        7
+        >>> df.repartition(7, "age").explain()
+        == Physical Plan ==
+        AdaptiveSparkPlan isFinalPlan=false
+        +- Exchange hashpartitioning(age..., 7), REPARTITION_BY_NUM, ...
+        ...
 
         Repartition the data into 7 partitions by 'age' and 'name columns.
 
-        >>> df.repartition(3, "name", "age").rdd.getNumPartitions()
-        3
+        >>> df.repartition(3, "name", "age").explain()
+        == Physical Plan ==
+        AdaptiveSparkPlan isFinalPlan=false
+        +- Exchange hashpartitioning(name..., age..., 3), REPARTITION_BY_NUM, ...
+        ...
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
@@ -1895,8 +1905,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         For example, the first partition can have ``(14, "Tom")``, and the second
         partition would have ``(16, "Bob")`` and ``(23, "Alice")``.
 
-        >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
-        2
+        >>> df.repartitionByRange(2, "age").explain()
+        == Physical Plan ==
+        AdaptiveSparkPlan isFinalPlan=false
+        +- Exchange rangepartitioning(age... ASC NULLS FIRST, 2), REPARTITION_BY_NUM, ...
+        ...
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
