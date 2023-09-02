@@ -575,8 +575,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def first_value(e: Column): Column =
-    call_function("first_value", e)
+  def first_value(e: Column): Column = call_function("first_value", e)
 
   /**
    * Aggregate function: returns the first value in a group.
@@ -848,8 +847,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def last_value(e: Column): Column =
-    call_function("last_value", e)
+  def last_value(e: Column): Column = call_function("last_value", e)
 
   /**
    * Aggregate function: returns the last value in a group.
@@ -2077,8 +2075,7 @@ object functions {
    * @group bitwise_funcs
    * @since 3.5.0
    */
-  def getbit(e: Column, pos: Column): Column =
-    call_function("getbit", e, pos)
+  def getbit(e: Column, pos: Column): Column = call_function("getbit", e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -4700,8 +4697,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def char_length(str: Column): Column =
-    call_function("char_length", str)
+  def char_length(str: Column): Column = call_function("char_length", str)
 
   /**
    * Returns the character length of string data or number of bytes of binary data.
@@ -4711,8 +4707,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def character_length(str: Column): Column =
-    call_function("character_length", str)
+  def character_length(str: Column): Column = call_function("character_length", str)
 
   /**
    * Returns the ASCII character having the binary equivalent to `n`.
@@ -7066,8 +7061,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def array_agg(e: Column): Column =
-    call_function("array_agg", e)
+  def array_agg(e: Column): Column = call_function("array_agg", e)
 
   /**
    * Returns a random permutation of the given array.
