@@ -3764,4 +3764,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "supported" -> "constant expressions"),
       cause = cause)
   }
+
+  def tableValuedFunctionRequiredMetadataIncompatibleWithCall(
+      functionName: String,
+      requestedMetadata: String,
+      invalidFunctionCallProperty: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "requestedMetadata" -> requestedMetadata,
+        "invalidFunctionCallProperty" -> invalidFunctionCallProperty))
+  }
+
+  def tableValuedFunctionRequiredMetadataInvalid(
+      functionName: String,
+      reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "reason" -> reason))
+  }
 }
