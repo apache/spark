@@ -1057,7 +1057,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+  def stddev(e: Column): Column = call_function("stddev", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -4562,7 +4562,7 @@ object functions {
    * @since 3.5.0
    */
   def printf(format: Column, arguments: Column*): Column =
-    call_function("printf", (Seq(format) ++ arguments): _*)
+    call_function("printf", (format +: arguments): _*)
 
   /**
    * Decodes a `str` in 'application/x-www-form-urlencoded' format

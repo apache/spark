@@ -987,7 +987,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def std(e: Column): Column = stddev(e)
+  def std(e: Column): Column = Column.fn("std", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -2337,7 +2337,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+  def ceiling(e: Column, scale: Column): Column = Column.fn("ceiling", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2345,7 +2345,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column): Column = ceil(e)
+  def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
    * Convert a number in a string column from one base to another.
@@ -2800,7 +2800,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def power(l: Column, r: Column): Column = pow(l, r)
+  def power(l: Column, r: Column): Column = Column.fn("power", l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2937,7 +2937,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def sign(e: Column): Column = signum(e)
+  def sign(e: Column): Column = Column.fn("sign", e)
 
   /**
    * Computes the signum of the given value.
@@ -4428,7 +4428,7 @@ object functions {
    * @since 3.5.0
    */
   def printf(format: Column, arguments: Column*): Column =
-    Column.fn("format_string", lit(format) +: arguments: _*)
+    Column.fn("printf", (format +: arguments): _*)
 
   /**
    * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
