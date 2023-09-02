@@ -805,9 +805,23 @@ def read_udtf(pickleSer, infile, eval_type):
                         message_parameters={"method_name": f.__name__, "error": str(e)},
                     )
 
+            def check_return_value(res):
+                # Check whether the result of an arrow UDTF is iterable before
+                # using it to construct a pandas DataFrame.
+                if res is not None and not isinstance(res, Iterable):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_NOT_ITERABLE",
+                        message_parameters={
+                            "type": type(res).__name__,
+                            "func": f.__name__,
+                        },
+                    )
+
             def evaluate(*args: pd.Series, **kwargs: pd.Series):
                 if len(args) == 0 and len(kwargs) == 0:
-                    yield verify_result(pd.DataFrame(func())), arrow_return_type
+                    res = func()
+                    check_return_value(res)
+                    yield verify_result(pd.DataFrame(res)), arrow_return_type
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
@@ -819,14 +833,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             *row[:len_args],
                             **{key: row[len_args + i] for i, key in enumerate(keys)},
                         )
-                        if res is not None and not isinstance(res, Iterable):
-                            raise PySparkRuntimeError(
-                                error_class="UDTF_RETURN_NOT_ITERABLE",
-                                message_parameters={
-                                    "type": type(res).__name__,
-                                    "func": f.__name__,
-                                },
-                            )
+                        check_return_value(res)
                         yield verify_result(pd.DataFrame(res)), arrow_return_type
 
             return evaluate

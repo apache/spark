@@ -188,6 +188,15 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, "UDTF_RETURN_NOT_ITERABLE"):
             TestUDTF(lit(1)).collect()
 
+    def test_udtf_with_zero_arg_and_invalid_return_value(self):
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                return 1
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_NOT_ITERABLE"):
+            TestUDTF().collect()
+
     def test_udtf_with_invalid_return_value_in_terminate(self):
         @udtf(returnType="x: int")
         class TestUDTF:
