@@ -58,7 +58,7 @@ trait Generator extends Expression {
 
   override def nullable: Boolean = false
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
+  protected override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
 
   /**
    * The output element schema.
