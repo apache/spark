@@ -110,12 +110,6 @@ object TableOutputResolver {
       resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
-    if (errors.nonEmpty) {
-      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-        tableName, actualExpectedCols.map(_.name).quoted
-      )
-    }
-
     if (resolved == query.output) {
       query
     } else {
