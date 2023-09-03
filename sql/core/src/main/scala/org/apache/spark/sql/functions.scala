@@ -3691,7 +3691,8 @@ object functions {
   }
 
   /**
-   * Calls a method with reflection.
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
    *
    * @group misc_funcs
    * @since 4.0.0

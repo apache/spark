@@ -3775,6 +3775,13 @@ def java_method(*cols: "ColumnOrName") -> Column:
 java_method.__doc__ = pysparkfuncs.java_method.__doc__
 
 
+def try_reflect(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_reflect", *cols)
+
+
+try_reflect.__doc__ = pysparkfuncs.try_reflect.__doc__
+
+
 def version() -> Column:
     return _invoke_function_over_columns("version")
 

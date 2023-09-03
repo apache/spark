@@ -461,6 +461,7 @@ __all__ = [
     "try_divide",
     "try_element_at",
     "try_multiply",
+    "try_reflect",
     "try_subtract",
     "try_sum",
     "try_to_binary",
@@ -15746,6 +15747,33 @@ def java_method(*cols: "ColumnOrName") -> Column:
 
     """
     return _invoke_function_over_seq_of_columns("java_method", cols)
+
+
+@try_remote_functions
+def try_reflect(*cols: "ColumnOrName") -> Column:
+    """
+    This is a special version of `reflect` that performs the same operation, but returns a NULL
+    value instead of raising an error if the invoke method thrown exception.
+
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        the first element should be a literal string for the class name,
+        and the second element should be a literal string for the method name,
+        and the remaining are input arguments to the Java method.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
+    >>> df.select(
+    ...     try_reflect(lit("java.util.UUID"), lit("fromString"), df.a).alias('r')
+    ... ).collect()
+    [Row(r='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
+    """
+    return _invoke_function_over_seq_of_columns("try_reflect", cols)
 
 
 @try_remote_functions

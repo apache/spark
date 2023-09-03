@@ -2864,6 +2864,10 @@ class PlanGenerationTestSuite
     fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
   }
 
+  functionTest("try_reflect") {
+    fn.try_reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
   }
