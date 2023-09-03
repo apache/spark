@@ -19,26 +19,27 @@
 import tempfile
 import unittest
 import numpy as np
-import pandas as pd
+
 from pyspark.ml.param import Param, Params
-from pyspark.ml.connect import Model, Estimator
-from pyspark.ml.connect.feature import StandardScaler
-from pyspark.ml.connect.classification import LogisticRegression as LORV2
-from pyspark.ml.connect.pipeline import Pipeline
-from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
-from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.tuning import ParamGridBuilder
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
-from sklearn.datasets import load_breast_cancer
-
-
-have_torch = True
+have_sklearn = True
 try:
-    import torch  # noqa: F401
+    from sklearn.datasets import load_breast_cancer  # noqa: F401
 except ImportError:
-    have_torch = False
+    have_sklearn = False
+
+if should_test_connect:
+    import pandas as pd
+    from pyspark.ml.connect import Model, Estimator
+    from pyspark.ml.connect.feature import StandardScaler
+    from pyspark.ml.connect.classification import LogisticRegression as LORV2
+    from pyspark.ml.connect.pipeline import Pipeline
+    from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
+    from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 
 
 class HasInducedError(Params):
@@ -272,6 +273,9 @@ class CrossValidatorTestsMixin:
         cv.fit(train_dataset)
 
 
+@unittest.skipIf(
+    not should_test_connect or not have_sklearn, connect_requirement_message or "No sklearn found"
+)
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

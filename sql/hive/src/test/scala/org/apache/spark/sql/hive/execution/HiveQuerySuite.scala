@@ -1258,11 +1258,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """INSERT INTO TABLE dp_test PARTITION(dp)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1169",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
         "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "normalizedPartSpec" -> "dp",
-        "partColNames" -> "dp,sp"))
+        "tableColumns" -> "`key`, `value`, `dp`, `sp`",
+        "dataColumns" -> "`key`, `value`, `(key % 5)`"))
 
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 

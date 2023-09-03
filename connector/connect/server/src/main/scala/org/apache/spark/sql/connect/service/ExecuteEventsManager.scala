@@ -119,19 +119,19 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
             s"${request.getPlan.getOpTypeCase} not supported.")
       }
 
-    listenerBus.post(
-      SparkListenerConnectOperationStarted(
-        jobTag,
-        operationId,
-        clock.getTimeMillis(),
-        sessionId,
-        request.getUserContext.getUserId,
-        request.getUserContext.getUserName,
-        Utils.redact(
-          sessionHolder.session.sessionState.conf.stringRedactionPattern,
-          ProtoUtils.abbreviate(plan, ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE).toString),
-        Some(request),
-        sparkSessionTags))
+    val event = SparkListenerConnectOperationStarted(
+      jobTag,
+      operationId,
+      clock.getTimeMillis(),
+      sessionId,
+      request.getUserContext.getUserId,
+      request.getUserContext.getUserName,
+      Utils.redact(
+        sessionHolder.session.sessionState.conf.stringRedactionPattern,
+        ProtoUtils.abbreviate(plan, ExecuteEventsManager.MAX_STATEMENT_TEXT_SIZE).toString),
+      sparkSessionTags)
+    event.planRequest = Some(request)
+    listenerBus.post(event)
   }
 
   /**
@@ -205,7 +205,9 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   Number of rows that are returned to the user. None is expected when the operation does not
    *   return any rows.
    */
-  def postFinished(producedRowsCountOpt: Option[Long] = None): Unit = {
+  def postFinished(
+      producedRowsCountOpt: Option[Long] = None,
+      extraTags: Map[String, String] = Map.empty): Unit = {
     assertStatus(
       List(ExecuteStatus.Started, ExecuteStatus.ReadyForExecution),
       ExecuteStatus.Finished)
@@ -217,7 +219,8 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
           jobTag,
           operationId,
           clock.getTimeMillis(),
-          producedRowCount))
+          producedRowCount,
+          extraTags))
   }
 
   /**
@@ -290,8 +293,6 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
  *   Opaque userName set in the Connect request.
  * @param statementText:
  *   The connect request plan converted to text.
- * @param planRequest:
- *   The Connect request. None if the operation is not of type @link proto.ExecutePlanRequest
  * @param sparkSessionTags:
  *   Extra tags set by the user (via SparkSession.addTag).
  * @param extraTags:
@@ -305,10 +306,15 @@ case class SparkListenerConnectOperationStarted(
     userId: String,
     userName: String,
     statementText: String,
-    planRequest: Option[proto.ExecutePlanRequest],
     sparkSessionTags: Set[String],
     extraTags: Map[String, String] = Map.empty)
-    extends SparkListenerEvent
+    extends SparkListenerEvent {
+
+  /**
+   * The Connect request. None if the operation is not of type @link proto.ExecutePlanRequest
+   */
+  @JsonIgnore var planRequest: Option[proto.ExecutePlanRequest] = None
+}
 
 /**
  * The event is sent after a Connect request has been analyzed (@link

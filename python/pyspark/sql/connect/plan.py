@@ -44,7 +44,7 @@ from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedData
 from pyspark.errors import (
     PySparkTypeError,
     PySparkNotImplementedError,
-    PySparkRuntimeError,
+    PySparkPicklingError,
     IllegalArgumentException,
 )
 
@@ -464,7 +464,6 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._columns = list(columns)
-        self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
@@ -2211,7 +2210,7 @@ class PythonUDTF:
         try:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,

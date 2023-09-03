@@ -135,6 +135,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_udt(self):
         self.check_toPandas_udt(True)
 
+    def test_create_dataframe_namedtuples(self):
+        self.check_create_dataframe_namedtuples(True)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401

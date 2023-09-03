@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -60,7 +61,7 @@ class BatchEvalPythonEvaluatorFactory(
 
   override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+      argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
@@ -71,8 +72,8 @@ class BatchEvalPythonEvaluatorFactory(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDFRunner(
-        funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets, pythonMetrics, jobArtifactUUID)
+      new PythonUDFWithNamedArgumentsRunner(
+        funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics, jobArtifactUUID)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler

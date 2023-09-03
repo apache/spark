@@ -3409,6 +3409,14 @@ object functions {
   def user(): Column = withExpr { CurrentUser() }
 
   /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def session_user(): Column = withExpr { CurrentUser() }
+
+  /**
    * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
    * UUID 36-character string.
    *
@@ -3718,6 +3726,16 @@ object functions {
    */
   def java_method(cols: Column*): Column = withExpr {
     CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = withExpr {
+    new TryReflect(cols.map(_.expr))
   }
 
   /**
@@ -4469,7 +4487,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_varchar(e: Column, format: Column): Column = to_char(e, format)
+  def to_varchar(e: Column, format: Column): Column = call_function("to_varchar", e, format)
 
   /**
    * Convert string 'e' to a number based on the string format 'format'.

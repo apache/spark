@@ -50,6 +50,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark.sql.udtf import OrderingColumn, PartitioningColumn  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
@@ -77,6 +78,436 @@ if has_numpy:
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires making every single overridden definition.
+
+
+__all__ = [
+    "abs",
+    "acos",
+    "acosh",
+    "add_months",
+    "aes_decrypt",
+    "aes_encrypt",
+    "aggregate",
+    "any_value",
+    "approxCountDistinct",
+    "approx_count_distinct",
+    "approx_percentile",
+    "array",
+    "array_agg",
+    "array_append",
+    "array_compact",
+    "array_contains",
+    "array_distinct",
+    "array_except",
+    "array_insert",
+    "array_intersect",
+    "array_join",
+    "array_max",
+    "array_min",
+    "array_position",
+    "array_prepend",
+    "array_remove",
+    "array_repeat",
+    "array_size",
+    "array_sort",
+    "array_union",
+    "arrays_overlap",
+    "arrays_zip",
+    "asc",
+    "asc_nulls_first",
+    "asc_nulls_last",
+    "ascii",
+    "asin",
+    "asinh",
+    "assert_true",
+    "atan",
+    "atan2",
+    "atanh",
+    "avg",
+    "base64",
+    "bin",
+    "bit_and",
+    "bit_count",
+    "bit_get",
+    "bit_length",
+    "bit_or",
+    "bit_xor",
+    "bitmap_bit_position",
+    "bitmap_bucket_number",
+    "bitmap_construct_agg",
+    "bitmap_count",
+    "bitmap_or_agg",
+    "bitwiseNOT",
+    "bitwise_not",
+    "bool_and",
+    "bool_or",
+    "broadcast",
+    "bround",
+    "btrim",
+    "bucket",
+    "call_function",
+    "call_udf",
+    "cardinality",
+    "cast",
+    "cbrt",
+    "ceil",
+    "ceiling",
+    "char",
+    "char_length",
+    "character_length",
+    "coalesce",
+    "col",
+    "collect_list",
+    "collect_set",
+    "column",
+    "concat",
+    "concat_ws",
+    "contains",
+    "conv",
+    "convert_timezone",
+    "corr",
+    "cos",
+    "cosh",
+    "cot",
+    "count",
+    "countDistinct",
+    "count_distinct",
+    "count_if",
+    "count_min_sketch",
+    "covar_pop",
+    "covar_samp",
+    "crc32",
+    "create_map",
+    "csc",
+    "cume_dist",
+    "curdate",
+    "current_catalog",
+    "current_database",
+    "current_date",
+    "current_schema",
+    "current_timestamp",
+    "current_timezone",
+    "current_user",
+    "date_add",
+    "date_diff",
+    "date_format",
+    "date_from_unix_date",
+    "date_part",
+    "date_sub",
+    "date_trunc",
+    "dateadd",
+    "datediff",
+    "datepart",
+    "day",
+    "dayofmonth",
+    "dayofweek",
+    "dayofyear",
+    "days",
+    "decode",
+    "degrees",
+    "dense_rank",
+    "desc",
+    "desc_nulls_first",
+    "desc_nulls_last",
+    "e",
+    "element_at",
+    "elt",
+    "encode",
+    "endswith",
+    "equal_null",
+    "every",
+    "exists",
+    "exp",
+    "explode",
+    "explode_outer",
+    "expm1",
+    "expr",
+    "extract",
+    "factorial",
+    "filter",
+    "find_in_set",
+    "first",
+    "first_value",
+    "flatten",
+    "floor",
+    "forall",
+    "format_number",
+    "format_string",
+    "from_csv",
+    "from_json",
+    "from_unixtime",
+    "from_utc_timestamp",
+    "get",
+    "get_json_object",
+    "getbit",
+    "greatest",
+    "grouping",
+    "grouping_id",
+    "hash",
+    "hex",
+    "histogram_numeric",
+    "hll_sketch_agg",
+    "hll_sketch_estimate",
+    "hll_union",
+    "hll_union_agg",
+    "hour",
+    "hours",
+    "hypot",
+    "ifnull",
+    "ilike",
+    "initcap",
+    "inline",
+    "inline_outer",
+    "input_file_block_length",
+    "input_file_block_start",
+    "input_file_name",
+    "instr",
+    "isnan",
+    "isnotnull",
+    "isnull",
+    "java_method",
+    "json_array_length",
+    "json_object_keys",
+    "json_tuple",
+    "kurtosis",
+    "lag",
+    "last",
+    "last_day",
+    "last_value",
+    "lcase",
+    "lead",
+    "least",
+    "left",
+    "length",
+    "levenshtein",
+    "like",
+    "lit",
+    "ln",
+    "localtimestamp",
+    "locate",
+    "log",
+    "log10",
+    "log1p",
+    "log2",
+    "lower",
+    "lpad",
+    "ltrim",
+    "make_date",
+    "make_dt_interval",
+    "make_interval",
+    "make_timestamp",
+    "make_timestamp_ltz",
+    "make_timestamp_ntz",
+    "make_ym_interval",
+    "map_concat",
+    "map_contains_key",
+    "map_entries",
+    "map_filter",
+    "map_from_arrays",
+    "map_from_entries",
+    "map_keys",
+    "map_values",
+    "map_zip_with",
+    "mask",
+    "max",
+    "max_by",
+    "md5",
+    "mean",
+    "median",
+    "min",
+    "min_by",
+    "minute",
+    "mode",
+    "monotonically_increasing_id",
+    "month",
+    "months",
+    "months_between",
+    "named_struct",
+    "nanvl",
+    "negate",
+    "negative",
+    "next_day",
+    "now",
+    "nth_value",
+    "ntile",
+    "nullif",
+    "nvl",
+    "nvl2",
+    "octet_length",
+    "overlay",
+    "overload",
+    "parse_url",
+    "percent_rank",
+    "percentile",
+    "percentile_approx",
+    "pi",
+    "pmod",
+    "posexplode",
+    "posexplode_outer",
+    "position",
+    "positive",
+    "pow",
+    "power",
+    "printf",
+    "product",
+    "quarter",
+    "radians",
+    "raise_error",
+    "rand",
+    "randn",
+    "rank",
+    "reduce",
+    "reflect",
+    "regexp",
+    "regexp_count",
+    "regexp_extract",
+    "regexp_extract_all",
+    "regexp_instr",
+    "regexp_like",
+    "regexp_replace",
+    "regexp_substr",
+    "regr_avgx",
+    "regr_avgy",
+    "regr_count",
+    "regr_intercept",
+    "regr_r2",
+    "regr_slope",
+    "regr_sxx",
+    "regr_sxy",
+    "regr_syy",
+    "repeat",
+    "replace",
+    "reverse",
+    "right",
+    "rint",
+    "rlike",
+    "round",
+    "row_number",
+    "rpad",
+    "rtrim",
+    "schema_of_csv",
+    "schema_of_json",
+    "sec",
+    "second",
+    "sentences",
+    "sequence",
+    "session_window",
+    "sha",
+    "sha1",
+    "sha2",
+    "shiftLeft",
+    "shiftRight",
+    "shiftRightUnsigned",
+    "shiftleft",
+    "shiftright",
+    "shiftrightunsigned",
+    "shuffle",
+    "sign",
+    "signum",
+    "sin",
+    "sinh",
+    "size",
+    "skewness",
+    "slice",
+    "some",
+    "sort_array",
+    "soundex",
+    "spark_partition_id",
+    "split",
+    "split_part",
+    "sqrt",
+    "stack",
+    "startswith",
+    "std",
+    "stddev",
+    "stddev_pop",
+    "stddev_samp",
+    "str_to_map",
+    "struct",
+    "substr",
+    "substring",
+    "substring_index",
+    "sum",
+    "sumDistinct",
+    "sum_distinct",
+    "tan",
+    "tanh",
+    "timestamp_micros",
+    "timestamp_millis",
+    "timestamp_seconds",
+    "toDegrees",
+    "toRadians",
+    "to_binary",
+    "to_char",
+    "to_csv",
+    "to_date",
+    "to_json",
+    "to_number",
+    "to_timestamp",
+    "to_timestamp_ltz",
+    "to_timestamp_ntz",
+    "to_unix_timestamp",
+    "to_utc_timestamp",
+    "to_varchar",
+    "transform",
+    "transform_keys",
+    "transform_values",
+    "translate",
+    "trim",
+    "trunc",
+    "try_add",
+    "try_aes_decrypt",
+    "try_avg",
+    "try_divide",
+    "try_element_at",
+    "try_multiply",
+    "try_subtract",
+    "try_sum",
+    "try_to_binary",
+    "try_to_number",
+    "try_to_timestamp",
+    "typeof",
+    "ucase",
+    "udf",
+    "udtf",
+    "unbase64",
+    "unhex",
+    "unix_date",
+    "unix_micros",
+    "unix_millis",
+    "unix_seconds",
+    "unix_timestamp",
+    "unwrap_udt",
+    "upper",
+    "url_decode",
+    "url_encode",
+    "user",
+    "var_pop",
+    "var_samp",
+    "variance",
+    "version",
+    "weekday",
+    "weekofyear",
+    "when",
+    "width_bucket",
+    "window",
+    "window_time",
+    "xpath",
+    "xpath_boolean",
+    "xpath_double",
+    "xpath_float",
+    "xpath_int",
+    "xpath_long",
+    "xpath_number",
+    "xpath_short",
+    "xpath_string",
+    "xxhash64",
+    "year",
+    "years",
+    "zip_with",
+    "pandas_udf",
+    "PandasUDFType",
+]
 
 
 def _get_jvm_function(name: str, sc: SparkContext) -> Callable:
@@ -230,7 +661,8 @@ column = col
 @try_remote_functions
 def asc(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the ascending order of the given column name.
+    Returns a sort expression for the target column in ascending order.
+    This function is used in `sort` and `orderBy` functions.
 
     .. versionadded:: 1.3.0
 
@@ -240,42 +672,67 @@ def asc(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to sort by in the ascending order.
+        Target column to sort by in the ascending order.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column specifying the order.
+        The column specifying the sort order.
 
     Examples
     --------
-    Sort by the column 'id' in the descending order.
+    Example 1: Sort DataFrame by 'id' column in ascending order.
 
-    >>> df = spark.range(5)
-    >>> df = df.sort(desc("id"))
-    >>> df.show()
-    +---+
-    | id|
-    +---+
-    |  4|
-    |  3|
-    |  2|
-    |  1|
-    |  0|
-    +---+
+    >>> from pyspark.sql.functions import asc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(asc("id")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  3|    A|
+    |  4|    B|
+    +---+-----+
 
-    Sort by the column 'id' in the ascending order.
+    Example 2: Use `asc` in `orderBy` function to sort the DataFrame.
 
-    >>> df.orderBy(asc("id")).show()
-    +---+
-    | id|
-    +---+
-    |  0|
-    |  1|
-    |  2|
-    |  3|
-    |  4|
-    +---+
+    >>> from pyspark.sql.functions import asc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.orderBy(asc("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  3|    A|
+    |  4|    B|
+    |  2|    C|
+    +---+-----+
+
+    Example 3: Combine `asc` with `desc` to sort by multiple columns.
+
+    >>> from pyspark.sql.functions import asc, desc
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df.sort(asc("group"), desc("value")).show()
+    +---+-----+-----+
+    | id|group|value|
+    +---+-----+-----+
+    |  2|    A|    4|
+    |  3|    A|    2|
+    |  1|    B|    3|
+    +---+-----+-----+
+
+    Example 4: Implement `asc` from column expression.
+
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(df.id.asc()).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  3|    A|
+    |  4|    B|
+    +---+-----+
     """
     return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
@@ -283,7 +740,8 @@ def asc(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def desc(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given column name.
+    Returns a sort expression for the target column in descending order.
+    This function is used in `sort` and `orderBy` functions.
 
     .. versionadded:: 1.3.0
 
@@ -293,27 +751,67 @@ def desc(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to sort by in the descending order.
+        Target column to sort by in the descending order.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column specifying the order.
+        The column specifying the sort order.
 
     Examples
     --------
-    Sort by the column 'id' in the descending order.
+    Example 1: Sort DataFrame by 'id' column in descending order.
 
-    >>> spark.range(5).orderBy(desc("id")).show()
-    +---+
-    | id|
-    +---+
-    |  4|
-    |  3|
-    |  2|
-    |  1|
-    |  0|
-    +---+
+    >>> from pyspark.sql.functions import desc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(desc("id")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  4|    B|
+    |  3|    A|
+    |  2|    C|
+    +---+-----+
+
+    Example 2: Use `desc` in `orderBy` function to sort the DataFrame.
+
+    >>> from pyspark.sql.functions import desc
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.orderBy(desc("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  2|    C|
+    |  4|    B|
+    |  3|    A|
+    +---+-----+
+
+    Example 3: Combine `asc` with `desc` to sort by multiple columns.
+
+    >>> from pyspark.sql.functions import asc, desc
+    >>> df = spark.createDataFrame([(2, 'A', 4),
+    ...                             (1, 'B', 3),
+    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
+    >>> df.sort(desc("group"), asc("value")).show()
+    +---+-----+-----+
+    | id|group|value|
+    +---+-----+-----+
+    |  1|    B|    3|
+    |  3|    A|    2|
+    |  2|    A|    4|
+    +---+-----+-----+
+
+    Example 4: Implement `desc` from column expression.
+
+    >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
+    >>> df.sort(df.id.desc()).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  4|    B|
+    |  3|    A|
+    |  2|    C|
+    +---+-----+
     """
     return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
@@ -366,36 +864,54 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
-    >>> df.select(try_add(df.birth, df.age).alias('r')).collect()
-    [Row(r=1997), Row(r=1992)]
+    Example 1: Integer plus Integer.
 
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-    >>> schema = StructType([
-    ...     StructField("i", IntegerType(), True),
-    ...     StructField("d", StringType(), True),
-    ... ])
-    >>> df = spark.createDataFrame([(1, '2015-09-30')], schema)
-    >>> df = df.select(df.i, to_date(df.d).alias('d'))
-    >>> df.select(try_add(df.d, df.i).alias('r')).collect()
-    [Row(r=datetime.date(2015, 10, 1))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_add("birth", "age")).show()
+    +-------------------+
+    |try_add(birth, age)|
+    +-------------------+
+    |               1997|
+    |               1992|
+    +-------------------+
 
-    >>> df.select(try_add(df.d, make_interval(df.i)).alias('r')).collect()
-    [Row(r=datetime.date(2016, 9, 30))]
+    Example 2: Date plus Integer.
 
-    >>> df.select(
-    ...     try_add(df.d, make_interval(lit(0), lit(0), lit(0), df.i)).alias('r')
-    ... ).collect()
-    [Row(r=datetime.date(2015, 10, 1))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30')) AS TAB(date)"
+    ... ).select(sf.try_add("date", sf.lit(1))).show()
+    +----------------+
+    |try_add(date, 1)|
+    +----------------+
+    |      2015-10-01|
+    +----------------+
 
-    >>> df.select(
-    ...     try_add(make_interval(df.i), make_interval(df.i)).alias('r')
-    ... ).show(truncate=False)
-    +-------+
-    |r      |
-    +-------+
-    |2 years|
-    +-------+
+    Example 3: Date plus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
+    ... ).select(sf.try_add("date", "i")).show()
+    +----------------+
+    |try_add(date, i)|
+    +----------------+
+    |      2016-09-30|
+    +----------------+
+
+    Example 4: Interval plus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
+    ... ).select(sf.try_add("i", "j")).show()
+    +-----------------+
+    |    try_add(i, j)|
+    +-----------------+
+    |INTERVAL '3' YEAR|
+    +-----------------+
     """
     return _invoke_function_over_columns("try_add", left, right)
 
@@ -413,9 +929,15 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
-    >>> df.select(try_avg(df.age).alias('r')).collect()
-    [Row(r=8.5)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_avg("age").alias("age_avg")).show()
+    +-------+
+    |age_avg|
+    +-------+
+    |    8.5|
+    +-------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -437,37 +959,34 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_divide(df.a, df.b).alias('r')).collect()
-    [Row(r=400.0), Row(r=995.0)]
+    Example 1: Integer divided by Integer.
 
-    >>> df = spark.createDataFrame([(1, 2)], ["year", "month"])
-    >>> df.select(
-    ...     try_divide(make_interval(df.year), df.month).alias('r')
-    ... ).show(truncate=False)
-    +--------+
-    |r       |
-    +--------+
-    |6 months|
-    +--------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (1990, 2), (1234, 0)], ["a", "b"]
+    ... ).select(sf.try_divide("a", "b")).show()
+    +----------------+
+    |try_divide(a, b)|
+    +----------------+
+    |           400.0|
+    |           995.0|
+    |            NULL|
+    +----------------+
 
-    >>> df.select(
-    ...     try_divide(make_interval(df.year, df.month), lit(2)).alias('r')
-    ... ).show(truncate=False)
-    +--------+
-    |r       |
-    +--------+
-    |7 months|
-    +--------+
+    Example 2: Interval divided by Integer.
 
-    >>> df.select(
-    ...     try_divide(make_interval(df.year, df.month), lit(0)).alias('r')
-    ... ).show(truncate=False)
-    +----+
-    |r   |
-    +----+
-    |NULL|
-    +----+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select(
+    ...     sf.try_divide(sf.make_interval(sf.lit(1)), "id")
+    ... ).show()
+    +--------------------------------------------------+
+    |try_divide(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
+    +--------------------------------------------------+
+    |                                              NULL|
+    |                                           1 years|
+    |                                          6 months|
+    |                                          4 months|
+    +--------------------------------------------------+
     """
     return _invoke_function_over_columns("try_divide", left, right)
 
@@ -489,17 +1008,35 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_multiply(df.a, df.b).alias('r')).collect()
-    [Row(r=90000), Row(r=3980)]
+    Example 1: Integer multiplied by Integer.
 
-    >>> df = spark.createDataFrame([(2, 3),], ["a", "b"])
-    >>> df.select(try_multiply(make_interval(df.a), df.b).alias('r')).show(truncate=False)
-    +-------+
-    |r      |
-    +-------+
-    |6 years|
-    +-------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (1990, 2)], ["a", "b"]
+    ... ).select(sf.try_multiply("a", "b")).show()
+    +------------------+
+    |try_multiply(a, b)|
+    +------------------+
+    |             90000|
+    |              3980|
+    +------------------+
+
+    Example 2: Interval multiplied by Integer.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(
+    ...     sf.try_multiply(sf.make_interval(sf.lit(0), sf.lit(3)), "id")
+    ... ).show()
+    +----------------------------------------------------+
+    |try_multiply(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
+    +----------------------------------------------------+
+    |                                           0 seconds|
+    |                                            3 months|
+    |                                            6 months|
+    |                                            9 months|
+    |                                             1 years|
+    |                                    1 years 3 months|
+    +----------------------------------------------------+
     """
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -519,36 +1056,54 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
-    >>> df.select(try_subtract(df.a, df.b).alias('r')).collect()
-    [Row(r=5985), Row(r=1988)]
+    Example 1: Integer minus Integer.
 
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-    >>> schema = StructType([
-    ...     StructField("i", IntegerType(), True),
-    ...     StructField("d", StringType(), True),
-    ... ])
-    >>> df = spark.createDataFrame([(1, '2015-09-30')], schema)
-    >>> df = df.select(df.i, to_date(df.d).alias('d'))
-    >>> df.select(try_subtract(df.d, df.i).alias('r')).collect()
-    [Row(r=datetime.date(2015, 9, 29))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_subtract("birth", "age")).show()
+    +------------------------+
+    |try_subtract(birth, age)|
+    +------------------------+
+    |                    1967|
+    |                    1988|
+    +------------------------+
 
-    >>> df.select(try_subtract(df.d, make_interval(df.i)).alias('r')).collect()
-    [Row(r=datetime.date(2014, 9, 30))]
+    Example 2: Date minus Integer.
 
-    >>> df.select(
-    ...     try_subtract(df.d, make_interval(lit(0), lit(0), lit(0), df.i)).alias('r')
-    ... ).collect()
-    [Row(r=datetime.date(2015, 9, 29))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-10-01')) AS TAB(date)"
+    ... ).select(sf.try_subtract("date", sf.lit(1))).show()
+    +---------------------+
+    |try_subtract(date, 1)|
+    +---------------------+
+    |           2015-09-30|
+    +---------------------+
 
-    >>> df.select(
-    ...     try_subtract(make_interval(df.i), make_interval(df.i)).alias('r')
-    ... ).show(truncate=False)
-    +---------+
-    |r        |
-    +---------+
-    |0 seconds|
-    +---------+
+    Example 3: Date minus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
+    ... ).select(sf.try_subtract("date", "i")).show()
+    +---------------------+
+    |try_subtract(date, i)|
+    +---------------------+
+    |           2014-09-30|
+    +---------------------+
+
+    Example 4: Interval minus Interval.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
+    ... ).select(sf.try_subtract("i", "j")).show()
+    +------------------+
+    |try_subtract(i, j)|
+    +------------------+
+    |INTERVAL '-1' YEAR|
+    +------------------+
     """
     return _invoke_function_over_columns("try_subtract", left, right)
 
@@ -566,9 +1121,13 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(try_sum(df["id"]).alias('r')).collect()
-    [Row(r=45)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(10).select(sf.try_sum("id").alias("sum")).show()
+    +---+
+    |sum|
+    +---+
+    | 45|
+    +---+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -3416,6 +3975,7 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
+@try_remote_functions
 def width_bucket(
     v: "ColumnOrName",
     min: "ColumnOrName",
@@ -3672,8 +4232,9 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
 
 @try_remote_functions
 def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
-    """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
-    of column `col`.
+    """
+    This aggregate function returns a new :class:`~pyspark.sql.Column`, which estimates
+    the approximate distinct count of elements in a specified column or a group of columns.
 
     .. versionadded:: 2.1.0
 
@@ -3683,24 +4244,70 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        The label of the column to count distinct values in.
     rsd : float, optional
-        maximum relative standard deviation allowed (default = 0.05).
-        For rsd < 0.01, it is more efficient to use :func:`count_distinct`
+        The maximum allowed relative standard deviation (default = 0.05).
+        If rsd < 0.01, it would be more efficient to use :func:`count_distinct`.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column of computed results.
+        A new Column object representing the approximate unique count.
+
+    See Also
+    ----------
+    :meth:`pyspark.sql.functions.count_distinct`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    Example 1: Counting distinct values in a single column DataFrame representing integers
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.createDataFrame([1,2,2,3], "int")
     >>> df.agg(approx_count_distinct("value").alias('distinct_values')).show()
     +---------------+
     |distinct_values|
     +---------------+
     |              3|
     +---------------+
+
+    Example 2: Counting distinct values in a single column DataFrame representing strings
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.createDataFrame([("apple",), ("orange",), ("apple",), ("banana",)], ['fruit'])
+    >>> df.agg(approx_count_distinct("fruit").alias('distinct_fruits')).show()
+    +---------------+
+    |distinct_fruits|
+    +---------------+
+    |              3|
+    +---------------+
+
+    Example 3: Counting distinct values in a DataFrame with multiple columns
+
+    >>> from pyspark.sql.functions import approx_count_distinct, struct
+    >>> df = spark.createDataFrame([("Alice", 1),
+    ...                             ("Alice", 2),
+    ...                             ("Bob", 3),
+    ...                             ("Bob", 3)], ["name", "value"])
+    >>> df = df.withColumn("combined", struct("name", "value"))
+    >>> df.agg(approx_count_distinct("combined").alias('distinct_pairs')).show()
+    +--------------+
+    |distinct_pairs|
+    +--------------+
+    |             3|
+    +--------------+
+
+    Example 4: Counting distinct values with a specified relative standard deviation
+
+    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> df = spark.range(100000)
+    >>> df.agg(approx_count_distinct("id").alias('with_default_rsd'),
+    ...        approx_count_distinct("id", 0.1).alias('with_rsd_0.1')).show()
+    +----------------+------------+
+    |with_default_rsd|with_rsd_0.1|
+    +----------------+------------+
+    |           95546|      102065|
+    +----------------+------------+
     """
     if rsd is None:
         return _invoke_function_over_columns("approx_count_distinct", col)
@@ -4312,8 +4919,8 @@ def monotonically_increasing_id() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 10, 1, 2).select(F.monotonically_increasing_id()).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 10, 1, 2).select(sf.monotonically_increasing_id()).show()
     +-----------------------------+
     |monotonically_increasing_id()|
     +-----------------------------+
@@ -4612,8 +5219,8 @@ def rand(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', F.rand(seed=42) * 3).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
     +---+------------------+
@@ -4653,8 +5260,8 @@ def randn(seed: Optional[int] = None) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', F.randn(seed=42)).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
     +---+------------------+
     | id|             randn|
     +---+------------------+
@@ -5155,9 +5762,9 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     Examples
     --------
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.sql("SELECT * FROM VALUES (1), (2), (4) AS t(value)")
-    >>> df.select(F.log(2.0, df.value).alias('log2_value')).show()
+    >>> df.select(sf.log(2.0, df.value).alias('log2_value')).show()
     +----------+
     |log2_value|
     +----------+
@@ -5168,7 +5775,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
 
     And Natural logarithm
 
-    >>> df.select(F.log(df.value).alias('ln_value')).show()
+    >>> df.select(sf.log(df.value).alias('ln_value')).show()
     +------------------+
     |          ln_value|
     +------------------+
@@ -6940,6 +7547,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+@try_remote_functions
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     Parses the `col` with the `format` to a timestamp. The function always
@@ -7779,9 +8387,6 @@ def to_unix_timestamp(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7795,12 +8400,6 @@ def to_unix_timestamp(
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=1460098800)]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
-
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
-    [Row(r=None)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
@@ -7820,9 +8419,6 @@ def to_timestamp_ltz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7832,17 +8428,15 @@ def to_timestamp_ltz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
@@ -7861,9 +8455,6 @@ def to_timestamp_ntz(
 
     .. versionadded:: 3.5.0
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str
@@ -7873,17 +8464,15 @@ def to_timestamp_ntz(
 
     Examples
     --------
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
     >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
+    ... # doctest: +SKIP
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
-    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
@@ -10343,6 +10932,7 @@ def character_length(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("character_length", str)
 
 
+@try_remote_functions
 def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
     This is a special version of `to_binary` that performs the same operation, but returns a NULL
@@ -11572,11 +12162,11 @@ def explode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(explode(eDF.intlist).alias("anInt")).collect()
+    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> df.select(explode(df.intlist).alias("anInt")).collect()
     [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
 
-    >>> eDF.select(explode(eDF.mapfield).alias("key", "value")).show()
+    >>> df.select(explode(df.mapfield).alias("key", "value")).show()
     +---+-----+
     |key|value|
     +---+-----+
@@ -11611,11 +12201,11 @@ def posexplode(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> eDF.select(posexplode(eDF.intlist)).collect()
+    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> df.select(posexplode(df.intlist)).collect()
     [Row(pos=0, col=1), Row(pos=1, col=2), Row(pos=2, col=3)]
 
-    >>> eDF.select(posexplode(eDF.mapfield)).show()
+    >>> df.select(posexplode(df.mapfield)).show()
     +---+---+-----+
     |pos|key|value|
     +---+---+-----+
@@ -13651,6 +14241,7 @@ def map_zip_with(
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
 
+@try_remote_functions
 def str_to_map(
     text: "ColumnOrName",
     pairDelim: Optional["ColumnOrName"] = None,
@@ -14076,6 +14667,7 @@ def make_interval(
     )
 
 
+@try_remote_functions
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14147,6 +14739,7 @@ def make_timestamp(
         )
 
 
+@try_remote_functions
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14217,6 +14810,7 @@ def make_timestamp_ltz(
         )
 
 
+@try_remote_functions
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -14270,6 +14864,7 @@ def make_timestamp_ntz(
     )
 
 
+@try_remote_functions
 def make_ym_interval(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
@@ -14448,13 +15043,16 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |    2.0|
     +-------+
     >>> _ = spark.sql("CREATE FUNCTION custom_avg AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+    ... # doctest: +SKIP
     >>> df.select(call_function("custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
     |                               102.0|
     +------------------------------------+
     >>> df.select(call_function("spark_catalog.default.custom_avg", col("id"))).show()
+    ... # doctest: +SKIP
     +------------------------------------+
     |spark_catalog.default.custom_avg(id)|
     +------------------------------------+
@@ -15375,6 +15973,9 @@ def udf(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments.
+
     Parameters
     ----------
     f : function
@@ -15407,6 +16008,20 @@ def udf(
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
+
+    UDF can use keyword arguments:
+
+    >>> @udf(returnType=IntegerType())
+    ... def calc(a, b):
+    ...     return a + 10 * b
+    ...
+    >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+    +-----------------------------+
+    |calc(b => (id * 10), a => id)|
+    +-----------------------------+
+    |                            0|
+    |                          101|
+    +-----------------------------+
 
     Notes
     -----

@@ -19,18 +19,20 @@ import os
 import tempfile
 import unittest
 import numpy as np
-from pyspark.ml.connect.classification import (
-    LogisticRegression as LORV2,
-    LogisticRegressionModel as LORV2Model,
-)
 from pyspark.sql import SparkSession
-
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 have_torch = True
 try:
     import torch  # noqa: F401
 except ImportError:
     have_torch = False
+
+if should_test_connect:
+    from pyspark.ml.connect.classification import (
+        LogisticRegression as LORV2,
+        LogisticRegressionModel as LORV2Model,
+    )
 
 
 class ClassificationTestsMixin:
@@ -218,6 +220,9 @@ class ClassificationTestsMixin:
             loaded_model.transform(eval_df1.toPandas())
 
 
+@unittest.skipIf(
+    not should_test_connect or not have_torch, connect_requirement_message or "No torch found"
+)
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

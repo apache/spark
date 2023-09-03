@@ -3033,8 +3033,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         for f in (
             "rdd",
-            "foreach",
-            "foreachPartition",
             "checkpoint",
             "localCheckpoint",
         ):
@@ -3345,6 +3343,27 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         with self.assertRaises(RuntimeError) as e:
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+
+class SparkConnectSessionWithOptionsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder.config("string", "foo")
+            .config("integer", 1)
+            .config("boolean", False)
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
+    def test_config(self):
+        # Config
+        self.assertEqual(self.spark.conf.get("string"), "foo")
+        self.assertEqual(self.spark.conf.get("boolean"), "false")
+        self.assertEqual(self.spark.conf.get("integer"), "1")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

@@ -14,17 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client
+package org.apache.spark.sql
 
 import java.io.File
 import java.nio.file.{Files, Paths}
 
 import scala.util.Properties
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.connect.common.ProtoDataTypes
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.test.RemoteSparkSession
 
 class UDFClassLoadingE2ESuite extends RemoteSparkSession {
 
