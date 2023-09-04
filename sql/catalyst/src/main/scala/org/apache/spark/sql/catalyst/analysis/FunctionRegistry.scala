@@ -454,6 +454,7 @@ object FunctionRegistry {
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
+    expression[TryReflect]("try_reflect"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -530,8 +531,8 @@ object FunctionRegistry {
     expression[FormatString]("format_string"),
     expression[ToNumber]("to_number"),
     expression[TryToNumber]("try_to_number"),
-    expression[ToCharacter]("to_char"),
-    expression[ToCharacter]("to_varchar", setAlias = true, Some("3.5.0")),
+    expressionBuilder("to_char", ToCharacterBuilder),
+    expressionBuilder("to_varchar", ToCharacterBuilder, setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -741,6 +742,7 @@ object FunctionRegistry {
     expression[CurrentCatalog]("current_catalog"),
     expression[CurrentUser]("current_user"),
     expression[CurrentUser]("user", setAlias = true),
+    expression[CurrentUser]("session_user", setAlias = true),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),

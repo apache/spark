@@ -104,17 +104,17 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
     case r: InheritAnalysisRules =>
       PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
-    case c: Cast if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
+    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
 
   def quoteIdentifier(name: String): String = {
-    SparkStringUtils.quoteIdentifier(name)
+    QuotingUtils.quoteIdentifier(name)
   }
 
   def quoteNameParts(name: Seq[String]): String = {
-    name.map(part => quoteIdentifier(part)).mkString(".")
+    QuotingUtils.quoteNameParts(name)
   }
 
   def quoteIfNeeded(part: String): String = {

@@ -16,21 +16,29 @@
 #
 
 import unittest
-from typing import Optional
+import uuid
+from collections.abc import Generator
+from typing import Optional, Any
 
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-import pyspark.sql.connect.proto as proto
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
+    import grpc
     import pandas as pd
     import pyarrow as pa
+    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+    from pyspark.sql.connect.client.core import Retrying
+    from pyspark.sql.connect.client.reattach import (
+        RetryException,
+        ExecutePlanResponseReattachableIterator,
+    )
+    import pyspark.sql.connect.proto as proto
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_passthrough(self):
-        client = SparkConnectClient("sc://foo/;user_agent=bar")
+        client = SparkConnectClient("sc://foo/;user_agent=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -41,7 +49,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
 
     def test_user_agent_default(self):
-        client = SparkConnectClient("sc://foo/")
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -54,11 +62,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
 
     def test_properties(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         self.assertEqual(client.token, "bar")
         self.assertEqual(client.host, "foo")
 
-        client = SparkConnectClient("sc://foo/")
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         self.assertIsNone(client.token)
 
     def test_channel_builder(self):
@@ -67,12 +75,14 @@ class SparkConnectClientTestCase(unittest.TestCase):
             def userId(self) -> Optional[str]:
                 return "abc"
 
-        client = SparkConnectClient(CustomChannelBuilder("sc://foo/"))
+        client = SparkConnectClient(
+            CustomChannelBuilder("sc://foo/"), use_reattachable_execute=False
+        )
 
         self.assertEqual(client._user_id, "abc")
 
     def test_interrupt_all(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
@@ -80,11 +90,185 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
 
     def test_is_closed(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
+        client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
 
         self.assertFalse(client.is_closed)
         client.close()
         self.assertTrue(client.is_closed)
+
+    def test_retry(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+
+        total_sleep = 0
+
+        def sleep(t):
+            nonlocal total_sleep
+            total_sleep += t
+
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, sleep=sleep, **client._retry_policy
+            ):
+                with attempt:
+                    raise RetryException()
+        except RetryException:
+            pass
+
+        # tolerated at least 10 mins of fails
+        self.assertGreaterEqual(total_sleep, 600)
+
+    def test_channel_builder_with_session(self):
+        dummy = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://foo/;session_id={dummy}")
+        client = SparkConnectClient(chan)
+        self.assertEqual(client._session_id, chan.session_id)
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class SparkConnectClientReattachTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.request = proto.ExecutePlanRequest()
+        self.policy = {
+            "max_retries": 3,
+            "backoff_multiplier": 4.0,
+            "initial_backoff": 10,
+            "max_backoff": 10,
+            "jitter": 10,
+            "min_jitter_threshold": 10,
+        }
+        self.response = proto.ExecutePlanResponse()
+        self.finished = proto.ExecutePlanResponse(
+            result_complete=proto.ExecutePlanResponse.ResultComplete()
+        )
+
+    def _stub_with(self, execute=None, attach=None):
+        return MockSparkConnectStub(
+            execute_ops=ResponseGenerator(execute) if execute is not None else None,
+            attach_ops=ResponseGenerator(attach) if attach is not None else None,
+        )
+
+    def test_basic_flow(self):
+        stub = self._stub_with([self.response, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        for b in ite:
+            pass
+
+        self.assertEqual(0, stub.attach_calls)
+        self.assertGreater(1, stub.release_calls)
+        self.assertEqual(1, stub.execute_calls)
+
+    def test_fail_during_execute(self):
+        def fatal():
+            raise TestException("Fatal")
+
+        stub = self._stub_with([self.response, fatal])
+        with self.assertRaises(TestException):
+            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+            for b in ite:
+                pass
+
+        self.assertEqual(0, stub.attach_calls)
+        self.assertEqual(0, stub.release_calls)
+        self.assertEqual(1, stub.execute_calls)
+
+    def test_fail_and_retry_during_execute(self):
+        def non_fatal():
+            raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+
+        stub = self._stub_with(
+            [self.response, non_fatal], [self.response, self.response, self.finished]
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        for b in ite:
+            pass
+
+        self.assertEqual(1, stub.attach_calls)
+        self.assertEqual(1, stub.release_calls)
+        self.assertEqual(1, stub.execute_calls)
+
+    def test_fail_and_retry_during_reattach(self):
+        count = 0
+
+        def non_fatal():
+            nonlocal count
+            if count < 2:
+                count += 1
+                raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+            else:
+                return proto.ExecutePlanResponse()
+
+        stub = self._stub_with(
+            [self.response, non_fatal], [self.response, non_fatal, self.response, self.finished]
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        for b in ite:
+            pass
+
+        self.assertEqual(2, stub.attach_calls)
+        self.assertEqual(2, stub.release_calls)
+        self.assertEqual(1, stub.execute_calls)
+
+
+class TestException(grpc.RpcError, grpc.Call):
+    """Exception mock to test retryable exceptions."""
+
+    def __init__(self, msg, code=grpc.StatusCode.INTERNAL):
+        self.msg = msg
+        self._code = code
+
+    def code(self):
+        return self._code
+
+    def __str__(self):
+        return self.msg
+
+    def trailing_metadata(self):
+        return ()
+
+
+class ResponseGenerator(Generator):
+    """This class is used to generate values that are returned by the streaming
+    iterator of the GRPC stub."""
+
+    def __init__(self, funs):
+        self._funs = funs
+        self._iterator = iter(self._funs)
+
+    def send(self, value: Any) -> proto.ExecutePlanResponse:
+        val = next(self._iterator)
+        if callable(val):
+            return val()
+        else:
+            return val
+
+    def throw(self, type: Any = None, value: Any = None, traceback: Any = None) -> Any:
+        super().throw(type, value, traceback)
+
+    def close(self) -> None:
+        return super().close()
+
+
+class MockSparkConnectStub:
+    """Simple mock class for the GRPC stub used by the re-attachable execution."""
+
+    def __init__(self, execute_ops=None, attach_ops=None):
+        self._execute_ops = execute_ops
+        self._attach_ops = attach_ops
+        # Call counters
+        self.execute_calls = 0
+        self.release_calls = 0
+        self.attach_calls = 0
+
+    def ExecutePlan(self, *args, **kwargs):
+        self.execute_calls += 1
+        return self._execute_ops
+
+    def ReattachExecute(self, *args, **kwargs):
+        self.attach_calls += 1
+        return self._attach_ops
+
+    def ReleaseExecute(self, *args, **kwargs):
+        self.release_calls += 1
 
 
 class MockService:

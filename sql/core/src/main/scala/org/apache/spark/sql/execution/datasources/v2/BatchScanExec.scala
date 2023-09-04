@@ -153,7 +153,7 @@ case class BatchScanExec(
             if (spjParams.commonPartitionValues.isDefined &&
               spjParams.applyPartialClustering) {
               // A mapping from the common partition values to how many splits the partition
-              // should contain. Note this no longer maintain the partition key ordering.
+              // should contain.
               val commonPartValuesMap = spjParams.commonPartitionValues
                 .get
                 .map(t => (InternalRowComparableWrapper(t._1, p.expressions), t._2))
@@ -190,10 +190,17 @@ case class BatchScanExec(
                     Seq.fill(numSplits)(Seq.empty))
               }
             } else {
+              // either `commonPartitionValues` is not defined, or it is defined but
+              // `applyPartialClustering` is false.
               val partitionMapping = groupedPartitions.map { case (row, parts) =>
                 InternalRowComparableWrapper(row, p.expressions) -> parts
               }.toMap
-              finalPartitions = p.partitionValues.map { partValue =>
+
+              // In case `commonPartitionValues` is not defined (e.g., SPJ is not used), there
+              // could exist duplicated partition values, as partition grouping is not done
+              // at the beginning and postponed to this method. It is important to use unique
+              // partition values here so that grouped partitions won't get duplicated.
+              finalPartitions = p.uniquePartitionValues.map { partValue =>
                 // Use empty partition for those partition values that are not present
                 partitionMapping.getOrElse(
                   InternalRowComparableWrapper(partValue, p.expressions), Seq.empty)

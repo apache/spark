@@ -349,7 +349,7 @@ By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKey
 Below is a list of all the keywords in Spark SQL.
 
 |Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2016|
-|------|----------------------|-------------------------|--------|
+|--|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
@@ -423,6 +423,7 @@ Below is a list of all the keywords in Spark SQL.
 |DBPROPERTIES|non-reserved|non-reserved|non-reserved|
 |DEC|non-reserved|non-reserved|reserved|
 |DECIMAL|non-reserved|non-reserved|reserved|
+|DECLARE|non-reserved|non-reserved|non-reserved|
 |DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
@@ -607,6 +608,7 @@ Below is a list of all the keywords in Spark SQL.
 |SETS|non-reserved|non-reserved|non-reserved|
 |SHORT|non-reserved|non-reserved|non-reserved|
 |SHOW|non-reserved|non-reserved|non-reserved|
+|SINGLE|non-reserved|non-reserved|non-reserved|
 |SKEWED|non-reserved|non-reserved|non-reserved|
 |SMALLINT|non-reserved|non-reserved|reserved|
 |SOME|reserved|non-reserved|reserved|
@@ -634,6 +636,7 @@ Below is a list of all the keywords in Spark SQL.
 |TERMINATED|non-reserved|non-reserved|non-reserved|
 |THEN|reserved|non-reserved|reserved|
 |TIME|reserved|non-reserved|reserved|
+|TIMEDIFF|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP_LTZ|non-reserved|non-reserved|non-reserved|
 |TIMESTAMP_NTZ|non-reserved|non-reserved|non-reserved|
@@ -666,6 +669,8 @@ Below is a list of all the keywords in Spark SQL.
 |USING|reserved|strict-non-reserved|reserved|
 |VALUES|non-reserved|non-reserved|reserved|
 |VARCHAR|non-reserved|non-reserved|reserved|
+|VAR|non-reserved|non-reserved|non-reserved|
+|VARIABLE|non-reserved|non-reserved|non-reserved|
 |VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|

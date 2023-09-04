@@ -2934,7 +2934,7 @@ object Extract {
         }
       }
     } else {
-      throw QueryCompilationErrors.requireLiteralParameter(funcName, "field", "string")
+      throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "field", StringType)
     }
   }
 }

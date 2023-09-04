@@ -18,11 +18,8 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -238,26 +235,6 @@ abstract class DisableUnnecessaryBucketedScanSuite
          """.stripMargin, 0, 0)
       ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
         checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
-      }
-    }
-  }
-
-  test("SPARK-33075: not disable bucketed table scan for cached query") {
-    withTable("t1") {
-      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
-        spark.catalog.cacheTable("t1")
-        assertCached(spark.table("t1"))
-
-        // Verify cached bucketed table scan not disabled
-        val partitioning = stripAQEPlan(spark.table("t1").queryExecution.executedPlan)
-          .outputPartitioning
-        assert(partitioning match {
-          case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
-          case _ => false
-        })
-        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution.executedPlan
-        assert(find(aggregateQueryPlan)(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
       }
     }
   }

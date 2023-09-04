@@ -113,7 +113,8 @@ object AgnosticEncoders {
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      override val fields: Seq[EncoderField]) extends StructEncoder[K]
+      override val fields: Seq[EncoderField],
+      outerPointerGetter: Option[() => AnyRef]) extends StructEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
@@ -123,7 +124,7 @@ object AgnosticEncoders {
       }
       val cls = cachedCls.computeIfAbsent(encoders.size,
         _ => SparkClassUtils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
-      ProductEncoder[Any](ClassTag(cls), fields)
+      ProductEncoder[Any](ClassTag(cls), fields, None)
     }
 
     private[sql] def isTuple(tag: ClassTag[_]): Boolean = {

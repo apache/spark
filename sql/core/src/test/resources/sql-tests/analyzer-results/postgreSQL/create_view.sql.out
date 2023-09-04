@@ -52,7 +52,7 @@ org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 CREATE VIEW key_dependent_view AS
    SELECT * FROM view_base_table GROUP BY key
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",

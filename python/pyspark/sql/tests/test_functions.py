@@ -63,6 +63,10 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "random",  # namespace conflict with python built-in module
+            "uuid",  # namespace conflict with python built-in module
+            "chr",  # namespace conflict with python built-in function
+            "session_user",  # Scala only for now, needs implementation
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
@@ -78,10 +82,50 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set()
+        expected_missing_in_py = {
+            # TODO: XML functions will soon be added and removed from this list
+            # https://issues.apache.org/jira/browse/SPARK-44788
+            "from_xml",
+            "schema_of_xml",
+            # TODO: reflect function will soon be added and removed from this list
+            "try_reflect",
+        }
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
+        )
+
+    def test_public_function(self):
+        inspected_list = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
+
+        public_list = set(F.__all__)
+
+        # check alias: both function 'pow' and its alias 'power' should be included
+        self.assertTrue("pow" in inspected_list)
+        self.assertTrue("power" in inspected_list)
+        self.assertTrue("pow" in public_list)
+        self.assertTrue("power" in public_list)
+
+        inspected_execuded_list = {
+            "get_active_spark_context",  # internal helper function
+            "try_remote_functions",  # internal helper function
+            "to_str",  # internal helper function
+        }
+
+        self.assertEqual(
+            inspected_list - public_list,
+            inspected_execuded_list,
+            "Inspected functions NOT exposed!",
+        )
+
+        public_execuded_list = {
+            "PandasUDFType",  # type, not a function
+        }
+
+        self.assertEqual(
+            public_list - inspected_list,
+            public_execuded_list,
+            "Non-existent functions exposed!",
         )
 
     def test_explode(self):

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -180,6 +181,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.size === 2)
     checkAnswer(twoJoinsDF,
       Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+  }
+
+  test("SPARK-44236: disable WholeStageCodegen when set spark.sql.codegen.factoryMode is " +
+    "NO_CODEGEN") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      val df = spark.range(10).select($"id" + 1)
+      val plan = df.queryExecution.executedPlan
+      assert(!plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
+      checkAnswer(df, 1L to 10L map { i => Row(i) })
+    }
   }
 
   test("Full Outer ShuffledHashJoin and SortMergeJoin should be included in WholeStageCodegen") {

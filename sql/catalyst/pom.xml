@@ -112,6 +112,10 @@
       <type>jar</type>
     </dependency>
     <dependency>
+      <groupId>org.apache.ws.xmlschema</groupId>
+      <artifactId>xmlschema-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.datasketches</groupId>
       <artifactId>datasketches-java</artifactId>
       <version>3.3.0</version>
@@ -148,22 +152,6 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr4-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>antlr4</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <visitor>true</visitor>
-          <sourceDirectory>../catalyst/src/main/antlr4</sourceDirectory>
-          <treatWarningsAsErrors>true</treatWarningsAsErrors>
         </configuration>
       </plugin>
       <plugin>

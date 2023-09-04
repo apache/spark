@@ -37,6 +37,10 @@ Cannot find data for the output column `<colName>`.
 
 Cannot safely cast `<colName>` `<srcType>` to `<targetType>`.
 
+## EXTRA_COLUMNS
+
+Cannot write extra columns `<extraColumns>`.
+
 ## EXTRA_STRUCT_FIELDS
 
 Cannot write extra fields `<extraFields>` to the struct `<colName>`.

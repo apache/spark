@@ -96,7 +96,8 @@ private[spark] object Utils
   extends Logging
   with SparkClassUtils
   with SparkErrorUtils
-  with SparkFileUtils {
+  with SparkFileUtils
+  with SparkSerDeUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -122,26 +123,6 @@ private[spark] object Utils
   private val copyBuffer = ThreadLocal.withInitial[Array[Byte]](() => {
     new Array[Byte](COPY_BUFFER_LEN)
   })
-
-  /** Serialize an object using Java serialization */
-  def serialize[T](o: T): Array[Byte] = SparkSerDeUtils.serialize(o)
-
-  /** Deserialize an object using Java serialization */
-  def deserialize[T](bytes: Array[Byte]): T = SparkSerDeUtils.deserialize(bytes)
-
-  /** Deserialize an object using Java serialization and the given ClassLoader */
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-        // scalastyle:off classforname
-        Class.forName(desc.getName, false, loader)
-        // scalastyle:on classforname
-      }
-    }
-    ois.readObject.asInstanceOf[T]
-  }
-
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
   def deserializeLongValue(bytes: Array[Byte]) : Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
@@ -2128,9 +2109,9 @@ private[spark] object Utils
     def lockString: String = {
       lock match {
         case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Monitor(${lock.getClassName}@${monitor.getIdentityHashCode})"
         case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode})"
       }
     }
   }
@@ -2188,29 +2169,38 @@ private[spark] object Utils
   }
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
-    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
-      monitors.get(frame) match {
-        case Some(monitor) =>
-          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-        case None =>
-          frame.toString
-      }
+    val threadState = threadInfo.getThreadState
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackDepth -> m.toString).toMap
+    val stackTrace = StackTrace(threadInfo.getStackTrace.zipWithIndex.map { case (frame, idx) =>
+      val locked = if (idx == 0 && threadInfo.getLockInfo != null) {
+        threadState match {
+          case Thread.State.BLOCKED =>
+            s"\t-  blocked on ${threadInfo.getLockInfo}\n"
+          case Thread.State.WAITING | Thread.State.TIMED_WAITING =>
+            s"\t-  waiting on ${threadInfo.getLockInfo}\n"
+          case _ => ""
+        }
+      } else ""
+      val locking = monitors.get(idx).map(mi => s"\t-  locked $mi\n").getOrElse("")
+      s"${frame.toString}\n$locked$locking"
     })
 
-    // use a set to dedup re-entrant locks that are held at multiple places
-    val heldLocks =
-      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
-
+    val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
+    val monitorStrs = monitors.values.toSeq
     ThreadStackTrace(
-      threadId = threadInfo.getThreadId,
-      threadName = threadInfo.getThreadName,
-      threadState = threadInfo.getThreadState,
-      stackTrace = stackTrace,
-      blockedByThreadId =
-        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      holdingLocks = heldLocks.toSeq)
+      threadInfo.getThreadId,
+      threadInfo.getThreadName,
+      threadState,
+      stackTrace,
+      if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      synchronizers ++ monitorStrs,
+      synchronizers,
+      monitorStrs,
+      Option(threadInfo.getLockName),
+      Option(threadInfo.getLockOwnerName),
+      threadInfo.isSuspended,
+      threadInfo.isInNative)
   }
 
   /**
@@ -2902,34 +2892,6 @@ private[spark] object Utils
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
-  }
-
-  /**
-   * Returns true if and only if the underlying class is a member class.
-   *
-   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
-   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
-   * we can remove this helper method safely if we drop the support of jdk8u.
-   */
-  def isMemberClass(cls: Class[_]): Boolean = {
-    try {
-      cls.isMemberClass
-    } catch {
-      case _: InternalError =>
-        // We emulate jdk8u `Class.isMemberClass` below:
-        //   public boolean isMemberClass() {
-        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
-        //   }
-        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
-        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
-        // if a given class is not a local or an anonymous class, so we replace it with
-        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
-        // only in either case (JVM Spec 4.8.6).
-        //
-        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
-        // we reorder the conditions to follow it.
-        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
-    }
   }
 
   /**

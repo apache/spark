@@ -26,7 +26,7 @@ import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_UI_SESSION_LIMIT, CONNECT_UI_STATEMENT_LIMIT}
 import org.apache.spark.sql.connect.service._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 
 private[connect] class SparkConnectServerListener(
@@ -80,12 +80,9 @@ private[connect] class SparkConnectServerListener(
     }
     val executeJobTag = executeJobTagOpt.get
     val exec = executionList.get(executeJobTag)
-    val executionIdOpt: Option[String] = Option(jobStart.properties)
-      .flatMap { p => Option(p.getProperty(SQLExecution.EXECUTION_ID_KEY)) }
     if (exec.nonEmpty) {
       exec.foreach { exec =>
         exec.jobId += jobStart.jobId.toString
-        executionIdOpt.foreach { execId => exec.sqlExecId += execId }
         updateLiveStore(exec)
       }
     } else {
@@ -105,8 +102,8 @@ private[connect] class SparkConnectServerListener(
           exec.userId,
           exec.operationId,
           exec.sparkSessionTags)
+        liveExec.sqlExecId = exec.sqlExecId
         liveExec.jobId += jobStart.jobId.toString
-        executionIdOpt.foreach { execId => exec.sqlExecId += execId }
         updateStoreWithTriggerEnabled(liveExec)
         executionList.remove(liveExec.jobTag)
       }
@@ -115,6 +112,7 @@ private[connect] class SparkConnectServerListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
+      case e: SparkListenerSQLExecutionStart => onSQLExecutionStart(e)
       case e: SparkListenerConnectOperationStarted => onOperationStarted(e)
       case e: SparkListenerConnectOperationAnalyzed => onOperationAnalyzed(e)
       case e: SparkListenerConnectOperationReadyForExecution => onOperationReadyForExecution(e)
@@ -125,6 +123,45 @@ private[connect] class SparkConnectServerListener(
       case e: SparkListenerConnectSessionStarted => onSessionStarted(e)
       case e: SparkListenerConnectSessionClosed => onSessionClosed(e)
       case _ => // Ignore
+    }
+  }
+
+  def onSQLExecutionStart(e: SparkListenerSQLExecutionStart): Unit = {
+    val executeJobTagOpt = e.jobTags.find {
+      case ExecuteJobTag(_) => true
+      case _ => false
+    }
+    if (executeJobTagOpt.isEmpty) {
+      return
+    }
+    val executeJobTag = executeJobTagOpt.get
+    val exec = executionList.get(executeJobTag)
+    if (exec.nonEmpty) {
+      exec.foreach { exec =>
+        exec.sqlExecId += e.executionId.toString
+        updateLiveStore(exec)
+      }
+    } else {
+      // This block guards against potential event re-ordering where a SQLExecutionStart
+      // event is processed after a ConnectOperationClosed event, in which case the Execution
+      // has already been evicted from the executionList.
+      val storeExecInfo =
+        KVUtils.viewToSeq(kvstore.view(classOf[ExecutionInfo]), Int.MaxValue)(exec =>
+          exec.jobTag == executeJobTag)
+      storeExecInfo.foreach { exec =>
+        val liveExec = getOrCreateExecution(
+          exec.jobTag,
+          exec.statement,
+          exec.sessionId,
+          exec.startTimestamp,
+          exec.userId,
+          exec.operationId,
+          exec.sparkSessionTags)
+        liveExec.jobId = exec.jobId
+        liveExec.sqlExecId += e.executionId.toString
+        updateStoreWithTriggerEnabled(liveExec)
+        executionList.remove(liveExec.jobTag)
+      }
     }
   }
 
@@ -168,7 +205,7 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.READY
         updateLiveStore(executionData)
       case None =>
-        logWarning(s"onOperationReadyForExectuion called with unknown operation id: ${e.jobTag}")
+        logWarning(s"onOperationReadyForExecution called with unknown operation id: ${e.jobTag}")
     }
   }
 
@@ -326,7 +363,7 @@ private[connect] class LiveExecutionData(
   var closeTimestamp: Long = 0L
   var detail: String = ""
   var state: ExecutionState.Value = ExecutionState.STARTED
-  val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
+  var jobId: ArrayBuffer[String] = ArrayBuffer[String]()
   var sqlExecId: mutable.Set[String] = mutable.Set[String]()
 
   override protected def doUpdate(): Any = {

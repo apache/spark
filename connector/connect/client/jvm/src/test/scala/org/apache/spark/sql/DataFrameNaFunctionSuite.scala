@@ -19,9 +19,8 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
@@ -279,7 +278,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
 
   test("drop with col(*)") {
     val df = createDF()
-    val ex = intercept[SparkException] {
+    val ex = intercept[AnalysisException] {
       df.na.drop("any", Seq("*")).collect()
     }
     assert(ex.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))

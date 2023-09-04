@@ -17,6 +17,29 @@
 
 /* global $, vis, uiRoot, appBasePath */
 /* eslint-disable no-unused-vars */
+const xAxisFormat = {
+  minorLabels: {
+    millisecond:'SSS',
+    second:     'ss',
+    minute:     'mm',
+    hour:       'HH',
+    weekday:    'DD',
+    day:        'DD',
+    month:      'MM',
+    year:       'YYYY'
+  },
+  majorLabels: {
+    millisecond:'YYYY/MM/DD HH:mm:ss',
+    second:     'YYYY/MM/DD HH:mm',
+    minute:     'YYYY/MM/DD HH',
+    hour:       'YYYY/MM/DD',
+    weekday:    'YYYY/MM',
+    day:        'YYYY/MM',
+    month:      'YYYY',
+    year:       ''
+  }
+}
+
 function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
@@ -34,6 +57,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     },
+    format: xAxisFormat,
     xss: {
       disabled: false,
       filterOptions: {
@@ -126,6 +150,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     },
+    format: xAxisFormat,
     xss: {
       disabled: false,
       filterOptions: {
@@ -224,6 +249,7 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
     },
+    format: xAxisFormat,
     xss: {
       disabled: false,
       filterOptions: {

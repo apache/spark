@@ -962,11 +962,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       (1 to 10).map(i => Row(i, null))
     )
 
-    sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i, null))
-    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      },
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`unknown`",
+        "tableColumns" -> "`a`, `b`",
+        "dataColumns" -> "`a`"))
 
     sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
     checkAnswer(
@@ -1027,7 +1031,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     withTable("t") {
       sql("create table t(i int, s bigint default 42, x bigint) using parquet")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42L, null))
     }
     // The table has a partitioning column and a default value is injected.
@@ -1205,7 +1209,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t values(false, default + 1)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
@@ -1216,7 +1220,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("insert into t select false, default + 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1339",
+        errorClass = "DEFAULT_PLACEMENT_INVALID",
         parameters = Map.empty
       )
     }
@@ -1495,7 +1499,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql(createTableIntCol)
       sql("alter table t add column s bigint default 42")
       sql("alter table t add column x bigint")
-      sql("insert into t values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(spark.table("t"), Row(1, 42, null))
     }
     // The table has a partitioning column and a default value is injected.
