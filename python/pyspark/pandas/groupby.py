@@ -608,18 +608,18 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             min_count=min_count,
         )
 
-    def mean(self, numeric_only: Optional[bool] = True) -> FrameLike:
+    def mean(self, numeric_only: Optional[bool] = None) -> FrameLike:
         """
         Compute mean of groups, excluding missing values.
 
         Parameters
         ----------
-        numeric_only : bool, default True
+        numeric_only : bool, default None
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data. False is not supported.
             This parameter is mainly for pandas compatibility.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -646,6 +646,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  3.0  1.333333  0.333333
         2  4.0  1.500000  1.000000
         """
+        if numeric_only is None:
+            warnings.warn(
+                "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' if not set, "
+                "due to the inability to mix different data types in a single column. "
+                "This behavior might differ from the traditional Pandas behavior where "
+                "'numeric_only' defaults to 'False'. "
+                "Please ensure to set this parameter explicitly to avoid unexpected results.",
+            )
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
         return self._reduce_for_stat_function(
@@ -916,7 +924,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
     # TODO: sync the doc.
-    def var(self, ddof: int = 1, numeric_only: Optional[bool] = True) -> FrameLike:
+    def var(self, ddof: int = 1, numeric_only: Optional[bool] = None) -> FrameLike:
         """
         Compute variance of groups, excluding missing values.
 
@@ -931,7 +939,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             .. versionchanged:: 3.4.0
                Supported including arbitary integers.
 
-        numeric_only : bool, default True
+        numeric_only : bool, default None
              Include only float, int, boolean columns. If None, will attempt to use
              everything, then use only numeric data. False is not supported.
              This parameter is mainly for pandas compatibility.
@@ -956,6 +964,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
+        if numeric_only is None:
+            warnings.warn(
+                "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' if not set, "
+                "due to the inability to mix different data types in a single column. "
+                "This behavior might differ from the traditional Pandas behavior where "
+                "'numeric_only' defaults to 'False'. "
+                "Please ensure to set this parameter explicitly to avoid unexpected results.",
+            )
 
         def var(col: Column) -> Column:
             return SF.var(col, ddof)

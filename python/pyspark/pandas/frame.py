@@ -771,6 +771,15 @@ class DataFrame(Frame, Generic[T]):
         """
         from pyspark.pandas.series import Series, first_series
 
+        if name != "count":
+            warnings.warn(
+                "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' if not set, "
+                "due to the inability to mix different data types in a single column. "
+                "This behavior might differ from the traditional Pandas behavior where "
+                "'numeric_only' defaults to 'False'. "
+                "Please ensure to set this parameter explicitly to avoid unexpected results.",
+            )
+
         axis = validate_axis(axis)
         if axis == 0:
             min_count = kwargs.get("min_count", 0)
@@ -8935,7 +8944,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, check_same_anchor=False)
 
-    def cov(self, min_periods: Optional[int] = None, ddof: int = 1) -> "DataFrame":
+    def cov(
+        self, min_periods: Optional[int] = None, ddof: int = 1, numeric_only: Optional[bool] = None
+    ) -> "DataFrame":
         """
         Compute pairwise covariance of columns, excluding NA/null values.
 
@@ -8965,6 +8976,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             is ``N - ddof``, where ``N`` represents the number of elements.
 
             .. versionadded:: 3.4.0
+
+        numeric_only : bool, default None
+            Include only float, int, boolean columns. If None, will attempt to use
+            everything, then use only numeric data. False is not supported.
+            This parameter is mainly for pandas compatibility.
+
+            .. versionadded:: 4.0.0
 
         Returns
         -------
@@ -9029,6 +9047,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
+        if numeric_only is None:
+            warnings.warn(
+                "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' if not set, "
+                "due to the inability to mix different data types in a single column. "
+                "This behavior might differ from the traditional Pandas behavior where "
+                "'numeric_only' defaults to 'False'. "
+                "Please ensure to set this parameter explicitly to avoid unexpected results.",
+            )
         min_periods = 1 if min_periods is None else min_periods
 
         # Only compute covariance for Boolean and Numeric except Decimal
