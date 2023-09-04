@@ -10423,6 +10423,12 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     values but 'MI' prints a space.
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
+    If `col` is a datetime, `format` shall be a valid datetime pattern, see
+    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    If `col` is a binary, it is converted to a string in one of the formats:
+     'base64': a base 64 string.
+     'hex': a string in the hexadecimal format.
+     'utf-8': the input binary is decoded to UTF-8 string.
 
     .. versionadded:: 3.5.0
 
@@ -10463,6 +10469,12 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     values but 'MI' prints a space.
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
+    If `col` is a datetime, `format` shall be a valid datetime pattern, see
+    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    If `col` is a binary, it is converted to a string in one of the formats:
+     'base64': a base 64 string.
+     'hex': a string in the hexadecimal format.
+     'utf-8': the input binary is decoded to UTF-8 string.
 
     .. versionadded:: 3.5.0
 
