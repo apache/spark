@@ -78,7 +78,6 @@ object TableOutputResolver {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
       supportColDefaultValue: Boolean = false): LogicalPlan = {
 
     val actualExpectedCols = expected.map { attr =>

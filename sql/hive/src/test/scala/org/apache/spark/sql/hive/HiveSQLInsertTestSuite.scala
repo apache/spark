@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.SQLInsertTestSuite
+import org.apache.spark.{QueryContext, SparkThrowable}
+import org.apache.spark.sql.{DataFrame, Row, SQLInsertTestSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
@@ -44,8 +44,23 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       v1ErrorClass: String,
       v2ErrorClass: String,
       v1Parameters: Map[String, String],
-      v2Parameters: Map[String, String]): Unit = {
+      v2Parameters: Map[String, String],
+      v1QueryContext: Array[QueryContext] = Array.empty,
+      v2QueryContext: Array[QueryContext] = Array.empty): Unit = {
     checkError(exception = exception, sqlState = None, errorClass = v1ErrorClass,
-      parameters = v1Parameters)
+      parameters = v1Parameters, queryContext = v1QueryContext)
   }
+
+  override def checkV1AndV2Answer(
+      df: => DataFrame,
+      v1ExpectedAnswer: Row,
+      v2ExpectedAnswer: Row): Unit =
+    checkAnswer(df, v1ExpectedAnswer)
+
+  override def checkV1AndV2Answer(
+      df: => DataFrame,
+      v1ExpectedAnswer: Seq[Row],
+      v2ExpectedAnswer: Seq[Row]): Unit =
+    checkAnswer(df, v1ExpectedAnswer)
+
 }
