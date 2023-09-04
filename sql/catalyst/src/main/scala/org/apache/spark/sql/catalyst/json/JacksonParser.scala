@@ -462,7 +462,7 @@ class JacksonParser(
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
               skipRow = structFilters.skipRow(row, index)
-              bitmask(index) = false
+              schema.existenceDefaultsBitmask(index) = false
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()

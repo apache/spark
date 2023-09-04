@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import com.fasterxml.jackson.core.JsonToken
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class PartialValueException(val cause: Throwable) extends Exception(cause) {
