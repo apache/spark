@@ -90,8 +90,6 @@ class FunctionsTestsMixin:
             # TODO: listagg functions will soon be added and removed from this list
             "listagg_distinct",
             "listagg",
-            # TODO: reflect function will soon be added and removed from this list
-            "try_reflect",
         }
 
         self.assertEqual(

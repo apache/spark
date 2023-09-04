@@ -2900,7 +2900,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
     }
     executeHolder.eventsManager.postFinished()
 

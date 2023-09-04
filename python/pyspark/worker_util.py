@@ -70,11 +70,12 @@ def check_python_version(infile: IO) -> None:
     Check the Python version between the running process and the one used to serialize the command.
     """
     version = utf8_deserializer.loads(infile)
-    if version != "%d.%d" % sys.version_info[:2]:
+    worker_version = "%d.%d" % sys.version_info[:2]
+    if version != worker_version:
         raise PySparkRuntimeError(
             error_class="PYTHON_VERSION_MISMATCH",
             message_parameters={
-                "worker_version": str(sys.version_info[:2]),
+                "worker_version": worker_version,
                 "driver_version": str(version),
             },
         )
