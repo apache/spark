@@ -559,7 +559,11 @@ def ceil(col: "ColumnOrName") -> Column:
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
 
 
-ceiling = ceil
+def ceiling(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ceiling", col)
+
+
+ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
 
 
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
@@ -827,7 +831,11 @@ def signum(col: "ColumnOrName") -> Column:
 signum.__doc__ = pysparkfuncs.signum.__doc__
 
 
-sign = signum
+def sign(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("sign", col)
+
+
+sign.__doc__ = pysparkfuncs.sign.__doc__
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -1203,13 +1211,17 @@ skewness.__doc__ = pysparkfuncs.skewness.__doc__
 
 
 def stddev(col: "ColumnOrName") -> Column:
-    return stddev_samp(col)
+    return _invoke_function_over_columns("stddev", col)
 
 
 stddev.__doc__ = pysparkfuncs.stddev.__doc__
 
 
-std = stddev
+def std(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("std", col)
+
+
+std.__doc__ = pysparkfuncs.std.__doc__
 
 
 def stddev_samp(col: "ColumnOrName") -> Column:
@@ -1333,7 +1345,7 @@ variance.__doc__ = pysparkfuncs.variance.__doc__
 
 
 def every(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("bool_and", col)
+    return _invoke_function_over_columns("every", col)
 
 
 every.__doc__ = pysparkfuncs.every.__doc__
@@ -1347,7 +1359,7 @@ bool_and.__doc__ = pysparkfuncs.bool_and.__doc__
 
 
 def some(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("bool_or", col)
+    return _invoke_function_over_columns("some", col)
 
 
 some.__doc__ = pysparkfuncs.some.__doc__
@@ -2561,7 +2573,7 @@ parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
 
 
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-    return _invoke_function("printf", lit(format), *[_to_col(c) for c in cols])
+    return _invoke_function("printf", _to_col(format), *[_to_col(c) for c in cols])
 
 
 printf.__doc__ = pysparkfuncs.printf.__doc__
