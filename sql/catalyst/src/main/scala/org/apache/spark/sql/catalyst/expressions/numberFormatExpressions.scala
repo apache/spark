@@ -241,7 +241,7 @@ case class TryToNumber(left: Expression, right: Expression)
 object ToCharacterBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (expressions.length == 2) {
+    if (numArgs == 2) {
       val (inputExpr, format) = (expressions(0), expressions(1))
       inputExpr.dataType match {
         case _: DatetimeType => DateFormatClass(inputExpr, format)
@@ -249,7 +249,11 @@ object ToCharacterBuilder extends ExpressionBuilder {
           if (!(format.dataType == StringType && format.foldable)) {
             throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format", StringType)
           }
-          format.eval().asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT).trim match {
+          val fmt = format.eval()
+          if (fmt == null) {
+            throw QueryCompilationErrors.nullArgumentError(funcName, "format")
+          }
+          fmt.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT).trim match {
             case "base64" => Base64(inputExpr)
             case "hex" => Hex(inputExpr)
             case "utf-8" => new Decode(Seq(inputExpr, format))
