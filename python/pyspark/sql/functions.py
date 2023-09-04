@@ -412,9 +412,15 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
-    >>> df.select(try_avg(df.age).alias('r')).collect()
-    [Row(r=8.5)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
+    ... ).select(sf.try_avg("age")).show()
+    +------------+
+    |try_avg(age)|
+    +------------+
+    |         8.5|
+    +------------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -565,9 +571,13 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(try_sum(df["id"]).alias('r')).collect()
-    [Row(r=45)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(10).select(sf.try_sum("id")).show()
+    +-----------+
+    |try_sum(id)|
+    +-----------+
+    |         45|
+    +-----------+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -1316,7 +1326,37 @@ def ceil(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ceil", col)
 
 
-ceiling = ceil
+@try_remote_functions
+def ceiling(col: "ColumnOrName") -> Column:
+    """
+    Computes the ceiling of the given value.
+
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
+    +----------+
+    |CEIL(-0.1)|
+    +----------+
+    |         0|
+    +----------+
+    """
+    return _invoke_function_over_columns("ceiling", col)
 
 
 @try_remote_functions
@@ -1668,14 +1708,15 @@ def negative(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.range(3).select(negative("id").alias("n")).show()
-    +---+
-    |  n|
-    +---+
-    |  0|
-    | -1|
-    | -2|
-    +---+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(3).select(sf.negative("id")).show()
+    +------------+
+    |negative(id)|
+    +------------+
+    |           0|
+    |          -1|
+    |          -2|
+    +------------+
     """
     return _invoke_function_over_columns("negative", col)
 
@@ -1825,25 +1866,54 @@ def signum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(signum(lit(-5))).show()
-    +----------+
-    |SIGNUM(-5)|
-    +----------+
-    |      -1.0|
-    +----------+
-
-    >>> df.select(signum(lit(6))).show()
-    +---------+
-    |SIGNUM(6)|
-    +---------+
-    |      1.0|
-    +---------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(
+    ...     sf.signum(sf.lit(-5)),
+    ...     sf.signum(sf.lit(6))
+    ... ).show()
+    +----------+---------+
+    |SIGNUM(-5)|SIGNUM(6)|
+    +----------+---------+
+    |      -1.0|      1.0|
+    +----------+---------+
     """
     return _invoke_function_over_columns("signum", col)
 
 
-sign = signum
+@try_remote_functions
+def sign(col: "ColumnOrName") -> Column:
+    """
+    Computes the signum of the given value.
+
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(
+    ...     sf.sign(sf.lit(-5)),
+    ...     sf.sign(sf.lit(6))
+    ... ).show()
+    +--------+-------+
+    |sign(-5)|sign(6)|
+    +--------+-------+
+    |    -1.0|    1.0|
+    +--------+-------+
+    """
+    return _invoke_function_over_columns("sign", col)
 
 
 @try_remote_functions
@@ -2146,15 +2216,17 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(getbit("c", lit(1)).alias("d")).show()
-    +---+
-    |  d|
-    +---+
-    |  0|
-    |  0|
-    |  1|
-    +---+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[1], [1], [2]], ["c"]
+    ... ).select(sf.getbit("c", sf.lit(1))).show()
+    +------------+
+    |getbit(c, 1)|
+    +------------+
+    |           0|
+    |           0|
+    |           1|
+    +------------+
     """
     return _invoke_function_over_columns("getbit", col, pos)
 
@@ -2351,14 +2423,45 @@ def stddev(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(6)
-    >>> df.select(stddev(df.id)).first()
-    Row(stddev_samp(id)=1.87082...)
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(sf.stddev("id")).show()
+    +------------------+
+    |        stddev(id)|
+    +------------------+
+    |1.8708286933869...|
+    +------------------+
     """
     return _invoke_function_over_columns("stddev", col)
 
 
-std = stddev
+@try_remote_functions
+def std(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: alias for stddev_samp.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        standard deviation of given column.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(sf.std("id")).show()
+    +------------------+
+    |           std(id)|
+    +------------------+
+    |1.8708286933869...|
+    +------------------+
+    """
+    return _invoke_function_over_columns("std", col)
 
 
 @try_remote_functions
@@ -2384,9 +2487,13 @@ def stddev_samp(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(6)
-    >>> df.select(stddev_samp(df.id)).first()
-    Row(stddev_samp(id)=1.87082...)
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(sf.stddev_samp("id")).show()
+    +------------------+
+    |   stddev_samp(id)|
+    +------------------+
+    |1.8708286933869...|
+    +------------------+
     """
     return _invoke_function_over_columns("stddev_samp", col)
 
@@ -2414,9 +2521,13 @@ def stddev_pop(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(6)
-    >>> df.select(stddev_pop(df.id)).first()
-    Row(stddev_pop(id)=1.70782...)
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(6).select(sf.stddev_pop("id")).show()
+    +-----------------+
+    |   stddev_pop(id)|
+    +-----------------+
+    |1.707825127659...|
+    +-----------------+
     """
     return _invoke_function_over_columns("stddev_pop", col)
 
@@ -2816,27 +2927,35 @@ def every(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
-    >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |          true|
-    +--------------+
-    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
-    >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |         false|
-    +--------------+
-    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
-    >>> df.select(every("flag")).show()
-    +--------------+
-    |bool_and(flag)|
-    +--------------+
-    |         false|
-    +--------------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[True], [True], [True]], ["flag"]
+    ... ).select(sf.every("flag")).show()
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |       true|
+    +-----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[True], [False], [True]], ["flag"]
+    ... ).select(sf.every("flag")).show()
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |      false|
+    +-----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[False], [False], [False]], ["flag"]
+    ... ).select(sf.every("flag")).show()
+    +-----------+
+    |every(flag)|
+    +-----------+
+    |      false|
+    +-----------+
     """
     return _invoke_function_over_columns("every", col)
 
@@ -2904,27 +3023,35 @@ def some(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
-    >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
-    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
-    >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
-    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
-    >>> df.select(some("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |        false|
-    +-------------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[True], [True], [True]], ["flag"]
+    ... ).select(sf.some("flag")).show()
+    +----------+
+    |some(flag)|
+    +----------+
+    |      true|
+    +----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[True], [False], [True]], ["flag"]
+    ... ).select(sf.some("flag")).show()
+    +----------+
+    |some(flag)|
+    +----------+
+    |      true|
+    +----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [[False], [False], [False]], ["flag"]
+    ... ).select(sf.some("flag")).show()
+    +----------+
+    |some(flag)|
+    +----------+
+    |     false|
+    +----------+
     """
     return _invoke_function_over_columns("some", col)
 
@@ -4546,22 +4673,23 @@ def approx_percentile(
 
     Examples
     --------
-    >>> key = (col("id") % 3).alias("key")
-    >>> value = (randn(42) + key * 10).alias("value")
+    >>> import pyspark.sql.functions as sf
+    >>> key = (sf.col("id") % 3).alias("key")
+    >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
     >>> df.select(
-    ...     approx_percentile("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
+    ...     sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)
     ... ).printSchema()
     root
-     |-- quantiles: array (nullable = true)
+     |-- approx_percentile(value, array(0.25, 0.5, 0.75), 1000000): array (nullable = true)
      |    |-- element: double (containsNull = false)
 
     >>> df.groupBy("key").agg(
-    ...     approx_percentile("value", 0.5, lit(1000000)).alias("median")
+    ...     sf.approx_percentile("value", 0.5, sf.lit(1000000))
     ... ).printSchema()
     root
      |-- key: long (nullable = true)
-     |-- median: double (nullable = true)
+     |-- approx_percentile(value, 0.5, 1000000): double (nullable = true)
     """
     sc = get_active_spark_context()
 
@@ -5603,15 +5731,25 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None, 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(first_value('c1').alias('a'), first_value('c2').alias('b')).collect()
-    [Row(a=None, b=1)]
-    >>> df.select(first_value('c1', True).alias('a'), first_value('c2', True).alias('b')).collect()
-    [Row(a='a', b=1)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(None, 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["a", "b"]
+    ... ).select(sf.first_value('a'), sf.first_value('b')).show()
+    +--------------+--------------+
+    |first_value(a)|first_value(b)|
+    +--------------+--------------+
+    |          NULL|             1|
+    +--------------+--------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(None, 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["a", "b"]
+    ... ).select(sf.first_value('a', True), sf.first_value('b', True)).show()
+    +--------------+--------------+
+    |first_value(a)|first_value(b)|
+    +--------------+--------------+
+    |             a|             1|
+    +--------------+--------------+
     """
     if ignoreNulls is None:
         return _invoke_function_over_columns("first_value", col)
@@ -5641,15 +5779,25 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             (None, 2)], ["c1", "c2"])
-    >>> df.select(last_value('c1').alias('a'), last_value('c2').alias('b')).collect()
-    [Row(a=None, b=2)]
-    >>> df.select(last_value('c1', True).alias('a'), last_value('c2', True).alias('b')).collect()
-    [Row(a='b', b=2)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), (None, 2)], ["a", "b"]
+    ... ).select(sf.last_value('a'), sf.last_value('b')).show()
+    +-------------+-------------+
+    |last_value(a)|last_value(b)|
+    +-------------+-------------+
+    |         NULL|            2|
+    +-------------+-------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), (None, 2)], ["a", "b"]
+    ... ).select(sf.last_value('a', True), sf.last_value('b', True)).show()
+    +-------------+-------------+
+    |last_value(a)|last_value(b)|
+    +-------------+-------------+
+    |            b|            2|
+    +-------------+-------------+
     """
     if ignoreNulls is None:
         return _invoke_function_over_columns("last_value", col)
@@ -5811,8 +5959,8 @@ def curdate() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(curdate()).show() # doctest: +SKIP
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.curdate()).show() # doctest: +SKIP
     +--------------+
     |current_date()|
     +--------------+
@@ -6558,13 +6706,35 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
-    >>> df.select(dateadd(df.dt, 1).alias('next_date')).collect()
-    [Row(next_date=datetime.date(2015, 4, 9))]
-    >>> df.select(dateadd(df.dt, df.add.cast('integer')).alias('next_date')).collect()
-    [Row(next_date=datetime.date(2015, 4, 10))]
-    >>> df.select(dateadd('dt', -1).alias('prev_date')).collect()
-    [Row(prev_date=datetime.date(2015, 4, 7))]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('2015-04-08', 2,)], ['dt', 'add']
+    ... ).select(sf.dateadd("dt", 1)).show()
+    +---------------+
+    |date_add(dt, 1)|
+    +---------------+
+    |     2015-04-09|
+    +---------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('2015-04-08', 2,)], ['dt', 'add']
+    ... ).select(sf.dateadd("dt", sf.lit(2))).show()
+    +---------------+
+    |date_add(dt, 2)|
+    +---------------+
+    |     2015-04-10|
+    +---------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('2015-04-08', 2,)], ['dt', 'add']
+    ... ).select(sf.dateadd("dt", -1)).show()
+    +----------------+
+    |date_add(dt, -1)|
+    +----------------+
+    |      2015-04-07|
+    +----------------+
     """
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("dateadd", start, days)
@@ -7031,9 +7201,15 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
-    >>> df.select(xpath_number(df.x, lit('sum(a/b)')).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('<a><b>1</b><b>2</b></a>',)], ['x']
+    ... ).select(sf.xpath_number('x', sf.lit('sum(a/b)'))).show()
+    +-------------------------+
+    |xpath_number(x, sum(a/b))|
+    +-------------------------+
+    |                      3.0|
+    +-------------------------+
     """
     return _invoke_function_over_columns("xpath_number", xml, path)
 
@@ -7926,7 +8102,8 @@ def current_schema() -> Column:
 
     Examples
     --------
-    >>> spark.range(1).select(current_schema()).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_schema()).show()
     +------------------+
     |current_database()|
     +------------------+
@@ -7962,7 +8139,8 @@ def user() -> Column:
 
     Examples
     --------
-    >>> spark.range(1).select(user()).show() # doctest: +SKIP
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.user()).show() # doctest: +SKIP
     +--------------+
     |current_user()|
     +--------------+
@@ -9228,13 +9406,35 @@ def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "regexp"])
-    >>> df.select(regexp('str', lit(r'(\d+)')).alias('d')).collect()
-    [Row(d=True)]
-    >>> df.select(regexp('str', lit(r'\d{2}b')).alias('d')).collect()
-    [Row(d=False)]
-    >>> df.select(regexp("str", col("regexp")).alias('d')).collect()
-    [Row(d=True)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp('str', sf.lit(r'(\d+)'))).show()
+    +------------------+
+    |REGEXP(str, (\d+))|
+    +------------------+
+    |              true|
+    +------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp('str', sf.lit(r'\d{2}b'))).show()
+    +-------------------+
+    |REGEXP(str, \d{2}b)|
+    +-------------------+
+    |              false|
+    +-------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp('str', sf.col("regexp"))).show()
+    +-------------------+
+    |REGEXP(str, regexp)|
+    +-------------------+
+    |               true|
+    +-------------------+
     """
     return _invoke_function_over_columns("regexp", str, regexp)
 
@@ -9259,13 +9459,35 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "regexp"])
-    >>> df.select(regexp_like('str', lit(r'(\d+)')).alias('d')).collect()
-    [Row(d=True)]
-    >>> df.select(regexp_like('str', lit(r'\d{2}b')).alias('d')).collect()
-    [Row(d=False)]
-    >>> df.select(regexp_like("str", col("regexp")).alias('d')).collect()
-    [Row(d=True)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp_like('str', sf.lit(r'(\d+)'))).show()
+    +-----------------------+
+    |REGEXP_LIKE(str, (\d+))|
+    +-----------------------+
+    |                   true|
+    +-----------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp_like('str', sf.lit(r'\d{2}b'))).show()
+    +------------------------+
+    |REGEXP_LIKE(str, \d{2}b)|
+    +------------------------+
+    |                   false|
+    +------------------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("1a 2b 14m", r"(\d+)")], ["str", "regexp"]
+    ... ).select(sf.regexp_like('str', sf.col("regexp"))).show()
+    +------------------------+
+    |REGEXP_LIKE(str, regexp)|
+    +------------------------+
+    |                    true|
+    +------------------------+
     """
     return _invoke_function_over_columns("regexp_like", str, regexp)
 
@@ -10006,12 +10228,25 @@ def substr(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("Spark SQL", 5, 1,)], ["a", "b", "c"])
-    >>> df.select(substr(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r='k')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("Spark SQL", 5, 1,)], ["a", "b", "c"]
+    ... ).select(sf.substr("a", "b", "c")).show()
+    +---------------+
+    |substr(a, b, c)|
+    +---------------+
+    |              k|
+    +---------------+
 
-    >>> df.select(substr(df.a, df.b).alias('r')).collect()
-    [Row(r='k SQL')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("Spark SQL", 5, 1,)], ["a", "b", "c"]
+    ... ).select(sf.substr("a", "b")).show()
+    +------------------------+
+    |substr(a, b, 2147483647)|
+    +------------------------+
+    |                   k SQL|
+    +------------------------+
     """
     if len is not None:
         return _invoke_function_over_columns("substr", str, pos, len)
@@ -10071,9 +10306,15 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("aa%d%s", 123, "cc",)], ["a", "b", "c"])
-    >>> df.select(printf(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r='aa123cc')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("aa%d%s", 123, "cc",)], ["a", "b", "c"]
+    ... ).select(sf.printf("a", "b", "c")).show()
+    +---------------+
+    |printf(a, b, c)|
+    +---------------+
+    |        aa123cc|
+    +---------------+
     """
     sc = get_active_spark_context()
     return _invoke_function("printf", _to_java_column(format), _to_seq(sc, cols, _to_java_column))
@@ -10144,12 +10385,24 @@ def position(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("bar", "foobarbar", 5,)], ["a", "b", "c"])
-    >>> df.select(position(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r=7)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [("bar", "foobarbar", 5,)], ["a", "b", "c"]
+    ... ).select(sf.position("a", "b", "c")).show()
+    +-----------------+
+    |position(a, b, c)|
+    +-----------------+
+    |                7|
+    +-----------------+
 
-    >>> df.select(position(df.a, df.b).alias('r')).collect()
-    [Row(r=4)]
+    >>> spark.createDataFrame(
+    ...     [("bar", "foobarbar", 5,)], ["a", "b", "c"]
+    ... ).select(sf.position("a", "b")).show()
+    +-----------------+
+    |position(a, b, 1)|
+    +-----------------+
+    |                4|
+    +-----------------+
     """
     if start is not None:
         return _invoke_function_over_columns("position", substr, str, start)
@@ -10248,9 +10501,13 @@ def char(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(65,)], ['a'])
-    >>> df.select(char(df.a).alias('r')).collect()
-    [Row(r='A')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.char(sf.lit(65))).show()
+    +--------+
+    |char(65)|
+    +--------+
+    |       A|
+    +--------+
     """
     return _invoke_function_over_columns("char", col)
 
@@ -10301,9 +10558,13 @@ def char_length(str: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("SparkSQL",)], ['a'])
-    >>> df.select(char_length(df.a).alias('r')).collect()
-    [Row(r=8)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.char_length(sf.lit("SparkSQL"))).show()
+    +---------------------+
+    |char_length(SparkSQL)|
+    +---------------------+
+    |                    8|
+    +---------------------+
     """
     return _invoke_function_over_columns("char_length", str)
 
@@ -10324,9 +10585,13 @@ def character_length(str: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("SparkSQL",)], ['a'])
-    >>> df.select(character_length(df.a).alias('r')).collect()
-    [Row(r=8)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.character_length(sf.lit("SparkSQL"))).show()
+    +--------------------------+
+    |character_length(SparkSQL)|
+    +--------------------------+
+    |                         8|
+    +--------------------------+
     """
     return _invoke_function_over_columns("character_length", str)
 
@@ -10589,9 +10854,13 @@ def lcase(str: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("Spark",)], ['a'])
-    >>> df.select(lcase(df.a).alias('r')).collect()
-    [Row(r='spark')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.lcase(sf.lit("Spark"))).show()
+    +------------+
+    |lcase(Spark)|
+    +------------+
+    |       spark|
+    +------------+
     """
     return _invoke_function_over_columns("lcase", str)
 
@@ -10610,9 +10879,13 @@ def ucase(str: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("Spark",)], ['a'])
-    >>> df.select(ucase(df.a).alias('r')).collect()
-    [Row(r='SPARK')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.ucase(sf.lit("Spark"))).show()
+    +------------+
+    |ucase(Spark)|
+    +------------+
+    |       SPARK|
+    +------------+
     """
     return _invoke_function_over_columns("ucase", str)
 
@@ -12318,9 +12591,17 @@ def cardinality(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
-    >>> df.select(cardinality(df.data).alias('r')).collect()
-    [Row(r=3), Row(r=1), Row(r=0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [([1, 2, 3],),([1],),([],)], ['data']
+    ... ).select(sf.cardinality("data")).show()
+    +-----------------+
+    |cardinality(data)|
+    +-----------------+
+    |                3|
+    |                1|
+    |                0|
+    +-----------------+
     """
     return _invoke_function_over_columns("cardinality", col)
 
@@ -14177,26 +14458,27 @@ def make_timestamp_ltz(
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
     ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone).alias('r')
+    >>> df.select(sf.make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
     ... ).show(truncate=False)
-    +-----------------------+
-    |r                      |
-    +-----------------------+
-    |2014-12-27 21:30:45.887|
-    +-----------------------+
+    +--------------------------------------------------------------+
+    |make_timestamp_ltz(year, month, day, hour, min, sec, timezone)|
+    +--------------------------------------------------------------+
+    |2014-12-27 21:30:45.887                                       |
+    +--------------------------------------------------------------+
 
-    >>> df.select(make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec).alias('r')
+    >>> df.select(sf.make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
-    +-----------------------+
-    |r                      |
-    +-----------------------+
-    |2014-12-28 06:30:45.887|
-    +-----------------------+
+    +----------------------------------------------------+
+    |make_timestamp_ltz(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |2014-12-28 06:30:45.887                             |
+    +----------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -14245,17 +14527,18 @@ def make_timestamp_ntz(
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
     ...     ["year", "month", "day", "hour", "min", "sec"])
-    >>> df.select(make_timestamp_ntz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec).alias('r')
+    >>> df.select(sf.make_timestamp_ntz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
-    +-----------------------+
-    |r                      |
-    +-----------------------+
-    |2014-12-28 06:30:45.887|
-    +-----------------------+
+    +----------------------------------------------------+
+    |make_timestamp_ntz(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |2014-12-28 06:30:45.887                             |
+    +----------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns(
@@ -14689,9 +14972,15 @@ def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
-    >>> df.select(ifnull(df.e, lit(8)).alias('r')).collect()
-    [Row(r=8), Row(r=1)]
+    >>> df.select(sf.ifnull(df.e, sf.lit(8))).show()
+    +------------+
+    |ifnull(e, 8)|
+    +------------+
+    |           8|
+    |           1|
+    +------------+
     """
     return _invoke_function_over_columns("ifnull", col1, col2)
 
@@ -15057,9 +15346,13 @@ def sha(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("Spark",)], ["a"])
-    >>> df.select(sha(df.a).alias('r')).collect()
-    [Row(r='85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.sha(sf.lit("Spark"))).show()
+    +--------------------+
+    |          sha(Spark)|
+    +--------------------+
+    |85f5955f4b27a9a4c...|
+    +--------------------+
     """
     return _invoke_function_over_columns("sha", col)
 
@@ -15137,12 +15430,19 @@ def java_method(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
-    >>> df.select(
-    ...     java_method(lit("java.util.UUID"), lit("fromString"), df.a).alias('r')
-    ... ).collect()
-    [Row(r='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
-
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(
+    ...     sf.java_method(
+    ...         sf.lit("java.util.UUID"),
+    ...         sf.lit("fromString"),
+    ...         sf.lit("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2")
+    ...     )
+    ... ).show(truncate=False)
+    +-----------------------------------------------------------------------------+
+    |java_method(java.util.UUID, fromString, a5cf6c42-0c85-418f-af6c-3e4e5b1328f2)|
+    +-----------------------------------------------------------------------------+
+    |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2                                         |
+    +-----------------------------------------------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("java_method", cols)
 
