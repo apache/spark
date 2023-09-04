@@ -9943,7 +9943,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 
 
 @try_remote_functions
-def repeat(col: "ColumnOrName", n: int) -> Column:
+def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
 
@@ -9956,8 +9956,11 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    n : int
+    n : :class:`~pyspark.sql.Column` or str or int
         number of times to repeat value.
+
+        .. versionchanged:: 4.0.0
+           `n` now accepts column and column name.
 
     Returns
     -------
@@ -9966,11 +9969,38 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('ab',)], ['s',])
-    >>> df.select(repeat(df.s, 3).alias('s')).collect()
-    [Row(s='ababab')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab',)], ['s',]
+    ... ).select(sf.repeat("s", 3)).show()
+    +------------+
+    |repeat(s, 3)|
+    +------------+
+    |      ababab|
+    +------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab',)], ['s',]
+    ... ).select(sf.repeat("s", sf.lit(4))).show()
+    +------------+
+    |repeat(s, 4)|
+    +------------+
+    |    abababab|
+    +------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab', 5,)], ['s', 't']
+    ... ).select(sf.repeat("s", 't')).show()
+    +------------+
+    |repeat(s, t)|
+    +------------+
+    |  ababababab|
+    +------------+
     """
-    return _invoke_function("repeat", _to_java_column(col), n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("repeat", col, n)
 
 
 @try_remote_functions
