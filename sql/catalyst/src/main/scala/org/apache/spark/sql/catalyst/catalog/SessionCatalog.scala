@@ -246,8 +246,14 @@ class SessionCatalog(
   }
 
   private def requireDbExists(db: String): Unit = {
-    if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+    // 'default' database always exists in the system and cannot be dropped by anyone.
+    // So the intention here is to check for other databases which would throw
+    // NoSuchDatabaseException if it doesn't exist.
+    val dbName = format(db)
+    if (dbName != DEFAULT_DATABASE) {
+      if (!databaseExists(db)) {
+        throw new NoSuchDatabaseException(db)
+      }
     }
   }
 
