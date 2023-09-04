@@ -552,15 +552,23 @@ def cbrt(col: "ColumnOrName") -> Column:
 cbrt.__doc__ = pysparkfuncs.cbrt.__doc__
 
 
-def ceil(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ceil", col)
+def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("ceil", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
 
 
-def ceiling(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ceiling", col)
+def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("ceiling", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
