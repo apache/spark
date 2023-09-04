@@ -139,6 +139,7 @@ def wrap_arrow_batch_udf(f, return_type):
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
+    @fail_on_stopiteration
     def evaluate(*args: pd.Series, **kwargs: pd.Series) -> pd.Series:
         keys = list(kwargs.keys())
         len_args = len(args)
@@ -150,18 +151,6 @@ def wrap_arrow_batch_udf(f, return_type):
                 for row in zip(*args, *[kwargs[key] for key in keys])
             ]
         )
-
-    def verify_result_type(result):
-        if not hasattr(result, "__len__"):
-            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
-            raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
-                    "expected": pd_type,
-                    "actual": type(result).__name__,
-                },
-            )
-        return result
 
     def verify_result_length(result, length):
         if len(result) != length:
@@ -175,9 +164,7 @@ def wrap_arrow_batch_udf(f, return_type):
         return result
 
     return lambda *a, **kw: (
-        verify_result_length(
-            verify_result_type(evaluate(*a, **kw)), len((list(a) + list(kw.values()))[0])
-        ),
+        verify_result_length(evaluate(*a, **kw), len((list(a) + list(kw.values()))[0])),
         arrow_return_type,
     )
 
@@ -562,7 +549,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         else:
             chained_func = chain(chained_func, f)
 
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+    if eval_type in (
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+    ):
         func = chained_func
     else:
         # make sure StopIteration's raised in the user code are not ignored

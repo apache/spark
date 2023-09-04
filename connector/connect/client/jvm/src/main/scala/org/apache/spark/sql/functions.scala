@@ -3630,6 +3630,15 @@ object functions {
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
+
+  /**
    * Returns the Spark version. The string contains 2 fields, the first being a release version
    * and the second being a git revision.
    *
