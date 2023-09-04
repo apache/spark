@@ -420,17 +420,17 @@ class JacksonParser(
     case VALUE_STRING if parser.getTextLength < 1 && allowEmptyString =>
       dataType match {
         case FloatType | DoubleType | TimestampType | DateType =>
-          throw QueryExecutionErrors.emptyJsonFieldValueError(dataType)
+          throw EmptyJsonFieldValueException(dataType)
         case _ => null
       }
 
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw QueryExecutionErrors.emptyJsonFieldValueError(dataType)
+      throw EmptyJsonFieldValueException(dataType)
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw QueryExecutionErrors.cannotParseJSONFieldError(parser, token, dataType)
+      throw CannotParseJSONFieldException(parser.getCurrentName, parser.getText, token, dataType)
   }
 
   /**
@@ -459,6 +459,11 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case err: PartialValueException if enablePartialResults =>
+              badRecordException = badRecordException.orElse(Some(err.cause))
+              row.update(index, err.partialResult)
+              skipRow = structFilters.skipRow(row, index)
+              bitmask(index) = false
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
@@ -508,7 +513,7 @@ class JacksonParser(
     if (badRecordException.isEmpty) {
       mapData
     } else {
-      throw PartialResultException(InternalRow(mapData), badRecordException.get)
+      throw PartialMapDataResultException(mapData, badRecordException.get)
     }
   }
 
@@ -543,8 +548,19 @@ class JacksonParser(
       throw PartialResultArrayException(arrayData.toArray[InternalRow](schema),
         badRecordException.get)
     } else {
-      throw PartialResultException(InternalRow(arrayData), badRecordException.get)
+      throw PartialArrayDataResultException(arrayData, badRecordException.get)
     }
+  }
+
+  /**
+   * Converts the non-stacktrace exceptions to user-friendly QueryExecutionErrors.
+   */
+  private def convertCauseForPartialResult(err: Throwable): Throwable = err match {
+    case CannotParseJSONFieldException(fieldName, fieldValue, jsonType, dataType) =>
+      QueryExecutionErrors.cannotParseJSONFieldError(fieldName, fieldValue, jsonType, dataType)
+    case EmptyJsonFieldValueException(dataType) =>
+      QueryExecutionErrors.emptyJsonFieldValueError(dataType)
+    case _ => err
   }
 
   /**
@@ -589,12 +605,25 @@ class JacksonParser(
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => Array(row),
-          cause)
+          convertCauseForPartialResult(cause))
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(
           record = () => recordLiteral(record),
           partialResults = () => rows,
           cause)
+      // These exceptions should never be thrown outside of JacksonParser.
+      // They are used for the control flow in the parser. We add them here for completeness
+      // since they also indicate a bad record.
+      case PartialArrayDataResultException(arrayData, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResults = () => Array(InternalRow(arrayData)),
+          convertCauseForPartialResult(cause))
+      case PartialMapDataResultException(mapData, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResults = () => Array(InternalRow(mapData)),
+          convertCauseForPartialResult(cause))
     }
   }
 }
