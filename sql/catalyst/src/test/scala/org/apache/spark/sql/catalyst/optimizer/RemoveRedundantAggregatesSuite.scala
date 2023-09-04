@@ -31,7 +31,8 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
-      RemoveRedundantAggregates) :: Nil
+      RemoveRedundantAggregates,
+      RemoveNoopOperators) :: Nil
   }
 
   private val relation = LocalRelation($"a".int, $"b".int)
@@ -53,6 +54,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"a")($"a")
         .analyze
       val expected = relation
+        .select($"a")
         .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
@@ -68,6 +70,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"a")($"a")
         .analyze
       val expected = relation
+        .select($"a")
         .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
@@ -81,6 +84,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .groupBy($"a")($"a")
       .analyze
     val expected = relation
+      .select($"a")
       .groupBy($"a")($"a")
       .analyze
     val optimized = Optimize.execute(query)
@@ -94,7 +98,8 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"c")($"c")
         .analyze
       val expected = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as "c")
+        .select(($"a" + $"b") as "c")
+        .groupBy($"c")($"c")
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expected)
@@ -107,6 +112,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .groupBy($"a")($"a", rand(0) as "c")
       .analyze
     val expected = relation
+      .select($"a")
       .groupBy($"a")($"a", rand(0) as "c")
       .analyze
     val optimized = Optimize.execute(query)
@@ -119,7 +125,9 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
-      .groupBy($"a", $"c")($"a", rand(0) as "c")
+      .select($"a", $"b", rand(0) as "_nondeterministic")
+      .select($"a", $"_nondeterministic" as "c")
+      .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -152,7 +160,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate - upper has contains foldable expressions") {
     val originalQuery = x.groupBy($"a", $"b")($"a", $"b").groupBy($"a")($"a", TrueLiteral).analyze
-    val correctAnswer = x.groupBy($"a")($"a", TrueLiteral).analyze
+    val correctAnswer = x.select($"a").groupBy($"a")($"a", TrueLiteral).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -175,7 +183,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val expected = relation
       .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
-      .select($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -188,7 +195,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
-        .select("x.a".attr, "x.b".attr)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, correctAnswer.analyze)
@@ -202,7 +208,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "d".attr)("x.a".attr, "d".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
-        .select("x.a".attr, "d".attr)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, correctAnswer.analyze)
@@ -232,7 +237,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
-        .select("x.a".attr, "x.b".attr)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr)
 
@@ -248,7 +252,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val correctAnswer = relation
       .groupBy($"a")($"a", count($"b").as("cnt"))
-      .select($"a", $"cnt")
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
