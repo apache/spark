@@ -910,7 +910,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             F.sum,
-            accepted_spark_types=(NumericType, BooleanType),
+            accepted_spark_types=(NumericType, BooleanType, StringType),
             bool_to_numeric=True,
             min_count=min_count,
         )
@@ -3534,7 +3534,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for label in psdf._internal.column_labels:
                 psser = psdf._psser_for(label)
                 input_scol = psser._dtype_op.nan_to_null(psser).spark.column
-                output_scol = sfun(input_scol)
+                if sfun.__name__ == "sum" and isinstance(
+                    psdf._internal.spark_type_for(label), StringType
+                ):
+                    output_scol = F.concat_ws("", F.collect_list(input_scol))
+                else:
+                    output_scol = sfun(input_scol)
 
                 if min_count > 0:
                     output_scol = F.when(
