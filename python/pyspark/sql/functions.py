@@ -15767,9 +15767,10 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
     >>> df.select(
-    ...     try_reflect(lit("java.util.UUID"), lit("fromString"), df.a).alias('r')
+    ...     sf.try_reflect(lit("java.util.UUID"), sf.lit("fromString"), df.a).alias('r')
     ... ).collect()
     [Row(r='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
     """
