@@ -234,10 +234,17 @@ abstract class BinaryArithmetic extends BinaryOperator
     case _ => super.checkInputDataTypes()
   }
 
-  override def dataType: DataType = (left.dataType, right.dataType) match {
-    case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-      resultDecimalType(p1, s1, p2, s2)
-    case _ => left.dataType
+  override def dataType: DataType = (left, right) match {
+    case (_, r: AttributeReference) if !r.dataType.isInstanceOf[DecimalType] =>
+      left.dataType
+    case (l: AttributeReference, _) if !l.dataType.isInstanceOf[DecimalType] =>
+      left.dataType
+    case (_, _) =>
+      (left.dataType, right.dataType) match {
+        case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+          resultDecimalType(p1, s1, p2, s2)
+        case _ => left.dataType
+      }
   }
 
   // When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
