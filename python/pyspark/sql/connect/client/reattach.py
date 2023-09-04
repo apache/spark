@@ -131,9 +131,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        # on first try, we use the existing iterator.
-                        if not attempt.is_first_try():
-                            # on retry, the iterator is borked, so we need a new one
+                        if self._iterator is None:
+                            # we reattach new iterator if it was unset by self._call_iter
                             self._iterator = iter(
                                 self._stub.ReattachExecute(
                                     self._create_reattach_execute_request(), metadata=self._metadata
@@ -255,7 +254,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 )
                 raise RetryException()
             else:
+                # Remove the iterator, so that a new one will be created after retry.
+                self._iterator = None
                 raise e
+        except Exception as e:
+            # Remove the iterator, so that a new one will be created after retry.
+            self._iterator = None
+            raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(

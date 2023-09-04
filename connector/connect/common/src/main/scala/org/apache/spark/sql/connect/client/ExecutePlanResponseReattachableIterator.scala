@@ -91,8 +91,8 @@ class ExecutePlanResponseReattachableIterator(
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
   // throw error on first iter.hasNext() or iter.next()
-  private var iter: java.util.Iterator[proto.ExecutePlanResponse] =
-    rawBlockingStub.executePlan(initialRequest)
+  private var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
+    Some(rawBlockingStub.executePlan(initialRequest))
 
   override def next(): proto.ExecutePlanResponse = synchronized {
     // hasNext will trigger reattach in case the stream completed without resultComplete
@@ -102,14 +102,10 @@ class ExecutePlanResponseReattachableIterator(
 
     try {
       // Get next response, possibly triggering reattach in case of stream error.
-      var firstTry = true
       val ret = retry {
-        if (firstTry) {
-          // on first try, we use the existing iter.
-          firstTry = false
-        } else {
+        if (iter.isEmpty) {
           // on retry, the iter is borked, so we need a new one
-          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
         }
         callIter(_.next())
       }
@@ -134,15 +130,11 @@ class ExecutePlanResponseReattachableIterator(
       // After response complete response
       return false
     }
-    var firstTry = true
     try {
       retry {
-        if (firstTry) {
-          // on first try, we use the existing iter.
-          firstTry = false
-        } else {
+        if (iter.isEmpty) {
           // on retry, the iter is borked, so we need a new one
-          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+          iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
         }
         var hasNext = callIter(_.hasNext())
         // Graceful reattach:
@@ -150,7 +142,7 @@ class ExecutePlanResponseReattachableIterator(
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
           do {
-            iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+            iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
             assert(!resultComplete) // shouldn't change...
             hasNext = callIter(_.hasNext())
             // It's possible that the new iter will be empty, so we need to loop to get another.
@@ -208,7 +200,8 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
-      iterFun(iter)
+      assert(iter.isDefined)
+      iterFun(iter.get)
     } catch {
       case ex: StatusRuntimeException
           if Option(StatusProto.fromThrowable(ex))
@@ -221,6 +214,10 @@ class ExecutePlanResponseReattachableIterator(
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = rawBlockingStub.executePlan(initialRequest)
         throw new GrpcRetryHandler.RetryException
+      case NonFatal(e) =>
+        // Remove the iterator, so that a new one will be created after retry.
+        iter = None
+        throw e
     }
   }
 
