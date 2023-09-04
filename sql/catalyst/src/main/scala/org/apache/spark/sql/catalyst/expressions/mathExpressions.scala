@@ -67,7 +67,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
   override def toString: String = s"$prettyName($child)"
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).
+    getOrElse(name.toLowerCase(Locale.ROOT))
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
