@@ -1758,10 +1758,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> spark.range(10).coalesce(1).explain()
-        == Physical Plan ==
-        Coalesce 1
-        +- ... Range (0, 10, step=1, splits=...)
+        >>> from pyspark.sql import functions as sf
+        >>> spark.range(0, 10, 1, 3).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        +---------+
+
+        >>> from pyspark.sql import functions as sf
+        >>> spark.range(0, 10, 1, 3).coalesce(1).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        +---------+
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
@@ -1805,32 +1822,78 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.range(0, 64, 1, 9).withColumn(
+        ...     "name", sf.concat(sf.lit("name_"), sf.col("id").cast("string"))
+        ... ).withColumn(
+        ...     "age", sf.col("id") - 32
+        ... )
+        >>> df.select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        |        7|
+        |        8|
+        +---------+
 
         Repartition the data into 10 partitions.
 
-        >>> df.repartition(10).explain()
-        == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- Exchange RoundRobinPartitioning(10), REPARTITION_BY_NUM, ...
-        ...
+        >>> df.repartition(10).select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        |        7|
+        |        8|
+        |        9|
+        +---------+
 
         Repartition the data into 7 partitions by 'age' column.
 
-        >>> df.repartition(7, "age").explain()
-        == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- Exchange hashpartitioning(age..., 7), REPARTITION_BY_NUM, ...
-        ...
+        >>> df.repartition(7, "age").select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        |        3|
+        |        4|
+        |        5|
+        |        6|
+        +---------+
 
         Repartition the data into 7 partitions by 'age' and 'name columns.
 
-        >>> df.repartition(3, "name", "age").explain()
-        == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- Exchange hashpartitioning(name..., age..., 3), REPARTITION_BY_NUM, ...
-        ...
+        >>> df.repartition(3, "name", "age").select(
+        ...     sf.spark_partition_id().alias("partition")
+        ... ).distinct().sort("partition").show()
+        +---------+
+        |partition|
+        +---------+
+        |        0|
+        |        1|
+        |        2|
+        +---------+
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
@@ -1898,18 +1961,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-
         Repartition the data into 2 partitions by range in 'age' column.
-        For example, the first partition can have ``(14, "Tom")``, and the second
-        partition would have ``(16, "Bob")`` and ``(23, "Alice")``.
+        For example, the first partition can have ``(14, "Tom")`` and ``(16, "Bob")``,
+        and the second partition would have ``(23, "Alice")``.
 
-        >>> df.repartitionByRange(2, "age").explain()
-        == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- Exchange rangepartitioning(age... ASC NULLS FIRST, 2), REPARTITION_BY_NUM, ...
-        ...
+        >>> from pyspark.sql import functions as sf
+        >>> spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"]
+        ... ).repartitionByRange(2, "age").select(
+        ...     "age", "name", sf.spark_partition_id()
+        ... ).show()
+        +---+-----+--------------------+
+        |age| name|SPARK_PARTITION_ID()|
+        +---+-----+--------------------+
+        | 14|  Tom|                   0|
+        | 16|  Bob|                   0|
+        | 23|Alice|                   1|
+        +---+-----+--------------------+
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
