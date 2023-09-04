@@ -1808,6 +1808,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "NULL" : {
+        "message" : [
+          "expects a non-NULL value."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."

@@ -87,8 +87,6 @@ class FunctionsTestsMixin:
             # https://issues.apache.org/jira/browse/SPARK-44788
             "from_xml",
             "schema_of_xml",
-            # TODO: reflect function will soon be added and removed from this list
-            "try_reflect",
         }
 
         self.assertEqual(
