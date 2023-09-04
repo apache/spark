@@ -60,9 +60,9 @@ class ResolveAliasesSuite extends AnalysisTest {
   }
 
   test("SPARK-33989: test unary expression") {
-    checkAliasName(t1.select(Floor(Literal(null))), "FLOOR(NULL)")
-    checkAliasName(t1.select(Floor("a".attr)), "FLOOR(a)")
-    checkAliasName(t1.select(Floor("a".attr.cast(DoubleType))), "FLOOR(CAST(a AS DOUBLE))")
+    checkAliasName(t1.select(Floor(Literal(null))), "floor(NULL)")
+    checkAliasName(t1.select(Floor("a".attr)), "floor(a)")
+    checkAliasName(t1.select(Floor("a".attr.cast(DoubleType))), "floor(CAST(a AS DOUBLE))")
   }
 
   test("SPARK-33989: test binary expression") {
