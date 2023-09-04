@@ -1916,7 +1916,7 @@ def cbrt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def ceil(col: "ColumnOrName") -> Column:
+def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Computes the ceiling of the given value.
 
@@ -1929,6 +1929,10 @@ def ceil(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -1937,48 +1941,76 @@ def ceil(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(ceil(lit(-0.1))).show()
-    +----------+
-    |CEIL(-0.1)|
-    +----------+
-    |         0|
-    +----------+
-    """
-    return _invoke_function_over_columns("ceil", col)
-
-
-@try_remote_functions
-def ceiling(col: "ColumnOrName") -> Column:
-    """
-    Computes the ceiling of the given value.
-
-    .. versionadded:: 1.4.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        the column for computed results.
-
-    Examples
-    --------
-    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
     |CEIL(-0.1)|
     +----------+
     |         0|
     +----------+
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceil(sf.lit(-0.1), 1)).show()
+    +-------------+
+    |ceil(-0.1, 1)|
+    +-------------+
+    |         -0.1|
+    +-------------+
     """
-    return _invoke_function_over_columns("ceiling", col)
+    if scale is None:
+        return _invoke_function_over_columns("ceil", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceil", col, scale)
+
+
+@try_remote_functions
+def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Computes the ceiling of the given value.
+
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1))).show()
+    +-------------+
+    |ceiling(-0.1)|
+    +-------------+
+    |            0|
+    +-------------+
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1), 1)).show()
+    +----------------+
+    |ceiling(-0.1, 1)|
+    +----------------+
+    |            -0.1|
+    +----------------+
+    """
+    if scale is None:
+        return _invoke_function_over_columns("ceiling", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 @try_remote_functions
