@@ -79,12 +79,10 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     semaphore.drainPermits()
-    if (ammoniteOut != null) {
-      ammoniteOut.reset()
-    }
   }
 
   def runCommandsInShell(input: String): String = {
+    ammoniteOut.reset()
     require(input.nonEmpty)
     // Pad the input with a semaphore release so that we know when the execution of the provided
     // input is complete.
@@ -265,6 +263,19 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """.stripMargin
     val output = runCommandsInShell(input)
     assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
+  }
+
+  test("Single Cell Compilation") {
+    val input =
+      """
+        |case class C1(value: Int)
+        |case class C2(value: Int)
+        |val h1 = classOf[C1].getDeclaringClass
+        |val h2 = classOf[C2].getDeclaringClass
+        |val same = h1 == h2
+        |""".stripMargin
+    assertContains("same: Boolean = false", runCommandsInShell(input))
+    assertContains("same: Boolean = true", runCommandsUsingSingleCellInShell(input))
   }
 
   test("Local relation containing REPL generated class") {

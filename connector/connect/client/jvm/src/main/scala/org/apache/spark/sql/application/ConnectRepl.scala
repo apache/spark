@@ -122,8 +122,11 @@ object ExtendedCodeClassWrapper extends CodeWrapper {
       printCode: String,
       indexedWrapper: Name,
       extraCode: String): (String, String, Int) = {
-    val augmentedCode =
-      "org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)\n" + code
-    CodeClassWrapper(augmentedCode, source, imports, printCode, indexedWrapper, extraCode)
+    val (top, bottom, level) =
+      CodeClassWrapper(code, source, imports, printCode, indexedWrapper, extraCode)
+    // Make sure we register the Helper before anything else, so outer scopes work as expected.
+    val augmentedTop = top +
+      "\norg.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)\n"
+    (augmentedTop, bottom, level)
   }
 }
