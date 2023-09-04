@@ -105,6 +105,10 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     getCleanString(ammoniteOut)
   }
 
+  def runCommandsUsingSingleCellInShell(input: String): String = {
+    runCommandsInShell("{\n" + input + "\n}")
+  }
+
   def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(
@@ -263,6 +267,18 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
   }
 
+  test("Local relation containing REPL generated class") {
+    val input =
+      """
+        |case class MyTestClass(value: Int)
+        |val data = (0 to 10).map(MyTestClass)
+        |spark.createDataset(data).map(mtc => mtc.value).select(sum($"value")).as[Long].head
+        |""".stripMargin
+    val expected = "Long = 55L"
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
+  }
+
   test("Collect REPL generated class") {
     val input =
       """
@@ -275,8 +291,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => s"MyTestClass(${mtc.value})").
         |  mkString("[", ", ", "]")
           """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("""String = "[MyTestClass(1), MyTestClass(3)]"""", output)
+    val expected = """String = "[MyTestClass(1), MyTestClass(3)]""""
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("REPL class in encoder") {
@@ -288,8 +305,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => mtc.value).
         |  collect()
       """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("Array[Int] = Array(0, 1, 2)", output)
+    val expected = "Array[Int] = Array(0, 1, 2)"
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("REPL class in UDF") {
@@ -301,8 +319,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => s"MyTestClass(${mtc.value})").
         |  mkString("[", ", ", "]")
       """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("""String = "[MyTestClass(0), MyTestClass(1)]"""", output)
+    val expected = """String = "[MyTestClass(0), MyTestClass(1)]""""
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("streaming works with REPL generated code") {
