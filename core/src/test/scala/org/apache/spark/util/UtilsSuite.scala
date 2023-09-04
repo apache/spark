@@ -707,6 +707,20 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     }
   }
 
+  test("log4j log level change with name") {
+    val loggerName = "org.apache.spark"
+    assert(Utils.getLoggerLevel(loggerName).isEmpty)
+    Utils.setLogLevel(loggerName, Level.ALL)
+    assert(Utils.getLoggerLevel(loggerName).get == Level.ALL)
+    assert(log.isInfoEnabled())
+    Utils.setLogLevel(loggerName, Level.ERROR)
+    assert(Utils.getLoggerLevel(loggerName).get == Level.ERROR)
+    assert(!log.isInfoEnabled())
+    assert(log.isErrorEnabled())
+    Utils.removeLogger(loggerName)
+    assert(Utils.getLoggerLevel(loggerName).isEmpty)
+  }
+
   test("deleteRecursively") {
     val tempDir1 = Utils.createTempDir()
     assert(tempDir1.exists())

@@ -534,6 +534,27 @@ class SparkContext:
         """
         self._jsc.setLogLevel(logLevel)
 
+    def setLogLevel(self, logName: str, logLevel: str) -> None:
+        """
+        Control our logLevel of specific package or class name.
+        This overrides any user-defined log settings.
+        Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        logName : str
+            specific java package or class name
+        logLevel : str
+            The desired log level as a string.
+
+        Examples
+        --------
+        >>> sc.setLogLevel("org.apache.spark", "WARN")  # doctest :+SKIP
+        """
+        self._jsc.setLogLevel(logName, logLevel)
+
     @classmethod
     def setSystemProperty(cls, key: str, value: str) -> None:
         """

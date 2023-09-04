@@ -40,6 +40,7 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -399,6 +400,25 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL) && _schedulerBackend != null) {
       _schedulerBackend.updateExecutorsLogLevel(upperCased)
     }
+  }
+
+  /** Change logLevel of specific package or class name.
+   *  This overrides any user-defined log settings.
+   *
+   * @param loggerName package or class name such as "org.apache.spark" or
+   *                   "org.apache.spark.SparkContext"
+   * @param logLevel The desired log level as a string.
+   *                 Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+   *
+   * @since 4.0.0
+   */
+  def setLogLevel(loggerName: String, logLevel: String): Unit = {
+    // let's allow lowercase or mixed case too
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    Utils.setLogLevel(loggerName, Level.toLevel(upperCased))
   }
 
   try {

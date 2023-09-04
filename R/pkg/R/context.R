@@ -443,6 +443,23 @@ setLogLevel <- function(level) {
   invisible(callJMethod(sc, "setLogLevel", level))
 }
 
+#' Set new log level of of specific package or class name.
+#'
+#' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+#'
+#' @rdname setLogLevel
+#' @param loggerName specific java package or class name
+#' @param level New log level
+#' @examples
+#'\dontrun{
+#' setLogLevel("org.apache.spark", "ERROR")
+#'}
+#' @note setLogLevel since 4.0.0
+setLogLevel <- function(loggerName, level) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLogLevel", loggerName, level))
+}
+
 #' Set checkpoint directory
 #'
 #' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be

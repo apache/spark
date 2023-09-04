@@ -2332,7 +2332,7 @@ private[spark] object Utils
    * configure a new log4j level
    */
   def setLogLevel(l: Level): Unit = {
-    val (ctx, loggerConfig) = getLogContext
+    val (ctx, loggerConfig) = getLogContext()
     loggerConfig.setLevel(l)
     ctx.updateLoggers()
 
@@ -2340,6 +2340,53 @@ private[spark] object Utils
     Logging.sparkShellThresholdLevel = null
   }
 
+  /**
+   * configure a new log4j level for specific package or class
+   *
+   * @param name package or class name such as "org.apache.spark" or
+   *             "org.apache.spark.SparkContext"
+   * @param level new level of [[org.apache.log4j.Level]]
+   */
+  def setLogLevel(name: String, level: Level): Unit = {
+    val (ctx, loggerConfig) = getLogContext(name)
+    if (loggerConfig != null) {
+      loggerConfig.setLevel(level)
+      logInfo(s"Logger ${loggerConfig.getName} level changed into $level")
+    } else {
+      val newLoggerConfig = new LoggerConfig(name, level, true)
+      ctx.getConfiguration.addLogger(name, newLoggerConfig)
+      logInfo(s"Added new logger $name = $level")
+    }
+    ctx.updateLoggers()
+  }
+
+  /**
+   * get logger level for specific package or class
+   *
+   * Visible for testing
+   *
+   * @param name  package or class name such as "org.apache.spark" or
+   *              "org.apache.spark.SparkContext"
+   */
+  private[spark] def getLoggerLevel(name: String): Option[Level] = {
+    val (ctx, loggerConfig) = getLogContext(name)
+    Option(loggerConfig).map(c => c.getLevel)
+  }
+
+  /**
+   * remove logger for specific package or class
+   *
+   * Visible for testing
+   *
+   * @param name package or class name such as "org.apache.spark" or
+   *             "org.apache.spark.SparkContext"
+   */
+  private[spark] def removeLogger(name: String): Unit = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    ctx.getConfiguration.removeLogger(name)
+    ctx.updateLoggers()
+    logInfo(s"Removed logger $name")
+  }
 
   def setLogLevelIfNeeded(newLogLevel: String): Unit = {
     if (newLogLevel != Utils.getLogLevel) {
@@ -2347,16 +2394,17 @@ private[spark] object Utils
     }
   }
 
-  private lazy val getLogContext: (LoggerContext, LoggerConfig) = {
+  def getLogContext(loggerName: String = LogManager.ROOT_LOGGER_NAME):
+  (LoggerContext, LoggerConfig) = {
     val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
-    (ctx, ctx.getConfiguration().getLoggerConfig(LogManager.ROOT_LOGGER_NAME))
+    (ctx, ctx.getConfiguration().getLoggers().get(loggerName))
   }
 
   /**
    * Get current log level
    */
   def getLogLevel: String = {
-    val (_, loggerConfig) = getLogContext
+    val (_, loggerConfig) = getLogContext()
     loggerConfig.getLevel.name
   }
 
