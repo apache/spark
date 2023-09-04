@@ -4101,6 +4101,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
   /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
+
+  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs

@@ -4201,6 +4201,16 @@ object functions {
   }
 
   /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = withExpr {
+    StringRepeat(str.expr, n.expr)
+  }
+
+  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
