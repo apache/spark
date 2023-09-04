@@ -103,10 +103,6 @@ class ExecutePlanResponseReattachableIterator(
     try {
       // Get next response, possibly triggering reattach in case of stream error.
       val ret = retry {
-        if (iter.isEmpty) {
-          // on retry, the iter is borked, so we need a new one
-          iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
-        }
         callIter(_.next())
       }
 
@@ -132,17 +128,13 @@ class ExecutePlanResponseReattachableIterator(
     }
     try {
       retry {
-        if (iter.isEmpty) {
-          // on retry, the iter is borked, so we need a new one
-          iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
-        }
         var hasNext = callIter(_.hasNext())
         // Graceful reattach:
         // If iter ended, but there was no ResultComplete, it means that there is more,
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
           do {
-            iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
+            iter = None // unset iterator for new ReattachExecute to be called in _call_iter
             assert(!resultComplete) // shouldn't change...
             hasNext = callIter(_.hasNext())
             // It's possible that the new iter will be empty, so we need to loop to get another.
@@ -200,7 +192,9 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
-      assert(iter.isDefined)
+      if (iter.isEmpty) {
+        iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
+      }
       iterFun(iter.get)
     } catch {
       case ex: StatusRuntimeException
@@ -212,7 +206,7 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iter = rawBlockingStub.executePlan(initialRequest)
+        iter = Some(rawBlockingStub.executePlan(initialRequest))
         throw new GrpcRetryHandler.RetryException
       case NonFatal(e) =>
         // Remove the iterator, so that a new one will be created after retry.

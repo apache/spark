@@ -131,14 +131,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        if self._iterator is None:
-                            # we reattach new iterator if it was unset by self._call_iter
-                            self._iterator = iter(
-                                self._stub.ReattachExecute(
-                                    self._create_reattach_execute_request(), metadata=self._metadata
-                                )
-                            )
-
                         if self._current is None:
                             try:
                                 self._current = self._call_iter(lambda: next(self._iterator))
@@ -153,12 +145,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         # arrive, we keep reattaching.
                         if not self._result_complete and not has_next:
                             while not has_next:
-                                self._iterator = iter(
-                                    self._stub.ReattachExecute(
-                                        self._create_reattach_execute_request(),
-                                        metadata=self._metadata,
-                                    )
-                                )
+                                # unset iterator for new ReattachExecute to be called in _call_iter
+                                self._iterator = None
                                 # shouldn't change
                                 assert not self._result_complete
                                 try:
@@ -237,6 +225,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         Called inside retry block, so retryable failure will get handled upstream.
         """
+        if self._iterator is None:
+            # we get a new iterator with ReattachExecute if it was unset.
+            self._iterator = iter(
+                self._stub.ReattachExecute(
+                    self._create_reattach_execute_request(), metadata=self._metadata
+                )
+            )
+
         try:
             return iter_fun()
         except grpc.RpcError as e:
