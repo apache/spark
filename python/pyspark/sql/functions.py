@@ -15770,9 +15770,9 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
     >>> df.select(
-    ...     sf.try_reflect(lit("java.util.UUID"), sf.lit("fromString"), df.a).alias('r')
+    ...     sf.try_reflect(sf.lit("java.util.UUID"), sf.lit("fromString"), df.a)
     ... ).collect()
-    [Row(r='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
+    [Row(try_reflect(java.util.UUID, fromString, a)='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
     """
     return _invoke_function_over_seq_of_columns("try_reflect", cols)
 
