@@ -4263,6 +4263,7 @@ object functions {
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4284,6 +4285,14 @@ object functions {
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
    *   brackets if the input value is negative.</li> </ul>
+   *   If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *   <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *   If `e` is a binary, it is converted to a string in one of the formats:
+   *   <ul>
+   *     <li>'base64': a base 64 string.</li>
+   *     <li>'hex': a string in the hexadecimal format.</li>
+   *     <li>'utf-8': the input binary is decoded to UTF-8 string.</li>
+   *   </ul>
    *
    * @group string_funcs
    * @since 3.5.0
@@ -4311,11 +4320,20 @@ object functions {
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
    *   brackets if the input value is negative.</li> </ul>
+   *   If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *   <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *   If `e` is a binary, it is converted to a string in one of the formats:
+   *   <ul>
+   *     <li>'base64': a base 64 string.</li>
+   *     <li>'hex': a string in the hexadecimal format.</li>
+   *     <li>'utf-8': the input binary is decoded to UTF-8 string.</li>
+   *   </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
+  // scalastyle:on line.size.limit
 
   /**
    * Convert string 'e' to a number based on the string format 'format'. Throws an exception if

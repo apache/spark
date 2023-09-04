@@ -4399,6 +4399,7 @@ object functions {
     new ToBinary(e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -4419,6 +4420,13 @@ object functions {
    *     but 'MI' prints a space.
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
+   *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -4446,10 +4454,18 @@ object functions {
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
    *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
   def to_varchar(e: Column, format: Column): Column = call_function("to_varchar", e, format)
+  // scalastyle:on line.size.limit
 
   /**
    * Convert string 'e' to a number based on the string format 'format'.
