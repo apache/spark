@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
 
-object TableOutputResolver extends SQLConfHelper with Logging{
+object TableOutputResolver extends SQLConfHelper with Logging {
 
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
