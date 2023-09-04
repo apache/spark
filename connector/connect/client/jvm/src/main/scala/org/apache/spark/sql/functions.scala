@@ -4297,8 +4297,10 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4332,8 +4334,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
   // scalastyle:on line.size.limit
+  def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
 
   /**
    * Convert string 'e' to a number based on the string format 'format'. Throws an exception if
