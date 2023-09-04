@@ -21,7 +21,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.functions.{array, lit, map, map_from_arrays}
+import org.apache.spark.sql.functions.{array, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -539,6 +539,12 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
       map(zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
     }
+    def fromEntries(keys: Array[_], values: Array[_]): Column = {
+      val structures = keys.zip(values)
+        .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
+      map_from_entries(array(structures: _*))
+    }
+
     Seq(fromArr(_, _), createMap(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT map_contains_key(:mapParam, 0)",
@@ -548,6 +554,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql("SELECT map_contains_key(?, 'a')",
           Array(f(Array.empty[String], Array.empty[Double]))),
         Row(false))
+    }
+    Seq(fromArr(_, _), createMap(_, _), fromEntries(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT element_at(:mapParam, 'a')",
           Map("mapParam" -> f(Array("a"), Array(0)))),
@@ -569,5 +577,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
             Column(Literal(Array("a"))),
             array(map_from_arrays(Column(Literal(Array(1))), Column(Literal(Array(2)))))))),
       Row(2))
+    // `str_to_map` is not supported
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT :m['a'][1]",
+          Map("m" ->
+            map_from_arrays(
+              Column(Literal(Array("a"))),
+              array(str_to_map(Column(Literal("a:1,b:2,c:3")))))))
+      },
+      errorClass = "INVALID_SQL_ARG",
+      parameters = Map("name" -> "m"))
   }
 }
