@@ -1345,7 +1345,9 @@ def min(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
-    Returns the value associated with the maximum value of ord.
+    Returns the value from the `col` parameter that is associated with the maximum value
+    from the `ord` parameter.This function is often used to find the `col` parameter value
+    corresponding to the maximum `ord` parameter value within each group when used with groupBy().
 
     .. versionadded:: 3.3.0
 
@@ -1355,28 +1357,64 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The column representing the values to be returned. This could be the column instance
+        or the column name as string.
     ord : :class:`~pyspark.sql.Column` or str
-        column to be maximized
+        The column that needs to be maximized. This could be the column instance
+        or the column name as string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value associated with the maximum value of ord.
+        A column object representing the value from `col` that is associated with
+        the maximum value from `ord`.
 
     Examples
     --------
+    Example 1: Using `max_by` with groupBy
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(max_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).show()
     +------+----------------------+
     |course|max_by(year, earnings)|
     +------+----------------------+
     |  Java|                  2013|
     |dotNET|                  2013|
     +------+----------------------+
+
+    Example 2: Using `max_by` with different data types
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
+    ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|max_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |        IT|                    Charlie|
+    | Marketing|                       Anna|
+    +----------+---------------------------+
+
+    Example 3: Using `max_by` where `ord` has multiple maximum values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
+    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|max_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |   Consult|                      Henry|
+    |   Finance|                     George|
+    +----------+---------------------------+
     """
     return _invoke_function_over_columns("max_by", col, ord)
 
@@ -1384,7 +1422,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 @try_remote_functions
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
-    Returns the value associated with the minimum value of ord.
+    Returns the value from the `col` parameter that is associated with the minimum value
+    from the `ord` parameter. This function is often used to find the `col` parameter value
+    corresponding to the minimum `ord` parameter value within each group when used with groupBy().
 
     .. versionadded:: 3.3.0
 
@@ -1394,28 +1434,64 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The column representing the values that will be returned. This could be the column instance
+        or the column name as string.
     ord : :class:`~pyspark.sql.Column` or str
-        column to be minimized
+        The column that needs to be minimized. This could be the column instance
+        or the column name as string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value associated with the minimum value of ord.
+        Column object that represents the value from `col` associated with
+        the minimum value from `ord`.
 
     Examples
     --------
+    Example 1: Using `min_by` with groupBy:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(min_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).show()
     +------+----------------------+
-    |course|min_by(year, earnings)|
+    |course| min_by(year, earnings)|
     +------+----------------------+
     |  Java|                  2012|
     |dotNET|                  2012|
     +------+----------------------+
+
+    Example 2: Using `min_by` with different data types:
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
+    ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|min_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |        IT|                        Bob|
+    | Marketing|                      David|
+    +----------+---------------------------+
+
+    Example 3: Using `min_by` where `ord` has multiple minimum values:
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
+    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|min_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |   Consult|                        Eva|
+    |   Finance|                     George|
+    +----------+---------------------------+
     """
     return _invoke_function_over_columns("min_by", col, ord)
 
