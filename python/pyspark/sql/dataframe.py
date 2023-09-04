@@ -1934,15 +1934,90 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame with distinct records.
 
+        See Also
+        --------
+        DataFrame.dropDuplicates
+
         Examples
         --------
+        Remove duplicate rows from a DataFrame
+
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (23, "Alice")], ["age", "name"])
+        >>> df.distinct().show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        +---+-----+
 
-        Return the number of distinct rows in the :class:`DataFrame`
+        Count the number of distinct rows in a DataFrame
 
         >>> df.distinct().count()
         2
+
+        Get distinct rows from a DataFrame with multiple columns
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom", "M"), (23, "Alice", "F"), (23, "Alice", "F"), (14, "Tom", "M")],
+        ...     ["age", "name", "gender"])
+        >>> df.distinct().show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        +---+-----+------+
+
+        Get distinct values from a specific column in a DataFrame
+
+        >>> df.select("name").distinct().show()
+        +-----+
+        | name|
+        +-----+
+        |  Tom|
+        |Alice|
+        +-----+
+
+        Count the number of distinct values in a specific column
+
+        >>> df.select("name").distinct().count()
+        2
+
+        Get distinct values from multiple columns in DataFrame
+
+        >>> df.select("name", "gender").distinct().show()
+        +-----+------+
+        | name|gender|
+        +-----+------+
+        |  Tom|     M|
+        |Alice|     F|
+        +-----+------+
+
+        Get distinct rows from a DataFrame with null values
+
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom", "M"), (23, "Alice", "F"), (23, "Alice", "F"), (14, "Tom", None)],
+        ...     ["age", "name", "gender"])
+        >>> df.distinct().show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        | 14|  Tom|  NULL|
+        +---+-----+------+
+
+        Get distinct non-null values from a DataFrame
+
+        >>> df.distinct().filter(df.gender.isNotNull()).show()
+        +---+-----+------+
+        |age| name|gender|
+        +---+-----+------+
+        | 14|  Tom|     M|
+        | 23|Alice|     F|
+        +---+-----+------+
         """
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 

@@ -172,7 +172,7 @@ private[connect] class ExecuteHolder(
     }
   }
 
-  def removeGrpcResponseSender[_](sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
+  def removeGrpcResponseSender(sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
     // if closed, we are shutting down and interrupting all senders already
     if (closedTime.isEmpty) {
       grpcResponseSenders -=
