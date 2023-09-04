@@ -1346,7 +1346,7 @@ def min(col: "ColumnOrName") -> Column:
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
     Returns the value from the `col` parameter that is associated with the maximum value
-    from the `ord` parameter.This function is often used to find the `col` parameter value
+    from the `ord` parameter. This function is often used to find the `col` parameter value
     corresponding to the maximum `ord` parameter value within each group when used with groupBy().
 
     .. versionadded:: 3.3.0
