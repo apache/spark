@@ -551,7 +551,7 @@ struct<five:string,f1:double>
 -- !query
 SELECT sinh(double('1'))
 -- !query schema
-struct<SINH(1):double>
+struct<sinh(1):double>
 -- !query output
 1.1752011936438014
 
@@ -559,7 +559,7 @@ struct<SINH(1):double>
 -- !query
 SELECT cosh(double('1'))
 -- !query schema
-struct<COSH(1):double>
+struct<cosh(1):double>
 -- !query output
 1.543080634815244
 
@@ -567,7 +567,7 @@ struct<COSH(1):double>
 -- !query
 SELECT tanh(double('1'))
 -- !query schema
-struct<TANH(1):double>
+struct<tanh(1):double>
 -- !query output
 0.7615941559557649
 
@@ -575,7 +575,7 @@ struct<TANH(1):double>
 -- !query
 SELECT asinh(double('1'))
 -- !query schema
-struct<ASINH(1):double>
+struct<asinh(1):double>
 -- !query output
 0.8813735870195429
 
@@ -583,7 +583,7 @@ struct<ASINH(1):double>
 -- !query
 SELECT acosh(double('2'))
 -- !query schema
-struct<ACOSH(2):double>
+struct<acosh(2):double>
 -- !query output
 1.3169578969248166
 
@@ -591,7 +591,7 @@ struct<ACOSH(2):double>
 -- !query
 SELECT atanh(double('0.5'))
 -- !query schema
-struct<ATANH(0.5):double>
+struct<atanh(0.5):double>
 -- !query output
 0.5493061443340548
 
@@ -599,7 +599,7 @@ struct<ATANH(0.5):double>
 -- !query
 SELECT sinh(double('Infinity'))
 -- !query schema
-struct<SINH(Infinity):double>
+struct<sinh(Infinity):double>
 -- !query output
 Infinity
 
@@ -607,7 +607,7 @@ Infinity
 -- !query
 SELECT sinh(double('-Infinity'))
 -- !query schema
-struct<SINH(-Infinity):double>
+struct<sinh(-Infinity):double>
 -- !query output
 -Infinity
 
@@ -615,7 +615,7 @@ struct<SINH(-Infinity):double>
 -- !query
 SELECT sinh(double('NaN'))
 -- !query schema
-struct<SINH(NaN):double>
+struct<sinh(NaN):double>
 -- !query output
 NaN
 
@@ -623,7 +623,7 @@ NaN
 -- !query
 SELECT cosh(double('Infinity'))
 -- !query schema
-struct<COSH(Infinity):double>
+struct<cosh(Infinity):double>
 -- !query output
 Infinity
 
@@ -631,7 +631,7 @@ Infinity
 -- !query
 SELECT cosh(double('-Infinity'))
 -- !query schema
-struct<COSH(-Infinity):double>
+struct<cosh(-Infinity):double>
 -- !query output
 Infinity
 
@@ -639,7 +639,7 @@ Infinity
 -- !query
 SELECT cosh(double('NaN'))
 -- !query schema
-struct<COSH(NaN):double>
+struct<cosh(NaN):double>
 -- !query output
 NaN
 
@@ -647,7 +647,7 @@ NaN
 -- !query
 SELECT tanh(double('Infinity'))
 -- !query schema
-struct<TANH(Infinity):double>
+struct<tanh(Infinity):double>
 -- !query output
 1.0
 
@@ -655,7 +655,7 @@ struct<TANH(Infinity):double>
 -- !query
 SELECT tanh(double('-Infinity'))
 -- !query schema
-struct<TANH(-Infinity):double>
+struct<tanh(-Infinity):double>
 -- !query output
 -1.0
 
@@ -663,7 +663,7 @@ struct<TANH(-Infinity):double>
 -- !query
 SELECT tanh(double('NaN'))
 -- !query schema
-struct<TANH(NaN):double>
+struct<tanh(NaN):double>
 -- !query output
 NaN
 
@@ -671,7 +671,7 @@ NaN
 -- !query
 SELECT asinh(double('Infinity'))
 -- !query schema
-struct<ASINH(Infinity):double>
+struct<asinh(Infinity):double>
 -- !query output
 Infinity
 
@@ -679,7 +679,7 @@ Infinity
 -- !query
 SELECT asinh(double('-Infinity'))
 -- !query schema
-struct<ASINH(-Infinity):double>
+struct<asinh(-Infinity):double>
 -- !query output
 -Infinity
 
@@ -687,7 +687,7 @@ struct<ASINH(-Infinity):double>
 -- !query
 SELECT asinh(double('NaN'))
 -- !query schema
-struct<ASINH(NaN):double>
+struct<asinh(NaN):double>
 -- !query output
 NaN
 
@@ -695,7 +695,7 @@ NaN
 -- !query
 SELECT acosh(double('Infinity'))
 -- !query schema
-struct<ACOSH(Infinity):double>
+struct<acosh(Infinity):double>
 -- !query output
 Infinity
 
@@ -703,7 +703,7 @@ Infinity
 -- !query
 SELECT acosh(double('-Infinity'))
 -- !query schema
-struct<ACOSH(-Infinity):double>
+struct<acosh(-Infinity):double>
 -- !query output
 NaN
 
@@ -711,7 +711,7 @@ NaN
 -- !query
 SELECT acosh(double('NaN'))
 -- !query schema
-struct<ACOSH(NaN):double>
+struct<acosh(NaN):double>
 -- !query output
 NaN
 
@@ -719,7 +719,7 @@ NaN
 -- !query
 SELECT atanh(double('Infinity'))
 -- !query schema
-struct<ATANH(Infinity):double>
+struct<atanh(Infinity):double>
 -- !query output
 NaN
 
@@ -727,7 +727,7 @@ NaN
 -- !query
 SELECT atanh(double('-Infinity'))
 -- !query schema
-struct<ATANH(-Infinity):double>
+struct<atanh(-Infinity):double>
 -- !query output
 NaN
 
@@ -735,7 +735,7 @@ NaN
 -- !query
 SELECT atanh(double('NaN'))
 -- !query schema
-struct<ATANH(NaN):double>
+struct<atanh(NaN):double>
 -- !query output
 NaN
 

@@ -286,7 +286,7 @@ Project [ AS five#x, f1#x, round(f1#x, 0) AS round_f1#x]
 -- !query
 select ceil(f1) as ceil_f1 from float8_tbl f
 -- !query analysis
-Project [CEIL(f1#x) AS ceil_f1#xL]
+Project [ceil(f1#x) AS ceil_f1#xL]
 +- SubqueryAlias f
    +- SubqueryAlias spark_catalog.default.float8_tbl
       +- Relation spark_catalog.default.float8_tbl[f1#x] parquet
@@ -304,7 +304,7 @@ Project [ceiling(f1#x) AS ceiling_f1#xL]
 -- !query
 select floor(f1) as floor_f1 from float8_tbl f
 -- !query analysis
-Project [FLOOR(f1#x) AS floor_f1#xL]
+Project [floor(f1#x) AS floor_f1#xL]
 +- SubqueryAlias f
    +- SubqueryAlias spark_catalog.default.float8_tbl
       +- Relation spark_catalog.default.float8_tbl[f1#x] parquet
@@ -322,7 +322,7 @@ Project [sign(f1#x) AS sign_f1#x]
 -- !query
 SELECT sqrt(double('64')) AS eight
 -- !query analysis
-Project [SQRT(cast(64 as double)) AS eight#x]
+Project [sqrt(cast(64 as double)) AS eight#x]
 +- OneRowRelation
 
 
@@ -380,7 +380,7 @@ SELECT '' AS three, f.f1, exp(ln(f.f1)) AS exp_ln_f1
    FROM FLOAT8_TBL f
    WHERE f.f1 > '0.0'
 -- !query analysis
-Project [ AS three#x, f1#x, EXP(ln(f1#x)) AS exp_ln_f1#x]
+Project [ AS three#x, f1#x, exp(ln(f1#x)) AS exp_ln_f1#x]
 +- Filter (f1#x > cast(0.0 as double))
    +- SubqueryAlias f
       +- SubqueryAlias spark_catalog.default.float8_tbl
@@ -437,168 +437,168 @@ Project [ AS five#x, f1#x]
 -- !query
 SELECT sinh(double('1'))
 -- !query analysis
-Project [SINH(cast(1 as double)) AS SINH(1)#x]
+Project [sinh(cast(1 as double)) AS sinh(1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cosh(double('1'))
 -- !query analysis
-Project [COSH(cast(1 as double)) AS COSH(1)#x]
+Project [cosh(cast(1 as double)) AS cosh(1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT tanh(double('1'))
 -- !query analysis
-Project [TANH(cast(1 as double)) AS TANH(1)#x]
+Project [tanh(cast(1 as double)) AS tanh(1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT asinh(double('1'))
 -- !query analysis
-Project [ASINH(cast(1 as double)) AS ASINH(1)#x]
+Project [asinh(cast(1 as double)) AS asinh(1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT acosh(double('2'))
 -- !query analysis
-Project [ACOSH(cast(2 as double)) AS ACOSH(2)#x]
+Project [acosh(cast(2 as double)) AS acosh(2)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT atanh(double('0.5'))
 -- !query analysis
-Project [ATANH(cast(0.5 as double)) AS ATANH(0.5)#x]
+Project [atanh(cast(0.5 as double)) AS atanh(0.5)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT sinh(double('Infinity'))
 -- !query analysis
-Project [SINH(cast(Infinity as double)) AS SINH(Infinity)#x]
+Project [sinh(cast(Infinity as double)) AS sinh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT sinh(double('-Infinity'))
 -- !query analysis
-Project [SINH(cast(-Infinity as double)) AS SINH(-Infinity)#x]
+Project [sinh(cast(-Infinity as double)) AS sinh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT sinh(double('NaN'))
 -- !query analysis
-Project [SINH(cast(NaN as double)) AS SINH(NaN)#x]
+Project [sinh(cast(NaN as double)) AS sinh(NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cosh(double('Infinity'))
 -- !query analysis
-Project [COSH(cast(Infinity as double)) AS COSH(Infinity)#x]
+Project [cosh(cast(Infinity as double)) AS cosh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cosh(double('-Infinity'))
 -- !query analysis
-Project [COSH(cast(-Infinity as double)) AS COSH(-Infinity)#x]
+Project [cosh(cast(-Infinity as double)) AS cosh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT cosh(double('NaN'))
 -- !query analysis
-Project [COSH(cast(NaN as double)) AS COSH(NaN)#x]
+Project [cosh(cast(NaN as double)) AS cosh(NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT tanh(double('Infinity'))
 -- !query analysis
-Project [TANH(cast(Infinity as double)) AS TANH(Infinity)#x]
+Project [tanh(cast(Infinity as double)) AS tanh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT tanh(double('-Infinity'))
 -- !query analysis
-Project [TANH(cast(-Infinity as double)) AS TANH(-Infinity)#x]
+Project [tanh(cast(-Infinity as double)) AS tanh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT tanh(double('NaN'))
 -- !query analysis
-Project [TANH(cast(NaN as double)) AS TANH(NaN)#x]
+Project [tanh(cast(NaN as double)) AS tanh(NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT asinh(double('Infinity'))
 -- !query analysis
-Project [ASINH(cast(Infinity as double)) AS ASINH(Infinity)#x]
+Project [asinh(cast(Infinity as double)) AS asinh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT asinh(double('-Infinity'))
 -- !query analysis
-Project [ASINH(cast(-Infinity as double)) AS ASINH(-Infinity)#x]
+Project [asinh(cast(-Infinity as double)) AS asinh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT asinh(double('NaN'))
 -- !query analysis
-Project [ASINH(cast(NaN as double)) AS ASINH(NaN)#x]
+Project [asinh(cast(NaN as double)) AS asinh(NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT acosh(double('Infinity'))
 -- !query analysis
-Project [ACOSH(cast(Infinity as double)) AS ACOSH(Infinity)#x]
+Project [acosh(cast(Infinity as double)) AS acosh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT acosh(double('-Infinity'))
 -- !query analysis
-Project [ACOSH(cast(-Infinity as double)) AS ACOSH(-Infinity)#x]
+Project [acosh(cast(-Infinity as double)) AS acosh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT acosh(double('NaN'))
 -- !query analysis
-Project [ACOSH(cast(NaN as double)) AS ACOSH(NaN)#x]
+Project [acosh(cast(NaN as double)) AS acosh(NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT atanh(double('Infinity'))
 -- !query analysis
-Project [ATANH(cast(Infinity as double)) AS ATANH(Infinity)#x]
+Project [atanh(cast(Infinity as double)) AS atanh(Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT atanh(double('-Infinity'))
 -- !query analysis
-Project [ATANH(cast(-Infinity as double)) AS ATANH(-Infinity)#x]
+Project [atanh(cast(-Infinity as double)) AS atanh(-Infinity)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT atanh(double('NaN'))
 -- !query analysis
-Project [ATANH(cast(NaN as double)) AS ATANH(NaN)#x]
+Project [atanh(cast(NaN as double)) AS atanh(NaN)#x]
 +- OneRowRelation
 
 

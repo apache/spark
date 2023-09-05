@@ -3116,42 +3116,42 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT signum(INTERVAL '-10' YEAR)
 -- !query analysis
-Project [SIGNUM(INTERVAL '-10' YEAR) AS SIGNUM(INTERVAL '-10' YEAR)#x]
+Project [signum(INTERVAL '-10' YEAR) AS signum(INTERVAL '-10' YEAR)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT signum(INTERVAL '10' MONTH)
 -- !query analysis
-Project [SIGNUM(INTERVAL '10' MONTH) AS SIGNUM(INTERVAL '10' MONTH)#x]
+Project [signum(INTERVAL '10' MONTH) AS signum(INTERVAL '10' MONTH)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT signum(INTERVAL '0-0' YEAR TO MONTH)
 -- !query analysis
-Project [SIGNUM(INTERVAL '0-0' YEAR TO MONTH) AS SIGNUM(INTERVAL '0-0' YEAR TO MONTH)#x]
+Project [signum(INTERVAL '0-0' YEAR TO MONTH) AS signum(INTERVAL '0-0' YEAR TO MONTH)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT signum(INTERVAL '-10' DAY)
 -- !query analysis
-Project [SIGNUM(INTERVAL '-10' DAY) AS SIGNUM(INTERVAL '-10' DAY)#x]
+Project [signum(INTERVAL '-10' DAY) AS signum(INTERVAL '-10' DAY)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT signum(INTERVAL '10' HOUR)
 -- !query analysis
-Project [SIGNUM(INTERVAL '10' HOUR) AS SIGNUM(INTERVAL '10' HOUR)#x]
+Project [signum(INTERVAL '10' HOUR) AS signum(INTERVAL '10' HOUR)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT signum(INTERVAL '0 0:0:0' DAY TO SECOND)
 -- !query analysis
-Project [SIGNUM(INTERVAL '0 00:00:00' DAY TO SECOND) AS SIGNUM(INTERVAL '0 00:00:00' DAY TO SECOND)#x]
+Project [signum(INTERVAL '0 00:00:00' DAY TO SECOND) AS signum(INTERVAL '0 00:00:00' DAY TO SECOND)#x]
 +- OneRowRelation
 
 

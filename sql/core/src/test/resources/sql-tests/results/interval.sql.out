@@ -3584,7 +3584,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT signum(INTERVAL '-10' YEAR)
 -- !query schema
-struct<SIGNUM(INTERVAL '-10' YEAR):double>
+struct<signum(INTERVAL '-10' YEAR):double>
 -- !query output
 -1.0
 
@@ -3592,7 +3592,7 @@ struct<SIGNUM(INTERVAL '-10' YEAR):double>
 -- !query
 SELECT signum(INTERVAL '10' MONTH)
 -- !query schema
-struct<SIGNUM(INTERVAL '10' MONTH):double>
+struct<signum(INTERVAL '10' MONTH):double>
 -- !query output
 1.0
 
@@ -3600,7 +3600,7 @@ struct<SIGNUM(INTERVAL '10' MONTH):double>
 -- !query
 SELECT signum(INTERVAL '0-0' YEAR TO MONTH)
 -- !query schema
-struct<SIGNUM(INTERVAL '0-0' YEAR TO MONTH):double>
+struct<signum(INTERVAL '0-0' YEAR TO MONTH):double>
 -- !query output
 0.0
 
@@ -3608,7 +3608,7 @@ struct<SIGNUM(INTERVAL '0-0' YEAR TO MONTH):double>
 -- !query
 SELECT signum(INTERVAL '-10' DAY)
 -- !query schema
-struct<SIGNUM(INTERVAL '-10' DAY):double>
+struct<signum(INTERVAL '-10' DAY):double>
 -- !query output
 -1.0
 
@@ -3616,7 +3616,7 @@ struct<SIGNUM(INTERVAL '-10' DAY):double>
 -- !query
 SELECT signum(INTERVAL '10' HOUR)
 -- !query schema
-struct<SIGNUM(INTERVAL '10' HOUR):double>
+struct<signum(INTERVAL '10' HOUR):double>
 -- !query output
 1.0
 
@@ -3624,7 +3624,7 @@ struct<SIGNUM(INTERVAL '10' HOUR):double>
 -- !query
 SELECT signum(INTERVAL '0 0:0:0' DAY TO SECOND)
 -- !query schema
-struct<SIGNUM(INTERVAL '0 00:00:00' DAY TO SECOND):double>
+struct<signum(INTERVAL '0 00:00:00' DAY TO SECOND):double>
 -- !query output
 0.0
 
