@@ -2191,10 +2191,6 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.connect.dataframe.__dict__.copy()
-    # Spark Connect does not support RDD but the tests depend on them.
-    del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
