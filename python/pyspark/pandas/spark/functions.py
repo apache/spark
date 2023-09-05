@@ -159,20 +159,6 @@ def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
         return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
 
 
-def last_non_null(col: Column) -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(  # type: ignore[return-value]
-            "last_non_null",
-            col,  # type: ignore[arg-type]
-        )
-
-    else:
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.lastNonNull(col._jc))
-
-
 def null_index(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions import _invoke_function_over_columns
