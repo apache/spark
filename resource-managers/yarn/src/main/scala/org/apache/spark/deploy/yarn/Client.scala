@@ -1618,9 +1618,10 @@ private[spark] object Client extends Logging {
       return false
     }
 
-    val srcUserInfo = srcUri.getUserInfo()
-    val dstUserInfo = dstUri.getUserInfo()
-    if (srcUserInfo != null && !srcUserInfo.equalsIgnoreCase(dstUserInfo)) {
+    val srcUserInfo = Option(srcUri.getUserInfo).getOrElse("")
+    val dstUserInfo = Option(dstUri.getUserInfo).getOrElse("")
+
+    if (!srcUserInfo.equals(dstUserInfo)) {
       return false
     }
 
