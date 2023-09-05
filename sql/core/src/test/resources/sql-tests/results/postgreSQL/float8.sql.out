@@ -436,7 +436,7 @@ struct<eight:double>
 -- !query
 SELECT power(double('144'), double('0.5'))
 -- !query schema
-struct<POWER(144, 0.5):double>
+struct<power(144, 0.5):double>
 -- !query output
 12.0
 
@@ -444,7 +444,7 @@ struct<POWER(144, 0.5):double>
 -- !query
 SELECT power(double('NaN'), double('0.5'))
 -- !query schema
-struct<POWER(NaN, 0.5):double>
+struct<power(NaN, 0.5):double>
 -- !query output
 NaN
 
@@ -452,7 +452,7 @@ NaN
 -- !query
 SELECT power(double('144'), double('NaN'))
 -- !query schema
-struct<POWER(144, NaN):double>
+struct<power(144, NaN):double>
 -- !query output
 NaN
 
@@ -460,7 +460,7 @@ NaN
 -- !query
 SELECT power(double('NaN'), double('NaN'))
 -- !query schema
-struct<POWER(NaN, NaN):double>
+struct<power(NaN, NaN):double>
 -- !query output
 NaN
 
@@ -468,7 +468,7 @@ NaN
 -- !query
 SELECT power(double('-1'), double('NaN'))
 -- !query schema
-struct<POWER(-1, NaN):double>
+struct<power(-1, NaN):double>
 -- !query output
 NaN
 
@@ -476,7 +476,7 @@ NaN
 -- !query
 SELECT power(double('1'), double('NaN'))
 -- !query schema
-struct<POWER(1, NaN):double>
+struct<power(1, NaN):double>
 -- !query output
 NaN
 
@@ -484,7 +484,7 @@ NaN
 -- !query
 SELECT power(double('NaN'), double('0'))
 -- !query schema
-struct<POWER(NaN, 0):double>
+struct<power(NaN, 0):double>
 -- !query output
 1.0
 

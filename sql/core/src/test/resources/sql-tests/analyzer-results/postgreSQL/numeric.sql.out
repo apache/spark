@@ -4071,8 +4071,8 @@ INSERT INTO num_result SELECT id, 0, LOG(cast('10' as decimal(38, 18)), ABS(val)
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(LOG(CAST(10 AS DECIMAL(38,18)), abs(val))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, LOG(cast(cast(10 as decimal(38,18)) as double), cast(abs(val#x) as double)) AS LOG(CAST(10 AS DECIMAL(38,18)), abs(val))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(log(CAST(10 AS DECIMAL(38,18)), abs(val))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, log(cast(cast(10 as decimal(38,18)) as double), cast(abs(val#x) as double)) AS log(CAST(10 AS DECIMAL(38,18)), abs(val))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4107,8 +4107,8 @@ INSERT INTO num_result SELECT id, 0, POWER(cast('10' as decimal(38, 18)), LN(ABS
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, POWER(cast(cast(10 as decimal(38,18)) as double), ln(cast(abs(round(val#x, 200)) as double))) AS POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(power(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, power(cast(cast(10 as decimal(38,18)) as double), ln(cast(abs(round(val#x, 200)) as double))) AS power(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4844,49 +4844,49 @@ Project [ln(9.342536355E34) AS ln(9.342536355E34)#x]
 -- !query
 select log(3.4634998359873254962349856073435545)
 -- !query analysis
-Project [LOG(E(), cast(3.4634998359873254962349856073435545 as double)) AS LOG(E(), 3.4634998359873254962349856073435545)#x]
+Project [log(E(), cast(3.4634998359873254962349856073435545 as double)) AS log(e(), 3.4634998359873254962349856073435545)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(9.999999999999999999)
 -- !query analysis
-Project [LOG(E(), cast(9.999999999999999999 as double)) AS LOG(E(), 9.999999999999999999)#x]
+Project [log(E(), cast(9.999999999999999999 as double)) AS log(e(), 9.999999999999999999)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(10.00000000000000000)
 -- !query analysis
-Project [LOG(E(), cast(10.00000000000000000 as double)) AS LOG(E(), 10.00000000000000000)#x]
+Project [log(E(), cast(10.00000000000000000 as double)) AS log(e(), 10.00000000000000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(10.00000000000000001)
 -- !query analysis
-Project [LOG(E(), cast(10.00000000000000001 as double)) AS LOG(E(), 10.00000000000000001)#x]
+Project [log(E(), cast(10.00000000000000001 as double)) AS log(e(), 10.00000000000000001)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(590489.45235237)
 -- !query analysis
-Project [LOG(E(), cast(590489.45235237 as double)) AS LOG(E(), 590489.45235237)#x]
+Project [log(E(), cast(590489.45235237 as double)) AS log(e(), 590489.45235237)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(0.99923, 4.58934e34)
 -- !query analysis
-Project [LOG(cast(0.99923 as double), 4.58934E34) AS LOG(0.99923, 4.58934E34)#x]
+Project [log(cast(0.99923 as double), 4.58934E34) AS log(0.99923, 4.58934E34)#x]
 +- OneRowRelation
 
 
 -- !query
 select log(1.000016, 8.452010e18)
 -- !query analysis
-Project [LOG(cast(1.000016 as double), 8.45201E18) AS LOG(1.000016, 8.45201E18)#x]
+Project [log(cast(1.000016 as double), 8.45201E18) AS log(1.000016, 8.45201E18)#x]
 +- OneRowRelation
 
 

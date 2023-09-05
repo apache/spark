@@ -329,49 +329,49 @@ Project [sqrt(cast(64 as double)) AS eight#x]
 -- !query
 SELECT power(double('144'), double('0.5'))
 -- !query analysis
-Project [POWER(cast(144 as double), cast(0.5 as double)) AS POWER(144, 0.5)#x]
+Project [power(cast(144 as double), cast(0.5 as double)) AS power(144, 0.5)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('NaN'), double('0.5'))
 -- !query analysis
-Project [POWER(cast(NaN as double), cast(0.5 as double)) AS POWER(NaN, 0.5)#x]
+Project [power(cast(NaN as double), cast(0.5 as double)) AS power(NaN, 0.5)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('144'), double('NaN'))
 -- !query analysis
-Project [POWER(cast(144 as double), cast(NaN as double)) AS POWER(144, NaN)#x]
+Project [power(cast(144 as double), cast(NaN as double)) AS power(144, NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('NaN'), double('NaN'))
 -- !query analysis
-Project [POWER(cast(NaN as double), cast(NaN as double)) AS POWER(NaN, NaN)#x]
+Project [power(cast(NaN as double), cast(NaN as double)) AS power(NaN, NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('-1'), double('NaN'))
 -- !query analysis
-Project [POWER(cast(-1 as double), cast(NaN as double)) AS POWER(-1, NaN)#x]
+Project [power(cast(-1 as double), cast(NaN as double)) AS power(-1, NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('1'), double('NaN'))
 -- !query analysis
-Project [POWER(cast(1 as double), cast(NaN as double)) AS POWER(1, NaN)#x]
+Project [power(cast(1 as double), cast(NaN as double)) AS power(1, NaN)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT power(double('NaN'), double('0'))
 -- !query analysis
-Project [POWER(cast(NaN as double), cast(0 as double)) AS POWER(NaN, 0)#x]
+Project [power(cast(NaN as double), cast(0 as double)) AS power(NaN, 0)#x]
 +- OneRowRelation
 
 

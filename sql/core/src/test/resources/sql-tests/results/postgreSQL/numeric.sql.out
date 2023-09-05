@@ -5095,7 +5095,7 @@ struct<ln(9.342536355E34):double>
 -- !query
 select log(3.4634998359873254962349856073435545)
 -- !query schema
-struct<LOG(E(), 3.4634998359873254962349856073435545):double>
+struct<log(e(), 3.4634998359873254962349856073435545):double>
 -- !query output
 1.2422795911259166
 
@@ -5103,7 +5103,7 @@ struct<LOG(E(), 3.4634998359873254962349856073435545):double>
 -- !query
 select log(9.999999999999999999)
 -- !query schema
-struct<LOG(E(), 9.999999999999999999):double>
+struct<log(e(), 9.999999999999999999):double>
 -- !query output
 2.302585092994046
 
@@ -5111,7 +5111,7 @@ struct<LOG(E(), 9.999999999999999999):double>
 -- !query
 select log(10.00000000000000000)
 -- !query schema
-struct<LOG(E(), 10.00000000000000000):double>
+struct<log(e(), 10.00000000000000000):double>
 -- !query output
 2.302585092994046
 
@@ -5119,7 +5119,7 @@ struct<LOG(E(), 10.00000000000000000):double>
 -- !query
 select log(10.00000000000000001)
 -- !query schema
-struct<LOG(E(), 10.00000000000000001):double>
+struct<log(e(), 10.00000000000000001):double>
 -- !query output
 2.302585092994046
 
@@ -5127,7 +5127,7 @@ struct<LOG(E(), 10.00000000000000001):double>
 -- !query
 select log(590489.45235237)
 -- !query schema
-struct<LOG(E(), 590489.45235237):double>
+struct<log(e(), 590489.45235237):double>
 -- !query output
 13.288707052228641
 
@@ -5135,7 +5135,7 @@ struct<LOG(E(), 590489.45235237):double>
 -- !query
 select log(0.99923, 4.58934e34)
 -- !query schema
-struct<LOG(0.99923, 4.58934E34):double>
+struct<log(0.99923, 4.58934E34):double>
 -- !query output
 -103611.55579543479
 
@@ -5143,7 +5143,7 @@ struct<LOG(0.99923, 4.58934E34):double>
 -- !query
 select log(1.000016, 8.452010e18)
 -- !query schema
-struct<LOG(1.000016, 8.45201E18):double>
+struct<log(1.000016, 8.45201E18):double>
 -- !query output
 2723830.287707013
 
