@@ -7,27 +7,19 @@
 -- 4. AND or OR for the join condition
 
 CREATE TEMP VIEW x(x1, x2) AS VALUES
-    (0, 1),
+    (2, 1),
     (1, 1),
-    (1, 2),
-    (3, 4),
-    (5, 6),
-    (9, 10);
+    (3, 4);
 
 CREATE TEMP VIEW y(y1, y2) AS VALUES
     (0, 2),
     (1, 4),
-    (1, 5),
-    (2, 6),
-    (3, 8),
     (4, 11);
 
 CREATE TEMP VIEW z(z1, z2) AS VALUES
-    (0, 2),
-    (1, 4),
+    (4, 2),
     (3, 3),
-    (3, 6),
-    (8, 11);
+    (8, 1);
 
 
 --Correlated IN, REFERENCE LEFT, INNER JOIN
