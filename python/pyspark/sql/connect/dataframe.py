@@ -593,7 +593,9 @@ class DataFrame:
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
     def _sort_cols(
-        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+        self,
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
     ) -> List[Column]:
         """Return a JVM Seq of Columns that describes the sort order"""
         if cols is None:
@@ -602,11 +604,24 @@ class DataFrame:
                 message_parameters={"item": "cols"},
             )
 
-        _cols: List[Column] = []
         if len(cols) == 1 and isinstance(cols[0], list):
-            _cols = [_to_col(c) for c in cols[0]]
-        else:
-            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+            cols = cols[0]
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                # ordinal is 1-based
+                if c > 0:
+                    _c = self[c - 1]
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _c = self[-c - 1].desc()
+                else:
+                    raise IndexError("Column ordinal must not be zero!")
+            else:
+                _c = c  # type: ignore[assignment]
+            _cols.append(_to_col(cast("ColumnOrName", _c)))
 
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
@@ -623,7 +638,9 @@ class DataFrame:
         return _cols
 
     def sort(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Sort(
@@ -639,7 +656,9 @@ class DataFrame:
     orderBy = sort
 
     def sortWithinPartitions(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Sort(
