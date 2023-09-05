@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.immutable
 
-trait SparkCollectionUtils {
+private[spark] trait SparkCollectionUtils {
   /**
    * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
    */
@@ -34,4 +34,4 @@ trait SparkCollectionUtils {
   }
 }
 
-object SparkCollectionUtils extends SparkCollectionUtils
+private[spark] object SparkCollectionUtils extends SparkCollectionUtils

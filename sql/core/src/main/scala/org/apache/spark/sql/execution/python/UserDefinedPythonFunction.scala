@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets
 import java.util.HashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.Pickler
 
@@ -32,7 +33,8 @@ import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorker
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, PythonUDAF, PythonUDF, PythonUDTF, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -145,7 +147,7 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementSchema = UserDefinedPythonTableFunction.analyzeInPython(_, _, tableArgs))
+          resolveElementMetadata = UserDefinedPythonTableFunction.analyzeInPython(_, _, tableArgs))
     }
     Generate(
       udtf,
@@ -191,7 +193,9 @@ object UserDefinedPythonTableFunction {
    * will be thrown when an exception is raised in Python.
    */
   def analyzeInPython(
-      func: PythonFunction, exprs: Seq[Expression], tableArgs: Seq[Boolean]): StructType = {
+      func: PythonFunction,
+      exprs: Seq[Expression],
+      tableArgs: Seq[Boolean]): PythonUDTFAnalyzeResult = {
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -272,7 +276,7 @@ object UserDefinedPythonTableFunction {
       val dataIn = new DataInputStream(new BufferedInputStream(
         new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
-      // Receive the schema
+      // Receive the schema.
       val schema = dataIn.readInt() match {
         case length if length >= 0 =>
           val obj = new Array[Byte](length)
@@ -286,6 +290,37 @@ object UserDefinedPythonTableFunction {
           val msg = new String(obj, StandardCharsets.UTF_8)
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
+      // Receive whether the "with single partition" property is requested.
+      val withSinglePartition = dataIn.readInt() == 1
+      // Receive the list of requested partitioning columns, if any.
+      val partitionByColumns = ArrayBuffer.empty[Expression]
+      val numPartitionByColumns = dataIn.readInt()
+      for (_ <- 0 until numPartitionByColumns) {
+        val length = dataIn.readInt()
+        val obj = new Array[Byte](length)
+        dataIn.readFully(obj)
+        val columnName = new String(obj, StandardCharsets.UTF_8)
+        partitionByColumns.append(UnresolvedAttribute(columnName))
+      }
+      // Receive the list of requested ordering columns, if any.
+      val orderBy = ArrayBuffer.empty[SortOrder]
+      val numOrderByItems = dataIn.readInt()
+      for (_ <- 0 until numOrderByItems) {
+        val length = dataIn.readInt()
+        val obj = new Array[Byte](length)
+        dataIn.readFully(obj)
+        val columnName = new String(obj, StandardCharsets.UTF_8)
+        val direction = if (dataIn.readInt() == 1) Ascending else Descending
+        val overrideNullsFirst = dataIn.readInt()
+        overrideNullsFirst match {
+          case 0 =>
+            orderBy.append(SortOrder(UnresolvedAttribute(columnName), direction))
+          case 1 => orderBy.append(
+            SortOrder(UnresolvedAttribute(columnName), direction, NullsFirst, Seq.empty))
+          case 2 => orderBy.append(
+            SortOrder(UnresolvedAttribute(columnName), direction, NullsLast, Seq.empty))
+        }
+      }
 
       PythonWorkerUtils.receiveAccumulatorUpdates(maybeAccumulator, dataIn)
       Option(func.accumulator).foreach(_.merge(maybeAccumulator.get))
@@ -298,7 +333,11 @@ object UserDefinedPythonTableFunction {
       }
       releasedOrClosed = true
 
-      schema
+      PythonUDTFAnalyzeResult(
+        schema = schema,
+        withSinglePartition = withSinglePartition,
+        partitionByExpressions = partitionByColumns.toSeq,
+        orderByExpressions = orderBy.toSeq)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

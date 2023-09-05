@@ -14,11 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-source "https://rubygems.org"
-
-gem "ffi", "1.15.5"
-gem "jekyll", "4.3.2"
-gem "rouge", "3.26.0"
-gem "jekyll-redirect-from", "0.16.0"
-gem "webrick", "1.8.1"

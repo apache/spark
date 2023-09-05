@@ -139,6 +139,7 @@ def wrap_arrow_batch_udf(f, return_type):
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
+    @fail_on_stopiteration
     def evaluate(*args: pd.Series, **kwargs: pd.Series) -> pd.Series:
         keys = list(kwargs.keys())
         len_args = len(args)
@@ -150,18 +151,6 @@ def wrap_arrow_batch_udf(f, return_type):
                 for row in zip(*args, *[kwargs[key] for key in keys])
             ]
         )
-
-    def verify_result_type(result):
-        if not hasattr(result, "__len__"):
-            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
-            raise PySparkTypeError(
-                error_class="UDF_RETURN_TYPE",
-                message_parameters={
-                    "expected": pd_type,
-                    "actual": type(result).__name__,
-                },
-            )
-        return result
 
     def verify_result_length(result, length):
         if len(result) != length:
@@ -175,9 +164,7 @@ def wrap_arrow_batch_udf(f, return_type):
         return result
 
     return lambda *a, **kw: (
-        verify_result_length(
-            verify_result_type(evaluate(*a, **kw)), len((list(a) + list(kw.values()))[0])
-        ),
+        verify_result_length(evaluate(*a, **kw), len((list(a) + list(kw.values()))[0])),
         arrow_return_type,
     )
 
@@ -562,7 +549,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         else:
             chained_func = chain(chained_func, f)
 
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+    if eval_type in (
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+    ):
         func = chained_func
     else:
         # make sure StopIteration's raised in the user code are not ignored
@@ -773,6 +763,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         message_parameters={
                             "type_name": type(result).__name__,
                             "value": str(result),
+                            "func": f.__name__,
                         },
                     )
 
@@ -787,6 +778,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             message_parameters={
                                 "expected": str(return_type_size),
                                 "actual": str(len(result.columns)),
+                                "func": f.__name__,
                             },
                         )
 
@@ -806,9 +798,23 @@ def read_udtf(pickleSer, infile, eval_type):
                         message_parameters={"method_name": f.__name__, "error": str(e)},
                     )
 
+            def check_return_value(res):
+                # Check whether the result of an arrow UDTF is iterable before
+                # using it to construct a pandas DataFrame.
+                if res is not None and not isinstance(res, Iterable):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_NOT_ITERABLE",
+                        message_parameters={
+                            "type": type(res).__name__,
+                            "func": f.__name__,
+                        },
+                    )
+
             def evaluate(*args: pd.Series, **kwargs: pd.Series):
                 if len(args) == 0 and len(kwargs) == 0:
-                    yield verify_result(pd.DataFrame(func())), arrow_return_type
+                    res = func()
+                    check_return_value(res)
+                    yield verify_result(pd.DataFrame(res)), arrow_return_type
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
@@ -820,13 +826,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             *row[:len_args],
                             **{key: row[len_args + i] for i, key in enumerate(keys)},
                         )
-                        if res is not None and not isinstance(res, Iterable):
-                            raise PySparkRuntimeError(
-                                error_class="UDTF_RETURN_NOT_ITERABLE",
-                                message_parameters={
-                                    "type": type(res).__name__,
-                                },
-                            )
+                        check_return_value(res)
                         yield verify_result(pd.DataFrame(res)), arrow_return_type
 
             return evaluate
@@ -868,13 +868,17 @@ def read_udtf(pickleSer, infile, eval_type):
                             message_parameters={
                                 "expected": str(return_type_size),
                                 "actual": str(len(result)),
+                                "func": f.__name__,
                             },
                         )
 
                     if not (isinstance(result, (list, dict, tuple)) or hasattr(result, "__dict__")):
                         raise PySparkRuntimeError(
                             error_class="UDTF_INVALID_OUTPUT_ROW_TYPE",
-                            message_parameters={"type": type(result).__name__},
+                            message_parameters={
+                                "type": type(result).__name__,
+                                "func": f.__name__,
+                            },
                         )
 
                 return toInternal(result)
@@ -898,7 +902,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 if not isinstance(res, Iterable):
                     raise PySparkRuntimeError(
                         error_class="UDTF_RETURN_NOT_ITERABLE",
-                        message_parameters={"type": type(res).__name__},
+                        message_parameters={
+                            "type": type(res).__name__,
+                            "func": f.__name__,
+                        },
                     )
 
                 # If the function returns a result, we map it to the internal representation and

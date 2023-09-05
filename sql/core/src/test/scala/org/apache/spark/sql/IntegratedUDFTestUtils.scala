@@ -320,7 +320,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
   sealed trait TestUDTF {
     def apply(session: SparkSession, exprs: Column*): DataFrame
 
+    val name: String
     val prettyName: String
+    val udtf: UserDefinedPythonTableFunction
   }
 
   class PythonUDFWithoutId(
@@ -395,7 +397,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def createUserDefinedPythonTableFunction(
       name: String,
       pythonScript: String,
-      returnType: StructType,
+      returnType: Option[StructType],
       evalType: Int = PythonEvalType.SQL_TABLE_UDF,
       deterministic: Boolean = false): UserDefinedPythonTableFunction = {
     UserDefinedPythonTableFunction(
@@ -408,13 +410,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pythonVer = pythonVer,
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
-      returnType = Some(returnType),
+      returnType = returnType,
       pythonEvalType = evalType,
       udfDeterministic = deterministic)
   }
 
   case class TestPythonUDTF(name: String) extends TestUDTF {
-    private val pythonScript: String =
+    val pythonScript: String =
       """
         |class TestUDTF:
         |    def eval(self, a: int, b: int):
@@ -427,16 +429,265 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            ...
         |""".stripMargin
 
-    private[IntegratedUDFTestUtils] lazy val udtf = createUserDefinedPythonTableFunction(
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
       name = "TestUDTF",
       pythonScript = pythonScript,
-      returnType = StructType.fromDDL("x int, y int")
+      returnType = Some(StructType.fromDDL("x int, y int"))
     )
 
     def apply(session: SparkSession, exprs: Column*): DataFrame =
       udtf.apply(session, exprs: _*)
 
     val prettyName: String = "Regular Python UDTF"
+  }
+
+  object TestPythonUDTFCountSumLast extends TestUDTF {
+    val name: String = "UDTFCountSumLast"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.types import IntegerType, Row, StructType
+         |class $name:
+         |    def __init__(self):
+         |        self._count = 0
+         |        self._sum = 0
+         |        self._last = None
+         |
+         |    @staticmethod
+         |    def analyze(self):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("count", IntegerType())
+         |                .add("total", IntegerType())
+         |                .add("last", IntegerType()))
+         |
+         |    def eval(self, row: Row):
+         |        self._count += 1
+         |        self._last = row["input"]
+         |        self._sum += row["input"]
+         |
+         |    def terminate(self):
+         |        yield self._count, self._sum, self._last
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Python UDTF finding the count, sum, and last value from the input rows"
+  }
+
+  object TestPythonUDTFLastString extends TestUDTF {
+    val name: String = "UDTFLastString"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import Row, StringType, StructType
+         |class $name:
+         |    def __init__(self):
+         |        self._last = ""
+         |
+         |    @staticmethod
+         |    def analyze(self):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("last", StringType()))
+         |
+         |    def eval(self, row: Row):
+         |        self._last = row["input"]
+         |
+         |    def terminate(self):
+         |        yield self._last,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF returning the last string provided in the input table"
+  }
+
+
+  object TestPythonUDTFWithSinglePartition extends TestUDTF {
+    val name: String = "UDTFWithSinglePartition"
+    val pythonScript: String =
+      s"""
+        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.types import IntegerType, Row, StructType
+        |class $name:
+        |    def __init__(self):
+        |        self._count = 0
+        |        self._sum = 0
+        |        self._last = None
+        |
+        |    @staticmethod
+        |    def analyze(self):
+        |        return AnalyzeResult(
+        |            schema=StructType()
+        |                .add("count", IntegerType())
+        |                .add("total", IntegerType())
+        |                .add("last", IntegerType()),
+        |            with_single_partition=True,
+        |            order_by=[
+        |                OrderingColumn("input"),
+        |                OrderingColumn("partition_col")])
+        |
+        |    def eval(self, row: Row):
+        |        self._count += 1
+        |        self._last = row["input"]
+        |        self._sum += row["input"]
+        |
+        |    def terminate(self):
+        |        yield self._count, self._sum, self._last
+        |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF exporting single-partition requirement from 'analyze'"
+  }
+
+  object TestPythonUDTFPartitionBy extends TestUDTF {
+    val name: String = "UDTFPartitionByOrderBy"
+    val pythonScript: String =
+      s"""
+        |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.types import IntegerType, Row, StructType
+        |class $name:
+        |    def __init__(self):
+        |        self._partition_col = None
+        |        self._count = 0
+        |        self._sum = 0
+        |        self._last = None
+        |
+        |    @staticmethod
+        |    def analyze(self):
+        |        return AnalyzeResult(
+        |            schema=StructType()
+        |                .add("partition_col", IntegerType())
+        |                .add("count", IntegerType())
+        |                .add("total", IntegerType())
+        |                .add("last", IntegerType()),
+        |            partition_by=[
+        |                PartitioningColumn("partition_col")
+        |            ],
+        |            order_by=[
+        |                OrderingColumn("input")
+        |            ])
+        |
+        |    def eval(self, row: Row):
+        |        self._partition_col = row["partition_col"]
+        |        self._count += 1
+        |        self._last = row["input"]
+        |        self._sum += row["input"]
+        |
+        |    def terminate(self):
+        |        yield self._partition_col, self._count, self._sum, self._last
+        |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Python UDTF exporting input table partitioning and ordering requirement from 'analyze'"
+  }
+
+  object TestPythonUDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
+    val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.types import IntegerType, Row, StructType
+         |class $name:
+         |    def __init__(self):
+         |        self._last = None
+         |
+         |    @staticmethod
+         |    def analyze(self):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("last", IntegerType()),
+         |            with_single_partition=True,
+         |            partition_by=[
+         |                PartitioningColumn("partition_col")
+         |            ])
+         |
+         |    def eval(self, row: Row):
+         |        self._last = row["input"]
+         |
+         |    def terminate(self):
+         |        yield self._last,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Python UDTF exporting invalid input table partitioning requirement from 'analyze' " +
+        "because the 'with_single_partition' property is also exported to true"
+  }
+
+  object TestPythonUDTFInvalidOrderByWithoutPartitionBy extends TestUDTF {
+    val name: String = "UDTFInvalidOrderByWithoutPartitionBy"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+         |from pyspark.sql.types import IntegerType, Row, StructType
+         |class $name:
+         |    def __init__(self):
+         |        self._last = None
+         |
+         |    @staticmethod
+         |    def analyze(self):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("last", IntegerType()),
+         |            order_by=[
+         |                OrderingColumn("input")
+         |            ])
+         |
+         |    def eval(self, row: Row):
+         |        self._last = row["input"]
+         |
+         |    def terminate(self):
+         |        yield self._last,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Python UDTF exporting invalid input table ordering requirement from 'analyze' " +
+        "without a corresponding partitioning table requirement"
   }
 
   /**
@@ -622,8 +873,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
   /**
    * Register UDTFs used in the test cases.
    */
-  def registerTestUDTF(testUDTF: TestUDTF, session: SparkSession): Unit = testUDTF match {
-    case udtf: TestPythonUDTF => session.udtf.registerPython(udtf.name, udtf.udtf)
-    case other => throw new RuntimeException(s"Unknown UDTF class [${other.getClass}]")
+  case class TestUDTFSet(udtfs: Seq[TestUDTF])
+  def registerTestUDTFs(testUDTFSet: TestUDTFSet, session: SparkSession): Unit = {
+    testUDTFSet.udtfs.foreach {
+      _ match {
+        case udtf: TestUDTF => session.udtf.registerPython(udtf.name, udtf.udtf)
+        case other => throw new RuntimeException(s"Unknown UDTF class [${other.getClass}]")
+      }
+    }
   }
 }

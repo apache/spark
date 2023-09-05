@@ -900,6 +900,20 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
           "actualNum" -> "3",
           "docroot" -> SPARK_DOC_ROOT),
         context = ExpectedContext("", "", 7, 21 + funcName.length, s"$funcName('a', 'b', 'c')"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select $funcName(x'537061726b2053514c', CAST(NULL AS STRING))")
+        },
+        errorClass = "INVALID_PARAMETER_VALUE.NULL",
+        parameters = Map(
+          "functionName" -> s"`$funcName`",
+          "parameter" -> "`format`"),
+        context = ExpectedContext(
+          "",
+          "",
+          7,
+          51 + funcName.length,
+          s"$funcName(x'537061726b2053514c', CAST(NULL AS STRING))"))
     }
   }
 

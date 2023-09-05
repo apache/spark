@@ -1808,6 +1808,11 @@
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
+      "NULL" : {
+        "message" : [
+          "expects a non-NULL value."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -2697,6 +2702,18 @@
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
     ]
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata <requestedMetadata>, but the function call <invalidFunctionCallProperty>."
+    ],
+    "sqlState" : "22023"
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata was invalid; <reason>."
+    ],
+    "sqlState" : "22023"
   },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [

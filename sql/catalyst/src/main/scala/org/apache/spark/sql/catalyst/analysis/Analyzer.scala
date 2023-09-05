@@ -2081,7 +2081,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+            val resolvedTvf = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
@@ -2091,7 +2091,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   catalog, "table-valued functions")
               }
             }
-
+            // Resolve Python UDTF calls if needed.
+            val resolvedFunc = resolvedTvf match {
+              case g @ Generate(u: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                val analyzeResult: PythonUDTFAnalyzeResult =
+                  u.resolveElementMetadata(u.func, u.children)
+                g.copy(generator =
+                  PythonUDTF(u.name, u.func, analyzeResult.schema, u.children,
+                    u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes,
+                    analyzeResult = Some(analyzeResult)))
+              case other =>
+                other
+            }
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
             val functionTableSubqueryArgs =
               mutable.ArrayBuffer.empty[FunctionTableSubqueryArgumentExpression]
@@ -2099,15 +2110,35 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
-                resolvedFunc match {
-                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this clause")
+                val (
+                  pythonUDTFName: String,
+                  pythonUDTFAnalyzeResult: Option[PythonUDTFAnalyzeResult]) =
+                  resolvedFunc match {
+                    case Generate(p: PythonUDTF, _, _, _, _, _) =>
+                      (p.name,
+                        p.analyzeResult)
+                    case _ =>
+                      assert(!t.hasRepartitioning,
+                        "Cannot evaluate the table-valued function call because it included the " +
+                          "PARTITION BY clause, but only Python table functions support this " +
+                          "clause")
+                      ("", None)
+                  }
+                // Check if this is a call to a Python user-defined table function whose polymorphic
+                // 'analyze' method returned metadata indicated requested partitioning and/or
+                // ordering properties of the input relation. In that event, make sure that the UDTF
+                // call did not include any explicit PARTITION BY and/or ORDER BY clauses for the
+                // corresponding TABLE argument, and then update the TABLE argument representation
+                // to apply the requested partitioning and/or ordering.
+                pythonUDTFAnalyzeResult.map { analyzeResult =>
+                  val newTableArgument: FunctionTableSubqueryArgumentExpression =
+                    analyzeResult.applyToTableArgument(pythonUDTFName, t)
+                  tableArgs.append(SubqueryAlias(alias, newTableArgument.evaluable))
+                  functionTableSubqueryArgs.append(newTableArgument)
+                }.getOrElse {
+                  tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                  functionTableSubqueryArgs.append(t)
                 }
-                tableArgs.append(SubqueryAlias(alias, t.evaluable))
-                functionTableSubqueryArgs.append(t)
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
@@ -2219,7 +2250,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
-            val elementSchema = u.resolveElementSchema(u.func, u.children)
+            val elementSchema = u.resolveElementMetadata(u.func, u.children).schema
             PythonUDTF(u.name, u.func, elementSchema, u.children,
               u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes)
           }

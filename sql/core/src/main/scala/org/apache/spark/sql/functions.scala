@@ -575,7 +575,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def first_value(e: Column): Column = first(e)
+  def first_value(e: Column): Column = call_function("first_value", e)
 
   /**
    * Aggregate function: returns the first value in a group.
@@ -589,9 +589,8 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def first_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
-    new First(e.expr, ignoreNulls.expr)
-  }
+  def first_value(e: Column, ignoreNulls: Column): Column =
+    call_function("first_value", e, ignoreNulls)
 
   /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
@@ -848,7 +847,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def last_value(e: Column): Column = last(e)
+  def last_value(e: Column): Column = call_function("last_value", e)
 
   /**
    * Aggregate function: returns the last value in a group.
@@ -862,9 +861,8 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def last_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
-    new Last(e.expr, ignoreNulls.expr)
-  }
+  def last_value(e: Column, ignoreNulls: Column): Column =
+    call_function("last_value", e, ignoreNulls)
 
   /**
    * Aggregate function: returns the most frequent value in a group.
@@ -1017,9 +1015,8 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
-    percentile_approx(e, percentage, accuracy)
-  }
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column =
+    call_function("approx_percentile", e, percentage, accuracy)
 
   /**
    * Aggregate function: returns the product of all numerical elements in a group.
@@ -1052,7 +1049,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def std(e: Column): Column = stddev(e)
+  def std(e: Column): Column = call_function("std", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1060,7 +1057,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+  def stddev(e: Column): Column = call_function("stddev", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1330,7 +1327,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+  def every(e: Column): Column = call_function("every", e)
 
   /**
    * Aggregate function: returns true if all values of `e` are true.
@@ -1346,7 +1343,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+  def some(e: Column): Column = call_function("some", e)
 
   /**
    * Aggregate function: returns true if at least one value of `e` is true.
@@ -1354,7 +1351,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def any(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+  def any(e: Column): Column = call_function("any", e)
 
   /**
    * Aggregate function: returns true if at least one value of `e` is true.
@@ -1944,9 +1941,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_avg(e: Column): Column = withAggregateFunction {
-    Average(e.expr, EvalMode.TRY)
-  }
+  def try_avg(e: Column): Column =
+    call_function("try_avg", e)
 
   /**
    * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
@@ -1984,9 +1980,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_sum(e: Column): Column = withAggregateFunction {
-    Sum(e.expr, EvalMode.TRY)
-  }
+  def try_sum(e: Column): Column = call_function("try_sum", e)
 
   /**
    * Creates a new struct column.
@@ -2081,7 +2075,7 @@ object functions {
    * @group bitwise_funcs
    * @since 3.5.0
    */
-  def getbit(e: Column, pos: Column): Column = bit_get(e, pos)
+  def getbit(e: Column, pos: Column): Column = call_function("getbit", e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -2385,7 +2379,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+  def ceiling(e: Column, scale: Column): Column =
+    call_function("ceiling", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2393,7 +2388,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column): Column = ceil(e)
+  def ceiling(e: Column): Column = call_function("ceiling", e)
 
   /**
    * Convert a number in a string column from one base to another.
@@ -2751,7 +2746,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def negative(e: Column): Column = withExpr { UnaryMinus(e.expr) }
+  def negative(e: Column): Column = call_function("negative", e)
 
   /**
    * Returns Pi.
@@ -2979,7 +2974,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def sign(e: Column): Column = signum(e)
+  def sign(e: Column): Column = call_function("sign", e)
 
   /**
    * Computes the signum of the given value.
@@ -3184,7 +3179,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def current_schema(): Column = withExpr { CurrentDatabase() }
+  def current_schema(): Column = call_function("current_schema")
 
   /**
    * Returns the user name of current execution context.
@@ -3368,7 +3363,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def user(): Column = withExpr { CurrentUser() }
+  def user(): Column = call_function("user")
 
   /**
    * Returns the user name of current execution context.
@@ -3646,9 +3641,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def sha(col: Column): Column = withExpr {
-    Sha1(col.expr)
-  }
+  def sha(col: Column): Column = call_function("sha", col)
 
   /**
    * Returns the length of the block being read, or -1 if not available.
@@ -3686,12 +3679,12 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def java_method(cols: Column*): Column = withExpr {
-    CallMethodViaReflection(cols.map(_.expr))
-  }
+  def java_method(cols: Column*): Column =
+    call_function("java_method", cols: _*)
 
   /**
-   * Calls a method with reflection.
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
    *
    * @group misc_funcs
    * @since 4.0.0
@@ -3739,9 +3732,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(seed: Column): Column = withExpr {
-    Rand(seed.expr)
-  }
+  def random(seed: Column): Column = call_function("random", seed)
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) uniformly
@@ -3750,9 +3741,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(): Column = withExpr {
-    new Rand()
-  }
+  def random(): Column = call_function("random")
 
   /**
    * Returns the bucket number for the given input column.
@@ -4058,7 +4047,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def regexp(str: Column, regexp: Column): Column = rlike(str, regexp)
+  def regexp(str: Column, regexp: Column): Column =
+    call_function("regexp", str, regexp)
 
   /**
    * Returns true if `str` matches `regexp`, or false otherwise.
@@ -4066,7 +4056,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def regexp_like(str: Column, regexp: Column): Column = rlike(str, regexp)
+  def regexp_like(str: Column, regexp: Column): Column =
+    call_function("regexp_like", str, regexp)
 
   /**
    * Returns a count of the number of times that the regular expression pattern `regexp`
@@ -4207,6 +4198,16 @@ object functions {
    */
   def repeat(str: Column, n: Int): Column = withExpr {
     StringRepeat(str.expr, lit(n).expr)
+  }
+
+  /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = withExpr {
+    StringRepeat(str.expr, n.expr)
   }
 
   /**
@@ -4532,9 +4533,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def substr(str: Column, pos: Column, len: Column): Column = withExpr {
-    Substring(str.expr, pos.expr, len.expr)
-  }
+  def substr(str: Column, pos: Column, len: Column): Column =
+    call_function("substr", str, pos, len)
 
   /**
    * Returns the substring of `str` that starts at `pos`,
@@ -4543,9 +4543,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def substr(str: Column, pos: Column): Column = withExpr {
-    new Substring(str.expr, pos.expr)
-  }
+  def substr(str: Column, pos: Column): Column =
+    call_function("substr", str, pos)
 
   /**
    * Extracts a part from a URL.
@@ -4573,9 +4572,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def printf(format: Column, arguments: Column*): Column = withExpr {
-    FormatString((lit(format) +: arguments).map(_.expr): _*)
-  }
+  def printf(format: Column, arguments: Column*): Column =
+    call_function("printf", (format +: arguments): _*)
 
   /**
    * Decodes a `str` in 'application/x-www-form-urlencoded' format
@@ -4606,9 +4604,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def position(substr: Column, str: Column, start: Column): Column = withExpr {
-    StringLocate(substr.expr, str.expr, start.expr)
-  }
+  def position(substr: Column, str: Column, start: Column): Column =
+    call_function("position", substr, str, start)
 
   /**
    * Returns the position of the first occurrence of `substr` in `str` after position `1`.
@@ -4617,9 +4614,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def position(substr: Column, str: Column): Column = withExpr {
-    new StringLocate(substr.expr, str.expr)
-  }
+  def position(substr: Column, str: Column): Column =
+    call_function("position", substr, str)
 
   /**
    * Returns a boolean. The value is True if str ends with suffix.
@@ -4648,9 +4644,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def char(n: Column): Column = withExpr {
-    Chr(n.expr)
-  }
+  def char(n: Column): Column = call_function("char", n)
 
   /**
    * Removes the leading and trailing space characters from `str`.
@@ -4714,9 +4708,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def char_length(str: Column): Column = withExpr {
-    Length(str.expr)
-  }
+  def char_length(str: Column): Column = call_function("char_length", str)
 
   /**
    * Returns the character length of string data or number of bytes of binary data.
@@ -4726,9 +4718,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def character_length(str: Column): Column = withExpr {
-    Length(str.expr)
-  }
+  def character_length(str: Column): Column = call_function("character_length", str)
 
   /**
    * Returns the ASCII character having the binary equivalent to `n`.
@@ -4837,9 +4827,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def lcase(str: Column): Column = withExpr {
-    Lower(str.expr)
-  }
+  def lcase(str: Column): Column = call_function("lcase", str)
 
   /**
    * Returns `str` with all characters changed to uppercase.
@@ -4847,9 +4835,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def ucase(str: Column): Column = withExpr {
-    Upper(str.expr)
-  }
+  def ucase(str: Column): Column = call_function("ucase", str)
 
   /**
    * Returns the leftmost `len`(`len` can be string type) characters from the string `str`,
@@ -4911,7 +4897,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def curdate(): Column = withExpr { CurrentDate() }
+  def curdate(): Column = call_function("curdate")
 
   /**
    * Returns the current date at the start of query evaluation as a date column.
@@ -5013,7 +4999,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def dateadd(start: Column, days: Column): Column = date_add(start, days)
+  def dateadd(start: Column, days: Column): Column =
+    call_function("dateadd", start, days)
 
   /**
    * Returns the date that is `days` days before `start`
@@ -5078,7 +5065,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def date_diff(end: Column, start: Column): Column = datediff(end, start)
+  def date_diff(end: Column, start: Column): Column =
+    call_function("date_diff", end, start)
 
   /**
    * Create date from the number of `days` since 1970-01-01.
@@ -5135,7 +5123,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def day(e: Column): Column = dayofmonth(e)
+  def day(e: Column): Column = call_function("day", e)
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
@@ -5174,7 +5162,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def date_part(field: Column, source: Column): Column = call_function("date_part", field, source)
+  def date_part(field: Column, source: Column): Column =
+    call_function("date_part", field, source)
 
   /**
    * Extracts a part of the date/timestamp or interval source.
@@ -5186,7 +5175,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def datepart(field: Column, source: Column): Column = call_function("datepart", field, source)
+  def datepart(field: Column, source: Column): Column =
+    call_function("datepart", field, source)
 
   /**
    * Returns the last day of the month which the given date belongs to.
@@ -5439,9 +5429,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def try_to_timestamp(s: Column, format: Column): Column = withExpr {
-    new ParseToTimestamp(s.expr, format.expr)
-  }
+  def try_to_timestamp(s: Column, format: Column): Column =
+    call_function("try_to_timestamp", s, format)
 
   /**
    * Parses the `s` to a timestamp. The function always returns null on an invalid
@@ -5451,9 +5440,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def try_to_timestamp(s: Column): Column = withExpr {
-    new ParseToTimestamp(s.expr)
-  }
+  def try_to_timestamp(s: Column): Column =
+    call_function("try_to_timestamp", s)
 
   /**
    * Converts the column into `DateType` by casting rules to `DateType`.
@@ -5890,9 +5878,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ltz(timestamp: Column, format: Column): Column = withExpr {
-    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampType)
-  }
+  def to_timestamp_ltz(timestamp: Column, format: Column): Column =
+    call_function("to_timestamp_ltz", timestamp, format)
 
   /**
    * Parses the `timestamp` expression with the default format to a timestamp without time zone.
@@ -5901,9 +5888,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ltz(timestamp: Column): Column = withExpr {
-    ParseToTimestamp(timestamp.expr, None, TimestampType)
-  }
+  def to_timestamp_ltz(timestamp: Column): Column =
+    call_function("to_timestamp_ltz", timestamp)
 
   /**
    * Parses the `timestamp_str` expression with the `format` expression
@@ -5912,9 +5898,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ntz(timestamp: Column, format: Column): Column = withExpr {
-    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampNTZType)
-  }
+  def to_timestamp_ntz(timestamp: Column, format: Column): Column =
+    call_function("to_timestamp_ntz", timestamp, format)
 
   /**
    * Parses the `timestamp` expression with the default format to a timestamp without time zone.
@@ -5923,9 +5908,8 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ntz(timestamp: Column): Column = withExpr {
-    ParseToTimestamp(timestamp.expr, None, TimestampNTZType)
-  }
+  def to_timestamp_ntz(timestamp: Column): Column =
+    call_function("to_timestamp_ntz", timestamp)
 
   /**
    * Returns the UNIX timestamp of the given time.
@@ -7030,7 +7014,7 @@ object functions {
    * @group collection_funcs
    * @since 3.5.0
    */
-  def cardinality(e: Column): Column = size(e)
+  def cardinality(e: Column): Column = call_function("cardinality", e)
 
   /**
    * Sorts the input array for the given column in ascending order,
@@ -7088,7 +7072,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def array_agg(e: Column): Column = collect_list(e)
+  def array_agg(e: Column): Column = call_function("array_agg", e)
 
   /**
    * Returns a random permutation of the given array.
@@ -7487,9 +7471,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_number(x: Column, p: Column): Column = withExpr {
-    XPathDouble(x.expr, p.expr)
-  }
+  def xpath_number(x: Column, p: Column): Column =
+    call_function("xpath_number", x, p)
 
   /**
    * Returns a float value, the value zero if no match is found,
@@ -7788,10 +7771,9 @@ object functions {
       hours: Column,
       mins: Column,
       secs: Column,
-      timezone: Column): Column = withExpr {
-    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
-      mins.expr, secs.expr, Some(timezone.expr), dataType = TimestampType)
-  }
+      timezone: Column): Column =
+    call_function("make_timestamp_ltz",
+      years, months, days, hours, mins, secs, timezone)
 
   /**
    * Create the current timestamp with local time zone from years, months, days, hours, mins and
@@ -7807,10 +7789,9 @@ object functions {
       days: Column,
       hours: Column,
       mins: Column,
-      secs: Column): Column = withExpr {
-    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
-      mins.expr, secs.expr, dataType = TimestampType)
-  }
+      secs: Column): Column =
+    call_function("make_timestamp_ltz",
+      years, months, days, hours, mins, secs)
 
   /**
    * Create local date-time from years, months, days, hours, mins, secs fields. If the
@@ -7826,10 +7807,9 @@ object functions {
       days: Column,
       hours: Column,
       mins: Column,
-      secs: Column): Column = withExpr {
-    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
-      mins.expr, secs.expr, dataType = TimestampNTZType)
-  }
+      secs: Column): Column =
+    call_function("make_timestamp_ntz",
+      years, months, days, hours, mins, secs)
 
   /**
    * Make year-month interval from years, months.
@@ -7896,9 +7876,8 @@ object functions {
    * @group predicates_funcs
    * @since 3.5.0
    */
-  def ifnull(col1: Column, col2: Column): Column = withExpr {
-    new Nvl(col1.expr, col2.expr)
-  }
+  def ifnull(col1: Column, col2: Column): Column =
+    call_function("ifnull", col1, col2)
 
   /**
    * Returns true if `col` is not null, or false otherwise.

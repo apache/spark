@@ -987,7 +987,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def std(e: Column): Column = stddev(e)
+  def std(e: Column): Column = Column.fn("std", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -2337,7 +2337,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+  def ceiling(e: Column, scale: Column): Column = Column.fn("ceiling", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2345,7 +2345,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column): Column = ceil(e)
+  def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
    * Convert a number in a string column from one base to another.
@@ -2800,7 +2800,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def power(l: Column, r: Column): Column = pow(l, r)
+  def power(l: Column, r: Column): Column = Column.fn("power", l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2937,7 +2937,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def sign(e: Column): Column = signum(e)
+  def sign(e: Column): Column = Column.fn("sign", e)
 
   /**
    * Computes the signum of the given value.
@@ -3630,6 +3630,15 @@ object functions {
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
+
+  /**
    * Returns the Spark version. The string contains 2 fields, the first being a release version
    * and the second being a git revision.
    *
@@ -4092,6 +4101,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
   /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
+
+  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
@@ -4428,7 +4445,7 @@ object functions {
    * @since 3.5.0
    */
   def printf(format: Column, arguments: Column*): Column =
-    Column.fn("format_string", lit(format) +: arguments: _*)
+    Column.fn("printf", (format +: arguments): _*)
 
   /**
    * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
