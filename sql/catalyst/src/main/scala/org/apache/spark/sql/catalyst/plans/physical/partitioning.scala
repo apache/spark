@@ -312,26 +312,37 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * Represents a partitioning where rows are split across partitions based on transforms defined
  * by `expressions`. `partitionValues`, if defined, should contain value of partition key(s) in
  * ascending order, after evaluated by the transforms in `expressions`, for each input partition.
- * In addition, its length must be the same as the number of input partitions (and thus is a 1-1
- * mapping). The `partitionValues` may contain duplicated partition values.
+ * In addition, its length must be the same as the number of Spark partitions (and thus is a 1-1
+ * mapping), and each row in `partitionValues` must be unique.
  *
- * For example, if `expressions` is `[years(ts_col)]`, then a valid value of `partitionValues` is
- * `[0, 1, 2]`, which represents 3 input partitions with distinct partition values. All rows
- * in each partition have the same value for column `ts_col` (which is of timestamp type), after
- * being applied by the `years` transform.
+ * The `originalPartitionValues`, on the other hand, are partition values from the original input
+ * splits returned by data sources. It may contain duplicated values.
  *
- * On the other hand, `[0, 0, 1]` is not a valid value for `partitionValues` since `0` is
- * duplicated twice.
+ * For example, if a data source reports partition transform expressions `[years(ts_col)]` with 4
+ * input splits whose corresponding partition values are `[0, 1, 2, 2]`, then the `expressions`
+ * in this case is `[years(ts_col)]`, while `partitionValues` is `[0, 1, 2]`, which
+ * represents 3 input partitions with distinct partition values. All rows in each partition have
+ * the same value for column `ts_col` (which is of timestamp type), after being applied by the
+ * `years` transform. This is generated after combining the two splits with partition value `2`
+ * into a single Spark partition.
+ *
+ * On the other hand, in this example `[0, 1, 2, 2]` is the value of `originalPartitionValues`
+ * which is calculated from the original input splits.
  *
  * @param expressions partition expressions for the partitioning.
  * @param numPartitions the number of partitions
- * @param partitionValues the values for the cluster keys of the distribution, must be
- *                        in ascending order.
+ * @param partitionValues the values for the final cluster keys (that is, after applying grouping
+ *                        on the input splits according to `expressions`) of the distribution,
+ *                        must be in ascending order, and must NOT contain duplicated values.
+ * @param originalPartitionValues the original input partition values before any grouping has been
+ *                                applied, must be in ascending order, and may contain duplicated
+ *                                values
  */
 case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
-    partitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
+    partitionValues: Seq[InternalRow] = Seq.empty,
+    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -368,7 +379,7 @@ object KeyGroupedPartitioning {
   def apply(
       expressions: Seq[Expression],
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
-    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues)
+    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues, partitionValues)
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
