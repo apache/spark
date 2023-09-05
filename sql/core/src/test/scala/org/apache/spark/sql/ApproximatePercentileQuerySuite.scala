@@ -340,7 +340,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-XXXXX: NULL arguments of percentile_approx") {
+  test("SPARK-45079: NULL arguments of percentile_approx") {
     checkError(
       exception = intercept[AnalysisException] {
         sql(
