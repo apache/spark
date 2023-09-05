@@ -1310,21 +1310,15 @@ object TransposeWindow extends Rule[LogicalPlan] {
   private def compatibleOrderBy(w1: Window, w2: Window): Boolean = {
     val childWindowExprs = w2.windowExpressions.map(x => x.toAttribute)
     val parentOrder = w1.orderSpec.flatMap(x => x.references)
-    println(s"child window expr ${childWindowExprs}")
-    println(s"parent order ${parentOrder}")
-    println(s"Intersects? ${childWindowExprs.intersect(parentOrder).isEmpty}")
     childWindowExprs.intersect(parentOrder).isEmpty
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
-    println(s"Parent ${w1.references} vs produced ${w1.producedAttributes}")
-    println(s"Child ${w2.windowOutputSet}")
-    println(s"Intersect is empty? ${w1.references.intersect(w2.windowOutputSet).isEmpty}")
     w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.expressions.forall(_.deterministic) &&
       w2.expressions.forall(_.deterministic) &&
-      compatiblePartitions(w1.partitionSpec, w2.partitionSpec) // &&
-      // compatibleOrderBy(w1, w2)
+      compatiblePartitions(w1.partitionSpec, w2.partitionSpec) &&
+      compatibleOrderBy(w1, w2)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(

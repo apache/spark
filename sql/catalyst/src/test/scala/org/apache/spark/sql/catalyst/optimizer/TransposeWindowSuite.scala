@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Concat, CurrentRow, Rand, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.{Concat, CurrentRow, Rand, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class TransposeWindowSuite extends PlanTest {
@@ -162,37 +162,36 @@ class TransposeWindowSuite extends PlanTest {
 
   test("two windows with overlapping project/order by lists") {
     // Parent orders by the window expression of the child, no reordering.
-    val sum_a_2 = sum(c).as('sum_a_2)
-    val sum_a_2_attr = sum_a_2.toAttribute
-    println(s"sum_a_2 ${sum_a_2_attr}")
-    val parentOrderSpec = Seq(d.asc, sum_a_2_attr.asc)
-    val query = testRelation
-      .window(Seq(sum_a_2),
-        partitionSpec4, orderSpec2)
-      .window(Seq(sum(c).as('sum_a_1), sum_a_2_attr), partitionSpec3,
-        parentOrderSpec)
-    val analyzed = query.analyze
-    val optimized = Optimize.execute(analyzed)
-    comparePlans(optimized, analyzed)
-  }
-
-  test("row number expressions") {
+    // Child plan is SELECT a, b, ROW_NUMBER() OVER (PARTITION BY a, b ORDER BY a) as rn_child
+    val input = testRelation.analyze
+    val childPartitionFields = Seq(a, b)
+    val childOrderByFields = Seq(a.asc)
     val windowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
-    val childWindowExpr = windowExpr(RowNumber(),
-      windowSpec(Nil, orderSpec2, windowFrame)).as("rn")
-    val childWindow = testRelation.window(
-      Seq(childWindowExpr, c),
-      partitionSpec4, orderSpec2)
-    val childWindowRef = childWindowExpr.toAttribute
-    val parentOrderSpec = Seq(d.asc, childWindowRef.asc)
-    val parentWindowExpr = windowExpr(RowNumber(),
-      windowSpec(Nil, parentOrderSpec, windowFrame)).as("rn_parent")
-    val query = childWindow
-      .window(Seq(parentWindowExpr, d, childWindowExpr), partitionSpec3,
-        parentOrderSpec)
-    val analyzed = query.analyze
-    val optimized = Optimize.execute(analyzed)
-    comparePlans(optimized, analyzed)
+
+    val childRowNumber = WindowExpression(RowNumber(),
+      WindowSpecDefinition(childPartitionFields, childOrderByFields, windowFrame))
+    val childRowNumberAlias = childRowNumber.as("rn_child")
+    val childRowNumberRef = childRowNumberAlias.toAttribute
+
+    val childWindow = Window(Seq(childRowNumberAlias) ++ childPartitionFields,
+      childPartitionFields, childOrderByFields, input)
+
+    // Parent plan is
+    // SELECT a, rn_child, ROW_NUMBER() OVER (PARTITION BY a ORDER BY a, rn) as rn_parent
+    // Note that parent orders by the result of the child, so they can't be reordered.
+    val parentPartitionFields = Seq(a)
+    val parentOrderByFields = Seq(a.asc, childRowNumberRef.asc)
+    val parentRowNumber = WindowExpression(RowNumber(),
+      WindowSpecDefinition(parentPartitionFields, parentOrderByFields, windowFrame))
+    val parentRowNumberAlias = parentRowNumber.as("rn_parent")
+    val parentWindow = Window(Seq(parentRowNumberAlias, a, childRowNumberRef),
+      parentPartitionFields, parentOrderByFields, childWindow)
+
+    // Parent window does not have any references, so the existing check
+    // in TransposeWindows always returns true
+    assert(parentWindow.references.isEmpty)
+    val optimized = Optimize.execute(parentWindow)
+    comparePlans(optimized, parentWindow)
   }
 
 }
