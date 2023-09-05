@@ -289,7 +289,7 @@ class Index(IndexOpsMixin):
 
         if name is None:
             name = type(self).__name__
-        return "%s: %s entries%s" % (name, total_count, index_summary)
+        return "%s: %s entries%s" % (name, int(total_count), index_summary)
 
     @property
     def size(self) -> int:
