@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
@@ -191,18 +193,26 @@ case class CreateDataSourceTableAsSelectCommand(
         schema = tableSchema)
       // Table location is already validated. No need to check it again during table creation.
       sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
-      val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
+      try {
+        val result = saveDataIntoTable(
+          sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
 
-      result match {
-        case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+        result match {
+          case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
             sparkSession.sqlContext.conf.manageFilesourcePartitions =>
-          // Need to recover partitions into the metastore so our saved data is visible.
-          sessionState.executePlan(RepairTableCommand(
-            table.identifier,
-            enableAddPartitions = true,
-            enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
-        case _ =>
+            // Need to recover partitions into the metastore so our saved data is visible.
+            sessionState.executePlan(RepairTableCommand(
+              table.identifier,
+              enableAddPartitions = true,
+              enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
+          case _ =>
+        }
+      } catch {
+        case NonFatal(e) =>
+          // drop the created table.
+          sessionState.catalog.dropTable(newTable.identifier,
+            ignoreIfNotExists = true, purge = false)
+          throw e
       }
     }
 
