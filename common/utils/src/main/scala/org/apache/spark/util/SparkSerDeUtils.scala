@@ -18,7 +18,7 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream, ObjectStreamClass}
 
-trait SparkSerDeUtils {
+private[spark] trait SparkSerDeUtils {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -51,4 +51,4 @@ trait SparkSerDeUtils {
   }
 }
 
-object SparkSerDeUtils extends SparkSerDeUtils
+private[spark] object SparkSerDeUtils extends SparkSerDeUtils
