@@ -228,16 +228,16 @@ case class AlterColumn(
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
     val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
-      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
-    }
-    if (setDefaultExpression.isDefined && setDefaultExpression.get.nonEmpty) {
-      val newDataType = if (dataType.isDefined) {
-        dataType.get
-      } else {
-        column.asInstanceOf[ResolvedFieldName].field.dataType
+      if (newDefaultExpression.nonEmpty) {
+        val newDataType = if (dataType.isDefined) {
+          dataType.get
+        } else {
+          column.asInstanceOf[ResolvedFieldName].field.dataType
+        }
+        ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
+          "ALTER TABLE ALTER COLUMN")
       }
-      ResolveDefaultColumns.analyze(column.name.last, newDataType, setDefaultExpression.get,
-        "ALTER TABLE ALTER COLUMN")
+      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
     }
     typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }
