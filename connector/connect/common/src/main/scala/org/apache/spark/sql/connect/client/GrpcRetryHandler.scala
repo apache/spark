@@ -217,7 +217,24 @@ private[sql] object GrpcRetryHandler extends Logging {
    */
   private[client] def retryException(e: Throwable): Boolean = {
     e match {
-      case e: StatusRuntimeException => e.getStatus.getCode == Status.Code.UNAVAILABLE
+      case e: StatusRuntimeException =>
+        val statusCode: Status.Code = e.getStatus.getCode
+
+        if (List(Status.Code.INTERNAL)
+          .contains(statusCode)) {
+          // This error happens if another RPC preempts this RPC, retry.
+          val msg_cursor_disconnected = "INVALID_CURSOR.DISCONNECTED"
+
+          val msg: String = e.toString
+          if (List(msg_cursor_disconnected).exists(msg.contains)) {
+            return true
+          }
+        }
+
+        if (statusCode == Status.Code.UNAVAILABLE) {
+          return true
+        }
+        false
       case _ => false
     }
   }
