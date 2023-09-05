@@ -1314,17 +1314,17 @@ case class SetTableSerDeProperties(
  */
 case class CacheTable(
     table: LogicalPlan,
-    multipartIdentifier: Seq[String],
+    identifier: LogicalPlan,
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTable = {
     assert(!isAnalyzed)
-    copy(table = newChildren.head)
+    copy(table = newChildren.head, identifier = newChildren.last)
   }
 
-  override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(table, identifier)
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }

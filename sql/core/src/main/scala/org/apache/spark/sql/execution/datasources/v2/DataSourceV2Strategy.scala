@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{FakeSystemCatalog, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -484,8 +484,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case RepairTable(_: ResolvedTable, _, _) =>
       throw QueryCompilationErrors.repairTableNotSupportedForV2TablesError()
 
-    case r: CacheTable =>
-      CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
+    case CacheTable(table, ResolvedIdentifier(FakeSystemCatalog, ident), isLazy, options, _) =>
+      CacheTableExec(table, ident.toString, isLazy, options) :: Nil
+
+    case CacheTable(table, ResolvedIdentifier(cat, ident), isLazy, options, _) =>
+      CacheTableExec(table, s"${cat.name()}.$ident", isLazy, options) :: Nil
 
     case r: CacheTableAsSelect =>
       CacheTableAsSelectExec(

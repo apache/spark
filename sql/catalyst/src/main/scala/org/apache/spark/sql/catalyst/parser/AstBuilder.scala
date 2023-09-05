@@ -4612,7 +4612,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       if (query.isDefined) {
         CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
       } else {
-        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident), ident, isLazy, options)
+        CacheTable(createUnresolvedRelation(ctx.identifierReference, ident),
+          UnresolvedIdentifier(ident, allowTemp = true), isLazy, options)
       }
     })
   }

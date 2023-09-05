@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.LocalTempView
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.storage.StorageLevel
 
@@ -71,10 +70,10 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
 
 case class CacheTableExec(
     relation: LogicalPlan,
-    multipartIdentifier: Seq[String],
+    identifier: String,
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
-  override lazy val relationName: String = multipartIdentifier.quoted
+  override lazy val relationName: String = identifier
 
   override lazy val planToCache: LogicalPlan = relation
 
