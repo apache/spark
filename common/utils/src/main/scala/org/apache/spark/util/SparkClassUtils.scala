@@ -20,7 +20,7 @@ import java.util.Random
 
 import scala.util.Try
 
-trait SparkClassUtils {
+private[spark] trait SparkClassUtils {
   val random = new Random()
 
   def getSparkClassLoader: ClassLoader = getClass.getClassLoader
@@ -80,4 +80,4 @@ trait SparkClassUtils {
   }
 }
 
-object SparkClassUtils extends SparkClassUtils
+private[spark] object SparkClassUtils extends SparkClassUtils
