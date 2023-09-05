@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Concat, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Concat, CurrentRow, Rand, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -163,11 +163,32 @@ class TransposeWindowSuite extends PlanTest {
   test("two windows with overlapping project/order by lists") {
     // Parent orders by the window expression of the child, no reordering.
     val sum_a_2 = sum(c).as('sum_a_2)
-    val parentOrderSpec = Seq(d.asc, sum_a_2.toAttribute.asc)
+    val sum_a_2_attr = sum_a_2.toAttribute
+    println(s"sum_a_2 ${sum_a_2_attr}")
+    val parentOrderSpec = Seq(d.asc, sum_a_2_attr.asc)
     val query = testRelation
       .window(Seq(sum_a_2),
         partitionSpec4, orderSpec2)
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec3,
+      .window(Seq(sum(c).as('sum_a_1), sum_a_2_attr), partitionSpec3,
+        parentOrderSpec)
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+    comparePlans(optimized, analyzed)
+  }
+
+  test("row number expressions") {
+    val windowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+    val childWindowExpr = windowExpr(RowNumber(),
+      windowSpec(Nil, orderSpec2, windowFrame)).as("rn")
+    val childWindow = testRelation.window(
+      Seq(childWindowExpr, c),
+      partitionSpec4, orderSpec2)
+    val childWindowRef = childWindowExpr.toAttribute
+    val parentOrderSpec = Seq(d.asc, childWindowRef.asc)
+    val parentWindowExpr = windowExpr(RowNumber(),
+      windowSpec(Nil, parentOrderSpec, windowFrame)).as("rn_parent")
+    val query = childWindow
+      .window(Seq(parentWindowExpr, d, childWindowExpr), partitionSpec3,
         parentOrderSpec)
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
