@@ -21,7 +21,7 @@ from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
     from pyspark import sql
-    from pyspark.sql.connect.udf import UserDefinedFunction
+    from pyspark_connect.sql.udf import UserDefinedFunction
 
     sql.udf.UserDefinedFunction = UserDefinedFunction
 

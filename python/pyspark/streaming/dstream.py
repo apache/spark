@@ -37,7 +37,7 @@ from typing import (
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.streaming.util import rddToFileName, TransformFunction
 from pyspark.rdd import portable_hash, RDD
 from pyspark.resultiterable import ResultIterable

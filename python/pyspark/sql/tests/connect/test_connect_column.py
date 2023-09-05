@@ -18,7 +18,7 @@
 import decimal
 import datetime
 
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     Row,
     StructField,
     StructType,
@@ -39,8 +39,8 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
@@ -48,10 +48,10 @@ from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 if should_test_connect:
     import pandas as pd
     from pyspark.sql import functions as SF
-    from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
-    from pyspark.sql.connect.types import (
+    from pyspark_connect.sql import functions as CF
+    from pyspark_connect.sql.column import Column
+    from pyspark_connect.sql.expressions import DistributedSequenceID, LiteralExpression
+    from pyspark_connect.sql.types import (
         JVM_BYTE_MIN,
         JVM_BYTE_MAX,
         JVM_SHORT_MIN,
@@ -66,7 +66,7 @@ if should_test_connect:
 class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.dataframe import DataFrame as SDF
-        from pyspark.sql.connect.dataframe import DataFrame as CDF
+        from pyspark_connect.sql.dataframe import DataFrame as CDF
 
         assert isinstance(df1, (SDF, CDF))
         if isinstance(df1, SDF):

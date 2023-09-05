@@ -20,8 +20,8 @@ from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
-from pyspark.errors.exceptions.captured import (
+from pyspark_common.errors import StreamingQueryException, PySparkValueError
+from pyspark_common.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
 from pyspark.sql.streaming.listener import StreamingQueryListener

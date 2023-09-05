@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.utils import is_timestamp_ntz_preferred
+from pyspark_connect.sql.utils import check_dependencies
+from pyspark_common.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -39,7 +39,7 @@ from threading import Lock
 import numpy as np
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     _from_numpy_type,
     DateType,
     ArrayType,
@@ -60,8 +60,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 
-import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.types import (
+import pyspark_connect.sql.proto as proto
+from pyspark_connect.sql.types import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,
@@ -74,11 +74,11 @@ from pyspark.sql.connect.types import (
     pyspark_types_to_proto_types,
     proto_schema_to_pyspark_data_type,
 )
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.window import WindowSpec
+    from pyspark_connect.sql.client import SparkConnectClient
+    from pyspark_connect.sql.window import WindowSpec
 
 
 class Expression:
@@ -925,7 +925,7 @@ class WindowExpression(Expression):
     ) -> None:
         super().__init__()
 
-        from pyspark.sql.connect.window import WindowSpec
+        from pyspark_connect.sql.window import WindowSpec
 
         assert windowFunction is not None and isinstance(windowFunction, Expression)
 

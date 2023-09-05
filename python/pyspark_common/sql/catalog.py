@@ -19,7 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark_common.sql.types import StructType

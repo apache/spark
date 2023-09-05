@@ -35,9 +35,9 @@ from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
-from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_active_spark_context
+from pyspark_common.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark_common.sql.types import DataType
+from pyspark_common.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
@@ -1142,7 +1142,7 @@ class Column:
         ----------------
         metadata: dict
             a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            corresponding :class:`StructField <pyspark_common.sql.types.StructField>` (optional, keyword
             only argument)
 
             .. versionchanged:: 2.2.0
@@ -1206,7 +1206,7 @@ class Column:
 
         Examples
         --------
-        >>> from pyspark.sql.types import StringType
+        >>> from pyspark_common.sql.types import StringType
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.age.cast("string").alias('ages')).collect()

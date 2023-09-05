@@ -16,7 +16,7 @@
 #
 import sys
 
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark_common.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 
 def check_dependencies(mod_name: str) -> None:

@@ -45,7 +45,7 @@ except Exception:
     has_memory_profiler = False
 
 from pyspark.accumulators import AccumulatorParam
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.context import SparkContext

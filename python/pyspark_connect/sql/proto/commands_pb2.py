@@ -29,9 +29,9 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
-from pyspark.sql.connect.proto import common_pb2 as spark_dot_connect_dot_common__pb2
-from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
-from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_relations__pb2
+from pyspark_connect.sql.proto import common_pb2 as spark_dot_connect_dot_common__pb2
+from pyspark_connect.sql.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
+from pyspark_connect.sql.proto import relations_pb2 as spark_dot_connect_dot_relations__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(

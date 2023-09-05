@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -34,8 +34,8 @@ from functools import cached_property
 
 import grpc
 
-import pyspark.sql.connect.proto as proto
-import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+import pyspark_connect.sql.proto as proto
+import pyspark_connect.sql.proto.base_pb2_grpc as grpc_lib
 
 
 JAR_PREFIX: str = "jars"

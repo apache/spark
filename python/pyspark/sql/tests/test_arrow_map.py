@@ -18,7 +18,7 @@ import os
 import time
 import unittest
 
-from pyspark.sql.utils import PythonException
+from pyspark_common.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

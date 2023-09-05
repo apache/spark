@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -28,8 +28,8 @@ import os
 import grpc
 from grpc_status import rpc_status
 
-import pyspark.sql.connect.proto as pb2
-import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
+import pyspark_connect.sql.proto as pb2
+import pyspark_connect.sql.proto.base_pb2_grpc as grpc_lib
 
 
 class ExecutePlanResponseReattachableIterator(Generator):
@@ -119,8 +119,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         return ret
 
     def _has_next(self) -> bool:
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
+        from pyspark_connect.sql.client.core import SparkConnectClient
+        from pyspark_connect.sql.client.core import Retrying
 
         if self._result_complete:
             # After response complete response
@@ -184,8 +184,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
+        from pyspark_connect.sql.client.core import SparkConnectClient
+        from pyspark_connect.sql.client.core import Retrying
 
         request = self._create_release_execute_request(until_response_id)
 
@@ -212,8 +212,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         if self._result_complete:
             return
 
-        from pyspark.sql.connect.client.core import SparkConnectClient
-        from pyspark.sql.connect.client.core import Retrying
+        from pyspark_connect.sql.client.core import SparkConnectClient
+        from pyspark_connect.sql.client.core import Retrying
 
         request = self._create_release_execute_request(None)
 

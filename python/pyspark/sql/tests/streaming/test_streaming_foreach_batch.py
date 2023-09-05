@@ -64,7 +64,7 @@ class StreamingTestsForeachBatchMixin:
                 q.stop()
 
     def test_streaming_foreach_batch_propagates_python_errors(self):
-        from pyspark.errors import StreamingQueryException
+        from pyspark_common.errors import StreamingQueryException
 
         q = None
 

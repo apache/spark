@@ -23,13 +23,13 @@ import tempfile
 from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
+from pyspark_common.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 
 
 pandas_requirement_message = None
 try:
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
 except ImportError as e:
@@ -38,7 +38,7 @@ except ImportError as e:
 
 pyarrow_requirement_message = None
 try:
-    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pyarrow_version
 
     require_minimum_pyarrow_version()
 except ImportError as e:
@@ -47,7 +47,7 @@ except ImportError as e:
 
 test_not_compiled_message = None
 try:
-    from pyspark.sql.utils import require_test_compiled
+    from pyspark_common.sql.utils import require_test_compiled
 
     require_test_compiled()
 except Exception as e:

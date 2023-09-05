@@ -22,9 +22,9 @@ import time
 
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+from pyspark_common.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark_common.errors.exceptions.connect import SparkConnectException
 
 
 class StreamingTestsMixin:
@@ -273,7 +273,7 @@ class StreamingTestsMixin:
             sq.stop()
 
         from pyspark.sql.functions import col, udf
-        from pyspark.errors import StreamingQueryException
+        from pyspark_common.errors import StreamingQueryException
 
         bad_udf = udf(lambda x: 1 / 0)
         sq = (

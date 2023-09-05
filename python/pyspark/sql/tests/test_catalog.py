@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 from pyspark import StorageLevel
-from pyspark.errors import AnalysisException
-from pyspark.sql.types import StructType, StructField, IntegerType
+from pyspark_common.errors import AnalysisException
+from pyspark_common.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

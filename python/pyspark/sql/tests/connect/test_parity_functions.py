@@ -21,8 +21,8 @@ from pyspark.sql.tests.test_functions import FunctionsTestsMixin
 from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
 
 if should_test_connect:
-    from pyspark.errors.exceptions.connect import SparkConnectException
-    from pyspark.sql.connect.column import Column
+    from pyspark_common.errors.exceptions.connect import SparkConnectException
+    from pyspark_connect.sql.column import Column
 
 
 class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):

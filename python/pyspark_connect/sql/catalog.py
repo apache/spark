@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -23,9 +23,9 @@ from typing import Any, Callable, List, Optional, TYPE_CHECKING
 import warnings
 import pandas as pd
 
-from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import StructType
-from pyspark.sql.connect.dataframe import DataFrame
+from pyspark_common.storagelevel import StorageLevel
+from pyspark_common.sql.types import StructType
+from pyspark_connect.sql.dataframe import DataFrame
 from pyspark.sql.catalog import (
     Catalog as PySparkCatalog,
     CatalogMetadata,
@@ -34,11 +34,11 @@ from pyspark.sql.catalog import (
     Function,
     Column,
 )
-from pyspark.sql.connect import plan
+from pyspark_connect.sql import plan
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.connect._typing import DataTypeOrString, UserDefinedFunctionLike
+    from pyspark_connect.sql.session import SparkSession
+    from pyspark_connect.sql._typing import DataTypeOrString, UserDefinedFunctionLike
 
 
 class Catalog:
@@ -329,15 +329,15 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.catalog
+    import pyspark_connect.sql.catalog
 
-    globs = pyspark.sql.connect.catalog.__dict__.copy()
+    globs = pyspark_connect.sql.catalog.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.catalog,
+        pyspark_connect.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

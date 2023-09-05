@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -23,22 +23,22 @@ import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
-import pyspark.sql.connect.proto as pb2
-from pyspark.sql.connect.readwriter import OptionUtils, to_str
-from pyspark.sql.connect.streaming.query import StreamingQuery
+from pyspark_connect.sql.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
+import pyspark_connect.sql.proto as pb2
+from pyspark_connect.sql.readwriter import OptionUtils, to_str
+from pyspark_connect.sql.streaming.query import StreamingQuery
 from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
+from pyspark_connect.sql.utils import get_python_ver
+from pyspark_common.sql.types import Row, StructType
+from pyspark_common.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.connect._typing import OptionalPrimitiveType
-    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark_connect.sql.session import SparkSession
+    from pyspark_connect.sql._typing import OptionalPrimitiveType
+    from pyspark_connect.sql.dataframe import DataFrame
     from pyspark.sql._typing import SupportsProcess
 
 
@@ -50,7 +50,7 @@ class DataStreamReader(OptionUtils):
         self._options: Dict[str, str] = {}
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.dataframe import DataFrame
 
         return DataFrame.withPlan(plan, self._client)
 
@@ -599,9 +599,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.streaming.readwriter
+    import pyspark_connect.sql.streaming.readwriter
 
-    globs = pyspark.sql.connect.readwriter.__dict__.copy()
+    globs = pyspark_connect.sql.readwriter.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.streaming.readwriter tests")
@@ -610,7 +610,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.streaming.readwriter,
+        pyspark_connect.sql.streaming.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

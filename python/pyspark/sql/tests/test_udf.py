@@ -26,7 +26,7 @@ from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import col, udf, assert_true, lit, rand
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     StringType,
     IntegerType,
     BooleanType,
@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
 )
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
+from pyspark_common.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 

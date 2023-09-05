@@ -21,7 +21,7 @@ from typing import Any, Optional, Union
 from py4j.java_gateway import JavaObject
 
 from pyspark import since, _NoValue
-from pyspark._globals import _NoValueType
+from pyspark_common._globals import _NoValueType
 
 
 class RuntimeConfig:

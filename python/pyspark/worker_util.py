@@ -34,7 +34,7 @@ except ImportError:
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (

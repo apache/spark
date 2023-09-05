@@ -968,8 +968,8 @@ class InternalFrame:
         """
         if len(sdf.columns) > 0:
             if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-                from pyspark.sql.connect.expressions import DistributedSequenceID
+                from pyspark_connect.sql.column import Column as ConnectColumn
+                from pyspark_connect.sql.expressions import DistributedSequenceID
 
                 return sdf.select(
                     ConnectColumn(DistributedSequenceID()).alias(column_name),

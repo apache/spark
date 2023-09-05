@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -28,20 +28,20 @@ from inspect import signature, isclass
 import pyarrow as pa
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import DataType
+from pyspark_common.storagelevel import StorageLevel
+from pyspark_common.sql.types import DataType
 
-import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.conversion import storage_level_to_proto
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
+import pyspark_connect.sql.proto as proto
+from pyspark_connect.sql.conversion import storage_level_to_proto
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.expressions import (
     Expression,
     SortOrder,
     ColumnReference,
     LiteralExpression,
 )
-from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
-from pyspark.errors import (
+from pyspark_connect.sql.types import pyspark_types_to_proto_types, UnparsedDataType
+from pyspark_common.errors import (
     PySparkTypeError,
     PySparkNotImplementedError,
     PySparkPicklingError,
@@ -49,9 +49,9 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
-    from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.udf import UserDefinedFunction
+    from pyspark_connect.sql._typing import ColumnOrName
+    from pyspark_connect.sql.client import SparkConnectClient
+    from pyspark_connect.sql.udf import UserDefinedFunction
 
 
 class LogicalPlan:
@@ -476,7 +476,7 @@ class Project(LogicalPlan):
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import col
+        from pyspark_connect.sql.functions import col
 
         assert self._child is not None
         plan = self._create_proto_relation()
@@ -590,7 +590,7 @@ class Hint(LogicalPlan):
         self._parameters = parameters
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import array, lit
+        from pyspark_connect.sql.functions import array, lit
 
         assert self._child is not None
         plan = self._create_proto_relation()
@@ -799,7 +799,7 @@ class Aggregate(LogicalPlan):
         self._pivot_values = pivot_values
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import lit
+        from pyspark_connect.sql.functions import lit
 
         assert self._child is not None
         plan = self._create_proto_relation()

@@ -28,7 +28,7 @@ import typing
 from types import TracebackType
 from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple, Union
 
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 from py4j.clientserver import ClientServer
 
@@ -161,7 +161,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
         ...
       File "/.../pyspark/util.py", line ...
         ...
-    pyspark.errors.exceptions.base.PySparkRuntimeError: ...
+    pyspark_common.errors.exceptions.base.PySparkRuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     True
 
@@ -177,7 +177,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     ...         traceback.format_exception(
     ...             type(e), e, try_simplify_traceback(skip_doctest_traceback(tb))))
     >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-    pyspark.errors.exceptions.base.PySparkRuntimeError: ...
+    pyspark_common.errors.exceptions.base.PySparkRuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     False
 

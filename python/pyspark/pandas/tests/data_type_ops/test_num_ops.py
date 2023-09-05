@@ -31,7 +31,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.sql.types import DecimalType, IntegralType
+from pyspark_common.sql.types import DecimalType, IntegralType
 
 
 class NumOpsTestsMixin:

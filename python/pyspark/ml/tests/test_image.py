@@ -51,7 +51,7 @@ class ImageFileFormatTest(SparkSessionTestCase):
         with QuietTest(self.sc):
             self.assertRaisesRegex(
                 TypeError,
-                "image argument should be pyspark.sql.types.Row; however",
+                "image argument should be pyspark_common.sql.types.Row; however",
                 lambda: ImageSchema.toNDArray("a"),
             )
 

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -31,12 +31,12 @@ from typing import (
     Optional,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
-from pyspark.sql.types import DataType
+from pyspark_common.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark_common.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
-import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.expressions import (
+import pyspark_connect.sql.proto as proto
+from pyspark_connect.sql.expressions import (
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
@@ -51,13 +51,13 @@ from pyspark.sql.connect.expressions import (
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import (
+    from pyspark_connect.sql._typing import (
         LiteralType,
         DateTimeLiteral,
         DecimalLiteral,
     )
-    from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.window import WindowSpec
+    from pyspark_connect.sql.client import SparkConnectClient
+    from pyspark_connect.sql.window import WindowSpec
 
 
 def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:
@@ -334,7 +334,7 @@ class Column:
         return "Column<'%s'>" % self._expr.__repr__()
 
     def over(self, window: "WindowSpec") -> "Column":
-        from pyspark.sql.connect.window import WindowSpec
+        from pyspark_connect.sql.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(
@@ -486,15 +486,15 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.column
+    import pyspark_connect.sql.column
 
-    globs = pyspark.sql.connect.column.__dict__.copy()
+    globs = pyspark_connect.sql.column.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.column tests").remote("local[4]").getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.column,
+        pyspark_connect.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

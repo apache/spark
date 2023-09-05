@@ -25,18 +25,18 @@ from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
 )
-from pyspark.errors import PySparkValueError
+from pyspark_common.errors import PySparkValueError
 
 if should_test_connect:
-    import pyspark.sql.connect.proto as proto
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import WriteOperation, Read
-    from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.expressions import LiteralExpression
-    from pyspark.sql.connect.functions import col, lit, max, min, sum
-    from pyspark.sql.connect.types import pyspark_types_to_proto_types
-    from pyspark.sql.types import (
+    import pyspark_connect.sql.proto as proto
+    from pyspark_connect.sql.column import Column
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_connect.sql.plan import WriteOperation, Read
+    from pyspark_connect.sql.readwriter import DataFrameReader
+    from pyspark_connect.sql.expressions import LiteralExpression
+    from pyspark_connect.sql.functions import col, lit, max, min, sum
+    from pyspark_connect.sql.types import pyspark_types_to_proto_types
+    from pyspark_common.sql.types import (
         StringType,
         StructType,
         StructField,

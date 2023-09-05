@@ -18,7 +18,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
+from pyspark_connect.sql.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 
 
 class SparkConnectServiceStub(object):

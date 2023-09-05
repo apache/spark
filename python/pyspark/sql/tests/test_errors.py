@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.errors import (
+from pyspark_common.errors import (
     ArithmeticException,
     ArrayIndexOutOfBoundsException,
     DateTimeException,

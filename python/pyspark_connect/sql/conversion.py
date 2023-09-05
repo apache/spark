@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -24,7 +24,7 @@ import decimal
 
 import pyarrow as pa
 
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     _create_row,
     Row,
     DataType,
@@ -41,8 +41,8 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 
-from pyspark.storagelevel import StorageLevel
-import pyspark.sql.connect.proto as pb2
+from pyspark_common.storagelevel import StorageLevel
+import pyspark_connect.sql.proto as pb2
 from pyspark.sql.pandas.types import to_arrow_schema, _dedup_names, _deduplicate_field_names
 
 from typing import (

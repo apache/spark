@@ -24,9 +24,9 @@ from py4j.java_gateway import java_import, JavaObject
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
-from pyspark.sql.types import Row, StructType
-from pyspark.sql.utils import ForeachBatchFunction
-from pyspark.errors import (
+from pyspark_common.sql.types import Row, StructType
+from pyspark_common.sql.utils import ForeachBatchFunction
+from pyspark_common.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkAttributeError,
@@ -136,8 +136,8 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        schema : :class:`pyspark.sql.types.StructType` or str
-            a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+        schema : :class:`pyspark_common.sql.types.StructType` or str
+            a :class:`pyspark_common.sql.types.StructType` object or a DDL-formatted string
             (For example ``col0 INT, col1 DOUBLE``).
 
         Notes
@@ -146,7 +146,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> from pyspark.sql.types import StructField, StructType, StringType
+        >>> from pyspark_common.sql.types import StructField, StructType, StringType
         >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)]))
         <...streaming.readwriter.DataStreamReader object ...>
         >>> spark.readStream.schema("col0 INT, col1 DOUBLE")
@@ -259,8 +259,8 @@ class DataStreamReader(OptionUtils):
             optional string for file-system backed data sources.
         format : str, optional
             optional string for format of the data source. Default to 'parquet'.
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            optional :class:`pyspark.sql.types.StructType` for the input schema
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            optional :class:`pyspark_common.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         **options : dict
             all other string options
@@ -347,8 +347,8 @@ class DataStreamReader(OptionUtils):
         path : str
             string represents path to the JSON dataset,
             or RDD of Strings storing JSON objects.
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            an optional :class:`pyspark.sql.types.StructType` for the input schema
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            an optional :class:`pyspark_common.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
 
         Other Parameters
@@ -640,8 +640,8 @@ class DataStreamReader(OptionUtils):
         ----------
         path : str or list
             string, or list of strings, for input path(s).
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            an optional :class:`pyspark.sql.types.StructType` for the input schema
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            an optional :class:`pyspark_common.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
 
         .. versionadded:: 2.0.0

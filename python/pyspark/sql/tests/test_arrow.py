@@ -28,7 +28,7 @@ from collections import namedtuple
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import rand, udf, assert_true, lit
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     StructType,
     StringType,
     IntegerType,
@@ -56,7 +56,7 @@ from pyspark.testing.sqlutils import (
     ExamplePointUDT,
 )
 from pyspark.testing.utils import QuietTest
-from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark_common.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 
 if have_pandas:
     import pandas as pd

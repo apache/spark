@@ -29,8 +29,8 @@ from contextlib import redirect_stdout
 from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
-from pyspark.sql.types import (
+from pyspark_common.sql.pandas.utils import pyarrow_version_less_than_minimum
+from pyspark_common.sql.types import (
     StringType,
     IntegerType,
     DoubleType,
@@ -44,8 +44,8 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.storagelevel import StorageLevel
-from pyspark.errors import (
+from pyspark_common.storagelevel import StorageLevel
+from pyspark_common.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,

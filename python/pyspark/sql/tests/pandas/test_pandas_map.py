@@ -23,7 +23,7 @@ from typing import cast
 
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
-from pyspark.errors import PythonException
+from pyspark_common.errors import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

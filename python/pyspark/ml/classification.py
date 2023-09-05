@@ -92,8 +92,8 @@ from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Matrix, Vector, Vectors, VectorUDT
 from pyspark.sql import DataFrame, Row
 from pyspark.sql.functions import udf, when
-from pyspark.sql.types import ArrayType, DoubleType
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.sql.types import ArrayType, DoubleType
+from pyspark_common.storagelevel import StorageLevel
 
 
 if TYPE_CHECKING:

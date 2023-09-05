@@ -19,7 +19,7 @@ import unittest
 from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf, sum
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     ArrayType,
     DoubleType,
     LongType,
@@ -29,7 +29,7 @@ from pyspark.sql.types import (
     Row,
 )
 from pyspark.sql.window import Window
-from pyspark.errors import IllegalArgumentException, PythonException
+from pyspark_common.errors import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

@@ -22,7 +22,7 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps
-from pyspark.errors import PySparkValueError
+from pyspark_common.errors import PySparkValueError
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils

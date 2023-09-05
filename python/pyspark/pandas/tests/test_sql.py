@@ -16,7 +16,7 @@
 #
 
 from pyspark import pandas as ps
-from pyspark.errors import ParseException
+from pyspark_common.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual

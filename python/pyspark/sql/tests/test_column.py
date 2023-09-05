@@ -17,8 +17,8 @@
 #
 
 from pyspark.sql import Column, Row
-from pyspark.sql.types import StructType, StructField, LongType
-from pyspark.errors import AnalysisException, PySparkTypeError
+from pyspark_common.sql.types import StructType, StructField, LongType
+from pyspark_common.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

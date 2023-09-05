@@ -23,7 +23,7 @@ import datetime
 import itertools
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     cast,
     BooleanType,
     ByteType,
@@ -50,7 +50,7 @@ from pyspark.sql.types import (
     Row,
     _create_row,
 )
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException
+from pyspark_common.errors import PySparkTypeError, UnsupportedOperationException
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -263,7 +263,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
     pandas.Series
         `pandas.Series` that have been converted to tz-naive
     """
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
 
@@ -295,7 +295,7 @@ def _check_series_convert_timestamps_internal(
     pandas.Series
         `pandas.Series` where if it is a timestamp, has been UTC normalized without a time zone
     """
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
 
@@ -363,7 +363,7 @@ def _check_series_convert_timestamps_localize(
     pandas.Series
         `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
 

@@ -16,7 +16,7 @@
 #
 import warnings
 
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -35,24 +35,24 @@ from typing import (
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
-from pyspark.sql.types import NumericType
-from pyspark.sql.types import StructType
+from pyspark_common.sql.types import NumericType
+from pyspark_common.sql.types import StructType
 
-import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, col, lit
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+import pyspark_connect.sql.plan as plan
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.functions import _invoke_function, col, lit
+from pyspark_common.errors import PySparkNotImplementedError, PySparkTypeError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import (
+    from pyspark_connect.sql._typing import (
         LiteralType,
         PandasGroupedMapFunction,
         GroupedMapPandasUserDefinedFunction,
         PandasCogroupedMapFunction,
         PandasGroupedMapFunctionWithState,
     )
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.types import StructType
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_common.sql.types import StructType
 
 
 class GroupedData:
@@ -64,7 +64,7 @@ class GroupedData:
         pivot_col: Optional["Column"] = None,
         pivot_values: Optional[Sequence["LiteralType"]] = None,
     ) -> None:
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.dataframe import DataFrame
 
         assert isinstance(df, DataFrame)
         self._df = df
@@ -111,7 +111,7 @@ class GroupedData:
         ...
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.dataframe import DataFrame
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -137,7 +137,7 @@ class GroupedData:
     agg.__doc__ = PySparkGroupedData.agg.__doc__
 
     def _numeric_agg(self, function: str, cols: Sequence[str]) -> "DataFrame":
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.dataframe import DataFrame
 
         assert isinstance(function, str) and function in ["min", "max", "avg", "sum"]
 
@@ -273,8 +273,8 @@ class GroupedData:
     def applyInPandas(
         self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.udf import UserDefinedFunction
+        from pyspark_connect.sql.dataframe import DataFrame
 
         udf_obj = UserDefinedFunction(
             func,
@@ -302,8 +302,8 @@ class GroupedData:
         outputMode: str,
         timeoutConf: str,
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.udf import UserDefinedFunction
+        from pyspark_connect.sql.dataframe import DataFrame
 
         udf_obj = UserDefinedFunction(
             func,
@@ -354,8 +354,8 @@ class PandasCogroupedOps:
     def applyInPandas(
         self, func: "PandasCogroupedMapFunction", schema: Union["StructType", str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.udf import UserDefinedFunction
+        from pyspark_connect.sql.dataframe import DataFrame
 
         udf_obj = UserDefinedFunction(
             func,
@@ -391,16 +391,16 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.group
+    import pyspark_connect.sql.group
 
-    globs = pyspark.sql.connect.group.__dict__.copy()
+    globs = pyspark_connect.sql.group.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.group,
+        pyspark_connect.sql.group,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )

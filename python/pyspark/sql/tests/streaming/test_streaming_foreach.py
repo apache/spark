@@ -206,7 +206,7 @@ class StreamingTestsForeachMixin:
         self.assertEqual(len(tester.close_events()), 0)
 
     def test_streaming_foreach_with_process_throwing_error(self):
-        from pyspark.errors import StreamingQueryException
+        from pyspark_common.errors import StreamingQueryException
 
         tester = self.ForeachWriterTester(self.spark)
 

@@ -17,7 +17,7 @@
 from typing import overload, Callable, Optional, TypeVar, Union
 
 from pyspark.serializers import NoOpSerializer
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.streaming import DStream
 from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar

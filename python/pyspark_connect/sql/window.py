@@ -14,28 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
 
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.expressions import (
     ColumnReference,
     Expression,
     SortOrder,
 )
-from pyspark.sql.connect.types import (
+from pyspark_connect.sql.types import (
     JVM_LONG_MIN,
     JVM_LONG_MAX,
 )
 from pyspark.sql.window import Window as PySparkWindow, WindowSpec as PySparkWindowSpec
-from pyspark.errors import PySparkTypeError
+from pyspark_common.errors import PySparkTypeError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark_connect.sql._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -238,15 +238,15 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.window
+    import pyspark_connect.sql.window
 
-    globs = pyspark.sql.connect.window.__dict__.copy()
+    globs = pyspark_connect.sql.window.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.window tests").remote("local[4]").getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.window,
+        pyspark_connect.sql.window,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

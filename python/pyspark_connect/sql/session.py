@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -51,10 +51,10 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import (
+from pyspark_connect.sql.client import SparkConnectClient, ChannelBuilder
+from pyspark_connect.sql.conf import RuntimeConf
+from pyspark_connect.sql.dataframe import DataFrame
+from pyspark_connect.sql.plan import (
     SQL,
     Range,
     LocalRelation,
@@ -63,13 +63,13 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
-from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming.readwriter import DataStreamReader
-from pyspark.sql.connect.streaming.query import StreamingQueryManager
+from pyspark_connect.sql.readwriter import DataFrameReader
+from pyspark_connect.sql.streaming.readwriter import DataStreamReader
+from pyspark_connect.sql.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     _infer_schema,
     _has_nulltype,
     _merge_type,
@@ -80,8 +80,8 @@ from pyspark.sql.types import (
     AtomicType,
     TimestampType,
 )
-from pyspark.sql.utils import to_str
-from pyspark.errors import (
+from pyspark_common.sql.utils import to_str
+from pyspark_common.errors import (
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -90,10 +90,10 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import OptionalPrimitiveType
-    from pyspark.sql.connect.catalog import Catalog
-    from pyspark.sql.connect.udf import UDFRegistration
-    from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark_connect.sql._typing import OptionalPrimitiveType
+    from pyspark_connect.sql.catalog import Catalog
+    from pyspark_connect.sql.udf import UDFRegistration
+    from pyspark_connect.sql.udtf import UDTFRegistration
 
 
 class SparkSession:
@@ -154,7 +154,7 @@ class SparkSession:
 
             .. code-block:: python
 
-                from pyspark.sql.connect import SparkSession, ChannelBuilder
+                from pyspark_connect.sql import SparkSession, ChannelBuilder
 
                 class CustomChannelBuilder(ChannelBuilder):
                     ...
@@ -517,7 +517,7 @@ class SparkSession:
                         "a StructType Schema is required in this case"
                     )
 
-            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+            from pyspark_connect.sql.conversion import LocalDataToArrowConversion
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
@@ -589,7 +589,7 @@ class SparkSession:
 
     @property
     def catalog(self) -> "Catalog":
-        from pyspark.sql.connect.catalog import Catalog
+        from pyspark_connect.sql.catalog import Catalog
 
         if not hasattr(self, "_catalog"):
             self._catalog = Catalog(self)
@@ -707,7 +707,7 @@ class SparkSession:
 
     @property
     def udf(self) -> "UDFRegistration":
-        from pyspark.sql.connect.udf import UDFRegistration
+        from pyspark_connect.sql.udf import UDFRegistration
 
         return UDFRegistration(self)
 
@@ -715,7 +715,7 @@ class SparkSession:
 
     @property
     def udtf(self) -> "UDTFRegistration":
-        from pyspark.sql.connect.udtf import UDTFRegistration
+        from pyspark_connect.sql.udtf import UDTFRegistration
 
         return UDTFRegistration(self)
 
@@ -920,9 +920,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.session
+    import pyspark_connect.sql.session
 
-    globs = pyspark.sql.connect.session.__dict__.copy()
+    globs = pyspark_connect.sql.session.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.session tests").remote("local[4]").getOrCreate()
     )
@@ -930,16 +930,16 @@ def _test() -> None:
     # Uses PySpark session to test builder.
     globs["SparkSession"] = PySparkSession
     # Spark Connect does not support to set master together.
-    pyspark.sql.connect.session.SparkSession.__doc__ = None
-    del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+    pyspark_connect.sql.session.SparkSession.__doc__ = None
+    del pyspark_connect.sql.session.SparkSession.Builder.master.__doc__
     # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
+    del pyspark_connect.sql.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
-    del pyspark.sql.connect.session.SparkSession.sql.__doc__
+    del pyspark_connect.sql.session.SparkSession.sql.__doc__
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.session,
+        pyspark_connect.sql.session,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

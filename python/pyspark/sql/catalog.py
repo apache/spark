@@ -19,14 +19,14 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import StructType
+from pyspark_common.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.types import DataType
+    from pyspark_common.sql.types import DataType
 
 
 class CatalogMetadata(NamedTuple):

@@ -21,7 +21,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.utils import try_remote_observation
+from pyspark_common.sql.utils import try_remote_observation
 
 __all__ = ["Observation"]
 

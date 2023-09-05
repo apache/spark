@@ -141,7 +141,7 @@ def is_timestamp_ntz_preferred() -> bool:
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
     if is_remote():
-        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+        from pyspark_connect.sql.session import SparkSession as ConnectSparkSession
 
         session = ConnectSparkSession.getActiveSession()
         if session is None:
@@ -186,7 +186,7 @@ def try_remote_functions(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect import functions
+            from pyspark_connect.sql import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -202,7 +202,7 @@ def try_remote_avro_functions(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.avro import functions
+            from pyspark_connect.sql.avro import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -218,7 +218,7 @@ def try_remote_protobuf_functions(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.protobuf import functions
+            from pyspark_connect.sql.protobuf import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -234,7 +234,7 @@ def try_remote_window(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window  # type: ignore[misc]
+            from pyspark_connect.sql.window import Window  # type: ignore[misc]
 
             return getattr(Window, f.__name__)(*args, **kwargs)
         else:
@@ -250,7 +250,7 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import WindowSpec
+            from pyspark_connect.sql.window import WindowSpec
 
             return getattr(WindowSpec, f.__name__)(*args, **kwargs)
         else:
@@ -291,7 +291,7 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
+            from pyspark_connect.sql.session import SparkSession  # type: ignore[misc]
 
             assert inspect.isclass(args[0])
             return getattr(SparkSession, f.__name__)(*args[1:], **kwargs)
@@ -312,7 +312,7 @@ def pyspark_column_op(
     from pyspark_common.pandas.data_type_ops.base import _is_extension_dtypes
 
     if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark_connect.sql.column import Column as ConnectColumn
 
         Column = ConnectColumn
     else:
@@ -329,7 +329,7 @@ def get_column_class() -> Type["Column"]:
     from pyspark.sql.column import Column as PySparkColumn
 
     if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark_connect.sql.column import Column as ConnectColumn
 
         return ConnectColumn  # type: ignore[return-value]
     else:
@@ -340,7 +340,7 @@ def get_dataframe_class() -> Type["DataFrame"]:
     from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 
     if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+        from pyspark_connect.sql.dataframe import DataFrame as ConnectDataFrame
 
         return ConnectDataFrame  # type: ignore[return-value]
     else:
@@ -351,7 +351,7 @@ def get_window_class() -> Type["Window"]:
     from pyspark.sql.window import Window as PySparkWindow
 
     if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
+        from pyspark_connect.sql.window import Window as ConnectWindow
 
         return ConnectWindow  # type: ignore[return-value]
     else:

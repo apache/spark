@@ -26,7 +26,7 @@ import pandas
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,

@@ -67,9 +67,9 @@ connect_requirement_message = (
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_connect.sql.plan import Read, Range, SQL, LogicalPlan
+    from pyspark_connect.sql.session import SparkSession
 
 
 class MockRemoteSession:

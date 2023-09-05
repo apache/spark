@@ -41,26 +41,26 @@ from typing import (
 from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func, _NoValue
-from pyspark._globals import _NoValueType
+from pyspark_common._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
     _local_iterator_from_socket,
 )
 from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     StructType,
     Row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context, toJArray
+from pyspark_common.sql.utils import get_active_spark_context, toJArray
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -549,7 +549,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def schema(self) -> StructType:
-        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark_common.sql.types.StructType`.
 
         .. versionadded:: 1.3.0
 
@@ -1647,7 +1647,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Persists the data in the disk by specifying the storage level.
 
-        >>> from pyspark.storagelevel import StorageLevel
+        >>> from pyspark_common.storagelevel import StorageLevel
         >>> df.persist(StorageLevel.DISK_ONLY)
         DataFrame[id: bigint]
         """
@@ -2512,7 +2512,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> from pyspark.sql.types import StructField, StringType
+        >>> from pyspark_common.sql.types import StructField, StringType
         >>> df = spark.createDataFrame([("a", 1)], ["i", "j"])
         >>> df.schema
         StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
@@ -5819,7 +5819,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df3.drop(sf.col("name")).show()
         Traceback (most recent call last):
         ...
-        pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
+        pyspark_common.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
 
         Example 6: Can not find a column matching the expression "a.b.c".
 

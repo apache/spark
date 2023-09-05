@@ -20,7 +20,7 @@ __all__ = [
     "getLogLevel",
 ]
 
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -64,39 +64,39 @@ from google.rpc import error_details_pb2
 
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
-from pyspark.sql.connect.client.artifact import ArtifactManager
-from pyspark.sql.connect.client.reattach import (
+from pyspark_connect.sql.client.artifact import ArtifactManager
+from pyspark_connect.sql.client.reattach import (
     ExecutePlanResponseReattachableIterator,
     RetryException,
 )
-from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
-import pyspark.sql.connect.proto as pb2
-import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
-import pyspark.sql.connect.types as types
-from pyspark.errors.exceptions.connect import (
+from pyspark_connect.sql.conversion import storage_level_to_proto, proto_to_storage_level
+import pyspark_connect.sql.proto as pb2
+import pyspark_connect.sql.proto.base_pb2_grpc as grpc_lib
+import pyspark_connect.sql.types as types
+from pyspark_common.errors.exceptions.connect import (
     convert_exception,
     SparkConnectException,
     SparkConnectGrpcException,
 )
-from pyspark.sql.connect.expressions import (
+from pyspark_connect.sql.expressions import (
     PythonUDF,
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.connect.plan import (
+from pyspark_connect.sql.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
-from pyspark.sql.connect.utils import get_python_ver
+from pyspark_connect.sql.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
+from pyspark_common.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
-from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError
+from pyspark_common.storagelevel import StorageLevel
+from pyspark_common.errors import PySparkValueError
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark_connect.sql._typing import DataTypeOrString
 
 
 def _configure_logging() -> logging.Logger:

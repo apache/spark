@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -22,20 +22,20 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
-from pyspark.sql.types import StructType
-from pyspark.sql.utils import to_str
+from pyspark_connect.sql.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
+from pyspark_common.sql.types import StructType
+from pyspark_common.sql.utils import to_str
 from pyspark.sql.readwriter import (
     DataFrameWriter as PySparkDataFrameWriter,
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_connect.sql._typing import ColumnOrName, OptionalPrimitiveType
+    from pyspark_connect.sql.session import SparkSession
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -132,7 +132,7 @@ class DataFrameReader(OptionUtils):
     load.__doc__ = PySparkDataFrameReader.load.__doc__
 
     def _df(self, plan: LogicalPlan) -> "DataFrame":
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.dataframe import DataFrame
 
         return DataFrame.withPlan(plan, self._client)
 
@@ -832,9 +832,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.readwriter
+    import pyspark_connect.sql.readwriter
 
-    globs = pyspark.sql.connect.readwriter.__dict__.copy()
+    globs = pyspark_connect.sql.readwriter.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")
@@ -843,7 +843,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.readwriter,
+        pyspark_connect.sql.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

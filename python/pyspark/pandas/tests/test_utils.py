@@ -32,7 +32,7 @@ from pyspark.testing.pandasutils import (
     _assert_pandas_almost_equal,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.errors import PySparkAssertionError
+from pyspark_common.errors import PySparkAssertionError
 
 some_global_variable = 0
 

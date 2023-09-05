@@ -34,7 +34,7 @@ Important classes of Spark SQL and DataFrames:
       Methods for statistics functionality.
     - :class:`pyspark.sql.functions`
       List of built-in functions available for :class:`DataFrame`.
-    - :class:`pyspark.sql.types`
+    - :class:`pyspark_common.sql.types`
       List of data types available.
     - :class:`pyspark.sql.Window`
       For working with window functions.

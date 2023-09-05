@@ -31,8 +31,8 @@ from pyspark.sql.functions import (
     pandas_udf,
     PandasUDFType,
 )
-from pyspark.sql.types import ArrayType, YearMonthIntervalType
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark_common.sql.types import ArrayType, YearMonthIntervalType
+from pyspark_common.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

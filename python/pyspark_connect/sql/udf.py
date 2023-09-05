@@ -17,7 +17,7 @@
 """
 User-defined function related classes and functions
 """
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -28,27 +28,27 @@ from inspect import getfullargspec
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.connect.expressions import (
+from pyspark_connect.sql.expressions import (
     ColumnReference,
     CommonInlineUserDefinedFunction,
     Expression,
     NamedArgumentExpression,
     PythonUDF,
 )
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.types import DataType, StringType
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.types import UnparsedDataType
+from pyspark_common.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
-from pyspark.errors import PySparkTypeError, PySparkRuntimeError
+from pyspark_common.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import (
+    from pyspark_connect.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
-    from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.types import StringType
+    from pyspark_connect.sql.session import SparkSession
+    from pyspark_common.sql.types import StringType
 
 
 def _create_py_udf(
@@ -59,7 +59,7 @@ def _create_py_udf(
     if useArrow is None:
         is_arrow_enabled = False
         try:
-            from pyspark.sql.connect.session import SparkSession
+            from pyspark_connect.sql.session import SparkSession
 
             session = SparkSession.active()
             is_arrow_enabled = (

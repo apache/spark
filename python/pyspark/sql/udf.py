@@ -31,16 +31,16 @@ from pyspark import SparkContext
 from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_expr, _to_seq
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     DataType,
     StringType,
     StructType,
     _parse_datatype_string,
 )
-from pyspark.sql.utils import get_active_spark_context
+from pyspark_common.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
+from pyspark_common.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark_common.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -497,9 +497,9 @@ class UDFRegistration:
             a Python function, or a user-defined function. The user-defined function can
             be either row-at-a-time or vectorized. See :meth:`pyspark.sql.functions.udf` and
             :meth:`pyspark.sql.functions.pandas_udf`.
-        returnType : :class:`pyspark.sql.types.DataType` or str, optional
+        returnType : :class:`pyspark_common.sql.types.DataType` or str, optional
             the return type of the registered user-defined function. The value can
-            be either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            be either a :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
             `returnType` can be optionally specified when `f` is a Python function but not
             when `f` is a user-defined function. Please see the examples below.
 
@@ -529,12 +529,12 @@ class UDFRegistration:
             >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
             [Row(stringLengthString(text)='3')]
 
-            >>> from pyspark.sql.types import IntegerType
+            >>> from pyspark_common.sql.types import IntegerType
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
             [Row(stringLengthInt(test)=4)]
 
-            >>> from pyspark.sql.types import IntegerType
+            >>> from pyspark_common.sql.types import IntegerType
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
             [Row(stringLengthInt(test)=4)]
@@ -545,7 +545,7 @@ class UDFRegistration:
             the registered user-defined function. `returnType` should not be specified.
             In this case, this API works as if `register(name, f)`.
 
-            >>> from pyspark.sql.types import IntegerType
+            >>> from pyspark_common.sql.types import IntegerType
             >>> from pyspark.sql.functions import udf
             >>> slen = udf(lambda s: len(s), IntegerType())
             >>> _ = spark.udf.register("slen", slen)
@@ -554,7 +554,7 @@ class UDFRegistration:
 
             >>> import random
             >>> from pyspark.sql.functions import udf
-            >>> from pyspark.sql.types import IntegerType
+            >>> from pyspark_common.sql.types import IntegerType
             >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
             >>> new_random_udf = spark.udf.register("random_udf", random_udf)
             >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
@@ -646,13 +646,13 @@ class UDFRegistration:
             name of the user-defined function
         javaClassName : str
             fully qualified name of java class
-        returnType : :class:`pyspark.sql.types.DataType` or str, optional
+        returnType : :class:`pyspark_common.sql.types.DataType` or str, optional
             the return type of the registered Java function. The value can be either
-            a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            a :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------
-        >>> from pyspark.sql.types import IntegerType
+        >>> from pyspark_common.sql.types import IntegerType
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         ... # doctest: +SKIP

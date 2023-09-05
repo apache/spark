@@ -18,7 +18,7 @@
 import unittest
 from typing import cast
 
-from pyspark.errors import AnalysisException, PythonException
+from pyspark_common.errors import AnalysisException, PythonException
 from pyspark.sql.functions import (
     array,
     explode,

@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 from pyspark.ml import functions as PyMLFunctions
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, _to_col, lit
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.functions import _invoke_function, _to_col, lit
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:

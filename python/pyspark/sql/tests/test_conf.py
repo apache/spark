@@ -16,7 +16,7 @@
 #
 from decimal import Decimal
 
-from pyspark.errors import IllegalArgumentException
+from pyspark_common.errors import IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

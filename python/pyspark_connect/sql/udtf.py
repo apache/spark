@@ -17,7 +17,7 @@
 """
 User-defined table function related classes and functions
 """
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -25,24 +25,24 @@ import warnings
 from typing import List, Type, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
-from pyspark.sql.connect.plan import (
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.expressions import ColumnReference, Expression, NamedArgumentExpression
+from pyspark_connect.sql.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
-from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.connect.utils import get_python_ver
+from pyspark_connect.sql.types import UnparsedDataType
+from pyspark_connect.sql.utils import get_python_ver
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
-from pyspark.sql.types import DataType, StructType
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark_common.sql.types import DataType, StructType
+from pyspark_common.errors import PySparkRuntimeError, PySparkTypeError
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark_connect.sql._typing import ColumnOrName
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_connect.sql.session import SparkSession
 
 
 def _create_udtf(
@@ -68,7 +68,7 @@ def _create_py_udtf(
     if useArrow is not None:
         arrow_enabled = useArrow
     else:
-        from pyspark.sql.connect.session import SparkSession
+        from pyspark_connect.sql.session import SparkSession
 
         arrow_enabled = False
         try:
@@ -86,7 +86,7 @@ def _create_py_udtf(
     eval_type: int = PythonEvalType.SQL_TABLE_UDF
 
     if arrow_enabled:
-        from pyspark.sql.pandas.utils import (
+        from pyspark_common.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
         )
@@ -161,8 +161,8 @@ class UserDefinedTableFunction:
         )
 
     def __call__(self, *args: "ColumnOrName", **kwargs: "ColumnOrName") -> "DataFrame":
-        from pyspark.sql.connect.session import SparkSession
-        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark_connect.sql.session import SparkSession
+        from pyspark_connect.sql.dataframe import DataFrame
 
         session = SparkSession.active()
 

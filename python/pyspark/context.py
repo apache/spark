@@ -62,14 +62,14 @@ from pyspark.serializers import (
     NoOpSerializer,
     ChunkedStream,
 )
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:

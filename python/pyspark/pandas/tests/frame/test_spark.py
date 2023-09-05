@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
-from pyspark.sql.types import StructType
+from pyspark_common.sql.types import StructType
 
 from pyspark import pandas as ps
 from pyspark.pandas.frame import CachedDataFrame

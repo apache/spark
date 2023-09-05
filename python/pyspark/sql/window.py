@@ -20,7 +20,7 @@ from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.utils import (
+from pyspark_common.sql.utils import (
     try_remote_window,
     try_remote_windowspec,
     get_active_spark_context,

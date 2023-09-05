@@ -29,8 +29,8 @@ from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
-from pyspark.sql.types import (
+from pyspark_common.sql.pandas.utils import pyarrow_version_less_than_minimum
+from pyspark_common.sql.types import (
     IntegerType,
     ByteType,
     StructType,
@@ -50,7 +50,7 @@ from pyspark.sql.types import (
     BinaryType,
     YearMonthIntervalType,
 )
-from pyspark.errors import AnalysisException, PythonException
+from pyspark_common.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
@@ -1332,7 +1332,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark_connect.sql.column import Column as ConnectColumn
 
         df = self.spark.range(0, 1).toDF("v")
 

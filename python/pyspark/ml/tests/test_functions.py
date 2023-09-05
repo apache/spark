@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
+from pyspark_common.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.testing.sqlutils import (
     have_pandas,

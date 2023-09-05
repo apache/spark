@@ -24,7 +24,7 @@ from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.linalg import Matrix
 from pyspark.sql import SQLContext
-from pyspark.sql.types import ArrayType, DoubleType, StructField, StructType
+from pyspark_common.sql.types import ArrayType, DoubleType, StructField, StructType
 
 __all__ = [
     "BinaryClassificationMetrics",

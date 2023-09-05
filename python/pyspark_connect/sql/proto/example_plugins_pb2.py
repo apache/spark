@@ -28,8 +28,8 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_relations__pb2
-from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
+from pyspark_connect.sql.proto import relations_pb2 as spark_dot_connect_dot_relations__pb2
+from pyspark_connect.sql.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(

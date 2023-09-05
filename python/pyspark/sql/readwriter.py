@@ -21,10 +21,10 @@ from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column
-from pyspark.sql.types import StructType
-from pyspark.sql import utils
-from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.sql.types import StructType
+from pyspark_common.sql import utils
+from pyspark_common.sql.utils import to_str
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -127,8 +127,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        schema : :class:`pyspark.sql.types.StructType` or str
-            a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+        schema : :class:`pyspark_common.sql.types.StructType` or str
+            a :class:`pyspark_common.sql.types.StructType` object or a DDL-formatted string
             (For example ``col0 INT, col1 DOUBLE``).
 
         Examples
@@ -267,8 +267,8 @@ class DataFrameReader(OptionUtils):
             optional string or a list of string for file-system backed data sources.
         format : str, optional
             optional string for format of the data source. Default to 'parquet'.
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            optional :class:`pyspark.sql.types.StructType` for the input schema
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            optional :class:`pyspark_common.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         **options : dict
             all other string options
@@ -360,8 +360,8 @@ class DataFrameReader(OptionUtils):
         path : str, list or :class:`RDD`
             string represents path to the JSON dataset, or a list of paths,
             or RDD of Strings storing JSON objects.
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            an optional :class:`pyspark.sql.types.StructType` for the input schema or
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            an optional :class:`pyspark_common.sql.types.StructType` for the input schema or
             a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
 
         Other Parameters
@@ -667,8 +667,8 @@ class DataFrameReader(OptionUtils):
         path : str or list
             string, or list of strings, for input path(s),
             or RDD of Strings storing CSV rows.
-        schema : :class:`pyspark.sql.types.StructType` or str, optional
-            an optional :class:`pyspark.sql.types.StructType` for the input schema
+        schema : :class:`pyspark_common.sql.types.StructType` or str, optional
+            an optional :class:`pyspark_common.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
 
         Other Parameters
@@ -1129,7 +1129,7 @@ class DataFrameWriter(OptionUtils):
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
-        >>> from pyspark.sql.types import StructType,StructField, StringType, IntegerType
+        >>> from pyspark_common.sql.types import StructType,StructField, StringType, IntegerType
         >>> schema = StructType([
         ...     StructField("age",IntegerType(),True),
         ...     StructField("name",StringType(),True),

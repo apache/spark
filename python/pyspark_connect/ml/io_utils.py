@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 from typing import Any, Dict, List
 from pyspark.ml.base import Params
 from pyspark.sql import SparkSession
-from pyspark.sql.utils import is_remote
+from pyspark_common.sql.utils import is_remote
 
 
 from pyspark import __version__ as pyspark_version

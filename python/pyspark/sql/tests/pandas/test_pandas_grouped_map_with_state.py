@@ -26,7 +26,7 @@ from typing import cast
 
 from pyspark import SparkConf
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     LongType,
     StringType,
     StructType,

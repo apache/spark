@@ -35,17 +35,17 @@ from typing import (
 from py4j.java_gateway import JavaObject
 
 from pyspark import since, _NoValue
-from pyspark._globals import _NoValueType
+from pyspark_common._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.udtf import UDTFRegistration
-from pyspark.errors.exceptions.captured import install_exception_handler
+from pyspark_common.errors.exceptions.captured import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
-from pyspark.sql.types import AtomicType, DataType, StructType
+from pyspark_common.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.streaming import StreamingQueryManager
 
 if TYPE_CHECKING:
@@ -249,7 +249,7 @@ class SQLContext:
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
         """
-        Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
+        Create a :class:`DataFrame` with single :class:`pyspark_common.sql.types.LongType` column named
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
         step value ``step``.
 
@@ -327,7 +327,7 @@ class SQLContext:
 
         Returns
         -------
-        :class:`pyspark.sql.types.StructType`
+        :class:`pyspark_common.sql.types.StructType`
         """
         return self.sparkSession._inferSchema(rdd, samplingRatio)
 
@@ -394,10 +394,10 @@ class SQLContext:
         from ``data``, which should be an RDD of :class:`Row`,
         or :class:`namedtuple`, or :class:`dict`.
 
-        When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string it must match
+        When ``schema`` is :class:`pyspark_common.sql.types.DataType` or a datatype string it must match
         the real data, or an exception will be thrown at runtime. If the given schema is not
-        :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
+        :class:`pyspark_common.sql.types.StructType`, it will be wrapped into a
+        :class:`pyspark_common.sql.types.StructType` as its only field, and the field name will be "value",
         each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determine the ratio of
@@ -406,10 +406,10 @@ class SQLContext:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 2.0.0
-           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a
+           The ``schema`` parameter can be a :class:`pyspark_common.sql.types.DataType` or a
            datatype string after 2.0.
-           If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-           :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
+           If it's not a :class:`pyspark_common.sql.types.StructType`, it will be wrapped into a
+           :class:`pyspark_common.sql.types.StructType` and each record will also be wrapped into a tuple.
 
         .. versionchanged:: 2.1.0
            Added verifySchema.
@@ -420,10 +420,10 @@ class SQLContext:
             an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        schema : :class:`pyspark_common.sql.types.DataType`, str or list, optional
+            a :class:`pyspark_common.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            :class:`pyspark_common.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
@@ -460,7 +460,7 @@ class SQLContext:
         >>> df2.collect()
         [Row(name='Alice', age=1)]
 
-        >>> from pyspark.sql.types import *
+        >>> from pyspark_common.sql.types import *
         >>> schema = StructType([
         ...    StructField("name", StringType(), True),
         ...    StructField("age", IntegerType(), True)])

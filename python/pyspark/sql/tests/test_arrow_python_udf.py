@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.errors import PythonException
+from pyspark_common.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin

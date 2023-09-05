@@ -18,7 +18,7 @@ import sys
 from typing import Union, TYPE_CHECKING
 
 from pyspark.rdd import PythonEvalType
-from pyspark.sql.types import StructType
+from pyspark_common.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
@@ -57,9 +57,9 @@ class PandasMapOpsMixin:
         func : function
             a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
             outputs an iterator of `pandas.DataFrame`\\s.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`pyspark_common.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
         barrier : bool, optional, default True
             Use barrier mode execution.
 
@@ -136,9 +136,9 @@ class PandasMapOpsMixin:
         func : function
             a Python native function that takes an iterator of `pyarrow.RecordBatch`\\s, and
             outputs an iterator of `pyarrow.RecordBatch`\\s.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`pyspark_common.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
         barrier : bool, optional, default True
             Use barrier mode execution.
 

@@ -21,7 +21,7 @@ from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
     from pyspark import sql
-    from pyspark.sql.connect.column import Column
+    from pyspark_connect.sql.column import Column
 
     # This is a hack to make the Column instance comparison works in `ColumnTestsMixin`.
     # e.g., `isinstance(col, pyspark.sql.Column)`.

@@ -18,9 +18,9 @@ import datetime
 import json
 from typing import Tuple, Optional
 
-from pyspark.sql.types import DateType, Row, StructType
-from pyspark.sql.utils import has_numpy
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.sql.types import DateType, Row, StructType
+from pyspark_common.sql.utils import has_numpy
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 
 __all__ = ["GroupState", "GroupStateTimeout"]
 

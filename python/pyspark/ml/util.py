@@ -39,7 +39,7 @@ from typing import (
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
-from pyspark.sql.utils import is_remote
+from pyspark_common.sql.utils import is_remote
 from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:

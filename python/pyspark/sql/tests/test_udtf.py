@@ -22,7 +22,7 @@ from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.errors import (
+from pyspark_common.errors import (
     PySparkAttributeError,
     PythonException,
     PySparkTypeError,
@@ -44,7 +44,7 @@ from pyspark.sql.functions import (
     OrderingColumn,
     PartitioningColumn,
 )
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     ArrayType,
     BooleanType,
     DataType,
@@ -1525,7 +1525,7 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(
             AnalysisException,
             "Output of `analyze` static method of Python UDTFs expects "
-            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark.sql.types.StringType'>",
+            "a pyspark.sql.udtf.AnalyzeResult but got: <class 'pyspark_common.sql.types.StringType'>",
         ):
             func().collect()
 

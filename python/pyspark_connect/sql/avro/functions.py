@@ -19,7 +19,7 @@
 A collections of builtin avro functions
 """
 
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -27,11 +27,11 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from pyspark.sql.avro import functions as PyAvroFunctions
 
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, _to_col, _options_to_col, lit
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.functions import _invoke_function, _to_col, _options_to_col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
+    from pyspark_connect.sql._typing import ColumnOrName
 
 
 def from_avro(
@@ -79,9 +79,9 @@ def _test() -> None:
 
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.avro.functions
+    import pyspark_connect.sql.avro.functions
 
-    globs = pyspark.sql.connect.avro.functions.__dict__.copy()
+    globs = pyspark_connect.sql.avro.functions.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.avro.functions tests")
@@ -90,7 +90,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.avro.functions,
+        pyspark_connect.sql.avro.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

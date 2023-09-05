@@ -19,7 +19,7 @@ from typing import ClassVar, Type, Dict, List, Optional, Union, cast
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.resource import ResourceInformation
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 
 class TaskContext:

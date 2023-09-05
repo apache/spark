@@ -1,12 +1,12 @@
 import re
-from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+from pyspark_common.errors.error_classes import ERROR_CLASSES_MAP
 
 
 def generate_errors_doc(output_rst_file_path: str) -> None:
     """
     Generates a reStructuredText (RST) documentation file for PySpark error classes.
 
-    This function fetches error classes defined in `pyspark.errors.error_classes`
+    This function fetches error classes defined in `pyspark_common.errors.error_classes`
     and writes them into an RST file. The generated RST file provides an overview
     of common, named error classes returned by PySpark.
 
@@ -40,7 +40,7 @@ def generate_errors_doc(output_rst_file_path: str) -> None:
 Error classes in PySpark
 ========================
 
-This is a list of common, named error classes returned by PySpark which are defined at `error_classes.py <https://github.com/apache/spark/blob/master/python/pyspark/errors/error_classes.py>`_.
+This is a list of common, named error classes returned by PySpark which are defined at `error_classes.py <https://github.com/apache/spark/blob/master/python/pyspark_common.errors/error_classes.py>`_.
 
 When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <https://spark.apache.org/docs/latest/api/python/development/contributing.html#contributing-error-and-exception>`_.
 """  # noqa

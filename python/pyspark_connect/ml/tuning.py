@@ -46,7 +46,7 @@ from pyspark.sql.functions import col, lit, rand
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
 
-from pyspark.sql.utils import is_remote
+from pyspark_common.sql.utils import is_remote
 
 
 if TYPE_CHECKING:

@@ -53,10 +53,10 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
+from pyspark_common.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark_common.errors import PySparkRuntimeError, PySparkTypeError
 from pyspark.worker_util import (
     check_python_version,
     read_command,

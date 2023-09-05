@@ -40,7 +40,7 @@ from typing import (
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
 from pyspark.util import print_exec
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark import SparkContext

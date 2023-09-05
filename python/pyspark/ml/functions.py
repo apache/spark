@@ -30,7 +30,7 @@ except ImportError:
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     ArrayType,
     ByteType,
     DataType,
@@ -406,7 +406,7 @@ def predict_batch_udf(
         For a dictionary of named numpy arrays, the arrays can only be one or two dimensional, since
         higher dimensional arrays are not supported.  For a row-oriented list of dictionaries, each
         element in the dictionary must be either a scalar or one-dimensional array.
-    return_type : :py:class:`pyspark.sql.types.DataType` or str.
+    return_type : :py:class:`pyspark_common.sql.types.DataType` or str.
         Spark SQL datatype for the expected output:
 
         * Scalar (e.g. IntegerType, FloatType) --> 1-dim numpy array.
@@ -497,7 +497,7 @@ def predict_batch_udf(
         >>> import numpy as np
         >>> import pandas as pd
         >>> from pyspark.ml.functions import predict_batch_udf
-        >>> from pyspark.sql.types import FloatType
+        >>> from pyspark_common.sql.types import FloatType
         >>>
         >>> df = spark.createDataFrame(pd.DataFrame(np.arange(100)))
         >>> df.show(5)
@@ -618,7 +618,7 @@ def predict_batch_udf(
         >>> import numpy as np
         >>> import pandas as pd
         >>> from pyspark.ml.functions import predict_batch_udf
-        >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+        >>> from pyspark_common.sql.types import ArrayType, FloatType, StructType, StructField
         >>> from typing import Mapping
         >>>
         >>> data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
@@ -828,7 +828,7 @@ def _test() -> None:
     import pyspark.ml.functions
     import sys
 
-    from pyspark.sql.pandas.utils import (
+    from pyspark_common.sql.pandas.utils import (
         require_minimum_pandas_version,
         require_minimum_pyarrow_version,
     )

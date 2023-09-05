@@ -16,7 +16,7 @@
 #
 
 """Spark Connect Python Client - ML module"""
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 

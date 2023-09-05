@@ -403,7 +403,7 @@ def align_diff_frames(
     this_columns_to_apply: List[Label] = []
     additional_that_columns: List[Label] = []
     if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark_connect.sql.column import Column as ConnectColumn
 
         Column = ConnectColumn
     columns_to_keep: List[Union[Series, Column]] = []  # type: ignore[valid-type]
@@ -945,7 +945,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     False
     """
     if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        from pyspark_connect.sql.column import Column as ConnectColumn
 
         if not isinstance(left, ConnectColumn):
             raise PySparkTypeError(

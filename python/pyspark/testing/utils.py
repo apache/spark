@@ -35,11 +35,11 @@ from typing import (
 from itertools import zip_longest
 
 from pyspark import SparkContext, SparkConf
-from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark_common.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, AtomicType, StructField
+from pyspark_common.sql.types import StructType, AtomicType, StructField
 
 have_scipy = False
 have_numpy = False
@@ -288,7 +288,7 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
     Examples
     --------
-    >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
+    >>> from pyspark_common.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
     >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> assertSchemaEqual(s1, s2)  # pass, schemas are identical
@@ -499,7 +499,7 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-        from pyspark.sql.utils import get_dataframe_class
+        from pyspark_common.sql.utils import get_dataframe_class
 
         # if is_remote(), allow Connect DataFrame
         SparkDataFrame = get_dataframe_class()

@@ -22,7 +22,7 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
-from pyspark.sql.types import StructType, _parse_datatype_string
+from pyspark_common.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -141,9 +141,9 @@ class PandasGroupedOpsMixin:
             a Python native function that takes a `pandas.DataFrame` and outputs a
             `pandas.DataFrame`, or that takes one tuple (grouping keys) and a
             `pandas.DataFrame` and outputs a `pandas.DataFrame`.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`pyspark_common.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------
@@ -287,12 +287,12 @@ class PandasGroupedOpsMixin:
             (key, Iterator[`pandas.DataFrame`], state) and return Iterator[`pandas.DataFrame`].
             Note that the type of the key is tuple and the type of the state is
             :class:`pyspark.sql.streaming.state.GroupState`.
-        outputStructType : :class:`pyspark.sql.types.DataType` or str
+        outputStructType : :class:`pyspark_common.sql.types.DataType` or str
             the type of the output records. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        stateStructType : :class:`pyspark.sql.types.DataType` or str
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
+        stateStructType : :class:`pyspark_common.sql.types.DataType` or str
             the type of the user-defined state. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
         outputMode : str
             the output mode of the function.
         timeoutConf : str
@@ -422,9 +422,9 @@ class PandasCogroupedOps:
             a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
             ``pandas.DataFrame``\\s, and outputs a ``pandas.DataFrame``.
-        schema : :class:`pyspark.sql.types.DataType` or str
+        schema : :class:`pyspark_common.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
-            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+            :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------

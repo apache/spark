@@ -26,7 +26,7 @@ import unittest
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.column import Column
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils

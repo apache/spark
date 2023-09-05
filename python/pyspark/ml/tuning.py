@@ -57,7 +57,7 @@ from pyspark.ml.util import (
 )
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
-from pyspark.sql.types import BooleanType
+from pyspark_common.sql.types import BooleanType
 
 from pyspark.sql.dataframe import DataFrame
 

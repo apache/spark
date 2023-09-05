@@ -22,7 +22,7 @@ import traceback
 from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark_common.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
@@ -31,7 +31,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.types import _parse_datatype_json_string
+from pyspark_common.sql.types import _parse_datatype_json_string
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.util import try_simplify_traceback
 from pyspark.worker_util import (

@@ -17,8 +17,8 @@
 from inspect import Signature
 from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
-from pyspark.sql.pandas.utils import require_minimum_pandas_version
-from pyspark.errors import PySparkNotImplementedError
+from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
+from pyspark_common.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (

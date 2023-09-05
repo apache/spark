@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -22,7 +22,7 @@ import json
 
 from typing import Any, Dict, Optional
 
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     DataType,
     ByteType,
     ShortType,
@@ -49,9 +49,9 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
-from pyspark.errors import PySparkAssertionError
+from pyspark_common.errors import PySparkAssertionError
 
-import pyspark.sql.connect.proto as pb2
+import pyspark_connect.sql.proto as pb2
 
 
 JVM_BYTE_MIN: int = -(1 << 7)
@@ -79,7 +79,7 @@ class UnparsedDataType(DataType):
 
     Examples
     --------
-    >>> from pyspark.sql.connect.types import UnparsedDataType
+    >>> from pyspark_connect.sql.types import UnparsedDataType
 
     >>> UnparsedDataType("int ")
     UnparsedDataType('int ')

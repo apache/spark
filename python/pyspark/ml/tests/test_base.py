@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.types import DoubleType, IntegerType
+from pyspark_common.sql.types import DoubleType, IntegerType
 from pyspark.testing.mlutils import (
     MockDataset,
     MockEstimator,

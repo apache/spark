@@ -21,7 +21,7 @@ from py4j.java_gateway import java_import, is_instance_of, JavaObject
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
 from pyspark.context import SparkContext
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer

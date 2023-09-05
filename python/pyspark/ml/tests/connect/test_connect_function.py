@@ -29,7 +29,7 @@ from pyspark.testing.connectutils import (
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame as CDF
+    from pyspark_connect.sql.dataframe import DataFrame as CDF
     from pyspark.ml.connect import functions as CF
 
 

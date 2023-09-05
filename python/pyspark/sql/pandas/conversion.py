@@ -27,14 +27,14 @@ from typing import (
 )
 from warnings import warn
 
-from pyspark.errors.exceptions.captured import unwrap_spark_exception
+from pyspark_common.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
-from pyspark.sql.types import ArrayType, MapType, TimestampType, StructType, DataType, _create_row
-from pyspark.sql.utils import is_timestamp_ntz_preferred
+from pyspark_common.sql.types import ArrayType, MapType, TimestampType, StructType, DataType, _create_row
+from pyspark_common.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.errors import PySparkTypeError
+from pyspark_common.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     import numpy as np
@@ -81,7 +81,7 @@ class PandasConversionMixin:
         assert isinstance(self, DataFrame)
 
         from pyspark.sql.pandas.types import _create_converter_to_pandas
-        from pyspark.sql.pandas.utils import require_minimum_pandas_version
+        from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
         require_minimum_pandas_version()
 
@@ -93,7 +93,7 @@ class PandasConversionMixin:
             use_arrow = True
             try:
                 from pyspark.sql.pandas.types import to_arrow_schema
-                from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+                from pyspark_common.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
                 to_arrow_schema(self.schema)
@@ -325,7 +325,7 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        from pyspark.sql.pandas.utils import require_minimum_pandas_version
+        from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
         require_minimum_pandas_version()
 
@@ -565,13 +565,13 @@ class SparkConversionMixin:
         assert isinstance(self, SparkSession)
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-        from pyspark.sql.types import TimestampType
+        from pyspark_common.sql.types import TimestampType
         from pyspark.sql.pandas.types import (
             from_arrow_type,
             to_arrow_type,
             _deduplicate_field_names,
         )
-        from pyspark.sql.pandas.utils import (
+        from pyspark_common.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
         )

@@ -20,14 +20,14 @@ from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
     from pyspark import sql
-    from pyspark.sql.connect.udtf import UserDefinedTableFunction
+    from pyspark_connect.sql.udtf import UserDefinedTableFunction
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
 
-from pyspark.sql.connect.functions import lit, udtf
+from pyspark_connect.sql.functions import lit, udtf
 from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+from pyspark_common.errors.exceptions.connect import SparkConnectGrpcException
 
 
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):

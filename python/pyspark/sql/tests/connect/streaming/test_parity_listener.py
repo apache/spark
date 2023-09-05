@@ -19,7 +19,7 @@ import unittest
 import time
 
 import pyspark.cloudpickle
-from pyspark.errors import PySparkPicklingError
+from pyspark_common.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit

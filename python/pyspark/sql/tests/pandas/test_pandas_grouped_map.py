@@ -34,7 +34,7 @@ from pyspark.sql.functions import (
     PandasUDFType,
     window,
 )
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     IntegerType,
     DoubleType,
     ArrayType,
@@ -52,7 +52,7 @@ from pyspark.sql.types import (
     MapType,
     YearMonthIntervalType,
 )
-from pyspark.errors import PythonException, PySparkTypeError
+from pyspark_common.errors import PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,

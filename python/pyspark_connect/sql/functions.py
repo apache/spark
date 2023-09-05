@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -39,9 +39,9 @@ from typing import (
 
 import numpy as np
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.expressions import (
     CaseWhen,
     Expression,
     LiteralExpression,
@@ -53,11 +53,11 @@ from pyspark.sql.connect.expressions import (
     UnresolvedNamedLambdaVariable,
     CallFunction,
 )
-from pyspark.sql.connect.udf import _create_py_udf
-from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.connect.udtf import _create_py_udtf
+from pyspark_connect.sql.udf import _create_py_udf
+from pyspark_connect.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
+from pyspark_connect.sql.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+from pyspark_common.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -65,13 +65,13 @@ from pyspark.sql.functions import pandas_udf  # noqa: F401
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import (
+    from pyspark_connect.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
-    from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.udtf import UserDefinedTableFunction
+    from pyspark_connect.sql.dataframe import DataFrame
+    from pyspark_connect.sql.udtf import UserDefinedTableFunction
 
 
 def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
@@ -298,7 +298,7 @@ getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
 def broadcast(df: "DataFrame") -> "DataFrame":
-    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark_connect.sql.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
         raise PySparkTypeError(
@@ -3924,9 +3924,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.functions
+    import pyspark_connect.sql.functions
 
-    globs = pyspark.sql.connect.functions.__dict__.copy()
+    globs = pyspark_connect.sql.functions.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
@@ -3935,7 +3935,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.functions,
+        pyspark_connect.sql.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

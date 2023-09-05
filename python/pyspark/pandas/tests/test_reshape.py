@@ -24,7 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.utils import name_like_string
-from pyspark.errors import AnalysisException
+from pyspark_common.errors import AnalysisException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 

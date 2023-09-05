@@ -42,10 +42,10 @@ from typing import (
 from py4j.java_gateway import JVMView
 
 from pyspark import SparkContext
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
+from pyspark_common.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
@@ -55,7 +55,7 @@ from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import (
+from pyspark_common.sql.utils import (
     to_str,
     has_numpy,
     try_remote_functions,
@@ -7726,9 +7726,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
 @try_remote_functions
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark_common.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
+    By default, it follows casting rules to :class:`pyspark_common.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -7748,7 +7748,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        date value as :class:`pyspark.sql.types.DateType` type.
+        date value as :class:`pyspark_common.sql.types.DateType` type.
 
     Examples
     --------
@@ -7848,9 +7848,9 @@ def to_timestamp(col: "ColumnOrName", format: str) -> Column:
 
 @try_remote_functions
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark_common.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
+    By default, it follows casting rules to :class:`pyspark_common.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -7870,7 +7870,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        timestamp value as :class:`pyspark.sql.types.TimestampType` type.
+        timestamp value as :class:`pyspark_common.sql.types.TimestampType` type.
 
     Examples
     --------
@@ -8527,7 +8527,7 @@ def window(
     [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
     the order of months are not supported.
 
-    The time column must be of :class:`pyspark.sql.types.TimestampType`.
+    The time column must be of :class:`pyspark_common.sql.types.TimestampType`.
 
     Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
@@ -8538,7 +8538,7 @@ def window(
     past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
-    and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    and 'end', where 'start' and 'end' will be of :class:`pyspark_common.sql.types.TimestampType`.
 
     .. versionadded:: 2.0.0
 
@@ -8676,7 +8676,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     It could also be a Column which can be evaluated to gap duration dynamically based on the
     input row.
     The output column will be a struct called 'session_window' by default with the nested columns
-    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark_common.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
 
@@ -9962,7 +9962,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     substr : str
         a string
     str : :class:`~pyspark.sql.Column` or str
-        a Column of :class:`pyspark.sql.types.StringType`
+        a Column of :class:`pyspark_common.sql.types.StringType`
     pos : int, optional
         start position (zero based)
 
@@ -10611,9 +10611,9 @@ def bin(col: "ColumnOrName") -> Column:
 
 @try_remote_functions
 def hex(col: "ColumnOrName") -> Column:
-    """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
-    :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
-    :class:`pyspark.sql.types.LongType`.
+    """Computes hex value of the given column, which could be :class:`pyspark_common.sql.types.StringType`,
+    :class:`pyspark_common.sql.types.BinaryType`, :class:`pyspark_common.sql.types.IntegerType` or
+    :class:`pyspark_common.sql.types.LongType`.
 
     .. versionadded:: 1.5.0
 
@@ -12979,7 +12979,7 @@ def from_json(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
+    >>> from pyspark_common.sql.types import *
     >>> data = [(1, '''{"a": 1}''')]
     >>> schema = StructType([StructField("a", IntegerType())])
     >>> df = spark.createDataFrame(data, ("key", "value"))
@@ -13043,7 +13043,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.types import *
+    >>> from pyspark_common.sql.types import *
     >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
@@ -15453,7 +15453,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql.functions import call_udf, col
-    >>> from pyspark.sql.types import IntegerType, StringType
+    >>> from pyspark_common.sql.types import IntegerType, StringType
     >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
     >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
     >>> df.select(call_udf("intX2", "id")).show()
@@ -15500,7 +15500,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql.functions import call_udf, col
-    >>> from pyspark.sql.types import IntegerType, StringType
+    >>> from pyspark_common.sql.types import IntegerType, StringType
     >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
     >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
     >>> df.select(call_function("intX2", "id")).show()
@@ -16509,16 +16509,16 @@ def udf(
     ----------
     f : function
         python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType` or str
+    returnType : :class:`pyspark_common.sql.types.DataType` or str
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
     useArrow : bool or None
         whether to use Arrow to optimize the (de)serialization. When it is None, the
         Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
     Examples
     --------
-    >>> from pyspark.sql.types import IntegerType
+    >>> from pyspark_common.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> @udf
     ... def to_upper(s):
@@ -16559,7 +16559,7 @@ def udf(
     more times than it is present in the query. If your function is not deterministic, call
     `asNondeterministic` on the user defined function. E.g.:
 
-    >>> from pyspark.sql.types import IntegerType
+    >>> from pyspark_common.sql.types import IntegerType
     >>> import random
     >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
@@ -16635,9 +16635,9 @@ def udtf(
     ----------
     cls : class
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+    returnType : :class:`pyspark_common.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
-        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        :class:`pyspark_common.sql.types.StructType` object or a DDL-formatted struct type string.
         If None, the handler class must provide `analyze` static method.
     useArrow : bool or None, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the

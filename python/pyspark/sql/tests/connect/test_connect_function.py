@@ -18,23 +18,23 @@ import os
 import unittest
 from inspect import getmembers, isfunction
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
-from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
+from pyspark_common.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+from pyspark_common.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 if should_test_connect:
-    from pyspark.sql.connect.column import Column
+    from pyspark_connect.sql.column import Column
     from pyspark.sql import functions as SF
     from pyspark.sql.window import Window as SW
     from pyspark.sql.dataframe import DataFrame as SDF
-    from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.window import Window as CW
-    from pyspark.sql.connect.dataframe import DataFrame as CDF
+    from pyspark_connect.sql import functions as CF
+    from pyspark_connect.sql.window import Window as CW
+    from pyspark_connect.sql.dataframe import DataFrame as CDF
 
 
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
@@ -2366,7 +2366,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_function_parity(self):
         # This test compares the available list of functions in pyspark.sql.functions with those
-        # available in the Spark Connect Python Client in pyspark.sql.connect.functions
+        # available in the Spark Connect Python Client in pyspark_connect.sql.functions
 
         sf_fn = {name for (name, value) in getmembers(SF, isfunction) if name[0] != "_"}
 

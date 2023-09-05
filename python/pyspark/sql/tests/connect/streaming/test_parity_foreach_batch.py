@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors import PySparkPicklingError
+from pyspark_common.errors import PySparkPicklingError
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):

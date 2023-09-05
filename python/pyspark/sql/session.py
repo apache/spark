@@ -48,9 +48,9 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.sql_formatter import SQLStringFormatter
+from pyspark_common.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     AtomicType,
     DataType,
     StructField,
@@ -63,9 +63,9 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
-from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+from pyspark_common.errors.exceptions.captured import install_exception_handler
+from pyspark_common.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark_common.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -77,7 +77,7 @@ if TYPE_CHECKING:
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
-    from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark_connect.sql.client import SparkConnectClient
 
 
 __all__ = ["SparkSession"]
@@ -93,13 +93,13 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 
         Parameters
         ----------
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        schema : :class:`pyspark_common.sql.types.DataType`, str or list, optional
+            a :class:`pyspark_common.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            :class:`pyspark_common.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
-            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+            ``byte`` instead of ``tinyint`` for :class:`pyspark_common.sql.types.ByteType`.
+            We can also use ``int`` as a short name for :class:`pyspark_common.sql.types.IntegerType`.
         sampleRatio : float, optional
             the sample ratio of rows used for inferring
 
@@ -461,7 +461,7 @@ class SparkSession(SparkConversionMixin):
                     or "spark.remote" in opts
                 ):
                     with SparkContext._lock:
-                        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                        from pyspark_connect.sql.session import SparkSession as RemoteSparkSession
 
                         if (
                             SparkContext._active_spark_context is None
@@ -521,7 +521,7 @@ class SparkSession(SparkConversionMixin):
             """
             opts = dict(self._options)
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
-                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                from pyspark_connect.sql.session import SparkSession as RemoteSparkSession
 
                 # Validate that no incompatible configuration options are selected.
                 self._validate_startup_urls()
@@ -871,7 +871,7 @@ class SparkSession(SparkConversionMixin):
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
         """
-        Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
+        Create a :class:`DataFrame` with single :class:`pyspark_common.sql.types.LongType` column named
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
         step value ``step``.
 
@@ -942,7 +942,7 @@ class SparkSession(SparkConversionMixin):
 
         Returns
         -------
-        :class:`pyspark.sql.types.StructType`
+        :class:`pyspark_common.sql.types.StructType`
         """
         if not data:
             raise PySparkValueError(
@@ -991,7 +991,7 @@ class SparkSession(SparkConversionMixin):
 
         Returns
         -------
-        :class:`pyspark.sql.types.StructType`
+        :class:`pyspark_common.sql.types.StructType`
         """
         first = rdd.first()
         if isinstance(first, Sized) and len(first) == 0:
@@ -1254,10 +1254,10 @@ class SparkSession(SparkConversionMixin):
             an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        schema : :class:`pyspark_common.sql.types.DataType`, str or list, optional
+            a :class:`pyspark_common.sql.types.DataType` or a datatype string or a list of
             column names, default is None. The data type string format equals to
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            :class:`pyspark_common.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
 
             When ``schema`` is a list of column names, the type of each column
@@ -1267,10 +1267,10 @@ class SparkSession(SparkConversionMixin):
             from ``data``, which should be an RDD of either :class:`Row`,
             :class:`namedtuple`, or :class:`dict`.
 
-            When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must
+            When ``schema`` is :class:`pyspark_common.sql.types.DataType` or a datatype string, it must
             match the real data, or an exception will be thrown at runtime. If the given schema is
-            not :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-            :class:`pyspark.sql.types.StructType` as its only field, and the field name will be
+            not :class:`pyspark_common.sql.types.StructType`, it will be wrapped into a
+            :class:`pyspark_common.sql.types.StructType` as its only field, and the field name will be
             "value". Each record will also be wrapped into a tuple, which can be converted to row
             later.
         samplingRatio : float, optional
@@ -1321,7 +1321,7 @@ class SparkSession(SparkConversionMixin):
 
         Create a DataFrame with the explicit schema specified.
 
-        >>> from pyspark.sql.types import *
+        >>> from pyspark_common.sql.types import *
         >>> schema = StructType([
         ...    StructField("name", StringType(), True),
         ...    StructField("age", IntegerType(), True)])
@@ -1410,7 +1410,7 @@ class SparkSession(SparkConversionMixin):
         if has_numpy and isinstance(data, np.ndarray):
             # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
             # so pandas is required.
-            from pyspark.sql.pandas.utils import require_minimum_pandas_version
+            from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
             require_minimum_pandas_version()
             if data.ndim not in [1, 2]:

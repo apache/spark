@@ -27,8 +27,8 @@ from pyspark import SparkFiles
 from pyspark.sql.functions import udf
 
 if should_test_connect:
-    from pyspark.sql.connect.client.artifact import ArtifactManager
-    from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark_connect.sql.client.artifact import ArtifactManager
+    from pyspark_connect.sql.client import ChannelBuilder
 
 
 class ArtifactTestsMixin:

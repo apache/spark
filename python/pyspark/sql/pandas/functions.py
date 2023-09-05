@@ -22,11 +22,11 @@ from typing import get_type_hints
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType
+from pyspark_common.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark_common.sql.types import DataType
 from pyspark.sql.udf import _create_udf
-from pyspark.sql.utils import is_remote
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark_common.sql.utils import is_remote
+from pyspark_common.errors import PySparkTypeError, PySparkValueError
 
 
 class PandasUDFType:
@@ -63,9 +63,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ----------
     f : function, optional
         user-defined function. A python function if used as a standalone function
-    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+    returnType : :class:`pyspark_common.sql.types.DataType` or str, optional
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        :class:`pyspark_common.sql.types.DataType` object or a DDL-formatted type string.
     functionType : int, optional
         an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
@@ -88,7 +88,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     Prior to Spark 3.0, the pandas UDF used `functionType` to decide the execution type as below:
 
     >>> from pyspark.sql.functions import PandasUDFType
-    >>> from pyspark.sql.types import IntegerType
+    >>> from pyspark_common.sql.types import IntegerType
     >>> @pandas_udf(IntegerType(), PandasUDFType.SCALAR)
     ... def slen(s):
     ...     return s.str.len()
@@ -98,7 +98,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     Note that the type hint should use `pandas.Series` in all cases but there is one variant
     that `pandas.DataFrame` should be used for its input or output type hint instead when the input
-    or output column is of :class:`pyspark.sql.types.StructType`. The following example shows
+    or output column is of :class:`pyspark_common.sql.types.StructType`. The following example shows
     a Pandas UDF which takes long column, string column and struct column, and outputs a struct
     column. It requires the function to specify the type hints of `pandas.Series` and
     `pandas.DataFrame` as below:
@@ -325,8 +325,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     should be checked for accuracy by users.
 
     Currently,
-    :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
-    nested :class:`pyspark.sql.types.StructType`
+    :class:`pyspark_common.sql.types.ArrayType` of :class:`pyspark_common.sql.types.TimestampType` and
+    nested :class:`pyspark_common.sql.types.StructType`
     are currently not supported as output types.
 
     See Also
@@ -508,7 +508,7 @@ def _create_pandas_udf(f, returnType, evalType):
         )
 
     if is_remote():
-        from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
+        from pyspark_connect.sql.udf import _create_udf as _create_connect_udf
 
         return _create_connect_udf(f, returnType, evalType)
     else:

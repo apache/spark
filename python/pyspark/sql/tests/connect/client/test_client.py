@@ -26,13 +26,13 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-    from pyspark.sql.connect.client.core import Retrying
-    from pyspark.sql.connect.client.reattach import (
+    from pyspark_connect.sql.client import SparkConnectClient, ChannelBuilder
+    from pyspark_connect.sql.client.core import Retrying
+    from pyspark_connect.sql.client.reattach import (
         RetryException,
         ExecutePlanResponseReattachableIterator,
     )
-    import pyspark.sql.connect.proto as proto
+    import pyspark_connect.sql.proto as proto
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

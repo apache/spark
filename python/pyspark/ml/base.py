@@ -49,7 +49,7 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import udf
-from pyspark.sql.types import DataType, StructField, StructType
+from pyspark_common.sql.types import DataType, StructField, StructType
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap

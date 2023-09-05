@@ -30,7 +30,7 @@ from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
 from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkAssertionError
+from pyspark_common.errors import PySparkAssertionError
 
 tabulate_requirement_message = None
 try:
@@ -57,7 +57,7 @@ except ImportError as e:
 have_plotly = plotly_requirement_message is None
 
 try:
-    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+    from pyspark_common.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
     import pandas as pd

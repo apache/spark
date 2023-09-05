@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -23,23 +23,23 @@ import sys
 import pickle
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
-import pyspark.sql.connect.proto as pb2
+from pyspark_common.errors import StreamingQueryException, PySparkValueError
+import pyspark_connect.sql.proto as pb2
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.connect import proto
-from pyspark.sql.connect.utils import get_python_ver
+from pyspark_connect.sql import proto
+from pyspark_connect.sql.utils import get_python_ver
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
     StreamingQueryManager as PySparkStreamingQueryManager,
 )
-from pyspark.errors.exceptions.connect import (
+from pyspark_common.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
-from pyspark.errors import PySparkPicklingError
+from pyspark_common.errors import PySparkPicklingError
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark_connect.sql.session import SparkSession
 
 
 class StreamingQuery:
@@ -277,11 +277,11 @@ def _test() -> None:
     import doctest
     import os
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.streaming.query
+    import pyspark_connect.sql.streaming.query
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    globs = pyspark.sql.connect.streaming.query.__dict__.copy()
+    globs = pyspark_connect.sql.streaming.query.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.streaming.query tests")
@@ -290,7 +290,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.streaming.query,
+        pyspark_connect.sql.streaming.query,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )

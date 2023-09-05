@@ -30,7 +30,7 @@ from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParam
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 
 def launch_gateway(conf=None, popen_kwargs=None):

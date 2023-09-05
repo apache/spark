@@ -32,7 +32,7 @@ import pyspark
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
-from pyspark.sql.utils import is_remote
+from pyspark_common.sql.utils import is_remote
 from urllib.parse import urlparse
 
 if getattr(builtins, "__IPYTHON__", False):
@@ -48,7 +48,7 @@ if getattr(builtins, "__IPYTHON__", False):
 
 if is_remote():
     try:
-        # Creates pyspark.sql.connect.SparkSession.
+        # Creates pyspark_connect.sql.SparkSession.
         spark = SparkSession.builder.getOrCreate()
     except Exception:
         import sys

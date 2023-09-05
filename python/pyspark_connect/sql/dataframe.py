@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.errors.exceptions.base import SessionNotSameException
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_common.errors.exceptions.base import SessionNotSameException
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -44,32 +44,32 @@ import warnings
 from collections.abc import Iterable
 
 from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark_common._globals import _NoValueType
 from pyspark.sql.observation import Observation
-from pyspark.sql.types import Row, StructType, _create_row
+from pyspark_common.sql.types import Row, StructType, _create_row
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import (
+from pyspark_common.errors import (
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
     PySparkNotImplementedError,
 )
-from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark_common.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
-from pyspark.storagelevel import StorageLevel
-import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
-from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
-from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
-from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import UnresolvedRegex
-from pyspark.sql.connect.functions import (
+from pyspark_common.storagelevel import StorageLevel
+import pyspark_connect.sql.plan as plan
+from pyspark_connect.sql.conversion import ArrowTableToRowsConversion
+from pyspark_connect.sql.group import GroupedData
+from pyspark_connect.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark_connect.sql.streaming.readwriter import DataStreamWriter
+from pyspark_connect.sql.column import Column
+from pyspark_connect.sql.expressions import UnresolvedRegex
+from pyspark_connect.sql.functions import (
     _to_col_with_plan_id,
     _to_col,
     _invoke_function,
@@ -83,7 +83,7 @@ from pyspark.sql.pandas.types import from_arrow_schema
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import (
+    from pyspark_connect.sql._typing import (
         ColumnOrName,
         ColumnOrNameOrOrdinal,
         LiteralType,
@@ -92,7 +92,7 @@ if TYPE_CHECKING:
         PandasMapIterFunction,
         ArrowMapIterFunction,
     )
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark_connect.sql.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
 
@@ -346,7 +346,7 @@ class DataFrame:
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
         def _convert_col(col: "ColumnOrName") -> "ColumnOrName":
-            from pyspark.sql.connect.expressions import SortOrder, ColumnReference
+            from pyspark_connect.sql.expressions import SortOrder, ColumnReference
 
             if isinstance(col, Column):
                 if isinstance(col._expr, SortOrder):
@@ -1549,7 +1549,7 @@ class DataFrame:
     def sampleBy(
         self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
     ) -> "DataFrame":
-        from pyspark.sql.connect.expressions import ColumnReference
+        from pyspark_connect.sql.expressions import ColumnReference
 
         if isinstance(col, str):
             col = Column(ColumnReference(col))
@@ -1971,7 +1971,7 @@ class DataFrame:
         evalType: int,
         barrier: bool,
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark_connect.sql.udf import UserDefinedFunction
 
         if self._plan is None:
             raise Exception("Cannot mapInPandas when self._plan is empty.")
@@ -2186,20 +2186,20 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.dataframe
+    import pyspark_connect.sql.dataframe
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    globs = pyspark.sql.connect.dataframe.__dict__.copy()
+    globs = pyspark_connect.sql.dataframe.__dict__.copy()
 
     # TODO(SPARK-41625): Support Structured Streaming
-    del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+    del pyspark_connect.sql.dataframe.DataFrame.isStreaming.__doc__
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
-    del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+    del pyspark_connect.sql.dataframe.DataFrame.observe.__doc__
 
     # TODO(SPARK-43435): should reenable this test
-    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
+    del pyspark_connect.sql.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
@@ -2208,7 +2208,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.dataframe,
+        pyspark_connect.sql.dataframe,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

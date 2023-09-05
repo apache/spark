@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
@@ -22,10 +22,10 @@ from typing import Any, Optional, Union, cast
 import warnings
 
 from pyspark import _NoValue
-from pyspark._globals import _NoValueType
+from pyspark_common._globals import _NoValueType
 from pyspark.sql.conf import RuntimeConfig as PySparkRuntimeConfig
-from pyspark.sql.connect import proto
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark_connect.sql import proto
+from pyspark_connect.sql.client import SparkConnectClient
 
 
 class RuntimeConf:
@@ -104,15 +104,15 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.conf
+    import pyspark_connect.sql.conf
 
-    globs = pyspark.sql.connect.conf.__dict__.copy()
+    globs = pyspark_connect.sql.conf.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.conf tests").remote("local[4]").getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.conf,
+        pyspark_connect.sql.conf,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

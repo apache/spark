@@ -23,7 +23,7 @@ import threading
 from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union
 
 from pyspark.serializers import read_int, CPickleSerializer
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark._typing import SupportsIAdd  # noqa: F401

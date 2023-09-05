@@ -26,15 +26,15 @@ import tempfile
 import uuid
 from collections import defaultdict
 
-from pyspark.errors import (
+from pyspark_common.errors import (
     PySparkAttributeError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
 )
-from pyspark.errors.exceptions.base import SessionNotSameException
+from pyspark_common.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     StructType,
     StructField,
     LongType,
@@ -58,7 +58,7 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.errors.exceptions.connect import (
+from pyspark_common.errors.exceptions.connect import (
     AnalysisException,
     ParseException,
     SparkConnectException,
@@ -68,16 +68,16 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import numpy as np
-    from pyspark.sql.connect.proto import Expression as ProtoExpression
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.readwriter import DataFrameWriterV2
+    from pyspark_connect.sql.proto import Expression as ProtoExpression
+    from pyspark_connect.sql.session import SparkSession as RemoteSparkSession
+    from pyspark_connect.sql.client import ChannelBuilder
+    from pyspark_connect.sql.column import Column
+    from pyspark_connect.sql.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark_connect.sql.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
-    from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
+    from pyspark_connect.sql import functions as CF
+    from pyspark_connect.sql.client.core import Retrying, SparkConnectClient
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -2335,7 +2335,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_writeTo_operations(self):
         # SPARK-42002: Implement DataFrameWriterV2
         import datetime
-        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+        from pyspark_connect.sql.functions import col, years, months, days, hours, bucket
 
         df = self.connect.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")

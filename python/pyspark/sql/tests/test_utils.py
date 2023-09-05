@@ -20,7 +20,7 @@ import difflib
 from itertools import zip_longest
 
 from pyspark.sql.functions import sha2, to_timestamp
-from pyspark.errors import (
+from pyspark_common.errors import (
     AnalysisException,
     ParseException,
     PySparkAssertionError,
@@ -32,7 +32,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     StringType,
     ArrayType,
     LongType,

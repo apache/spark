@@ -32,7 +32,7 @@ from pyspark.pandas.data_type_ops.num_ops import IntegralOps, FractionalOps, Dec
 from pyspark.pandas.data_type_ops.string_ops import StringOps
 from pyspark.pandas.data_type_ops.timedelta_ops import TimedeltaOps
 from pyspark.pandas.data_type_ops.udt_ops import UDTOps
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,

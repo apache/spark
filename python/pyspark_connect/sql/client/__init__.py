@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.utils import check_dependencies
+from pyspark_connect.sql.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from pyspark.sql.connect.client.core import *  # noqa: F401,F403
+from pyspark_connect.sql.client.core import *  # noqa: F401,F403

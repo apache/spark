@@ -74,7 +74,7 @@ from pyspark.join import (
 )
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
-from pyspark.storagelevel import StorageLevel
+from pyspark_common.storagelevel import StorageLevel
 from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
 from pyspark.resource.profile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
@@ -87,7 +87,7 @@ from pyspark.shuffle import (
 )
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import fail_on_stopiteration, _parse_memory
-from pyspark.errors import PySparkRuntimeError
+from pyspark_common.errors import PySparkRuntimeError
 
 
 if TYPE_CHECKING:
@@ -109,7 +109,7 @@ if TYPE_CHECKING:
         PandasGroupedMapUDFWithStateType,
     )
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.types import AtomicType, StructType
+    from pyspark_common.sql.types import AtomicType, StructType
     from pyspark.sql._typing import (
         AtomicValue,
         RowLike,

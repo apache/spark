@@ -31,7 +31,7 @@ import numpy as np
 from distutils.version import LooseVersion
 
 from pyspark import SparkContext
-from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
+from pyspark_common.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
 from pyspark.sql import SparkSession
 
 __all__ = ["ImageSchema"]
@@ -167,7 +167,7 @@ class _ImageSchema:
 
         if not isinstance(image, Row):
             raise TypeError(
-                "image argument should be pyspark.sql.types.Row; however, "
+                "image argument should be pyspark_common.sql.types.Row; however, "
                 "it got [%s]." % type(image)
             )
 

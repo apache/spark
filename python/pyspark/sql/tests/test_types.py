@@ -26,8 +26,8 @@ import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
-from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
-from pyspark.sql.types import (
+from pyspark_common.errors import AnalysisException, PySparkTypeError, PySparkValueError
+from pyspark_common.sql.types import (
     ByteType,
     ShortType,
     IntegerType,
@@ -51,7 +51,7 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
-from pyspark.sql.types import (
+from pyspark_common.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
@@ -507,7 +507,7 @@ class TypesTestsMixin:
             self.assertEqual(1.0, row.asDict()["d"]["key"].c)
 
     def test_udt(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
+        from pyspark_common.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
@@ -814,7 +814,7 @@ class TypesTestsMixin:
         self.assertRaises(TypeError, lambda: struct1[9.9])
 
     def test_parse_datatype_string(self):
-        from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
+        from pyspark_common.sql.types import _all_atomic_types, _parse_datatype_string
 
         for k, t in _all_atomic_types.items():
             if k != "varchar" and k != "char":
