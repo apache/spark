@@ -230,7 +230,7 @@ case class AlterColumn(
     val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
       TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
     }
-    if (setDefaultExpression.isDefined) {
+    if (setDefaultExpression.isDefined && setDefaultExpression.get.nonEmpty) {
       val newDataType = if (dataType.isDefined) {
         dataType.get
       } else {
