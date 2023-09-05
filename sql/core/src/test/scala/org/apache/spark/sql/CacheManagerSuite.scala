@@ -49,22 +49,12 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
       val t = "t1"
       val fullIdent = s"spark_catalog.$db.$t"
       spark.sql(s"CREATE TABLE $db.$t USING parquet AS SELECT 1 AS id")
-      spark.sql(s"CACHE TABLE $t")
-      assert(isInStorage(fullIdent))
-      spark.sql(s"UNCACHE TABLE $t")
-      assert(!isInStorage(fullIdent))
-      spark.sql(s"CACHE TABLE $db.$t")
-      assert(isInStorage(fullIdent))
-      spark.sql(s"UNCACHE TABLE $db.$t")
-      assert(!isInStorage(fullIdent))
-      spark.sql(s"CACHE TABLE $fullIdent")
-      assert(isInStorage(fullIdent))
-      spark.sql(s"UNCACHE TABLE $fullIdent")
-      assert(!isInStorage(fullIdent))
-      val tmpView = "tmpView"
-      spark.sql(s"CREATE TEMPORARY VIEW $tmpView AS SELECT 1 AS id")
-      spark.sql(s"CACHE TABLE $tmpView")
-      assert(isInStorage(tmpView))
+      Seq(t, s"$db.$t", fullIdent).foreach { table =>
+        spark.sql(s"CACHE TABLE $table")
+        assert(isInStorage(fullIdent))
+        spark.sql(s"UNCACHE TABLE $table")
+        assert(!isInStorage(fullIdent))
+      }
     } finally {
       spark.sql(s"DROP DATABASE $db CASCADE")
     }
@@ -76,5 +66,14 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
     assert(isInStorage(view))
     spark.sql(s"UNCACHE TABLE $view")
     assert(!isInStorage(view))
+  }
+
+  test("SPARK-45039: Cached table name should be the name of the temporary view") {
+    val tmpView = "tmpView"
+    spark.sql(s"CREATE TEMPORARY VIEW $tmpView AS SELECT 1 AS id")
+    spark.sql(s"CACHE TABLE $tmpView")
+    assert(isInStorage(tmpView))
+    spark.sql(s"UNCACHE TABLE $tmpView")
+    assert(!isInStorage(tmpView))
   }
 }
