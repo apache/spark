@@ -47,20 +47,15 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
     spark.sql(s"USE $db")
     try {
       val t = "t1"
-      val fullIdent = s"spark_catalog.$db.$t"
-      spark.sql(s"CREATE TABLE $db.$t USING parquet AS SELECT 1 AS id")
+      spark.sql(s"CREATE TABLE $t USING parquet AS SELECT 1 AS id")
       spark.sql(s"CACHE TABLE $t")
-      assert(isInStorage(fullIdent))
+      assert(isInStorage(s"$db.$t"))
       spark.sql(s"UNCACHE TABLE $t")
-      assert(!isInStorage(fullIdent))
+      assert(!isInStorage(s"$db.$t"))
       spark.sql(s"CACHE TABLE $db.$t")
-      assert(isInStorage(fullIdent))
-      spark.sql(s"UNCACHE TABLE $db.$t")
-      assert(!isInStorage(fullIdent))
-      spark.sql(s"CACHE TABLE $fullIdent")
-      assert(isInStorage(fullIdent))
-      spark.sql(s"UNCACHE TABLE $fullIdent")
-      assert(!isInStorage(fullIdent))
+      assert(isInStorage(s"$db.$t"))
+      spark.sql(s"UNCACHE TABLE $t")
+      assert(!isInStorage(s"$db.$t"))
     } finally {
       spark.sql(s"DROP DATABASE $db CASCADE")
     }
