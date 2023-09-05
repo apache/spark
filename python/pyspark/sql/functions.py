@@ -2219,7 +2219,7 @@ def e() -> Column:
     --------
     >>> spark.range(1).select(e()).show()
     +-----------------+
-    |              E()|
+    |              e()|
     +-----------------+
     |2.718281828459045|
     +-----------------+
@@ -2465,7 +2465,7 @@ def pi() -> Column:
     --------
     >>> spark.range(1).select(pi()).show()
     +-----------------+
-    |             PI()|
+    |             pi()|
     +-----------------+
     |3.141592653589793|
     +-----------------+
@@ -4154,7 +4154,7 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     --------
     >>> df = spark.range(1)
     >>> df.select(atan2(lit(1), lit(2))).first()
-    Row(ATAN2(1, 2)=0.46364...)
+    Row(atan2(1, 2)=0.46364...)
     """
     return _invoke_binary_math_function("atan2", col1, col2)
 
@@ -4185,7 +4185,7 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     --------
     >>> df = spark.range(1)
     >>> df.select(hypot(lit(1), lit(2))).first()
-    Row(HYPOT(1, 2)=2.23606...)
+    Row(hypot(1, 2)=2.23606...)
     """
     return _invoke_binary_math_function("hypot", col1, col2)
 
@@ -4216,7 +4216,7 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     --------
     >>> df = spark.range(1)
     >>> df.select(pow(lit(3), lit(2))).first()
-    Row(POWER(3, 2)=9.0)
+    Row(power(3, 2)=9.0)
     """
     return _invoke_binary_math_function("pow", col1, col2)
 

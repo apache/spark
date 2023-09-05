@@ -48,7 +48,7 @@ abstract class LeafMathExpression(c: Double, name: String)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
-  override def prettyName: String = name
+  override def prettyName: String = name.toLowerCase(Locale.ROOT)
 
   override def eval(input: InternalRow): Any = c
 }
@@ -122,7 +122,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
 
   override def toString: String = s"$prettyName($left, $right)"
 
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).
+    getOrElse(name.toLowerCase(Locale.ROOT))
 
   override def dataType: DataType = DoubleType
 
