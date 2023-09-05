@@ -14,3 +14,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from pyspark_common.ml.torch import *  # Allow legacy usage

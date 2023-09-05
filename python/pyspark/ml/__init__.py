@@ -19,6 +19,10 @@
 DataFrame-based machine learning APIs to let users quickly assemble and configure practical
 machine learning pipelines.
 """
+# Allow legacy usage
+from pyspark_common.ml import linalg, torch
+from pyspark_connect import ml as connect
+
 from pyspark.ml.base import (
     Estimator,
     Model,
@@ -40,10 +44,9 @@ from pyspark.ml import (
     stat,
     tuning,
     util,
-    linalg,
     param,
 )
-from pyspark.ml.torch.distributor import TorchDistributor
+from pyspark_common.ml.torch.distributor import TorchDistributor
 
 __all__ = [
     "Transformer",

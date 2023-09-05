@@ -14,10 +14,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""
-This package includes the internal APIs for PySpark about interoperability
-between pandas, PySpark and PyArrow. This package should not be directly
-imported and used.
-"""
-
-from pyspark_common.sql.pandas import utils
+from pyspark_common.pandas.plot.core import *  # noqa: F401,F403

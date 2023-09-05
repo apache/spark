@@ -55,19 +55,23 @@ filterwarnings(
     "ignore", message="distutils Version classes are deprecated. Use packaging.version instead."
 )
 
+# Allow legacy usage
+from pyspark_common import errors, storagelevel, cloudpickle, _globals
+from pyspark_common.storagelevel import StorageLevel
+
 from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
 from pyspark.util import InheritableThread, inheritable_thread_target
-from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
-from pyspark._globals import _NoValue  # noqa: F401
+from pyspark_common._globals import _NoValue  # noqa: F401
+
 
 _F = TypeVar("_F", bound=Callable)
 

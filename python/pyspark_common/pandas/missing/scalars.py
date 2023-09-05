@@ -14,10 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""
-This package includes the internal APIs for PySpark about interoperability
-between pandas, PySpark and PyArrow. This package should not be directly
-imported and used.
-"""
+from pyspark_common.pandas.exceptions import PandasNotImplementedError
 
-from pyspark_common.sql.pandas import utils
+
+def _unsupported_scalar(scalar_name):
+    return PandasNotImplementedError(class_name="ps", scalar_name=scalar_name)
+
+
+class MissingPandasLikeScalars:
+    Timestamp = _unsupported_scalar("Timestamp")
+    Timedelta = _unsupported_scalar("Timedelta")
+    Period = _unsupported_scalar("Period")
+    Interval = _unsupported_scalar("Interval")
+    Categorical = _unsupported_scalar("Categorical")

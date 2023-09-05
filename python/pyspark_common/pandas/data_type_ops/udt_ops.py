@@ -14,10 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""
-This package includes the internal APIs for PySpark about interoperability
-between pandas, PySpark and PyArrow. This package should not be directly
-imported and used.
-"""
 
-from pyspark_common.sql.pandas import utils
+from pyspark_common.pandas.data_type_ops.base import DataTypeOps
+
+
+class UDTOps(DataTypeOps):
+    """
+    The class for binary operations of pandas-on-Spark objects with Spark type:
+    UserDefinedType or its subclasses.
+    """
+
+    @property
+    def pretty_name(self) -> str:
+        return "user defined types"
