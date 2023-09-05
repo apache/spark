@@ -2319,7 +2319,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
       CacheTable(
-        UnresolvedRelation(Seq("a", "b", "c")), Seq("a", "b", "c"), false, Map.empty))
+        UnresolvedRelation(Seq("a", "b", "c")),
+        UnresolvedIdentifier(Seq("a", "b", "c"), true), false, Map.empty))
 
     comparePlans(
       parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
@@ -2333,13 +2334,14 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
       CacheTable(
-        UnresolvedRelation(Seq("a", "b", "c")), Seq("a", "b", "c"), true, Map.empty))
+        UnresolvedRelation(Seq("a", "b", "c")),
+        UnresolvedIdentifier(Seq("a", "b", "c"), true), true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
       CacheTable(
         UnresolvedRelation(Seq("a", "b", "c")),
-        Seq("a", "b", "c"),
+        UnresolvedIdentifier(Seq("a", "b", "c"), true),
         true,
         Map("storageLevel" -> "DISK_ONLY")))
 

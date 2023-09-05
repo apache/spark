@@ -61,6 +61,10 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
       assert(isInStorage(fullIdent))
       spark.sql(s"UNCACHE TABLE $fullIdent")
       assert(!isInStorage(fullIdent))
+      val tmpView = "tmpView"
+      spark.sql(s"CREATE TEMPORARY VIEW $tmpView AS SELECT 1 AS id")
+      spark.sql(s"CACHE TABLE $tmpView")
+      assert(isInStorage(tmpView))
     } finally {
       spark.sql(s"DROP DATABASE $db CASCADE")
     }
