@@ -857,10 +857,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
         >>> df.groupby("A").sum().sort_index()
-           B  C
+           B  C   D
         A
-        1  1  6
-        2  1  8
+        1  1  6  ab
+        2  1  8  aa
 
         >>> df.groupby("D").sum().sort_index()
            A  B   C
