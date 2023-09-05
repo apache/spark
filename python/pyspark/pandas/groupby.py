@@ -900,11 +900,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             unsupported = [
                 col.name
                 for col in self._agg_columns
-                if not isinstance(col.spark.data_type, (NumericType, BooleanType))
+                if not isinstance(col.spark.data_type, (NumericType, BooleanType, StringType))
             ]
             if len(unsupported) > 0:
                 log_advice(
-                    "GroupBy.sum() can only support numeric and bool columns even if"
+                    "GroupBy.sum() can only support numeric, bool and string columns even if"
                     f"numeric_only=False, skip unsupported columns: {unsupported}"
                 )
 
