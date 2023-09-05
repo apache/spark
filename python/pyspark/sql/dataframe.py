@@ -2853,7 +2853,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sparkSession)
 
     def sortWithinPartitions(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
@@ -2862,10 +2864,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Supports column ordinal.
+
         Parameters
         ----------
-        cols : str, list or :class:`Column`, optional
-            list of :class:`Column` or column names to sort by.
+        cols : int, str, list or :class:`Column`, optional
+            list of :class:`Column` or column names or column ordinals to sort by.
 
         Other Parameters
         ----------------
@@ -2879,17 +2884,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame sorted by partitions.
 
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
+        If a column ordinal is negative, it means sort descending.
+
         Examples
         --------
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.sortWithinPartitions("age", ascending=False)
         DataFrame[age: bigint, name: string]
+
+        >>> df.coalesce(1).sortWithinPartitions(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        >>> df.coalesce(1).sortWithinPartitions(-1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        +---+-----+
         """
         jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sparkSession)
 
     def sort(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
@@ -2898,10 +2928,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Supports column ordinal.
+
         Parameters
         ----------
-        cols : str, list, or :class:`Column`, optional
-             list of :class:`Column` or column names to sort by.
+        cols : int, str, list, or :class:`Column`, optional
+             list of :class:`Column` or column names or column ordinals to sort by.
 
         Other Parameters
         ----------------
@@ -2915,15 +2948,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             Sorted DataFrame.
 
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
+        If a column ordinal is negative, it means sort descending.
+
         Examples
         --------
-        >>> from pyspark.sql.functions import desc, asc
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (5, "Bob")], schema=["age", "name"])
 
         Sort the DataFrame in ascending order.
 
-        >>> df.sort(asc("age")).show()
+        >>> df.sort(sf.asc("age")).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        >>> df.sort(1).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2940,6 +2987,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|
         |  2|Alice|
         +---+-----+
+
         >>> df.orderBy(df.age.desc()).show()
         +---+-----+
         |age| name|
@@ -2947,7 +2995,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|  Bob|
         |  2|Alice|
         +---+-----+
+
         >>> df.sort("age", ascending=False).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.sort(-1).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2957,9 +3014,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Specify multiple columns
 
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
-        >>> df.orderBy(desc("age"), "name").show()
+        >>> df.orderBy(sf.desc("age"), "name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|  Bob|
+        +---+-----+
+
+        >>> df.orderBy(-1, "name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|  Bob|
+        +---+-----+
+
+        >>> df.orderBy(-1, 2).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -2971,6 +3047,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Specify multiple columns for sorting order at `ascending`.
 
         >>> df.orderBy(["age", "name"], ascending=[False, False]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.orderBy([1, "name"], ascending=[False, False]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  2|  Bob|
+        |  2|Alice|
+        +---+-----+
+
+        >>> df.orderBy([1, 2], ascending=[False, False]).show()
         +---+-----+
         |age| name|
         +---+-----+
@@ -3026,7 +3120,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jseq(_cols, _to_java_column)
 
     def _sort_cols(
-        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+        self,
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
     ) -> JavaObject:
         """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
@@ -3036,7 +3132,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
-        jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
+
+        jcols = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                # ordinal is 1-based
+                if c > 0:
+                    _c = self[c - 1]
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _c = self[-c - 1].desc()
+                else:
+                    raise IndexError("Column ordinal must not be zero!")
+            else:
+                _c = c  # type: ignore[assignment]
+            jcols.append(_to_java_column(cast("ColumnOrName", _c)))
+
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:

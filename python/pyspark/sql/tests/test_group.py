@@ -96,6 +96,59 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.groupBy(10).agg(sf.sum("b"))
 
+    def test_order_by_ordinal(self):
+        spark = self.spark
+        df = spark.createDataFrame(
+            [
+                (1, 1),
+                (1, 2),
+                (2, 1),
+                (2, 2),
+                (3, 1),
+                (3, 2),
+            ],
+            ["a", "b"],
+        )
+
+        with self.tempView("v"):
+            df.createOrReplaceTempView("v")
+
+            df1 = spark.sql("select * from v order by 1 desc;")
+            df2 = df.orderBy(-1)
+            assertSchemaEqual(df1.schema, df2.schema)
+            assertDataFrameEqual(df1, df2)
+
+            df1 = spark.sql("select * from v order by 1 desc, b desc;")
+            df2 = df.orderBy(-1, df.b.desc())
+            assertSchemaEqual(df1.schema, df2.schema)
+            assertDataFrameEqual(df1, df2)
+
+            df1 = spark.sql("select * from v order by 1 desc, 2 desc;")
+            df2 = df.orderBy(-1, -2)
+            assertSchemaEqual(df1.schema, df2.schema)
+            assertDataFrameEqual(df1, df2)
+
+            # groupby ordinal with orderby ordinal
+            df1 = spark.sql("select a, 1, sum(b) from v group by 1, 2 order by 1;")
+            df2 = df.select("a", sf.lit(1), "b").groupBy(1, 2).agg(sf.sum("b")).sort(1)
+            assertSchemaEqual(df1.schema, df2.schema)
+            assertDataFrameEqual(df1, df2)
+
+            df1 = spark.sql("select a, 1, sum(b) from v group by 1, 2 order by 3, 1;")
+            df2 = df.select("a", sf.lit(1), "b").groupBy(1, 2).agg(sf.sum("b")).sort(3, 1)
+            assertSchemaEqual(df1.schema, df2.schema)
+            assertDataFrameEqual(df1, df2)
+
+            # negative cases: ordinal out of range
+            with self.assertRaises(IndexError):
+                df.sort(0)
+
+            with self.assertRaises(IndexError):
+                df.orderBy(3)
+
+            with self.assertRaises(IndexError):
+                df.orderBy(-3)
+
 
 class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
     pass
