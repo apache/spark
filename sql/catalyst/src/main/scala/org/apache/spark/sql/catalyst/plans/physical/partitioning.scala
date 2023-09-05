@@ -355,7 +355,14 @@ case class KeyGroupedPartitioning(
           } else {
             // We'll need to find leaf attributes from the partition expressions first.
             val attributes = expressions.flatMap(_.collectLeaves())
-            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+
+            if (SQLConf.get.getConf(
+              SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)) {
+              requiredClustering.forall(x => attributes.exists(_.semanticEquals(x))) &&
+                  expressions.forall(_.collectLeaves().size == 1)
+            } else {
+              attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+            }
           }
 
         case _ =>
@@ -364,8 +371,21 @@ case class KeyGroupedPartitioning(
     }
   }
 
-  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
-    KeyGroupedShuffleSpec(this, distribution)
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
+    var result = KeyGroupedShuffleSpec(this, distribution)
+    if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+      // If allowing join keys to be subset of clustering keys, we should create a new
+      // `KeyGroupedPartitioning` here that is grouped on the join keys instead, and use that as
+      // the returned shuffle spec.
+      val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
+      val projectedPartitioning = KeyGroupedPartitioning(expressions, joinKeyPositions,
+        partitionValues, originalPartitionValues)
+      result = result.copy(partitioning = projectedPartitioning, joinKeyPositions =
+        Some(joinKeyPositions))
+    }
+
+    result
+  }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
     partitionValues
@@ -378,8 +398,25 @@ case class KeyGroupedPartitioning(
 object KeyGroupedPartitioning {
   def apply(
       expressions: Seq[Expression],
-      partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
-    KeyGroupedPartitioning(expressions, partitionValues.size, partitionValues, partitionValues)
+      projectionPositions: Seq[Int],
+      partitionValues: Seq[InternalRow],
+      originalPartitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
+    val projectedExpressions = projectionPositions.map(expressions(_))
+    val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
+    val projectedOriginalPartitionValues =
+      originalPartitionValues.map(project(expressions, projectionPositions, _))
+
+    KeyGroupedPartitioning(projectedExpressions, projectedPartitionValues.length,
+      projectedPartitionValues, projectedOriginalPartitionValues)
+  }
+
+  def project(
+      expressions: Seq[Expression],
+      positions: Seq[Int],
+      input: InternalRow): InternalRow = {
+    val projectedValues: Array[Any] = positions.map(i => input.get(i, expressions(i).dataType))
+      .toArray
+    new GenericInternalRow(projectedValues)
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -674,7 +711,8 @@ case class HashShuffleSpec(
 
 case class KeyGroupedShuffleSpec(
     partitioning: KeyGroupedPartitioning,
-    distribution: ClusteredDistribution) extends ShuffleSpec {
+    distribution: ClusteredDistribution,
+    joinKeyPositions: Option[Seq[Int]] = None) extends ShuffleSpec {
 
   /**
    * A sequence where each element is a set of positions of the partition expression to the cluster
@@ -709,7 +747,7 @@ case class KeyGroupedShuffleSpec(
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
-    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
+    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
