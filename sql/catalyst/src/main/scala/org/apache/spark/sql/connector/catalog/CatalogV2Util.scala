@@ -26,7 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -213,7 +213,9 @@ private[sql] object CatalogV2Util {
             // enforced by the parser). On the other hand, commands that drop the default value such
             // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
             if (update.newDefaultValue().nonEmpty) {
-              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
+              val result = field.withCurrentDefaultValue(update.newDefaultValue())
+              ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
+              Some(result)
             } else {
               Some(field.clearCurrentDefaultValue)
             })
