@@ -2018,39 +2018,6 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(ceil(lit(-0.1))).show()
-    +----------+
-    |ceil(-0.1)|
-    +----------+
-    |         0|
-    +----------+
-    """
-    return _invoke_function_over_columns("ceil", col)
-
-
-@try_remote_functions
-def ceiling(col: "ColumnOrName") -> Column:
-    """
-    Computes the ceiling of the given value.
-
-    .. versionadded:: 1.4.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        the column for computed results.
-
-    Examples
-    --------
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
