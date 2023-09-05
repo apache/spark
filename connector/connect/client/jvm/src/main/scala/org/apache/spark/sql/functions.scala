@@ -4284,15 +4284,12 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
-   *   If `e` is a datetime, `format` shall be a valid datetime pattern, see
-   *   <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
-   *   If `e` is a binary, it is converted to a string in one of the formats:
-   *   <ul>
-   *     <li>'base64': a base 64 string.</li>
-   *     <li>'hex': a string in the hexadecimal format.</li>
-   *     <li>'utf-8': the input binary is decoded to UTF-8 string.</li>
-   *   </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
@@ -4321,15 +4318,12 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
-   *   If `e` is a datetime, `format` shall be a valid datetime pattern, see
-   *   <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
-   *   If `e` is a binary, it is converted to a string in one of the formats:
-   *   <ul>
-   *     <li>'base64': a base 64 string.</li>
-   *     <li>'hex': a string in the hexadecimal format.</li>
-   *     <li>'utf-8': the input binary is decoded to UTF-8 string.</li>
-   *   </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
