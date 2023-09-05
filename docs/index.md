@@ -120,9 +120,9 @@ options for deployment:
 
 **API Docs:**
 
+* [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
-* [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
 * [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
@@ -163,7 +163,7 @@ options for deployment:
 * AMP Camps: a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Spark Streaming, Mesos, and more. [Videos](https://www.youtube.com/user/BerkeleyAMPLab/search?query=amp%20camp),
   are available online for free.
-* [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+* [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r))

@@ -11948,12 +11948,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
 
-    # TODO(SPARK-41619): Add `show_counts` parameter and replace with `null_counts`.
     def info(
         self,
         verbose: Optional[bool] = None,
         buf: Optional[IO[str]] = None,
         max_cols: Optional[int] = None,
+        show_counts: Optional[bool] = None,
     ) -> None:
         """
         Print a concise summary of a DataFrame.
@@ -11973,10 +11973,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             When to switch from the verbose to the truncated output. If the
             DataFrame has more than `max_cols` columns, the truncated output
             is used.
-        null_counts : bool, optional
+        show_counts : bool, optional
             Whether to show the non-null counts.
 
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         Returns
         -------
@@ -12066,6 +12066,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     buf=buf,
                     max_cols=max_cols,
                     memory_usage=False,
+                    show_counts=show_counts,  # type: ignore
                 )
             finally:
                 del self._data

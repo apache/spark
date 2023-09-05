@@ -180,10 +180,16 @@ class SparkSession:
         def _apply_options(self, session: "SparkSession") -> None:
             with self._lock:
                 for k, v in self._options.items():
-                    try:
-                        session.conf.set(k, v)
-                    except Exception as e:
-                        warnings.warn(str(e))
+                    # the options are applied after session creation,
+                    # so following options always take no effect
+                    if k not in [
+                        "spark.remote",
+                        "spark.master",
+                    ]:
+                        try:
+                            session.conf.set(k, v)
+                        except Exception as e:
+                            warnings.warn(str(e))
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None

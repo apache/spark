@@ -945,9 +945,9 @@ documentation](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#h
 
 The following table lists some of the common transformations supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/org/apache/spark/rdd/RDD.html),
+([Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
+ [Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/reference/index.html))
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
@@ -1059,9 +1059,9 @@ for details.
 
 The following table lists some of the common actions supported by Spark. Refer to the
 RDD API doc
-([Scala](api/scala/org/apache/spark/rdd/RDD.html),
+([Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
+ [Scala](api/scala/org/apache/spark/rdd/RDD.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [R](api/R/reference/index.html))
 
 and pair RDD functions doc
@@ -1207,9 +1207,9 @@ In addition, each persisted RDD can be stored using a different *storage level*,
 to persist the dataset on disk, persist it in memory but as serialized Java objects (to save space),
 replicate it across nodes.
 These levels are set by passing a
-`StorageLevel` object ([Scala](api/scala/org/apache/spark/storage/StorageLevel.html),
-[Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
-[Python](api/python/reference/api/pyspark.StorageLevel.html#pyspark.StorageLevel))
+`StorageLevel` object ([Python](api/python/reference/api/pyspark.StorageLevel.html#pyspark.StorageLevel),
+[Scala](api/scala/org/apache/spark/storage/StorageLevel.html),
+[Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
@@ -1596,9 +1596,9 @@ as Spark does not support two contexts running concurrently in the same program.
 
 You can see some [example Spark programs](https://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in the `examples` directory
-([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run Java and Scala examples by passing the class name to Spark's `bin/run-example` script; for instance:
 
@@ -1619,4 +1619,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Scala](api/scala/org/apache/spark/), [Java](api/java/), [Python](api/python/) and [R](api/R/).
+[Python](api/python/), [Scala](api/scala/org/apache/spark/), [Java](api/java/) and [R](api/R/).

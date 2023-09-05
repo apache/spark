@@ -80,9 +80,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     reset();
   }
 
-  @Override
-  public void close() {
-    super.close();
+  protected void releaseMemory() {
     nulls = null;
     byteData = null;
     shortData = null;
@@ -92,6 +90,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     doubleData = null;
     arrayLengths = null;
     arrayOffsets = null;
+  }
+
+  @Override
+  public void close() {
+    super.close();
   }
 
   //

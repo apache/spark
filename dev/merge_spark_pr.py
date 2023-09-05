@@ -557,7 +557,8 @@ def main():
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     # Assumes branch names can be sorted lexicographically
-    latest_branch = sorted(branch_names, reverse=True)[0]
+    branch_names = sorted(branch_names, reverse=True)
+    branch_iter = iter(branch_names)
 
     pr_num = input("Which pull request would you like to merge? (e.g. 34): ")
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
@@ -614,8 +615,13 @@ def main():
     # Instead, they're closed by committers.
     merge_commits = [e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None]
 
-    if merge_commits:
-        merge_hash = merge_commits[0]["commit_id"]
+    if merge_commits and pr["state"] == "closed":
+        # A PR might have multiple merge commits, if it's reopened and merged again. We shall
+        # cherry-pick PRs in closed state with the latest merge hash.
+        # If the PR is still open(reopened), we shall not cherry-pick it but perform the normal
+        # merge as it could have been reverted earlier.
+        merge_commits = sorted(merge_commits, key=lambda x: x["created_at"])
+        merge_hash = merge_commits[-1]["commit_id"]
         message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
 
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
@@ -627,7 +633,7 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        cherry_pick(pr_num, merge_hash, latest_branch)
+        cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -647,7 +653,9 @@ def main():
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while input("\n%s (y/n): " % pick_prompt).lower() == "y":
-        merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
+        merged_refs = merged_refs + [
+            cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
+        ]
 
     if asf_jira is not None:
         continue_maybe("Would you like to update an associated JIRA?")

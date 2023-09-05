@@ -1905,10 +1905,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val ignoreNA = extractBoolean(children(2), "ignoreNA")
         Some(EWM(children(0), alpha, ignoreNA))
 
-      case "last_non_null" if fun.getArgumentsCount == 1 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        Some(LastNonNull(children(0)))
-
       case "null_index" if fun.getArgumentsCount == 1 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         Some(NullIndex(children(0)))
@@ -2464,35 +2460,35 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case _ => Seq.empty
     }
 
-    // Convert the results to Arrow.
-    val schema = df.schema
-    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
-    val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-
-    // Convert the data.
-    val bytes = if (rows.isEmpty) {
-      ArrowConverters.createEmptyArrowBatch(
-        schema,
-        timeZoneId,
-        errorOnDuplicatedFieldNames = false)
-    } else {
-      val batches = ArrowConverters.toBatchWithSchemaIterator(
-        rowIter = rows.iterator,
-        schema = schema,
-        maxRecordsPerBatch = -1,
-        maxEstimatedBatchSize = maxBatchSize,
-        timeZoneId = timeZoneId,
-        errorOnDuplicatedFieldNames = false)
-      assert(batches.hasNext)
-      val bytes = batches.next()
-      assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-      bytes
-    }
-
     // To avoid explicit handling of the result on the client, we build the expected input
     // of the relation on the server. The client has to simply forward the result.
     val result = SqlCommandResult.newBuilder()
     if (isCommand) {
+      // Convert the results to Arrow.
+      val schema = df.schema
+      val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
+      val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
+
+      // Convert the data.
+      val bytes = if (rows.isEmpty) {
+        ArrowConverters.createEmptyArrowBatch(
+          schema,
+          timeZoneId,
+          errorOnDuplicatedFieldNames = false)
+      } else {
+        val batches = ArrowConverters.toBatchWithSchemaIterator(
+          rowIter = rows.iterator,
+          schema = schema,
+          maxRecordsPerBatch = -1,
+          maxEstimatedBatchSize = maxBatchSize,
+          timeZoneId = timeZoneId,
+          errorOnDuplicatedFieldNames = false)
+        assert(batches.hasNext)
+        val bytes = batches.next()
+        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+        bytes
+      }
+
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2900,7 +2896,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
-      sessionHolder.streamingRunnerCleanerCache.registerCleanerForQuery(query, cleaner)
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
     }
     executeHolder.eventsManager.postFinished()
 
