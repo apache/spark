@@ -213,9 +213,7 @@ private[sql] object CatalogV2Util {
             // enforced by the parser). On the other hand, commands that drop the default value such
             // as "ALTER TABLE t ALTER COLUMN c DROP DEFAULT" will set this string to empty.
             if (update.newDefaultValue().nonEmpty) {
-              val result = field.withCurrentDefaultValue(update.newDefaultValue())
-              ResolveDefaultColumns.analyze(result, "ALTER TABLE ALTER COLUMN")
-              Some(result)
+              Some(field.withCurrentDefaultValue(update.newDefaultValue()))
             } else {
               Some(field.clearCurrentDefaultValue)
             })
