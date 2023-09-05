@@ -117,21 +117,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
-      val completeTableName = tableName.map { table =>
-        import spark.sessionState.analyzer.CatalogAndIdentifier
-        spark.sessionState.sqlParser.parseMultipartIdentifier(table) match {
-          case id@Seq(t) if !spark.catalog.getTable(t).isTemporary =>
-            val CatalogAndIdentifier(_, ident) = id
-            ident.toString
-          case _ => table
-        }
-      }
       val inMemoryRelation = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
           storageLevel,
           qe,
-          completeTableName)
+          tableName)
       }
 
       this.synchronized {
