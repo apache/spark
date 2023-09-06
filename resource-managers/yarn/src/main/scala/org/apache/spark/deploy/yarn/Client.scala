@@ -492,10 +492,8 @@ private[spark] class Client(
   private[yarn] def getPreloadedStatCache(
       fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
     val statCache = HashMap[URI, FileStatus]()
-    val jars = sparkConf.get(SPARK_JARS)
-    val directoryToFiles = jars.map(directoriesToBePreloaded).getOrElse(HashMap.empty)
-
-    directoryToFiles.foreach { case (dir: URI, filesInDir: HashSet[String]) =>
+    val jars = sparkConf.get(JARS_TO_DISTRIBUTE)
+    directoriesToBePreloaded(jars).foreach { case (dir: URI, filesInDir: HashSet[String]) =>
       fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
         filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
