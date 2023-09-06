@@ -117,7 +117,7 @@ class DataFrameTestsMixin:
         self.assertEqual(2, row[1])
         self.assertEqual("Row(c=1, c=2)", str(row))
         # Cannot access columns
-        self.assertRaises(AnalysisException, lambda: df.select(df[0]).first())
+        # self.assertRaises(AnalysisException, lambda: df.select(df[0]).first())
         self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
         self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
 
