@@ -1153,43 +1153,6 @@ case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
 
 
 /**
- * Keep the last non-null value seen if any. This expression is dedicated only for
- * Pandas API on Spark.
- * For example,
- *  Input: null, 1, 2, 3, null, 4, 5, null
- *  Output: null, 1, 2, 3, 3, 4, 5, 5
- */
-case class LastNonNull(input: Expression)
-  extends AggregateWindowFunction with UnaryLike[Expression] {
-
-  override def dataType: DataType = input.dataType
-
-  private lazy val last = AttributeReference("last", dataType, nullable = true)()
-
-  override def aggBufferAttributes: Seq[AttributeReference] = last :: Nil
-
-  override lazy val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
-
-  override lazy val updateExpressions: Seq[Expression] = {
-    Seq(
-      /* last = */ If(IsNull(input), last, input)
-    )
-  }
-
-  override lazy val evaluateExpression: Expression = last
-
-  override def prettyName: String = "last_non_null"
-
-  override def sql: String = s"$prettyName(${input.sql})"
-
-  override def child: Expression = input
-
-  override protected def withNewChildInternal(newChild: Expression): LastNonNull =
-    copy(input = newChild)
-}
-
-
-/**
  * Return the indices for consecutive null values, for non-null values, it returns 0.
  * This expression is dedicated only for Pandas API on Spark.
  * For example,

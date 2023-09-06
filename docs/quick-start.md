@@ -470,18 +470,18 @@ Congratulations on running your first Spark application!
 * For an in-depth overview of the API, start with the [RDD programming guide](rdd-programming-guide.html) and the [SQL programming guide](sql-programming-guide.html), or see "Programming Guides" menu for other components.
 * For running applications on a cluster, head to the [deployment overview](cluster-overview.html).
 * Finally, Spark includes several samples in the `examples` directory
-([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run them as follows:
 
 {% highlight bash %}
-# For Scala and Java, use run-example:
-./bin/run-example SparkPi
-
 # For Python examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/python/pi.py
+
+# For Scala and Java, use run-example:
+./bin/run-example SparkPi
 
 # For R examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/r/dataframe.R

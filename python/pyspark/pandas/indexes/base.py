@@ -289,7 +289,7 @@ class Index(IndexOpsMixin):
 
         if name is None:
             name = type(self).__name__
-        return "%s: %s entries%s" % (name, total_count, index_summary)
+        return "%s: %s entries%s" % (name, int(total_count), index_summary)
 
     @property
     def size(self) -> int:
@@ -1917,18 +1917,12 @@ class Index(IndexOpsMixin):
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
         sdf_appended = sdf_self.union(sdf_other)
 
-        # names should be kept when MultiIndex, but Index wouldn't keep its name.
-        if isinstance(self, MultiIndex):
-            index_names = self._internal.index_names
-        else:
-            index_names = None
-
         internal = InternalFrame(
             spark_frame=sdf_appended,
             index_spark_columns=[
                 scol_for(sdf_appended, col) for col in self._internal.index_spark_column_names
             ],
-            index_names=index_names,
+            index_names=None,
             index_fields=index_fields,
         )
 

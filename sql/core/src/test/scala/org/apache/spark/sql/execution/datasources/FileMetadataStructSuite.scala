@@ -1035,10 +1035,10 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       spark.range(end = 10).write.format("parquet").save(path.toString)
 
       // Add the tag to the base Dataframe before selecting a metadata column.
-      val customTag = TreeNodeTag[Boolean]("customTag")
+      val customTag = TreeNodeTag[Unit]("customTag")
       val baseDf = spark.read.format("parquet").load(path.toString)
       val tagsPut = baseDf.queryExecution.analyzed.collect {
-        case rel: LogicalRelation => rel.setTagValue(customTag, true)
+        case rel: LogicalRelation => rel.setTagValue(customTag, ())
       }
 
       assert(tagsPut.nonEmpty)
@@ -1047,7 +1047,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
       // Expect the tag in the analyzed and optimized plan after querying a metadata column.
       def isTaggedRelation(plan: LogicalPlan): Boolean = plan match {
-        case rel: LogicalRelation => rel.getTagValue(customTag).getOrElse(false)
+        case rel: LogicalRelation => rel.getTagValue(customTag).isDefined
         case _ => false
       }
 

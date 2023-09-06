@@ -512,7 +512,7 @@ trait ColumnResolutionHelper extends Logging {
     }
     val plan = planOpt.get
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).contains(true)
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
     try {
       if (!isMetadataAccess) {
         plan.resolve(u.nameParts, conf.resolver)

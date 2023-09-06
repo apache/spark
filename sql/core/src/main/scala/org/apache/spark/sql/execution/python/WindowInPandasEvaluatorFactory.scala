@@ -25,11 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{JobArtifactSet, PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.window.{SlidingWindowFunctionFrame, UnboundedFollowingWindowFunctionFrame, UnboundedPrecedingWindowFunctionFrame, UnboundedWindowFunctionFrame, WindowEvaluatorFactoryBase, WindowFunctionFrame}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
@@ -170,14 +171,20 @@ class WindowInPandasEvaluatorFactory(
     // handles UDF inputs.
     private val dataInputs = new ArrayBuffer[Expression]
     private val dataInputTypes = new ArrayBuffer[DataType]
-    private val argOffsets = inputs.map { input =>
+    private val argMetas = inputs.map { input =>
       input.map { e =>
-        if (dataInputs.exists(_.semanticEquals(e))) {
-          dataInputs.indexWhere(_.semanticEquals(e))
+        val (key, value) = e match {
+          case NamedArgumentExpression(key, value) =>
+            (Some(key), value)
+          case _ =>
+            (None, e)
+        }
+        if (dataInputs.exists(_.semanticEquals(value))) {
+          ArgumentMetadata(dataInputs.indexWhere(_.semanticEquals(value)), key)
         } else {
-          dataInputs += e
-          dataInputTypes += e.dataType
-          dataInputs.length - 1
+          dataInputs += value
+          dataInputTypes += value.dataType
+          ArgumentMetadata(dataInputs.length - 1, key)
         }
       }.toArray
     }.toArray
@@ -206,11 +213,15 @@ class WindowInPandasEvaluatorFactory(
     pyFuncs.indices.foreach { exprIndex =>
       val frameIndex = expressionIndexToFrameIndex(exprIndex)
       if (isBounded(frameIndex)) {
-        argOffsets(exprIndex) =
-          Array(lowerBoundIndex(frameIndex), upperBoundIndex(frameIndex)) ++
-            argOffsets(exprIndex).map(_ + windowBoundsInput.length)
+        argMetas(exprIndex) =
+          Array(
+            ArgumentMetadata(lowerBoundIndex(frameIndex), None),
+            ArgumentMetadata(upperBoundIndex(frameIndex), None)) ++
+          argMetas(exprIndex).map(
+            meta => ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
       } else {
-        argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + windowBoundsInput.length)
+        argMetas(exprIndex) = argMetas(exprIndex).map(
+          meta => ArgumentMetadata(meta.offset + windowBoundsInput.length, meta.name))
       }
     }
 
@@ -346,10 +357,10 @@ class WindowInPandasEvaluatorFactory(
         }
       }
 
-      val windowFunctionResult = new ArrowPythonRunner(
+      val windowFunctionResult = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-        argOffsets,
+        argMetas,
         pythonInputSchema,
         sessionLocalTimeZone,
         largeVarTypes,

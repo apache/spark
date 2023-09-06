@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
@@ -96,7 +96,12 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
-    args.find(!_._2.isInstanceOf[Literal]).foreach { case (name, expr) =>
+    def isNotAllowed(expr: Expression): Boolean = expr.exists {
+      case _: Literal | _: CreateArray | _: CreateNamedStruct |
+        _: CreateMap | _: MapFromArrays |  _: MapFromEntries => false
+      case _ => true
+    }
+    args.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>
       expr.failAnalysis(
         errorClass = "INVALID_SQL_ARG",
         messageParameters = Map("name" -> name))
@@ -119,11 +124,13 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
-      case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case NameParameterizedQuery(child, args)
+        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_._2.resolved) =>
         checkArgs(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
-      case p @ PosParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case PosParameterizedQuery(child, args)
+        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved) =>
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
