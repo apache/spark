@@ -603,9 +603,7 @@ class SparkConnectClient(object):
         if not isinstance(e, grpc.RpcError):
             return False
 
-        if e.code() in [
-            grpc.StatusCode.INTERNAL
-        ]:
+        if e.code() in [grpc.StatusCode.INTERNAL]:
             # This error happens if another RPC preempts this RPC, retry.
             msg_cursor_disconnected = "INVALID_CURSOR.DISCONNECTED"
 
