@@ -220,8 +220,7 @@ private[sql] object GrpcRetryHandler extends Logging {
       case e: StatusRuntimeException =>
         val statusCode: Status.Code = e.getStatus.getCode
 
-        if (List(Status.Code.INTERNAL)
-            .contains(statusCode)) {
+        if (statusCode == Status.Code.INTERNAL) {
           val msg: String = e.toString
 
           // This error happens if another RPC preempts this RPC.
