@@ -647,10 +647,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         if numeric_only is None:
-            warnings.warn(
+            log_advice(
                 "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' "
-                "if not set, due to the inability to mix different data types in a single column. "
-                "This behavior might differ from the traditional Pandas behavior where "
+                "if not set, due to the inability to mix different data types in a single column "
+                "in Spark. This behavior might differ from the traditional Pandas behavior where "
                 "'numeric_only' defaults to 'False'. "
                 "Please ensure to set this parameter explicitly to avoid unexpected results.",
             )
@@ -965,10 +965,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
         if numeric_only is None:
-            warnings.warn(
+            log_advice(
                 "In Pandas API on Spark, the 'numeric_only' parameter defaults to 'True' "
-                "if not set, due to the inability to mix different data types in a single column. "
-                "This behavior might differ from the traditional Pandas behavior where "
+                "if not set, due to the inability to mix different data types in a single column "
+                "in Spark. This behavior might differ from the traditional Pandas behavior where "
                 "'numeric_only' defaults to 'False'. "
                 "Please ensure to set this parameter explicitly to avoid unexpected results.",
             )
