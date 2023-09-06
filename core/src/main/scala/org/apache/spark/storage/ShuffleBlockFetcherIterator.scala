@@ -160,7 +160,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val deferredFetchRequests = new HashMap[BlockManagerId, Queue[FetchRequest]]()
 
   /** Current bytes in flight from our requests */
-  private[this] var bytesInFlight = 0L
+  private var bytesInFlight = 0L
 
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
@@ -1195,8 +1195,10 @@ final class ShuffleBlockFetcherIterator(
     // immediately, defer the request until the next time it can be processed.
 
     // Process any outstanding deferred fetch requests if possible.
+    // Skip when the address is the local BM Id (this may happen when shuffle migration is enabled)
     if (deferredFetchRequests.nonEmpty) {
-      for ((remoteAddress, defReqQueue) <- deferredFetchRequests) {
+      for ((remoteAddress, defReqQueue) <- deferredFetchRequests
+           if remoteAddress != blockManager.blockManagerId) {
         while (isRemoteBlockFetchable(defReqQueue) &&
             !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front)) {
           val request = defReqQueue.dequeue()
@@ -1222,6 +1224,16 @@ final class ShuffleBlockFetcherIterator(
       } else {
         send(remoteAddress, request)
       }
+    }
+
+    if (deferredFetchRequests.contains(blockManager.blockManagerId)) {
+      // This might happen when shuffle migration is enabled
+      // Change the remote fetches to local fetches here
+      val defReqQueue = deferredFetchRequests(blockManager.blockManagerId)
+      val localBlocks = mutable.LinkedHashSet[(BlockId, Int)]()
+      localBlocks ++= defReqQueue.flatMap(req => req.blocks.map(i => (i.blockId, i.mapIndex)))
+      fetchLocalBlocks(localBlocks)
+      deferredFetchRequests -= blockManager.blockManagerId
     }
 
     def send(remoteAddress: BlockManagerId, request: FetchRequest): Unit = {

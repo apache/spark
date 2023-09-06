@@ -673,12 +673,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
       "spark.storage.decommission.enabled" -> "true",
       "spark.storage.decommission.shuffleBlocks.enabled" -> "true"
     ) {
+      val blockManager = createMockBlockManager()
+      val localBmId = blockManager.blockManagerId
       val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
       val blocks = Map[BlockId, ManagedBuffer](
         ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
         ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
         ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
       )
+
+      doReturn(blocks(ShuffleBlockId(0, 2, 0))).when(blockManager)
+        .getLocalBlockData(meq(ShuffleBlockId(0, 2, 0)))
 
       answerFetchBlocks { invocation =>
         val host = invocation.getArgument[String](0)
@@ -695,6 +700,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
           case "test-remote-2" =>
             listener.onBlockFetchSuccess(
               ShuffleBlockId(0, 1, 0).toString, blocks(ShuffleBlockId(0, 1, 0)))
+          case "test-local-host" =>
             listener.onBlockFetchSuccess(
               ShuffleBlockId(0, 2, 0).toString, blocks(ShuffleBlockId(0, 2, 0)))
         }
@@ -706,7 +712,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
           mapId match {
             case 0 => BlockManagerId("test-remote-1", "test-remote-1", 2)
             case 1 => BlockManagerId("test-remote-2", "test-remote-2", 2)
-            case 2 => BlockManagerId("test-remote-2", "test-remote-2", 2)
+            case 2 => localBmId
           }
         }
 
@@ -714,10 +720,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
         SparkEnv.get.conf.set(
           "spark.storage.decommission.shuffleBlocks.refreshLocationsEnabled", isEnabled.toString)
         val iterator = createShuffleBlockIteratorWithDefaults(
-          Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))
+          Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+          blockManager = Some(blockManager)
         )
         if (isEnabled) {
-          assert(iterator.toList.map(_._1) == blocks.keys.toList)
+          assert(iterator.map(_._1).toSet == blocks.keys)
+          val bytesInFlightAccess = PrivateMethod[Long](Symbol("bytesInFlight"))
+          assert(iterator.invokePrivate(bytesInFlightAccess()) == 0)
         } else {
           intercept[FetchFailedException] {
             iterator.toList
