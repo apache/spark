@@ -37,7 +37,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 
 import pyspark.pandas as ps
-from pyspark.pandas.spark import functions as SF
 
 
 class StringMethods:
@@ -1506,7 +1505,7 @@ class StringMethods:
         """
         if not isinstance(repeats, int):
             raise TypeError("repeats expects an int parameter")
-        return self._data.spark.transform(lambda c: SF.repeat(col=c, n=repeats))
+        return self._data.spark.transform(lambda c: F.repeat(col=c, n=repeats))
 
     def replace(
         self,

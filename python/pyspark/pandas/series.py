@@ -2257,7 +2257,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        last_non_null = SF.last_non_null(scol)
+        last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
         Window = get_window_class()
