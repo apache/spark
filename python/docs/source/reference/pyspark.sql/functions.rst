@@ -502,6 +502,7 @@ Misc Functions
     assert_true
     raise_error
     reflect
+    try_reflect
     hll_sketch_estimate
     hll_union
     java_method

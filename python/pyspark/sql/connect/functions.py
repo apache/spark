@@ -552,15 +552,23 @@ def cbrt(col: "ColumnOrName") -> Column:
 cbrt.__doc__ = pysparkfuncs.cbrt.__doc__
 
 
-def ceil(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ceil", col)
+def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("ceil", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
 
 
-def ceiling(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ceiling", col)
+def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("ceiling", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
@@ -2357,8 +2365,9 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 rpad.__doc__ = pysparkfuncs.rpad.__doc__
 
 
-def repeat(col: "ColumnOrName", n: int) -> Column:
-    return _invoke_function("repeat", _to_col(col), lit(n))
+def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function("repeat", _to_col(col), _to_col(n))
 
 
 repeat.__doc__ = pysparkfuncs.repeat.__doc__
@@ -3785,6 +3794,13 @@ def java_method(*cols: "ColumnOrName") -> Column:
 
 
 java_method.__doc__ = pysparkfuncs.java_method.__doc__
+
+
+def try_reflect(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_reflect", *cols)
+
+
+try_reflect.__doc__ = pysparkfuncs.try_reflect.__doc__
 
 
 def version() -> Column:

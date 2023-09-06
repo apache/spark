@@ -461,6 +461,7 @@ __all__ = [
     "try_divide",
     "try_element_at",
     "try_multiply",
+    "try_reflect",
     "try_subtract",
     "try_sum",
     "try_to_binary",
@@ -1345,7 +1346,9 @@ def min(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
-    Returns the value associated with the maximum value of ord.
+    Returns the value from the `col` parameter that is associated with the maximum value
+    from the `ord` parameter. This function is often used to find the `col` parameter value
+    corresponding to the maximum `ord` parameter value within each group when used with groupBy().
 
     .. versionadded:: 3.3.0
 
@@ -1355,28 +1358,64 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The column representing the values to be returned. This could be the column instance
+        or the column name as string.
     ord : :class:`~pyspark.sql.Column` or str
-        column to be maximized
+        The column that needs to be maximized. This could be the column instance
+        or the column name as string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value associated with the maximum value of ord.
+        A column object representing the value from `col` that is associated with
+        the maximum value from `ord`.
 
     Examples
     --------
+    Example 1: Using `max_by` with groupBy
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(max_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.max_by("year", "earnings")).show()
     +------+----------------------+
     |course|max_by(year, earnings)|
     +------+----------------------+
     |  Java|                  2013|
     |dotNET|                  2013|
     +------+----------------------+
+
+    Example 2: Using `max_by` with different data types
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
+    ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|max_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |        IT|                    Charlie|
+    | Marketing|                       Anna|
+    +----------+---------------------------+
+
+    Example 3: Using `max_by` where `ord` has multiple maximum values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
+    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.max_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|max_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |   Consult|                      Henry|
+    |   Finance|                     George|
+    +----------+---------------------------+
     """
     return _invoke_function_over_columns("max_by", col, ord)
 
@@ -1384,7 +1423,9 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 @try_remote_functions
 def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     """
-    Returns the value associated with the minimum value of ord.
+    Returns the value from the `col` parameter that is associated with the minimum value
+    from the `ord` parameter. This function is often used to find the `col` parameter value
+    corresponding to the minimum `ord` parameter value within each group when used with groupBy().
 
     .. versionadded:: 3.3.0
 
@@ -1394,28 +1435,64 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The column representing the values that will be returned. This could be the column instance
+        or the column name as string.
     ord : :class:`~pyspark.sql.Column` or str
-        column to be minimized
+        The column that needs to be minimized. This could be the column instance
+        or the column name as string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value associated with the minimum value of ord.
+        Column object that represents the value from `col` associated with
+        the minimum value from `ord`.
 
     Examples
     --------
+    Example 1: Using `min_by` with groupBy:
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(min_by("year", "earnings")).show()
+    >>> df.groupby("course").agg(sf.min_by("year", "earnings")).show()
     +------+----------------------+
     |course|min_by(year, earnings)|
     +------+----------------------+
     |  Java|                  2012|
     |dotNET|                  2012|
     +------+----------------------+
+
+    Example 2: Using `min_by` with different data types:
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Marketing", "Anna", 4), ("IT", "Bob", 2),
+    ...     ("IT", "Charlie", 3), ("Marketing", "David", 1)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|min_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |        IT|                        Bob|
+    | Marketing|                      David|
+    +----------+---------------------------+
+
+    Example 3: Using `min_by` where `ord` has multiple minimum values:
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("Consult", "Eva", 6), ("Finance", "Frank", 5),
+    ...     ("Finance", "George", 5), ("Consult", "Henry", 7)],
+    ...     schema=("department", "name", "years_in_dept"))
+    >>> df.groupby("department").agg(sf.min_by("name", "years_in_dept")).show()
+    +----------+---------------------------+
+    |department|min_by(name, years_in_dept)|
+    +----------+---------------------------+
+    |   Consult|                        Eva|
+    |   Finance|                     George|
+    +----------+---------------------------+
     """
     return _invoke_function_over_columns("min_by", col, ord)
 
@@ -1916,7 +1993,7 @@ def cbrt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def ceil(col: "ColumnOrName") -> Column:
+def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Computes the ceiling of the given value.
 
@@ -1929,6 +2006,10 @@ def ceil(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -1937,48 +2018,76 @@ def ceil(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(ceil(lit(-0.1))).show()
-    +----------+
-    |CEIL(-0.1)|
-    +----------+
-    |         0|
-    +----------+
-    """
-    return _invoke_function_over_columns("ceil", col)
-
-
-@try_remote_functions
-def ceiling(col: "ColumnOrName") -> Column:
-    """
-    Computes the ceiling of the given value.
-
-    .. versionadded:: 1.4.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        the column for computed results.
-
-    Examples
-    --------
-    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
     |CEIL(-0.1)|
     +----------+
     |         0|
     +----------+
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceil(sf.lit(-0.1), 1)).show()
+    +-------------+
+    |ceil(-0.1, 1)|
+    +-------------+
+    |         -0.1|
+    +-------------+
     """
-    return _invoke_function_over_columns("ceiling", col)
+    if scale is None:
+        return _invoke_function_over_columns("ceil", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceil", col, scale)
+
+
+@try_remote_functions
+def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Computes the ceiling of the given value.
+
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1))).show()
+    +-------------+
+    |ceiling(-0.1)|
+    +-------------+
+    |            0|
+    +-------------+
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1), 1)).show()
+    +----------------+
+    |ceiling(-0.1, 1)|
+    +----------------+
+    |            -0.1|
+    +----------------+
+    """
+    if scale is None:
+        return _invoke_function_over_columns("ceiling", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 @try_remote_functions
@@ -9943,7 +10052,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 
 
 @try_remote_functions
-def repeat(col: "ColumnOrName", n: int) -> Column:
+def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
 
@@ -9956,8 +10065,11 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    n : int
+    n : :class:`~pyspark.sql.Column` or str or int
         number of times to repeat value.
+
+        .. versionchanged:: 4.0.0
+           `n` now accepts column and column name.
 
     Returns
     -------
@@ -9966,11 +10078,38 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('ab',)], ['s',])
-    >>> df.select(repeat(df.s, 3).alias('s')).collect()
-    [Row(s='ababab')]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab',)], ['s',]
+    ... ).select(sf.repeat("s", 3)).show()
+    +------------+
+    |repeat(s, 3)|
+    +------------+
+    |      ababab|
+    +------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab',)], ['s',]
+    ... ).select(sf.repeat("s", sf.lit(4))).show()
+    +------------+
+    |repeat(s, 4)|
+    +------------+
+    |    abababab|
+    +------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [('ab', 5,)], ['s', 't']
+    ... ).select(sf.repeat("s", 't')).show()
+    +------------+
+    |repeat(s, t)|
+    +------------+
+    |  ababababab|
+    +------------+
     """
-    return _invoke_function("repeat", _to_java_column(col), n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("repeat", col, n)
 
 
 @try_remote_functions
@@ -16108,6 +16247,34 @@ def java_method(*cols: "ColumnOrName") -> Column:
     +-----------------------------------------------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("java_method", cols)
+
+
+@try_remote_functions
+def try_reflect(*cols: "ColumnOrName") -> Column:
+    """
+    This is a special version of `reflect` that performs the same operation, but returns a NULL
+    value instead of raising an error if the invoke method thrown exception.
+
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        the first element should be a literal string for the class name,
+        and the second element should be a literal string for the method name,
+        and the remaining are input arguments to the Java method.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
+    >>> df.select(
+    ...     sf.try_reflect(sf.lit("java.util.UUID"), sf.lit("fromString"), df.a)
+    ... ).collect()
+    [Row(try_reflect(java.util.UUID, fromString, a)='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
+    """
+    return _invoke_function_over_seq_of_columns("try_reflect", cols)
 
 
 @try_remote_functions

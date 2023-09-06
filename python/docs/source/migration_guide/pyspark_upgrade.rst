@@ -39,6 +39,8 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, the default value of ``regex`` parameter for ``Series.str.replace`` has been changed from ``True`` to ``False`` from pandas API on Spark. Additionally, a single character ``pat`` with ``regex=True`` is now treated as a regular expression instead of a string literal.
 * In Spark 4.0, the resulting name from ``value_counts`` for all objects sets to ``'count'`` (or ``'proportion'`` if ``normalize=True`` was passed) from pandas API on Spark, and the index will be named after the original object.
 * In Spark 4.0, ``squeeze`` parameter from ``ps.read_csv`` and ``ps.read_excel`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``null_counts`` parameter from ``DataFrame.info`` has been removed from pandas API on Spark, use ``show_counts`` instead.
+* In Spark 4.0, the result of ``MultiIndex.append`` does not keep the index names from pandas API on Spark.
 
 
 Upgrading from PySpark 3.3 to 3.4

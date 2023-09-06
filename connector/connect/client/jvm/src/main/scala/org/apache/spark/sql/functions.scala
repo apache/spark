@@ -3630,6 +3630,15 @@ object functions {
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
+
+  /**
    * Returns the Spark version. The string contains 2 fields, the first being a release version
    * and the second being a git revision.
    *
@@ -4090,6 +4099,14 @@ object functions {
    * @since 3.4.0
    */
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
+
+  /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
 
   /**
    * Trim the spaces from right end for the specified string value.

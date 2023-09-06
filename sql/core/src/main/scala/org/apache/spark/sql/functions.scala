@@ -3683,7 +3683,8 @@ object functions {
     call_function("java_method", cols: _*)
 
   /**
-   * Calls a method with reflection.
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
    *
    * @group misc_funcs
    * @since 4.0.0
@@ -4197,6 +4198,16 @@ object functions {
    */
   def repeat(str: Column, n: Int): Column = withExpr {
     StringRepeat(str.expr, lit(n).expr)
+  }
+
+  /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = withExpr {
+    StringRepeat(str.expr, n.expr)
   }
 
   /**
