@@ -104,11 +104,7 @@ class FunctionsTestsMixin:
         self.assertTrue("pow" in public_list)
         self.assertTrue("power" in public_list)
 
-        inspected_execuded_list = {
-            "get_active_spark_context",  # internal helper function
-            "try_remote_functions",  # internal helper function
-            "to_str",  # internal helper function
-        }
+        inspected_execuded_list = set()
 
         self.assertEqual(
             inspected_list - public_list,
