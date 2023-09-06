@@ -836,7 +836,7 @@ class IsotonicRegressionModel(Saveable, Loader["IsotonicRegressionModel"]):
         """
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
-        return np.interp(x, self.boundaries, self.predictions)  # type: ignore[arg-type]
+        return np.interp(x, self.boundaries, self.predictions)
 
     @since("1.4.0")
     def save(self, sc: SparkContext, path: str) -> None:
