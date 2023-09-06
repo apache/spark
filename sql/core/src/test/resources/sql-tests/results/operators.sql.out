@@ -258,7 +258,7 @@ struct<pmod(-7, 3):int>
 -- !query
 select sec(1)
 -- !query schema
-struct<sec(1):double>
+struct<SEC(1):double>
 -- !query output
 1.8508157176809255
 
@@ -266,7 +266,7 @@ struct<sec(1):double>
 -- !query
 select sec(null)
 -- !query schema
-struct<sec(NULL):double>
+struct<SEC(NULL):double>
 -- !query output
 NULL
 
@@ -274,7 +274,7 @@ NULL
 -- !query
 select sec(0)
 -- !query schema
-struct<sec(0):double>
+struct<SEC(0):double>
 -- !query output
 1.0
 
@@ -282,7 +282,7 @@ struct<sec(0):double>
 -- !query
 select sec(-1)
 -- !query schema
-struct<sec(-1):double>
+struct<SEC(-1):double>
 -- !query output
 1.8508157176809255
 
@@ -290,7 +290,7 @@ struct<sec(-1):double>
 -- !query
 select csc(1)
 -- !query schema
-struct<csc(1):double>
+struct<CSC(1):double>
 -- !query output
 1.1883951057781212
 
@@ -298,7 +298,7 @@ struct<csc(1):double>
 -- !query
 select csc(null)
 -- !query schema
-struct<csc(NULL):double>
+struct<CSC(NULL):double>
 -- !query output
 NULL
 
@@ -306,7 +306,7 @@ NULL
 -- !query
 select csc(0)
 -- !query schema
-struct<csc(0):double>
+struct<CSC(0):double>
 -- !query output
 Infinity
 
@@ -314,7 +314,7 @@ Infinity
 -- !query
 select csc(-1)
 -- !query schema
-struct<csc(-1):double>
+struct<CSC(-1):double>
 -- !query output
 -1.1883951057781212
 
@@ -322,7 +322,7 @@ struct<csc(-1):double>
 -- !query
 select cot(1)
 -- !query schema
-struct<cot(1):double>
+struct<COT(1):double>
 -- !query output
 0.6420926159343306
 
@@ -330,7 +330,7 @@ struct<cot(1):double>
 -- !query
 select cot(null)
 -- !query schema
-struct<cot(NULL):double>
+struct<COT(NULL):double>
 -- !query output
 NULL
 
@@ -338,7 +338,7 @@ NULL
 -- !query
 select cot(0)
 -- !query schema
-struct<cot(0):double>
+struct<COT(0):double>
 -- !query output
 Infinity
 
@@ -346,7 +346,7 @@ Infinity
 -- !query
 select cot(-1)
 -- !query schema
-struct<cot(-1):double>
+struct<COT(-1):double>
 -- !query output
 -0.6420926159343306
 
@@ -354,7 +354,7 @@ struct<cot(-1):double>
 -- !query
 select ceiling(0)
 -- !query schema
-struct<ceiling(0):bigint>
+struct<CEILING(0):bigint>
 -- !query output
 0
 
@@ -362,7 +362,7 @@ struct<ceiling(0):bigint>
 -- !query
 select ceiling(1)
 -- !query schema
-struct<ceiling(1):bigint>
+struct<CEILING(1):bigint>
 -- !query output
 1
 
@@ -370,7 +370,7 @@ struct<ceiling(1):bigint>
 -- !query
 select ceil(1234567890123456)
 -- !query schema
-struct<ceil(1234567890123456):bigint>
+struct<CEIL(1234567890123456):bigint>
 -- !query output
 1234567890123456
 
@@ -378,7 +378,7 @@ struct<ceil(1234567890123456):bigint>
 -- !query
 select ceiling(1234567890123456)
 -- !query schema
-struct<ceiling(1234567890123456):bigint>
+struct<CEILING(1234567890123456):bigint>
 -- !query output
 1234567890123456
 
@@ -386,7 +386,7 @@ struct<ceiling(1234567890123456):bigint>
 -- !query
 select ceil(0.01)
 -- !query schema
-struct<ceil(0.01):decimal(1,0)>
+struct<CEIL(0.01):decimal(1,0)>
 -- !query output
 1
 
@@ -394,7 +394,7 @@ struct<ceil(0.01):decimal(1,0)>
 -- !query
 select ceiling(-0.10)
 -- !query schema
-struct<ceiling(-0.10):decimal(1,0)>
+struct<CEILING(-0.10):decimal(1,0)>
 -- !query output
 0
 
@@ -402,7 +402,7 @@ struct<ceiling(-0.10):decimal(1,0)>
 -- !query
 select floor(0)
 -- !query schema
-struct<floor(0):bigint>
+struct<FLOOR(0):bigint>
 -- !query output
 0
 
@@ -410,7 +410,7 @@ struct<floor(0):bigint>
 -- !query
 select floor(1)
 -- !query schema
-struct<floor(1):bigint>
+struct<FLOOR(1):bigint>
 -- !query output
 1
 
@@ -418,7 +418,7 @@ struct<floor(1):bigint>
 -- !query
 select floor(1234567890123456)
 -- !query schema
-struct<floor(1234567890123456):bigint>
+struct<FLOOR(1234567890123456):bigint>
 -- !query output
 1234567890123456
 
@@ -426,7 +426,7 @@ struct<floor(1234567890123456):bigint>
 -- !query
 select floor(0.01)
 -- !query schema
-struct<floor(0.01):decimal(1,0)>
+struct<FLOOR(0.01):decimal(1,0)>
 -- !query output
 0
 
@@ -434,7 +434,7 @@ struct<floor(0.01):decimal(1,0)>
 -- !query
 select floor(-0.10)
 -- !query schema
-struct<floor(-0.10):decimal(1,0)>
+struct<FLOOR(-0.10):decimal(1,0)>
 -- !query output
 -1
 

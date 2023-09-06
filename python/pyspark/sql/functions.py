@@ -842,7 +842,7 @@ def sqrt(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(sqrt(lit(4))).show()
     +-------+
-    |sqrt(4)|
+    |SQRT(4)|
     +-------+
     |    2.0|
     +-------+
@@ -1782,7 +1782,7 @@ def acos(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1, 3)
     >>> df.select(acos(df.id)).show()
     +--------+
-    |acos(id)|
+    |ACOS(id)|
     +--------+
     |     0.0|
     |     NaN|
@@ -1816,7 +1816,7 @@ def acosh(col: "ColumnOrName") -> Column:
     >>> df = spark.range(2)
     >>> df.select(acosh(col("id"))).show()
     +---------+
-    |acosh(id)|
+    |ACOSH(id)|
     +---------+
     |      NaN|
     |      0.0|
@@ -1850,7 +1850,7 @@ def asin(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([(0,), (2,)])
     >>> df.select(asin(df.schema.fieldNames()[0])).show()
     +--------+
-    |asin(_1)|
+    |ASIN(_1)|
     +--------+
     |     0.0|
     |     NaN|
@@ -1884,7 +1884,7 @@ def asinh(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(asinh(col("id"))).show()
     +---------+
-    |asinh(id)|
+    |ASINH(id)|
     +---------+
     |      0.0|
     +---------+
@@ -1917,7 +1917,7 @@ def atan(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(atan(df.id)).show()
     +--------+
-    |atan(id)|
+    |ATAN(id)|
     +--------+
     |     0.0|
     +--------+
@@ -1950,7 +1950,7 @@ def atanh(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([(0,), (2,)], schema=["numbers"])
     >>> df.select(atanh(df["numbers"])).show()
     +--------------+
-    |atanh(numbers)|
+    |ATANH(numbers)|
     +--------------+
     |           0.0|
     |           NaN|
@@ -1984,7 +1984,7 @@ def cbrt(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(cbrt(lit(27))).show()
     +--------+
-    |cbrt(27)|
+    |CBRT(27)|
     +--------+
     |     3.0|
     +--------+
@@ -2021,7 +2021,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
-    |ceil(-0.1)|
+    |CEIL(-0.1)|
     +----------+
     |         0|
     +----------+
@@ -2029,7 +2029,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1), 1)).show()
     +-------------+
-    |ceil(-0.1, 1)|
+    |CEIL(-0.1, 1)|
     +-------------+
     |         -0.1|
     +-------------+
@@ -2070,7 +2070,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1))).show()
     +-------------+
-    |ceiling(-0.1)|
+    |CEILING(-0.1)|
     +-------------+
     |            0|
     +-------------+
@@ -2078,7 +2078,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1), 1)).show()
     +----------------+
-    |ceiling(-0.1, 1)|
+    |CEILING(-0.1, 1)|
     +----------------+
     |            -0.1|
     +----------------+
@@ -2115,7 +2115,7 @@ def cos(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(cos(lit(math.pi))).first()
-    Row(cos(3.14159...)=-1.0)
+    Row(COS(3.14159...)=-1.0)
     """
     return _invoke_function_over_columns("cos", col)
 
@@ -2144,7 +2144,7 @@ def cosh(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(cosh(lit(1))).first()
-    Row(cosh(1)=1.54308...)
+    Row(COSH(1)=1.54308...)
     """
     return _invoke_function_over_columns("cosh", col)
 
@@ -2174,7 +2174,7 @@ def cot(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(cot(lit(math.radians(45)))).first()
-    Row(cot(0.78539...)=1.00000...)
+    Row(COT(0.78539...)=1.00000...)
     """
     return _invoke_function_over_columns("cot", col)
 
@@ -2204,7 +2204,7 @@ def csc(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(csc(lit(math.radians(90)))).first()
-    Row(csc(1.57079...)=1.0)
+    Row(CSC(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("csc", col)
 
@@ -2219,7 +2219,7 @@ def e() -> Column:
     --------
     >>> spark.range(1).select(e()).show()
     +-----------------+
-    |              e()|
+    |              E()|
     +-----------------+
     |2.718281828459045|
     +-----------------+
@@ -2252,7 +2252,7 @@ def exp(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(exp(lit(0))).show()
     +------+
-    |exp(0)|
+    |EXP(0)|
     +------+
     |   1.0|
     +------+
@@ -2284,7 +2284,7 @@ def expm1(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(expm1(lit(1))).first()
-    Row(expm1(1)=1.71828...)
+    Row(EXPM1(1)=1.71828...)
     """
     return _invoke_function_over_columns("expm1", col)
 
@@ -2314,7 +2314,7 @@ def floor(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(floor(lit(2.5))).show()
     +----------+
-    |floor(2.5)|
+    |FLOOR(2.5)|
     +----------+
     |         2|
     +----------+
@@ -2377,7 +2377,7 @@ def log10(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(log10(lit(100))).show()
     +----------+
-    |log10(100)|
+    |LOG10(100)|
     +----------+
     |       2.0|
     +----------+
@@ -2410,7 +2410,7 @@ def log1p(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(log1p(lit(math.e))).first()
-    Row(log1p(2.71828...)=1.31326...)
+    Row(LOG1P(2.71828...)=1.31326...)
 
     Same as:
 
@@ -2465,7 +2465,7 @@ def pi() -> Column:
     --------
     >>> spark.range(1).select(pi()).show()
     +-----------------+
-    |             pi()|
+    |             PI()|
     +-----------------+
     |3.141592653589793|
     +-----------------+
@@ -2570,7 +2570,7 @@ def sec(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(sec(lit(1.5))).first()
-    Row(sec(1.5)=14.13683...)
+    Row(SEC(1.5)=14.13683...)
     """
     return _invoke_function_over_columns("sec", col)
 
@@ -2603,7 +2603,7 @@ def signum(col: "ColumnOrName") -> Column:
     ...     sf.signum(sf.lit(6))
     ... ).show()
     +----------+---------+
-    |signum(-5)|signum(6)|
+    |SIGNUM(-5)|SIGNUM(6)|
     +----------+---------+
     |      -1.0|      1.0|
     +----------+---------+
@@ -2639,7 +2639,7 @@ def sign(col: "ColumnOrName") -> Column:
     ...     sf.sign(sf.lit(6))
     ... ).show()
     +--------+-------+
-    |sign(-5)|sign(6)|
+    |SIGN(-5)|SIGN(6)|
     +--------+-------+
     |    -1.0|    1.0|
     +--------+-------+
@@ -2672,7 +2672,7 @@ def sin(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(sin(lit(math.radians(90)))).first()
-    Row(sin(1.57079...)=1.0)
+    Row(SIN(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("sin", col)
 
@@ -2702,7 +2702,7 @@ def sinh(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(sinh(lit(1.1))).first()
-    Row(sinh(1.1)=1.33564...)
+    Row(SINH(1.1)=1.33564...)
     """
     return _invoke_function_over_columns("sinh", col)
 
@@ -2732,7 +2732,7 @@ def tan(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(tan(lit(math.radians(45)))).first()
-    Row(tan(0.78539...)=0.99999...)
+    Row(TAN(0.78539...)=0.99999...)
     """
     return _invoke_function_over_columns("tan", col)
 
@@ -2763,7 +2763,7 @@ def tanh(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(tanh(lit(math.radians(90)))).first()
-    Row(tanh(1.57079...)=0.91715...)
+    Row(TANH(1.57079...)=0.91715...)
     """
     return _invoke_function_over_columns("tanh", col)
 
@@ -4091,7 +4091,7 @@ def degrees(col: "ColumnOrName") -> Column:
     >>> import math
     >>> df = spark.range(1)
     >>> df.select(degrees(lit(math.pi))).first()
-    Row(degrees(3.14159...)=180.0)
+    Row(DEGREES(3.14159...)=180.0)
     """
     return _invoke_function_over_columns("degrees", col)
 
@@ -4121,7 +4121,7 @@ def radians(col: "ColumnOrName") -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(radians(lit(180))).first()
-    Row(radians(180)=3.14159...)
+    Row(RADIANS(180)=3.14159...)
     """
     return _invoke_function_over_columns("radians", col)
 
@@ -4154,7 +4154,7 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     --------
     >>> df = spark.range(1)
     >>> df.select(atan2(lit(1), lit(2))).first()
-    Row(atan2(1, 2)=0.46364...)
+    Row(ATAN2(1, 2)=0.46364...)
     """
     return _invoke_binary_math_function("atan2", col1, col2)
 
@@ -4185,7 +4185,7 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     --------
     >>> df = spark.range(1)
     >>> df.select(hypot(lit(1), lit(2))).first()
-    Row(hypot(1, 2)=2.23606...)
+    Row(HYPOT(1, 2)=2.23606...)
     """
     return _invoke_binary_math_function("hypot", col1, col2)
 
@@ -4216,7 +4216,7 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     --------
     >>> df = spark.range(1)
     >>> df.select(pow(lit(3), lit(2))).first()
-    Row(power(3, 2)=9.0)
+    Row(POWER(3, 2)=9.0)
     """
     return _invoke_binary_math_function("pow", col1, col2)
 

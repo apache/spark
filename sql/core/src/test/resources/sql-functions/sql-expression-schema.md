@@ -3,8 +3,8 @@
 | Class name | Function name or alias | Query example | Output schema |
 | ---------- | ---------------------- | ------------- | ------------- |
 | org.apache.spark.sql.catalyst.expressions.Abs | abs | SELECT abs(-1) | struct<abs(-1):int> |
-| org.apache.spark.sql.catalyst.expressions.Acos | acos | SELECT acos(1) | struct<acos(1):double> |
-| org.apache.spark.sql.catalyst.expressions.Acosh | acosh | SELECT acosh(1) | struct<acosh(1):double> |
+| org.apache.spark.sql.catalyst.expressions.Acos | acos | SELECT acos(1) | struct<ACOS(1):double> |
+| org.apache.spark.sql.catalyst.expressions.Acosh | acosh | SELECT acosh(1) | struct<ACOSH(1):double> |
 | org.apache.spark.sql.catalyst.expressions.Add | + | SELECT 1 + 2 | struct<(1 + 2):int> |
 | org.apache.spark.sql.catalyst.expressions.AddMonths | add_months | SELECT add_months('2016-08-31', 1) | struct<add_months(2016-08-31, 1):date> |
 | org.apache.spark.sql.catalyst.expressions.AesDecrypt | aes_decrypt | SELECT aes_decrypt(unhex('83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94'), '0000111122223333') | struct<aes_decrypt(unhex(83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94), 0000111122223333, GCM, DEFAULT, ):binary> |
@@ -36,12 +36,12 @@
 | org.apache.spark.sql.catalyst.expressions.ArraysOverlap | arrays_overlap | SELECT arrays_overlap(array(1, 2, 3), array(3, 4, 5)) | struct<arrays_overlap(array(1, 2, 3), array(3, 4, 5)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArraysZip | arrays_zip | SELECT arrays_zip(array(1, 2, 3), array(2, 3, 4)) | struct<arrays_zip(array(1, 2, 3), array(2, 3, 4)):array<struct<0:int,1:int>>> |
 | org.apache.spark.sql.catalyst.expressions.Ascii | ascii | SELECT ascii('222') | struct<ascii(222):int> |
-| org.apache.spark.sql.catalyst.expressions.Asin | asin | SELECT asin(0) | struct<asin(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Asinh | asinh | SELECT asinh(0) | struct<asinh(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Asin | asin | SELECT asin(0) | struct<ASIN(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Asinh | asinh | SELECT asinh(0) | struct<ASINH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.AssertTrue | assert_true | SELECT assert_true(0 < 1) | struct<assert_true((0 < 1), '(0 < 1)' is not true!):void> |
-| org.apache.spark.sql.catalyst.expressions.Atan | atan | SELECT atan(0) | struct<atan(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Atan2 | atan2 | SELECT atan2(0, 0) | struct<atan2(0, 0):double> |
-| org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<atanh(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Atan | atan | SELECT atan(0) | struct<ATAN(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Atan2 | atan2 | SELECT atan2(0, 0) | struct<ATAN2(0, 0):double> |
+| org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<ATANH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
@@ -74,9 +74,9 @@
 | org.apache.spark.sql.catalyst.expressions.Cast | string | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | timestamp | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | tinyint | N/A | N/A |
-| org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<cbrt(27.0):double> |
-| org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder | ceil | SELECT ceil(-0.1) | struct<ceil(-0.1):decimal(1,0)> |
-| org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder | ceiling | SELECT ceiling(-0.1) | struct<ceiling(-0.1):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<CBRT(27.0):double> |
+| org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder | ceil | SELECT ceil(-0.1) | struct<CEIL(-0.1):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder | ceiling | SELECT ceiling(-0.1) | struct<CEILING(-0.1):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.Chr | char | SELECT char(65) | struct<char(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Chr | chr | SELECT chr(65) | struct<chr(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Coalesce | coalesce | SELECT coalesce(NULL, 1, NULL) | struct<coalesce(NULL, 1, NULL):int> |
@@ -85,15 +85,15 @@
 | org.apache.spark.sql.catalyst.expressions.ContainsExpressionBuilder | contains | SELECT contains('Spark SQL', 'Spark') | struct<contains(Spark SQL, Spark):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Conv | conv | SELECT conv('100', 2, 10) | struct<conv(100, 2, 10):string> |
 | org.apache.spark.sql.catalyst.expressions.ConvertTimezone | convert_timezone | SELECT convert_timezone('Europe/Brussels', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00') | struct<convert_timezone(Europe/Brussels, America/Los_Angeles, TIMESTAMP_NTZ '2021-12-06 00:00:00'):timestamp_ntz> |
-| org.apache.spark.sql.catalyst.expressions.Cos | cos | SELECT cos(0) | struct<cos(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Cosh | cosh | SELECT cosh(0) | struct<cosh(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Cot | cot | SELECT cot(1) | struct<cot(1):double> |
+| org.apache.spark.sql.catalyst.expressions.Cos | cos | SELECT cos(0) | struct<COS(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Cosh | cosh | SELECT cosh(0) | struct<COSH(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Cot | cot | SELECT cot(1) | struct<COT(1):double> |
 | org.apache.spark.sql.catalyst.expressions.Crc32 | crc32 | SELECT crc32('Spark') | struct<crc32(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | named_struct | SELECT named_struct("a", 1, "b", 2, "c", 3) | struct<named_struct(a, 1, b, 2, c, 3):struct<a:int,b:int,c:int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | struct | SELECT struct(1, 2, 3) | struct<struct(1, 2, 3):struct<col1:int,col2:int,col3:int>> |
-| org.apache.spark.sql.catalyst.expressions.Csc | csc | SELECT csc(1) | struct<csc(1):double> |
+| org.apache.spark.sql.catalyst.expressions.Csc | csc | SELECT csc(1) | struct<CSC(1):double> |
 | org.apache.spark.sql.catalyst.expressions.CsvToStructs | from_csv | SELECT from_csv('1, 0.8', 'a INT, b DOUBLE') | struct<from_csv(1, 0.8):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.CumeDist | cume_dist | SELECT a, b, cume_dist() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,cume_dist() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double> |
 | org.apache.spark.sql.catalyst.expressions.CurDateExpressionBuilder | curdate | SELECT curdate() | struct<current_date():date> |
@@ -130,16 +130,16 @@
 | org.apache.spark.sql.catalyst.expressions.EqualNullSafe | <=> | SELECT 2 <=> 2 | struct<(2 <=> 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EqualTo | = | SELECT 2 = 2 | struct<(2 = 2):boolean> |
 | org.apache.spark.sql.catalyst.expressions.EqualTo | == | SELECT 2 == 2 | struct<(2 = 2):boolean> |
-| org.apache.spark.sql.catalyst.expressions.EulerNumber | e | SELECT e() | struct<e():double> |
-| org.apache.spark.sql.catalyst.expressions.Exp | exp | SELECT exp(0) | struct<exp(0):double> |
+| org.apache.spark.sql.catalyst.expressions.EulerNumber | e | SELECT e() | struct<E():double> |
+| org.apache.spark.sql.catalyst.expressions.Exp | exp | SELECT exp(0) | struct<EXP(0):double> |
 | org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode | SELECT explode(array(10, 20)) | struct<col:int> |
 | org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode_outer | SELECT explode_outer(array(10, 20)) | struct<col:int> |
-| org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<expm1(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<EXPM1(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Extract | extract | SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456') | struct<extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
 | org.apache.spark.sql.catalyst.expressions.FindInSet | find_in_set | SELECT find_in_set('ab','abc,b,ab,c,def') | struct<find_in_set(ab, abc,b,ab,c,def):int> |
 | org.apache.spark.sql.catalyst.expressions.Flatten | flatten | SELECT flatten(array(array(1, 2), array(3, 4))) | struct<flatten(array(array(1, 2), array(3, 4))):array<int>> |
-| org.apache.spark.sql.catalyst.expressions.FloorExpressionBuilder | floor | SELECT floor(-0.1) | struct<floor(-0.1):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.FloorExpressionBuilder | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.FormatNumber | format_number | SELECT format_number(12332.123456, 4) | struct<format_number(12332.123456, 4):string> |
 | org.apache.spark.sql.catalyst.expressions.FormatString | format_string | SELECT format_string("Hello World %d %s", 100, "days") | struct<format_string(Hello World %d %s, 100, days):string> |
 | org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf("Hello World %d %s", 100, "days") | struct<printf(Hello World %d %s, 100, days):string> |
@@ -156,7 +156,7 @@
 | org.apache.spark.sql.catalyst.expressions.HllSketchEstimate | hll_sketch_estimate | SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.HllUnion | hll_union | SELECT hll_sketch_estimate(hll_union(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<hll_sketch_estimate(hll_union(hll_sketch_agg(col1, 12), hll_sketch_agg(col2, 12), false)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Hour | hour | SELECT hour('2009-07-30 12:58:59') | struct<hour(2009-07-30 12:58:59):int> |
-| org.apache.spark.sql.catalyst.expressions.Hypot | hypot | SELECT hypot(3, 4) | struct<hypot(3, 4):double> |
+| org.apache.spark.sql.catalyst.expressions.Hypot | hypot | SELECT hypot(3, 4) | struct<HYPOT(3, 4):double> |
 | org.apache.spark.sql.catalyst.expressions.ILike | ilike | SELECT ilike('Spark', '_Park') | struct<ilike(Spark, _Park):boolean> |
 | org.apache.spark.sql.catalyst.expressions.If | if | SELECT if(1 < 2, 'a', 'b') | struct<(IF((1 < 2), a, b)):string> |
 | org.apache.spark.sql.catalyst.expressions.In | in | SELECT 1 in(1, 2, 3) | struct<(1 IN (1, 2, 3)):boolean> |
@@ -190,10 +190,10 @@
 | org.apache.spark.sql.catalyst.expressions.Like | like | SELECT like('Spark', '_park') | struct<Spark LIKE _park:boolean> |
 | org.apache.spark.sql.catalyst.expressions.LocalTimestamp | localtimestamp | SELECT localtimestamp() | struct<localtimestamp():timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.Log | ln | SELECT ln(1) | struct<ln(1):double> |
-| org.apache.spark.sql.catalyst.expressions.Log10 | log10 | SELECT log10(10) | struct<log10(10):double> |
-| org.apache.spark.sql.catalyst.expressions.Log1p | log1p | SELECT log1p(0) | struct<log1p(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Log2 | log2 | SELECT log2(2) | struct<log2(2):double> |
-| org.apache.spark.sql.catalyst.expressions.Logarithm | log | SELECT log(10, 100) | struct<log(10, 100):double> |
+| org.apache.spark.sql.catalyst.expressions.Log10 | log10 | SELECT log10(10) | struct<LOG10(10):double> |
+| org.apache.spark.sql.catalyst.expressions.Log1p | log1p | SELECT log1p(0) | struct<LOG1P(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Log2 | log2 | SELECT log2(2) | struct<LOG2(2):double> |
+| org.apache.spark.sql.catalyst.expressions.Logarithm | log | SELECT log(10, 100) | struct<LOG(10, 100):double> |
 | org.apache.spark.sql.catalyst.expressions.Lower | lcase | SELECT lcase('SparkSql') | struct<lcase(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.Lower | lower | SELECT lower('SparkSql') | struct<lower(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.Luhncheck | luhn_check | SELECT luhn_check('8112189876') | struct<luhn_check(8112189876):boolean> |
@@ -243,12 +243,12 @@
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampNTZExpressionBuilder | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.ParseUrl | parse_url | SELECT parse_url('http://spark.apache.org/path?query=1', 'HOST') | struct<parse_url(http://spark.apache.org/path?query=1, HOST):string> |
 | org.apache.spark.sql.catalyst.expressions.PercentRank | percent_rank | SELECT a, b, percent_rank(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,PERCENT_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double> |
-| org.apache.spark.sql.catalyst.expressions.Pi | pi | SELECT pi() | struct<pi():double> |
+| org.apache.spark.sql.catalyst.expressions.Pi | pi | SELECT pi() | struct<PI():double> |
 | org.apache.spark.sql.catalyst.expressions.Pmod | pmod | SELECT pmod(10, 3) | struct<pmod(10, 3):int> |
 | org.apache.spark.sql.catalyst.expressions.PosExplode | posexplode | SELECT posexplode(array(10,20)) | struct<pos:int,col:int> |
 | org.apache.spark.sql.catalyst.expressions.PosExplode | posexplode_outer | SELECT posexplode_outer(array(10,20)) | struct<pos:int,col:int> |
 | org.apache.spark.sql.catalyst.expressions.Pow | pow | SELECT pow(2, 3) | struct<pow(2, 3):double> |
-| org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<power(2, 3):double> |
+| org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<POWER(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Quarter | quarter | SELECT quarter('2016-08-31') | struct<quarter(2016-08-31):int> |
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp | SELECT regexp('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp_like | SELECT regexp_like('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP_LIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
@@ -274,7 +274,7 @@
 | org.apache.spark.sql.catalyst.expressions.RowNumber | row_number | SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,row_number() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.SchemaOfCsv | schema_of_csv | SELECT schema_of_csv('1,abc') | struct<schema_of_csv(1,abc):string> |
 | org.apache.spark.sql.catalyst.expressions.SchemaOfJson | schema_of_json | SELECT schema_of_json('[{"col":0}]') | struct<schema_of_json([{"col":0}]):string> |
-| org.apache.spark.sql.catalyst.expressions.Sec | sec | SELECT sec(0) | struct<sec(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Sec | sec | SELECT sec(0) | struct<SEC(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Second | second | SELECT second('2009-07-30 12:58:59') | struct<second(2009-07-30 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.SecondsToTimestamp | timestamp_seconds | SELECT timestamp_seconds(1230219000) | struct<timestamp_seconds(1230219000):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.Sentences | sentences | SELECT sentences('Hi there! Good morning.') | struct<sentences(Hi there! Good morning., , ):array<array<string>>> |
@@ -287,10 +287,10 @@
 | org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.Shuffle | shuffle | SELECT shuffle(array(1, 20, 3, 5)) | struct<shuffle(array(1, 20, 3, 5)):array<int>> |
-| org.apache.spark.sql.catalyst.expressions.Signum | sign | SELECT sign(40) | struct<sign(40):double> |
-| org.apache.spark.sql.catalyst.expressions.Signum | signum | SELECT signum(40) | struct<signum(40):double> |
-| org.apache.spark.sql.catalyst.expressions.Sin | sin | SELECT sin(0) | struct<sin(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Sinh | sinh | SELECT sinh(0) | struct<sinh(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Signum | sign | SELECT sign(40) | struct<SIGN(40):double> |
+| org.apache.spark.sql.catalyst.expressions.Signum | signum | SELECT signum(40) | struct<SIGNUM(40):double> |
+| org.apache.spark.sql.catalyst.expressions.Sin | sin | SELECT sin(0) | struct<SIN(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Sinh | sinh | SELECT sinh(0) | struct<SINH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Size | cardinality | SELECT cardinality(array('b', 'd', 'c', 'a')) | struct<cardinality(array(b, d, c, a)):int> |
 | org.apache.spark.sql.catalyst.expressions.Size | size | SELECT size(array('b', 'd', 'c', 'a')) | struct<size(array(b, d, c, a)):int> |
 | org.apache.spark.sql.catalyst.expressions.Slice | slice | SELECT slice(array(1, 2, 3, 4), 2, 2) | struct<slice(array(1, 2, 3, 4), 2, 2):array<int>> |
@@ -299,7 +299,7 @@
 | org.apache.spark.sql.catalyst.expressions.SparkPartitionID | spark_partition_id | SELECT spark_partition_id() | struct<SPARK_PARTITION_ID():int> |
 | org.apache.spark.sql.catalyst.expressions.SparkVersion | version | SELECT version() | struct<version():string> |
 | org.apache.spark.sql.catalyst.expressions.SplitPart | split_part | SELECT split_part('11.12.13', '.', 3) | struct<split_part(11.12.13, ., 3):string> |
-| org.apache.spark.sql.catalyst.expressions.Sqrt | sqrt | SELECT sqrt(4) | struct<sqrt(4):double> |
+| org.apache.spark.sql.catalyst.expressions.Sqrt | sqrt | SELECT sqrt(4) | struct<SQRT(4):double> |
 | org.apache.spark.sql.catalyst.expressions.Stack | stack | SELECT stack(2, 1, 2, 3) | struct<col0:int,col1:int> |
 | org.apache.spark.sql.catalyst.expressions.StartsWithExpressionBuilder | startswith | SELECT startswith('Spark SQL', 'Spark') | struct<startswith(Spark SQL, Spark):boolean> |
 | org.apache.spark.sql.catalyst.expressions.StringInstr | instr | SELECT instr('SparkSQL', 'SQL') | struct<instr(SparkSQL, SQL):int> |
@@ -321,15 +321,15 @@
 | org.apache.spark.sql.catalyst.expressions.Substring | substring | SELECT substring('Spark SQL', 5) | struct<substring(Spark SQL, 5, 2147483647):string> |
 | org.apache.spark.sql.catalyst.expressions.SubstringIndex | substring_index | SELECT substring_index('www.apache.org', '.', 2) | struct<substring_index(www.apache.org, ., 2):string> |
 | org.apache.spark.sql.catalyst.expressions.Subtract | - | SELECT 2 - 1 | struct<(2 - 1):int> |
-| org.apache.spark.sql.catalyst.expressions.Tan | tan | SELECT tan(0) | struct<tan(0):double> |
-| org.apache.spark.sql.catalyst.expressions.Tanh | tanh | SELECT tanh(0) | struct<tanh(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Tan | tan | SELECT tan(0) | struct<TAN(0):double> |
+| org.apache.spark.sql.catalyst.expressions.Tanh | tanh | SELECT tanh(0) | struct<TANH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.TimeWindow | window | SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start | struct<a:string,start:timestamp,end:timestamp,cnt:bigint> |
 | org.apache.spark.sql.catalyst.expressions.ToBinary | to_binary | SELECT to_binary('abc', 'utf-8') | struct<to_binary(abc, utf-8):binary> |
 | org.apache.spark.sql.catalyst.expressions.ToCharacterBuilder | to_char | SELECT to_char(454, '999') | struct<to_char(454, 999):string> |
 | org.apache.spark.sql.catalyst.expressions.ToCharacterBuilder | to_varchar | SELECT to_varchar(454, '999') | struct<to_char(454, 999):string> |
-| org.apache.spark.sql.catalyst.expressions.ToDegrees | degrees | SELECT degrees(3.141592653589793) | struct<degrees(3.141592653589793):double> |
+| org.apache.spark.sql.catalyst.expressions.ToDegrees | degrees | SELECT degrees(3.141592653589793) | struct<DEGREES(3.141592653589793):double> |
 | org.apache.spark.sql.catalyst.expressions.ToNumber | to_number | SELECT to_number('454', '999') | struct<to_number(454, 999):decimal(3,0)> |
-| org.apache.spark.sql.catalyst.expressions.ToRadians | radians | SELECT radians(180) | struct<radians(180):double> |
+| org.apache.spark.sql.catalyst.expressions.ToRadians | radians | SELECT radians(180) | struct<RADIANS(180):double> |
 | org.apache.spark.sql.catalyst.expressions.ToUTCTimestamp | to_utc_timestamp | SELECT to_utc_timestamp('2016-08-31', 'Asia/Seoul') | struct<to_utc_timestamp(2016-08-31, Asia/Seoul):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ToUnixTimestamp | to_unix_timestamp | SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd') | struct<to_unix_timestamp(2016-04-08, yyyy-MM-dd):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TransformKeys | transform_keys | SELECT transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1) | struct<transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |

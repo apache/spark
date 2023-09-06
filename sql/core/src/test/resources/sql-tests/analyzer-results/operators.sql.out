@@ -237,161 +237,161 @@ Project [pmod(-7, 3) AS pmod(-7, 3)#x]
 -- !query
 select sec(1)
 -- !query analysis
-Project [sec(cast(1 as double)) AS sec(1)#x]
+Project [SEC(cast(1 as double)) AS SEC(1)#x]
 +- OneRowRelation
 
 
 -- !query
 select sec(null)
 -- !query analysis
-Project [sec(cast(null as double)) AS sec(NULL)#x]
+Project [SEC(cast(null as double)) AS SEC(NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select sec(0)
 -- !query analysis
-Project [sec(cast(0 as double)) AS sec(0)#x]
+Project [SEC(cast(0 as double)) AS SEC(0)#x]
 +- OneRowRelation
 
 
 -- !query
 select sec(-1)
 -- !query analysis
-Project [sec(cast(-1 as double)) AS sec(-1)#x]
+Project [SEC(cast(-1 as double)) AS SEC(-1)#x]
 +- OneRowRelation
 
 
 -- !query
 select csc(1)
 -- !query analysis
-Project [csc(cast(1 as double)) AS csc(1)#x]
+Project [CSC(cast(1 as double)) AS CSC(1)#x]
 +- OneRowRelation
 
 
 -- !query
 select csc(null)
 -- !query analysis
-Project [csc(cast(null as double)) AS csc(NULL)#x]
+Project [CSC(cast(null as double)) AS CSC(NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select csc(0)
 -- !query analysis
-Project [csc(cast(0 as double)) AS csc(0)#x]
+Project [CSC(cast(0 as double)) AS CSC(0)#x]
 +- OneRowRelation
 
 
 -- !query
 select csc(-1)
 -- !query analysis
-Project [csc(cast(-1 as double)) AS csc(-1)#x]
+Project [CSC(cast(-1 as double)) AS CSC(-1)#x]
 +- OneRowRelation
 
 
 -- !query
 select cot(1)
 -- !query analysis
-Project [cot(cast(1 as double)) AS cot(1)#x]
+Project [COT(cast(1 as double)) AS COT(1)#x]
 +- OneRowRelation
 
 
 -- !query
 select cot(null)
 -- !query analysis
-Project [cot(cast(null as double)) AS cot(NULL)#x]
+Project [COT(cast(null as double)) AS COT(NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select cot(0)
 -- !query analysis
-Project [cot(cast(0 as double)) AS cot(0)#x]
+Project [COT(cast(0 as double)) AS COT(0)#x]
 +- OneRowRelation
 
 
 -- !query
 select cot(-1)
 -- !query analysis
-Project [cot(cast(-1 as double)) AS cot(-1)#x]
+Project [COT(cast(-1 as double)) AS COT(-1)#x]
 +- OneRowRelation
 
 
 -- !query
 select ceiling(0)
 -- !query analysis
-Project [ceiling(cast(0 as double)) AS ceiling(0)#xL]
+Project [CEILING(cast(0 as double)) AS CEILING(0)#xL]
 +- OneRowRelation
 
 
 -- !query
 select ceiling(1)
 -- !query analysis
-Project [ceiling(cast(1 as double)) AS ceiling(1)#xL]
+Project [CEILING(cast(1 as double)) AS CEILING(1)#xL]
 +- OneRowRelation
 
 
 -- !query
 select ceil(1234567890123456)
 -- !query analysis
-Project [ceil(1234567890123456) AS ceil(1234567890123456)#xL]
+Project [CEIL(1234567890123456) AS CEIL(1234567890123456)#xL]
 +- OneRowRelation
 
 
 -- !query
 select ceiling(1234567890123456)
 -- !query analysis
-Project [ceiling(1234567890123456) AS ceiling(1234567890123456)#xL]
+Project [CEILING(1234567890123456) AS CEILING(1234567890123456)#xL]
 +- OneRowRelation
 
 
 -- !query
 select ceil(0.01)
 -- !query analysis
-Project [ceil(0.01) AS ceil(0.01)#x]
+Project [CEIL(0.01) AS CEIL(0.01)#x]
 +- OneRowRelation
 
 
 -- !query
 select ceiling(-0.10)
 -- !query analysis
-Project [ceiling(-0.10) AS ceiling(-0.10)#x]
+Project [CEILING(-0.10) AS CEILING(-0.10)#x]
 +- OneRowRelation
 
 
 -- !query
 select floor(0)
 -- !query analysis
-Project [floor(cast(0 as double)) AS floor(0)#xL]
+Project [FLOOR(cast(0 as double)) AS FLOOR(0)#xL]
 +- OneRowRelation
 
 
 -- !query
 select floor(1)
 -- !query analysis
-Project [floor(cast(1 as double)) AS floor(1)#xL]
+Project [FLOOR(cast(1 as double)) AS FLOOR(1)#xL]
 +- OneRowRelation
 
 
 -- !query
 select floor(1234567890123456)
 -- !query analysis
-Project [floor(1234567890123456) AS floor(1234567890123456)#xL]
+Project [FLOOR(1234567890123456) AS FLOOR(1234567890123456)#xL]
 +- OneRowRelation
 
 
 -- !query
 select floor(0.01)
 -- !query analysis
-Project [floor(0.01) AS floor(0.01)#x]
+Project [FLOOR(0.01) AS FLOOR(0.01)#x]
 +- OneRowRelation
 
 
 -- !query
 select floor(-0.10)
 -- !query analysis
-Project [floor(-0.10) AS floor(-0.10)#x]
+Project [FLOOR(-0.10) AS FLOOR(-0.10)#x]
 +- OneRowRelation
 
 
