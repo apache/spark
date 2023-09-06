@@ -190,6 +190,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.TryReflect",
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
       "org.apache.spark.sql.catalyst.expressions.RaiseError",

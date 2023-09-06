@@ -939,6 +939,11 @@ class BaseUDFTestsMixin(object):
         ):
             self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
+        with self.assertRaisesRegex(
+            PythonException, r"test_udf\(\) got multiple values for argument 'a'"
+        ):
+            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
+
     def test_kwargs(self):
         @udf("int")
         def test_udf(**kwargs):
@@ -956,6 +961,16 @@ class BaseUDFTestsMixin(object):
         ):
             with self.subTest(query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
+
+        # negative
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
     def test_named_arguments_and_defaults(self):
         @udf("int")
@@ -989,6 +1004,21 @@ class BaseUDFTestsMixin(object):
         ):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
+
+    def test_raise_stop_iteration(self):
+        @udf("int")
+        def test_udf(a):
+            if a < 5:
+                return a
+            else:
+                raise StopIteration()
+
+        assertDataFrameEqual(
+            self.spark.range(5).select(test_udf(col("id"))), [Row(i) for i in range(5)]
+        )
+
+        with self.assertRaisesRegex(PythonException, "StopIteration"):
+            self.spark.range(10).select(test_udf(col("id"))).show()
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

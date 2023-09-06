@@ -166,6 +166,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "invalidFormat" -> toSQLValue(invalidFormat, StringType)))
   }
 
+  def nullArgumentError(funcName: String, parameter: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.NULL",
+      messageParameters = Map(
+        "parameter" -> toSQLId(parameter),
+        "functionName" -> toSQLId(funcName)))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -2159,25 +2167,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotWriteTooManyColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def cannotWriteNotEnoughColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def incompatibleDataToTableCannotFindDataError(
@@ -2198,6 +2206,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableExtraColumnsError(
+      tableName: String, extraColumns: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "extraColumns" -> extraColumns
       )
     )
   }
@@ -3752,5 +3771,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "key" -> key,
         "supported" -> "constant expressions"),
       cause = cause)
+  }
+
+  def tableValuedFunctionRequiredMetadataIncompatibleWithCall(
+      functionName: String,
+      requestedMetadata: String,
+      invalidFunctionCallProperty: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "requestedMetadata" -> requestedMetadata,
+        "invalidFunctionCallProperty" -> invalidFunctionCallProperty))
+  }
+
+  def tableValuedFunctionRequiredMetadataInvalid(
+      functionName: String,
+      reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "reason" -> reason))
   }
 }

@@ -719,6 +719,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-object NoopDialect extends JdbcDialect {
+private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

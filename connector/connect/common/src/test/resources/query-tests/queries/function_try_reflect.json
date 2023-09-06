@@ -13,10 +13,18 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "sign",
+        "functionName": "try_reflect",
         "arguments": [{
+          "literal": {
+            "string": "java.util.UUID"
+          }
+        }, {
+          "literal": {
+            "string": "fromString"
+          }
+        }, {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "g"
           }
         }]
       }

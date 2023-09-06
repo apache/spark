@@ -615,8 +615,13 @@ def main():
     # Instead, they're closed by committers.
     merge_commits = [e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None]
 
-    if merge_commits:
-        merge_hash = merge_commits[0]["commit_id"]
+    if merge_commits and pr["state"] == "closed":
+        # A PR might have multiple merge commits, if it's reopened and merged again. We shall
+        # cherry-pick PRs in closed state with the latest merge hash.
+        # If the PR is still open(reopened), we shall not cherry-pick it but perform the normal
+        # merge as it could have been reverted earlier.
+        merge_commits = sorted(merge_commits, key=lambda x: x["created_at"])
+        merge_hash = merge_commits[-1]["commit_id"]
         message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
 
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
