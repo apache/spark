@@ -1323,22 +1323,78 @@ def min(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column on which the minimum value is computed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        column for computed results.
+        A column that contains the minimum value computed.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.avg`
+    :meth:`pyspark.sql.functions.sum`
 
     Examples
     --------
+    Example 1: Compute the minimum value of a numeric column
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(10)
-    >>> df.select(min(df.id)).show()
+    >>> df.select(sf.min(df.id)).show()
     +-------+
     |min(id)|
     +-------+
     |      0|
     +-------+
+
+    Example 2: Compute the minimum value of a string column
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("Alice",), ("Bob",), ("Charlie",)], ["name"])
+    >>> df.select(sf.min("name")).show()
+    +---------+
+    |min(name)|
+    +---------+
+    |    Alice|
+    +---------+
+
+    Example 3: Compute the minimum value of a column with null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1,), (None,), (3,)], ["value"])
+    >>> df.select(sf.min("value")).show()
+    +----------+
+    |min(value)|
+    +----------+
+    |         1|
+    +----------+
+
+    Example 4: Compute the minimum value of a column in a grouped DataFrame
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("Alice", 1), ("Alice", 2), ("Bob", 3)], ["name", "value"])
+    >>> df.groupBy("name").agg(sf.min("value")).show()
+    +-----+----------+
+    | name|min(value)|
+    +-----+----------+
+    |Alice|         1|
+    |  Bob|         3|
+    +-----+----------+
+
+    Example 5: Compute the minimum value of a column in a DataFrame with multiple columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("Alice", 1, 100), ("Bob", 2, 200), ("Charlie", 3, 300)],
+    ...     ["name", "value1", "value2"])
+    >>> df.select(sf.min("value1"), sf.min("value2")).show()
+    +-----------+-----------+
+    |min(value1)|min(value2)|
+    +-----------+-----------+
+    |          1|        100|
+    +-----------+-----------+
     """
     return _invoke_function_over_columns("min", col)
 
