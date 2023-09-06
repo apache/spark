@@ -113,9 +113,12 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
 
   test("remove redundant alias from window") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.window(Seq($"b" as "b"), Seq($"a" as "a"), Seq()).analyze
+    val winSpec = windowSpec($"a" :: Nil, $"a".asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count($"b"), winSpec)
+
+    val query = relation.window(Seq(winExpr as "b" as "bb"), Seq($"a" as "a"), Seq()).analyze
     val optimized = Optimize.execute(query)
-    val expected = relation.window(Seq($"b"), Seq($"a"), Seq()).analyze
+    val expected = relation.window(Seq(winExpr as "bb"), Seq($"a"), Seq()).analyze
     comparePlans(optimized, expected)
   }
 

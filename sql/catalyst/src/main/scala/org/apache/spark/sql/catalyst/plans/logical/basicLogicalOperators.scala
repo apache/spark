@@ -1213,10 +1213,12 @@ object Aggregate {
 }
 
 case class Window(
-    windowExpressions: Seq[NamedExpression],
+    windowExpressions: Seq[Alias],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
+  assert(windowExpressions.forall(_.child.isInstanceOf[WindowExpression]))
+
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)

@@ -3128,7 +3128,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // "sum(a) over (...)" and "sum(b) over (...)" out, and assign "_we0" as the alias to
       // "sum(a) over (...)" and "_we1" as the alias to "sum(b) over (...)".
       // Then, the projectList will be [_we0/_we1].
-      val extractedWindowExprBuffer = new ArrayBuffer[NamedExpression]()
+      val extractedWindowExprBuffer = new ArrayBuffer[Alias]()
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         // We need to use transformDown because we want to trigger
         // "case alias @ Alias(window: WindowExpression, _)" first.
@@ -3148,7 +3148,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // SPARK-32616: Use a linked hash map to maintains the insertion order of the Window
       // operators, so the query with multiple Window operators can have the determined plan.
-      val groupedWindowExpressions = mutable.LinkedHashMap.empty[Spec, ArrayBuffer[NamedExpression]]
+      val groupedWindowExpressions = mutable.LinkedHashMap.empty[Spec, ArrayBuffer[Alias]]
       // Second, we group extractedWindowExprBuffer based on their Partition and Order Specs.
       extractedWindowExprBuffer.foreach { expr =>
         val distinctWindowSpec = expr.collect {
@@ -3168,7 +3168,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val spec = distinctWindowSpec.head
           val specKey = (spec.partitionSpec, spec.orderSpec, WindowFunctionType.functionType(expr))
           val windowExprs = groupedWindowExpressions
-            .getOrElseUpdate(specKey, new ArrayBuffer[NamedExpression])
+            .getOrElseUpdate(specKey, new ArrayBuffer[Alias])
           windowExprs += expr
         }
       }

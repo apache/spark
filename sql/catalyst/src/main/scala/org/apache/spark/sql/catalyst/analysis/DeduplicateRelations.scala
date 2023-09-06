@@ -424,7 +424,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case oldVersion @ Window(windowExpressions, _, _, child)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
-        val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))
+        val newVersion = oldVersion.copy(
+          windowExpressions = newAliases(windowExpressions).asInstanceOf[Seq[Alias]])
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 

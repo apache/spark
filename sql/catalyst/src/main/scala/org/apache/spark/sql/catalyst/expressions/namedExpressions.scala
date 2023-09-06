@@ -183,7 +183,7 @@ case class Alias(child: Expression, name: String)(
       nonInheritableMetadataKeys = nonInheritableMetadataKeys)
   }
 
-  def newInstance(): NamedExpression =
+  def newInstance(): Alias =
     Alias(child, name)(
       qualifier = qualifier,
       explicitMetadata = explicitMetadata,
