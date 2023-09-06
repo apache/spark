@@ -2116,11 +2116,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedCorrelatedSubqueryInJoinConditionError(
-      unsupportedSubqueryExpression: Expression): Throwable = {
+      unsupportedSubqueryExpressions: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
         "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
-      messageParameters = Map("subqueryExpression" -> unsupportedSubqueryExpression.sql))
+      messageParameters = Map("subqueryExpression" ->
+        unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
   }
 
   def functionCannotProcessInputError(
