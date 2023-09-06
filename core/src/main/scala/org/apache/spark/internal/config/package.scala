@@ -1828,6 +1828,11 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
+
   private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
     .version("1.3.0")
     .intConf
