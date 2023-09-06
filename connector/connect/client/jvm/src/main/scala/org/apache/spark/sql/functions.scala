@@ -2846,6 +2846,15 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2861,6 +2870,15 @@ object functions {
    * @since 3.4.0
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
    * @param e
