@@ -182,6 +182,7 @@ private[spark] class PythonWorkerFactory(
 
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(workerProcess.getInputStream, workerProcess.getErrorStream)
+
       // Wait for it to connect to our socket, and validate the auth secret.
       serverSocketChannel.socket().setSoTimeout(10000)
 
