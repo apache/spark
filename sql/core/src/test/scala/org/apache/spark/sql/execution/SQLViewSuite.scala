@@ -162,9 +162,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
         ),
         context = ExpectedContext(
@@ -177,9 +177,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
         ),
         context = ExpectedContext(
@@ -199,9 +199,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDE 'whatever'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -210,9 +210,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -221,9 +221,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -232,9 +232,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -243,9 +243,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -254,9 +254,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -265,9 +265,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -276,9 +276,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... ADD PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -287,9 +287,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... DROP PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -298,9 +298,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -309,9 +309,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -339,9 +339,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "LOAD DATA"
         ),
         context = ExpectedContext(
@@ -354,9 +354,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "SHOW CREATE TABLE"
         ),
         context = ExpectedContext(
@@ -369,9 +369,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ANALYZE TABLE"
         ),
         context = ExpectedContext(
@@ -421,7 +421,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "LOAD DATA"),
