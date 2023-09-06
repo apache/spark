@@ -337,4 +337,23 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
           Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
     }
   }
+
+  test("SPARK-45079: NULL arguments of percentile_approx") {
+    val e1 = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT percentile_approx(col, array(0.5, 0.4, 0.1), NULL)
+          |FROM VALUES (0), (1), (2), (10) AS tab(col);
+          |""".stripMargin).collect()
+    }
+    assert(e1.getMessage.contains("Accuracy value must not be null"))
+    val e2 = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT percentile_approx(col, NULL, 100)
+          |FROM VALUES (0), (1), (2), (10) AS tab(col);
+          |""".stripMargin).collect()
+    }
+    assert(e2.getMessage.contains("Percentage value must not be null"))
+  }
 }
