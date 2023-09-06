@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
@@ -148,10 +150,14 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         }
         val sortedKeyToPartitions = results.sorted(partitionOrdering)
         val groupedPartitions = sortedKeyToPartitions
-            .map(t => (InternalRowComparableWrapper(t._1, expressions), t._2))
-            .groupBy(_._1)
-            .toSeq
-            .map { case (key, s) => KeyGroupedPartition(key.row, s.map(_._2)) }
+          .map(t => (InternalRowComparableWrapper(t._1, expressions), t._2))
+          .foldLeft(
+            mutable.LinkedHashMap.empty[InternalRowComparableWrapper, Seq[HasPartitionKey]]) {
+            (acc, curr) =>
+              acc +=  (curr._1 -> (acc.getOrElse(curr._1, Seq.empty) :+ curr._2))
+          }
+          .toSeq
+          .map { case (key, s) => KeyGroupedPartition(key.row, s) }
 
         Some(KeyGroupedPartitionInfo(groupedPartitions, sortedKeyToPartitions.map(_._2)))
       }
