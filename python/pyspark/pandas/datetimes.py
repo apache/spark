@@ -128,7 +128,8 @@ class DatetimeMethods:
         DataFrame
             With columns year, week and day.
 
-        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32 is not supported by spark
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
 
         Examples
         --------
