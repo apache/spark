@@ -48,6 +48,7 @@ message Expression {
     CommonInlineUserDefinedFunction common_inline_user_defined_function = 15;
     CallFunction call_function = 16;
     NamedArgumentExpression named_argument_expression = 17;
+    GetColumnByOrdinal get_column_by_ordinal = 18;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -226,6 +227,15 @@ message Expression {
 
     // (Optional) The requested column is a metadata column.
     optional bool is_metadata_column = 3;
+  }
+
+  // An unresolved attribute that is represented by its column index.
+  message GetColumnByOrdinal {
+    // (Required) 0-based column index.
+    int32 ordinal = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function

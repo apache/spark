@@ -68,7 +68,10 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.expressions import (
+    UnresolvedRegex,
+    GetColumnByOrdinal,
+)
 from pyspark.sql.connect.functions import (
     _to_col_with_plan_id,
     _to_col,
@@ -1670,8 +1673,19 @@ class DataFrame:
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
-        elif isinstance(item, int):
-            return col(self.columns[item])
+        elif isinstance(item, int) and not isinstance(item, bool):
+            if item < 0:
+                raise IndexError(f"Column index must be non-negative but got {item}")
+            n = len(self.columns)
+            if item >= n:
+                raise IndexError(f"Column index must be in range [0, {n}) but got {item}")
+
+            return Column(
+                GetColumnByOrdinal(
+                    ordinal=item,
+                    plan_id=self._plan._plan_id,
+                )
+            )
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",

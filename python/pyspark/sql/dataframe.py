@@ -3454,8 +3454,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
-        elif isinstance(item, int):
-            jc = self._jdf.apply(self.columns[item])
+        elif isinstance(item, int) and not isinstance(item, bool):
+            if item < 0:
+                raise IndexError(f"Column index must be non-negative but got {item}")
+            n = len(self.columns)
+            if item >= n:
+                raise IndexError(f"Column index must be in range [0, {n}) but got {item}")
+
+            jc = self._jdf.apply(item)
             return Column(jc)
         else:
             raise PySparkTypeError(
