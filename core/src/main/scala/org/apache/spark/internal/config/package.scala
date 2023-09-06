@@ -533,7 +533,7 @@ package object config {
       .doc("If true, executors will try to refresh the cached locations for the shuffle blocks" +
         "when fetch failures happens (and decommission shuffle block migration is enabled), " +
         "and retry fetching when the location changes.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 

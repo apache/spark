@@ -492,6 +492,7 @@ private[spark] object TestUtils {
     file.getPath
   }
 
+  /** Sets all configs specified in `confPairs`, calls `f`, and then restores them. */
   def withConf[T](confPairs: (String, String)*)(f: => T): T = {
     val conf = SparkEnv.get.conf
     val (keys, values) = confPairs.unzip

@@ -1295,20 +1295,22 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     // Try to get the cached location first in case other concurrent tasks
     // fetched the fresh location already
     var currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
-    if (currentLocationOpt.isDefined && currentLocationOpt.get == prevLocation) {
+    if (currentLocationOpt.contains(prevLocation)) {
       // Address in the cache unchanged. Try to clean cache and get a fresh location
       unregisterShuffle(shuffleId)
-      currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
+      currentLocationOpt = getMapOutputLocation(shuffleId, mapId, canFetchMergeResult = true)
     }
-    if (currentLocationOpt.isEmpty) {
+    currentLocationOpt.getOrElse(
       throw new MetadataFetchFailedException(shuffleId, -1,
         message = s"Failed to get map output location for shuffleId $shuffleId, mapId $mapId")
-    }
-    currentLocationOpt.get
+    )
   }
 
-  private def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
-    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, false)
+  private def getMapOutputLocation(
+      shuffleId: Int,
+      mapId: Long,
+      canFetchMergeResult: Boolean = false): Option[BlockManagerId] = {
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, canFetchMergeResult)
     mapOutputStatuses.filter(_ != null).find(_.mapId == mapId).map(_.location)
   }
 

@@ -272,14 +272,14 @@ final class ShuffleBlockFetcherIterator(
       case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
-    val deferredBlocks = new HashMap[BlockManagerId, Queue[String]]()
+    val deferredBlocks = new HashMap[BlockManagerId, ArrayBuffer[String]]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
     val requestStartTime = clock.nanoTime()
 
     @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
       if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
-        val newAddressToBlocks = new HashMap[BlockManagerId, Queue[FetchBlockInfo]]()
+        val newAddressToBlocks = new HashMap[BlockManagerId, ArrayBuffer[FetchBlockInfo]]()
         deferredBlocks.foreach { case (blockManagerId, blockIds) =>
           val blocks = blockIds.map { blockId =>
             val (size, mapIndex) = infoMap(blockId)
@@ -356,8 +356,7 @@ final class ShuffleBlockFetcherIterator(
                     s"due to Netty OOM, will retry")
                 }
                 remainingBlocks -= blockId
-                deferredBlocks.getOrElseUpdate(address, new Queue[String]())
-                  .enqueue(blockId)
+                deferredBlocks.getOrElseUpdate(address, new ArrayBuffer[String]()) += blockId
                 enqueueDeferredFetchRequestIfNecessary()
               }
 
@@ -379,8 +378,8 @@ final class ShuffleBlockFetcherIterator(
                   logInfo(s"Map status location for block $blockId changed from $address " +
                     s"to $currentAddress")
                   remainingBlocks -= blockId
-                  deferredBlocks.getOrElseUpdate(currentAddress, new Queue[String]())
-                    .enqueue(blockId)
+                  deferredBlocks.getOrElseUpdate(currentAddress,
+                    new ArrayBuffer[String]()) += blockId
                   enqueueDeferredFetchRequestIfNecessary()
                 } else {
                   results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
@@ -1611,7 +1610,7 @@ object ShuffleBlockFetcherIterator {
   private[storage]
   case class DeferFetchRequestResult(
       failedAddress: BlockManagerId,
-      newAddressToBlocks: HashMap[BlockManagerId, Queue[FetchBlockInfo]]) extends FetchResult
+      newAddressToBlocks: HashMap[BlockManagerId, ArrayBuffer[FetchBlockInfo]]) extends FetchResult
 
   /**
    * Result of an un-successful fetch of either of these:
