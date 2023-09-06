@@ -3814,10 +3814,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
-        """
-        Groups the :class:`DataFrame` by the specified columns so that aggregation
-        can be performed on them.
-        See :class:`GroupedData` for all the available aggregate functions.
+        """Groups the :class:`DataFrame` using the specified columns,
+        so we can run aggregation on them. See :class:`GroupedData`
+        for all the available aggregate functions.
 
         :func:`groupby` is an alias for :func:`groupBy`.
 
@@ -3832,14 +3831,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols : list, str or :class:`Column`
-            The columns to group by.
-            Each element can be a column name (string) or an expression (:class:`Column`)
+            columns to group by.
+            Each element should be a column name (string) or an expression (:class:`Column`)
             or a column ordinal (int, 1-based) or list of them.
 
         Returns
         -------
         :class:`GroupedData`
-            A :class:`GroupedData` object representing the grouped data by the specified columns.
+            Grouped data by given columns.
 
         Notes
         -----
@@ -3851,7 +3850,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame([
         ...     (2, "Alice"), (2, "Bob"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
 
-        Example 1: Empty grouping columns triggers a global aggregation.
+        Empty grouping columns triggers a global aggregation.
 
         >>> df.groupBy().avg().show()
         +--------+
@@ -3860,7 +3859,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    2.75|
         +--------+
 
-        Example 2: Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
+        Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
 
         >>> df.groupBy("name").agg({"age": "sum"}).sort("name").show()
         +-----+--------+
@@ -3870,7 +3869,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       9|
         +-----+--------+
 
-        Example 3: Group-by 'name', and calculate maximum values.
+        Group-by 'name', and calculate maximum values.
 
         >>> df.groupBy(df.name).max().sort("name").show()
         +-----+--------+
@@ -3880,7 +3879,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       5|
         +-----+--------+
 
-        Example 4: Also group-by 'name', but using the column ordinal.
+        Also group-by 'name', but using the column ordinal.
 
         >>> df.groupBy(2).max().sort("name").show()
         +-----+--------+
@@ -3890,7 +3889,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       5|
         +-----+--------+
 
-        Example 5: Group-by 'name' and 'age', and calculate the number of rows in each group.
+        Group-by 'name' and 'age', and calculate the number of rows in each group.
 
         >>> df.groupBy(["name", df.age]).count().sort("name", "age").show()
         +-----+---+-----+
@@ -3901,7 +3900,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|  5|    1|
         +-----+---+-----+
 
-        Example 6: Also Group-by 'name' and 'age', but using the column ordinal.
+        Also Group-by 'name' and 'age', but using the column ordinal.
 
         >>> df.groupBy([df.name, 1]).count().sort("name", "age").show()
         +-----+---+-----+
