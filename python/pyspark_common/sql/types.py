@@ -48,7 +48,6 @@ from typing import (
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject, JVMView
 
-from pyspark.serializers import CloudPickleSerializer
 from pyspark_common.sql.utils import has_numpy, get_active_spark_context
 from pyspark_common.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 
@@ -1192,6 +1191,8 @@ class UserDefinedType(DataType):
         return json.dumps(self.jsonValue(), separators=(",", ":"), sort_keys=True)
 
     def jsonValue(self) -> Dict[str, Any]:
+        from pyspark.serializers import CloudPickleSerializer
+
         if self.scalaUDT():
             assert self.module() != "__main__", "UDT in __main__ cannot work with ScalaUDT"
             schema = {
@@ -1213,6 +1214,8 @@ class UserDefinedType(DataType):
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "UserDefinedType":
+        from pyspark.serializers import CloudPickleSerializer
+
         pyUDT = str(json["pyClass"])  # convert unicode to str
         split = pyUDT.rfind(".")
         pyModule = pyUDT[:split]

@@ -26,8 +26,6 @@ from py4j.java_gateway import (
     JavaObject,
 )
 
-from pyspark import SparkContext
-
 # For backward compatibility.
 from pyspark_common.errors import (  # noqa: F401
     AnalysisException,
@@ -149,6 +147,8 @@ def is_timestamp_ntz_preferred() -> bool:
         else:
             return session.conf.get("spark.sql.timestampType", None) == "TIMESTAMP_NTZ"
     else:
+        from pyspark import SparkContext
+
         jvm = SparkContext._jvm
         return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
 
@@ -259,9 +259,11 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def get_active_spark_context() -> SparkContext:
+def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
+    from pyspark import SparkContext
+
     sc = SparkContext._active_spark_context
     if sc is None or sc._jvm is None:
         raise RuntimeError("SparkContext or SparkSession should be created first.")
