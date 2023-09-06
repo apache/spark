@@ -222,11 +222,10 @@ private[sql] object GrpcRetryHandler extends Logging {
 
         if (List(Status.Code.INTERNAL)
             .contains(statusCode)) {
-          // This error happens if another RPC preempts this RPC, retry.
-          val msg_cursor_disconnected = "INVALID_CURSOR.DISCONNECTED"
-
           val msg: String = e.toString
-          if (List(msg_cursor_disconnected).exists(msg.contains)) {
+
+          // This error happens if another RPC preempts this RPC.
+          if (msg.contains("INVALID_CURSOR.DISCONNECTED")) {
             return true
           }
         }
