@@ -133,8 +133,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         if self._current is None:
                             try:
-                                assert self._iterator is not None
-                                self._current = self._call_iter(lambda: next(self._iterator))
+                                self._current = self._call_iter(
+                                    lambda: next(self._iterator)  # type: ignore[arg-type]
+                                )
                             except StopIteration:
                                 pass
 
@@ -151,8 +152,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
                                 # shouldn't change
                                 assert not self._result_complete
                                 try:
-                                    assert self._iterator is not None
-                                    self._current = self._call_iter(lambda: next(self._iterator))
+                                    self._current = self._call_iter(
+                                        lambda: next(self._iterator)  # type: ignore[arg-type]
+                                    )
                                 except StopIteration:
                                     pass
                                 has_next = self._current is not None
