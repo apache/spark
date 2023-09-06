@@ -229,11 +229,9 @@ case class AlterColumn(
     }
     val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
       if (newDefaultExpression.nonEmpty) {
-        val newDataType = if (dataType.isDefined) {
-          dataType.get
-        } else {
-          column.asInstanceOf[ResolvedFieldName].field.dataType
-        }
+        // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
+        // value parses successfully, and return an error otherwise
+        val newDataType = dataType.getOrElse(column.asInstanceOf[ResolvedFieldName].field.dataType)
         ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
           "ALTER TABLE ALTER COLUMN")
       }
