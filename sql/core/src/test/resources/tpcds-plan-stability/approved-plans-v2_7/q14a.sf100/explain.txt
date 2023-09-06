@@ -243,7 +243,7 @@ Input [3]: [cs_item_sk#18, cs_sold_date_sk#19, d_date_sk#20]
 Output [4]: [i_item_sk#21, i_brand_id#22, i_class_id#23, i_category_id#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int>
 
 (25) ColumnarToRow [codegen id : 5]
@@ -251,7 +251,7 @@ Input [4]: [i_item_sk#21, i_brand_id#22, i_class_id#23, i_category_id#24]
 
 (26) Filter [codegen id : 5]
 Input [4]: [i_item_sk#21, i_brand_id#22, i_class_id#23, i_category_id#24]
-Condition : isnotnull(i_item_sk#21)
+Condition : (((isnotnull(i_item_sk#21) AND isnotnull(i_brand_id#22)) AND isnotnull(i_class_id#23)) AND isnotnull(i_category_id#24))
 
 (27) BroadcastExchange
 Input [4]: [i_item_sk#21, i_brand_id#22, i_class_id#23, i_category_id#24]

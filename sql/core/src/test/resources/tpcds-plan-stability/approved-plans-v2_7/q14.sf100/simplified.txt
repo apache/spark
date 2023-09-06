@@ -144,7 +144,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                                                                                 InputAdapter
                                                                                                   BroadcastExchange #11
                                                                                                     WholeStageCodegen (5)
-                                                                                                      Filter [i_item_sk]
+                                                                                                      Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                                         ColumnarToRow
                                                                                                           InputAdapter
                                                                                                             Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]

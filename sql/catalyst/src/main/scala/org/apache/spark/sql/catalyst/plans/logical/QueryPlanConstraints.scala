@@ -62,33 +62,60 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
+
+    var lastInferredCount = 0
+    var predicates = ExpressionSet()
+    var equalNullSafeCandidates = constraints.filter(_.deterministic)
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
-    predicates.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        // Also remove EqualNullSafe with the same l and r to avoid Once strategy's idempotence
-        // is broken. l = r and l <=> r can infer l <=> l and r <=> r which is useless.
-        val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
-      case _ => // No inference
+    var equalToCandidates = equalNullSafeCandidates.filterNot(_.isInstanceOf[IsNotNull])
+
+    val refineEqualToCandidates = (curExp: Expression, l: Expression, r: Expression) => {
+      // Also remove EqualNullSafe with the same l and r,
+      // because l = r and l <=> r can infer l <=> l and r <=> r which are useless.
+      equalToCandidates - curExp - EqualNullSafe(l, r) - EqualNullSafe(r, l)
+    }
+    val refineEqualNullSafeCandidates = (curExp: Expression, l: Expression, r: Expression) => {
+      // Also remove EqualNullSafe and EqualTo with the same l and r,
+      // because l <=> r and l <=> r can infer l <=> l and r <=> r which are useless.
+      // l <=> r and l = r can infer l = l and r = r which is useless also.
+      equalNullSafeCandidates - curExp - EqualNullSafe(l, r) - EqualNullSafe(r, l) -
+        EqualTo(l, r) - EqualTo(r, l)
     }
 
-    constraints.foreach {
-      case eq @ EqualNullSafe(l: Attribute, r: Attribute) =>
-        val candidateConstraints = constraints - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualNullSafe(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(constraints - eq, r, l)
-      case eq @ EqualNullSafe(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
-        inferredConstraints ++= replaceConstraints(constraints - eq, l, r)
-      case _ => // No inference
-    }
+    // For constrains such as [a = b, b = c, c = d], predicate a = d can not be inferred by just
+    // one iterator, so a while loop is needed to infer all possible predicates.
+    do {
+      lastInferredCount = inferredConstraints.size
+
+      predicates = constraints.union(inferredConstraints)
+      predicates.foreach {
+        case eq @ EqualTo(l: Attribute, r: Attribute) =>
+          val candidateConstraints = refineEqualToCandidates(eq, l, r)
+          inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+          inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+        case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
+          inferredConstraints ++= replaceConstraints(refineEqualToCandidates(eq, l, r), r, l)
+        case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
+          inferredConstraints ++= replaceConstraints(refineEqualToCandidates(eq, l, r), l, r)
+        case _ => // No inference
+      }
+
+      predicates.foreach {
+        case eq @ EqualNullSafe(l: Attribute, r: Attribute) =>
+          val candidateConstraints = refineEqualNullSafeCandidates(eq, l, r)
+          inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+          inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+        case eq @ EqualNullSafe(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
+          inferredConstraints ++= replaceConstraints(refineEqualNullSafeCandidates(eq, l, r), r, l)
+        case eq @ EqualNullSafe(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
+          inferredConstraints ++= replaceConstraints(refineEqualNullSafeCandidates(eq, l, r), l, r)
+        case _ => // No inference
+      }
+
+      equalToCandidates = inferredConstraints.filterNot(_.isInstanceOf[IsNotNull])
+      equalNullSafeCandidates = inferredConstraints
+    } while (inferredConstraints.size > lastInferredCount)
+
     inferredConstraints -- constraints
   }
 

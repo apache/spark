@@ -394,7 +394,7 @@ class SetOperationSuite extends PlanTest {
 
   }
 
-  test("SPARK-44812: push filters through join generated from intersect") {
+  test("SPARK-44812: infer filters from join generated from intersect") {
     val a = LocalRelation.fromExternalRows(Seq($"a".int), Seq(Row(1), Row(2), Row(3)))
     val b = LocalRelation.fromExternalRows(Seq($"b".int), Seq(Row(2), Row(3), Row(4)))
 

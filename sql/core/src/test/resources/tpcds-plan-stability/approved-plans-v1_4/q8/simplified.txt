@@ -58,7 +58,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                                       HashAggregate [ca_zip] [count,count]
                                                         Project [ca_zip]
                                                           BroadcastHashJoin [ca_address_sk,c_current_addr_sk]
-                                                            Filter [ca_address_sk]
+                                                            Filter [ca_zip,ca_address_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_zip]
