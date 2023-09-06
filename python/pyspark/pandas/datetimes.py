@@ -26,7 +26,7 @@ from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType, IntegerType
+from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, IntegerType
 from pyspark.pandas import DataFrame
 from pyspark.pandas.config import option_context
 
