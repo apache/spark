@@ -27,7 +27,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
@@ -372,17 +372,22 @@ final class ShuffleBlockFetcherIterator(
               } else {
                 val (shuffleId, mapId) = BlockId.getShuffleIdAndMapId(block)
                 val mapOutputTrackerWorker = mapOutputTracker.asInstanceOf[MapOutputTrackerWorker]
-                val currentAddress = mapOutputTrackerWorker
-                  .getMapOutputLocationWithRefresh(shuffleId, mapId, address)
-                if (currentAddress != address) {
-                  logInfo(s"Map status location for block $blockId changed from $address " +
-                    s"to $currentAddress")
-                  remainingBlocks -= blockId
-                  deferredBlocks.getOrElseUpdate(currentAddress,
-                    new ArrayBuffer[String]()) += blockId
-                  enqueueDeferredFetchRequestIfNecessary()
-                } else {
-                  results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                Try(mapOutputTrackerWorker
+                  .getMapOutputLocationWithRefresh(shuffleId, mapId, address)) match {
+                  case Success(newAddress) =>
+                    if (newAddress != address) {
+                      logInfo(s"Map status location for block $blockId changed from $address " +
+                        s"to $newAddress")
+                      remainingBlocks -= blockId
+                      deferredBlocks.getOrElseUpdate(newAddress,
+                        new ArrayBuffer[String]()) += blockId
+                      enqueueDeferredFetchRequestIfNecessary()
+                    } else {
+                      results.put(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                    }
+                  case Failure(ex) =>
+                    ex.addSuppressed(e)
+                    results.put(FailureFetchResult(block, infoMap(blockId)._2, address, ex))
                 }
               }
           }

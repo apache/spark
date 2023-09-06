@@ -45,7 +45,7 @@ import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.network.util.LimitedInputStream
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
 import org.apache.spark.storage.ShuffleBlockFetcherIterator._
 import org.apache.spark.util.Utils
@@ -732,6 +732,38 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
             iterator.toList
           }
         }
+      }
+    }
+  }
+
+
+  test("metadata fetch failure in handle map output location change") {
+    TestUtils.withConf(
+      "spark.decommission.enabled" -> "true",
+      "spark.storage.decommission.enabled" -> "true",
+      "spark.storage.decommission.shuffleBlocks.enabled" -> "true",
+      "spark.storage.decommission.shuffleBlocks.refreshLocationsEnabled" -> "true"
+    ) {
+      val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+      val blocks = Map[BlockId, ManagedBuffer](
+        ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+      )
+      answerFetchBlocks { invocation =>
+        val host = invocation.getArgument[String](0)
+        val listener = invocation.getArgument[BlockFetchingListener](4)
+        host match {
+          case "test-remote-1" =>
+            listener.onBlockFetchFailure(
+              ShuffleBlockId(0, 0, 0).toString, new RuntimeException())
+        }
+      }
+      when(mapOutputTracker.getMapOutputLocationWithRefresh(any(), any(), any()))
+        .thenAnswer(_ => throw new MetadataFetchFailedException(0, 0, ""))
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0))
+      )
+      intercept[FetchFailedException] {
+        iterator.toList
       }
     }
   }
