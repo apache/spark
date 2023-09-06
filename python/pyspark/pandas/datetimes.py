@@ -125,6 +125,7 @@ class DatetimeMethods:
 
         Returns
         -------
+        Note: Results have int64 type instead of UInt32 as is in pandas due to UInt32 is not supported by spark
         DataFrame
             With columns year, week and day.
 
@@ -137,6 +138,7 @@ class DatetimeMethods:
         2019-12-30  2020     1    1
         2019-12-31  2020     1    2
         2020-01-01  2020     1    3
+
         >>> dfs.dt.isocalendar().week
         2019-12-29    52
         2019-12-30     1

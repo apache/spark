@@ -99,14 +99,6 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(psidx.day_of_year, pidx.day_of_year)
             self.assert_eq(psidx.day_of_week, pidx.day_of_week)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            for psidx, pidx in self.idx_pairs:
-                self.assert_eq(psidx.isocalendar().week, pidx.isocalendar().week.astype(np.int64))
-        else:
-            for psidx, pidx in self.idx_pairs:
-                self.assert_eq(psidx.week, pidx.week)
-                self.assert_eq(psidx.weekofyear, pidx.weekofyear)
-
     def test_ceil(self):
         for psidx, pidx in self.idx_pairs:
             for freq in self.fixed_freqs:
@@ -257,6 +249,7 @@ class DatetimeIndexTestsMixin:
     def test_isocalendar(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(psidx.isocalendar().astype(int), pidx.isocalendar().astype(int))
+            self.assert_eq(psidx.isocalendar().week, pidx.isocalendar().week.astype(np.int64))
 
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
