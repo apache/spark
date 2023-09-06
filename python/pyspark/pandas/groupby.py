@@ -3539,11 +3539,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 ):
                     input_scol_name = psser._internal.data_spark_column_names[0]
                     # Sort data with natural order column to ensure order of data
+                    sorted_array = F.array_sort(
+                        F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
+                    )
+
+                    # Using transform to extract strings
                     output_scol = F.concat_ws(
-                        "",
-                        F.array_sort(
-                            F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
-                        ).getField(input_scol_name),
+                        "", F.transform(sorted_array, lambda x: x.getField(input_scol_name))
                     )
                 else:
                     output_scol = sfun(input_scol)
