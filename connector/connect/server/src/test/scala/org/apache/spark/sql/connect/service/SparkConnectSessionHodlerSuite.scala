@@ -18,9 +18,12 @@
 package org.apache.spark.sql.connect.service
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.sys.process.Process
 
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
@@ -91,14 +94,75 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  private def dummyPythonFunction(sessionHolder: SessionHolder): SimplePythonFunction = {
+  private def streamingForeachBatchFunction(pysparkPythonPath: String): Array[Byte] = {
+    var binaryPandasFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          IntegratedUDFTestUtils.pythonExec,
+          "-c",
+          "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            "lambda df, batchId: batchId)))"),
+        None,
+        "PYTHONPATH" -> s"$pysparkPythonPath").!!
+      binaryPandasFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  }
+
+  private def streamingQueryListenerFunction(pysparkPythonPath: String): Array[Byte] = {
+    var binaryPandasFunc: Array[Byte] = null
+    val pythonScript =
+      """
+        |from pyspark.sql.streaming.listener import StreamingQueryListener
+        |
+        |class MyListener(StreamingQueryListener):
+        |    def onQueryStarted(e):
+        |        pass
+        |
+        |    def onQueryIdle(e):
+        |        pass
+        |
+        |    def onQueryProgress(e):
+        |        pass
+        |
+        |    def onQueryTerminated(e):
+        |        pass
+        |
+        |listener = MyListener()
+      """.stripMargin
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            IntegratedUDFTestUtils.pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              "f.write(CloudPickleSerializer().dumps(listener))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath").!!
+        binaryPandasFunc = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  }
+
+  private def dummyPythonFunction(sessionHolder: SessionHolder)(
+      fcn: String => Array[Byte]): SimplePythonFunction = {
     // Needed because pythonPath in PythonWorkerFactory doesn't include test spark home
     val sparkPythonPath = PythonUtils.mergePythonPaths(
       Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
       Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator))
 
     SimplePythonFunction(
-      command = Array.emptyByteArray,
+      command = fcn(sparkPythonPath),
       envVars = mutable.Map("PYTHONPATH" -> sparkPythonPath).asJava,
       pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
       pythonExec = IntegratedUDFTestUtils.pythonExec,
@@ -112,11 +176,11 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     try {
       SparkConnectService.start(spark.sparkContext)
 
-      val pythonFn = dummyPythonFunction(sessionHolder)
+      val pythonFn = dummyPythonFunction(sessionHolder)(streamingForeachBatchFunction)
       val (fn1, cleaner1) =
-        StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+        StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
       val (fn2, cleaner2) =
-        StreamingForeachBatchHelper.testPythonForeachBatchWrapper(pythonFn, sessionHolder)
+        StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
 
       val query1 = spark.readStream
         .format("rate")
@@ -141,27 +205,24 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.streamingForeachBatchRunnerCleanerCache
         .registerCleanerForQuery(query2, cleaner2)
 
-      assert(cleaner1.runner.pythonWorker.isDefined)
-      val worker1 = cleaner1.runner.pythonWorker.get
-      assert(cleaner2.runner.pythonWorker.isDefined)
-      val worker2 = cleaner2.runner.pythonWorker.get
+      val (runner1, runner2) = (cleaner1.runner, cleaner2.runner)
 
       // assert both python processes are running
-      assert(!worker1.isStopped())
-      assert(!worker2.isStopped())
+      assert(!runner1.isWorkerStopped().get)
+      assert(!runner2.isWorkerStopped().get)
       // stop query1
       query1.stop()
       // assert query1's python process is not running
       eventually(timeout(30.seconds)) {
-        assert(worker1.isStopped())
-        assert(!worker2.isStopped())
+        assert(runner1.isWorkerStopped().get)
+        assert(!runner2.isWorkerStopped().get)
       }
 
       // stop query2
       query2.stop()
       eventually(timeout(30.seconds)) {
         // assert query2's python process is not running
-        assert(worker2.isStopped())
+        assert(runner2.isWorkerStopped().get)
       }
 
       assert(spark.streams.active.isEmpty) // no running query
@@ -178,34 +239,31 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     try {
       SparkConnectService.start(spark.sparkContext)
 
-      val pythonFn = dummyPythonFunction(sessionHolder)
+      val pythonFn = dummyPythonFunction(sessionHolder)(streamingQueryListenerFunction)
 
       val id1 = "listener_removeListener_test_1"
       val id2 = "listener_removeListener_test_2"
-      val listener1 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
-      val listener2 = PythonStreamingQueryListener.forTesting(pythonFn, sessionHolder)
+      val listener1 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
+      val listener2 = new PythonStreamingQueryListener(pythonFn, sessionHolder)
 
       sessionHolder.cacheListenerById(id1, listener1)
       spark.streams.addListener(listener1)
       sessionHolder.cacheListenerById(id2, listener2)
       spark.streams.addListener(listener2)
 
-      assert(listener1.runner.pythonWorker.isDefined)
-      val worker1 = listener1.runner.pythonWorker.get
-      assert(listener2.runner.pythonWorker.isDefined)
-      val worker2 = listener2.runner.pythonWorker.get
+      val (runner1, runner2) = (listener1.runner, listener2.runner)
 
       // assert both python processes are running
-      assert(!worker1.isStopped())
-      assert(!worker2.isStopped())
+      assert(!runner1.isWorkerStopped().get)
+      assert(!runner2.isWorkerStopped().get)
 
       // remove listener1
       spark.streams.removeListener(listener1)
       sessionHolder.removeCachedListener(id1)
       // assert listener1's python process is not running
       eventually(timeout(30.seconds)) {
-        assert(worker1.isStopped())
-        assert(!worker2.isStopped())
+        assert(runner1.isWorkerStopped().get)
+        assert(!runner2.isWorkerStopped().get)
       }
 
       // remove listener2
@@ -213,7 +271,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.removeCachedListener(id2)
       eventually(timeout(30.seconds)) {
         // assert listener2's python process is not running
-        assert(worker2.isStopped())
+        assert(runner2.isWorkerStopped().get)
         // all listeners are removed
         assert(spark.streams.listListeners().isEmpty)
       }

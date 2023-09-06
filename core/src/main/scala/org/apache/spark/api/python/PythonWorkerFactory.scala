@@ -40,10 +40,6 @@ case class PythonWorker(channel: SocketChannel, selector: Selector, selectionKey
     selector.close()
     channel.close()
   }
-
-  def isStopped(): Boolean = {
-    !channel.isOpen() && !selector.isOpen()
-  }
 }
 
 private[spark] class PythonWorkerFactory(
@@ -415,6 +411,11 @@ private[spark] class PythonWorkerFactory(
           logWarning("Failed to close worker", e)
       }
     }
+  }
+
+  def isWorkerStopped(worker: PythonWorker): Boolean = {
+    assert(!useDaemon, "isWorkerStopped() is not supported for daemon mode")
+    simpleWorkers.get(worker).exists(!_.isAlive)
   }
 }
 

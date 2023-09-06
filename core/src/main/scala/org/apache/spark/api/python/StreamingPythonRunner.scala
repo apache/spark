@@ -49,8 +49,7 @@ private[spark] class StreamingPythonRunner(
 
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
-  // scoped for testing
-  private[spark] var pythonWorker: Option[PythonWorker] = None
+  private var pythonWorker: Option[PythonWorker] = None
   private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
 
@@ -112,8 +111,8 @@ private[spark] class StreamingPythonRunner(
     logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
 
     try {
-      pythonWorker.foreach { worker =>
-        pythonWorkerFactory.foreach { factory =>
+      pythonWorkerFactory.foreach { factory =>
+        pythonWorker.foreach { worker =>
           factory.stopWorker(worker)
           factory.stop()
         }
@@ -121,6 +120,19 @@ private[spark] class StreamingPythonRunner(
     } catch {
       case e: Exception =>
         logError("Exception when trying to kill worker", e)
+    }
+  }
+
+  /**
+   * Returns whether the Python worker has been stopped.
+   * @return Some(true) if the Python worker has been stopped.
+   *         None if either the Python worker or the Python worker factory is not initialized.
+   */
+  def isWorkerStopped(): Option[Boolean] = {
+    pythonWorkerFactory.flatMap { factory =>
+      pythonWorker.map { worker =>
+        factory.isWorkerStopped(worker)
+      }
     }
   }
 }
