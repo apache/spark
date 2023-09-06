@@ -102,17 +102,6 @@ object SubqueryExpression {
   }
 
   /**
-   * Returns true when an expression contains an IN or correlated EXISTS subquery
-   * and false otherwise.
-   */
-  def hasUncorrelatedInSubquery(e: Expression): Boolean = {
-    e.exists {
-      case l: ListQuery => !l.isCorrelated
-      case _ => false
-    }
-  }
-
-  /**
    * Returns true when an expression contains a subquery that has outer reference(s). The outer
    * reference attributes are kept as children of subquery expression by
    * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveSubquery]]
