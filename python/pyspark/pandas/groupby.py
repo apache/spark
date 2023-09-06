@@ -3537,14 +3537,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 if sfun.__name__ == "sum" and isinstance(
                     psdf._internal.spark_type_for(label), StringType
                 ):
-                    # Sort data with natural order column to ensure order of data
-                    sorted_array = F.array_sort(
-                        F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
-                    )
                     input_scol_name = psser._internal.data_spark_column_names[0]
-                    # Extract only strings from nested arrays to pass as arguments to concat_ws
-                    string_array = F.flatten(F.array(sorted_array.getField(input_scol_name)))
-                    output_scol = F.concat_ws("", string_array)
+                    # Sort data with natural order column to ensure order of data
+                    output_scol = F.concat_ws(
+                        "",
+                        F.array_sort(
+                            F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
+                        ).getField(input_scol_name),
+                    )
                 else:
                     output_scol = sfun(input_scol)
 
