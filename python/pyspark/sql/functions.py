@@ -56,7 +56,6 @@ from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 
-# TODO: should directly rename the internal functions
 from pyspark.sql.utils import (
     to_str as _to_str,
     has_numpy as _has_numpy,
