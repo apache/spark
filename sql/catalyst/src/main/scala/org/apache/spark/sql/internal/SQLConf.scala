@@ -4391,7 +4391,8 @@ object SQLConf {
     buildConf("spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled")
       .internal()
       .doc("When true, optimize uncorrelated IN subqueries in join predicates by rewriting them " +
-        "to joins.")
+        s"to joins. This interacts with ${LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key} because it " +
+        "can rewrite IN predicates.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
