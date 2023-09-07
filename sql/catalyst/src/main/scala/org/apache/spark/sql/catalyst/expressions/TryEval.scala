@@ -85,7 +85,7 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
     }
   )
 
-  override def prettyName: String = "try_add"
+  override def prettyName: String = "TRY_ADD"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 
@@ -123,7 +123,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
     }
   )
 
-  override def prettyName: String = "try_divide"
+  override def prettyName: String = "TRY_DIVIDE"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 
@@ -162,7 +162,7 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
     }
   )
 
-  override def prettyName: String = "try_subtract"
+  override def prettyName: String = "TRY_SUBTRACT"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 
@@ -194,7 +194,7 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
     }
   )
 
-  override def prettyName: String = "try_multiply"
+  override def prettyName: String = "TRY_MULTIPLY"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 

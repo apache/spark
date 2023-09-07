@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import scala.math.{max, min}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -107,7 +109,8 @@ case class UnaryMinus(
   }
 
   override def sql: String = {
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("-") match {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).
+      map(_.toUpperCase(Locale.ROOT)).getOrElse("-") match {
       case "-" => s"(- ${child.sql})"
       case funcName => s"$funcName(${child.sql})"
     }
@@ -880,7 +883,7 @@ case class IntegralDivide(
     DecimalType.bounded(if (intDig == 0) 1 else intDig, 0)
   }
 
-  override def sqlOperator: String = "div"
+  override def sqlOperator: String = "DIV"
 
   private lazy val div: (Any, Any) => Any = {
     val integral = left.dataType match {
@@ -956,13 +959,15 @@ case class Remainder(
   }
 
   override def toString: String = {
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).
+      map(_.toUpperCase(Locale.ROOT)).getOrElse(sqlOperator) match {
       case operator if operator == sqlOperator => s"($left $sqlOperator $right)"
       case funcName => s"$funcName($left, $right)"
     }
   }
   override def sql: String = {
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(sqlOperator) match {
+    getTagValue(FunctionRegistry.FUNC_ALIAS).
+      map(_.toUpperCase(Locale.ROOT)).getOrElse(sqlOperator) match {
       case operator if operator == sqlOperator => s"(${left.sql} $sqlOperator ${right.sql})"
       case funcName => s"$funcName(${left.sql}, ${right.sql})"
     }

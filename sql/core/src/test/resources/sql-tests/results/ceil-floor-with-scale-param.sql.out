@@ -2,7 +2,7 @@
 -- !query
 SELECT CEIL(2.5, 0)
 -- !query schema
-struct<ceil(2.5, 0):decimal(2,0)>
+struct<CEIL(2.5, 0):decimal(2,0)>
 -- !query output
 3
 
@@ -10,7 +10,7 @@ struct<ceil(2.5, 0):decimal(2,0)>
 -- !query
 SELECT CEIL(3.5, 0)
 -- !query schema
-struct<ceil(3.5, 0):decimal(2,0)>
+struct<CEIL(3.5, 0):decimal(2,0)>
 -- !query output
 4
 
@@ -18,7 +18,7 @@ struct<ceil(3.5, 0):decimal(2,0)>
 -- !query
 SELECT CEIL(-2.5, 0)
 -- !query schema
-struct<ceil(-2.5, 0):decimal(2,0)>
+struct<CEIL(-2.5, 0):decimal(2,0)>
 -- !query output
 -2
 
@@ -26,7 +26,7 @@ struct<ceil(-2.5, 0):decimal(2,0)>
 -- !query
 SELECT CEIL(-3.5, 0)
 -- !query schema
-struct<ceil(-3.5, 0):decimal(2,0)>
+struct<CEIL(-3.5, 0):decimal(2,0)>
 -- !query output
 -3
 
@@ -34,7 +34,7 @@ struct<ceil(-3.5, 0):decimal(2,0)>
 -- !query
 SELECT CEIL(-0.35, 1)
 -- !query schema
-struct<ceil(-0.35, 1):decimal(2,1)>
+struct<CEIL(-0.35, 1):decimal(2,1)>
 -- !query output
 -0.3
 
@@ -42,7 +42,7 @@ struct<ceil(-0.35, 1):decimal(2,1)>
 -- !query
 SELECT CEIL(-35, -1)
 -- !query schema
-struct<ceil(-35, -1):decimal(11,0)>
+struct<CEIL(-35, -1):decimal(11,0)>
 -- !query output
 -30
 
@@ -50,7 +50,7 @@ struct<ceil(-35, -1):decimal(11,0)>
 -- !query
 SELECT CEIL(-0.1, 0)
 -- !query schema
-struct<ceil(-0.1, 0):decimal(1,0)>
+struct<CEIL(-0.1, 0):decimal(1,0)>
 -- !query output
 0
 
@@ -58,7 +58,7 @@ struct<ceil(-0.1, 0):decimal(1,0)>
 -- !query
 SELECT CEIL(5, 0)
 -- !query schema
-struct<ceil(5, 0):decimal(11,0)>
+struct<CEIL(5, 0):decimal(11,0)>
 -- !query output
 5
 
@@ -66,7 +66,7 @@ struct<ceil(5, 0):decimal(11,0)>
 -- !query
 SELECT CEIL(3.14115, -3)
 -- !query schema
-struct<ceil(3.14115, -3):decimal(4,0)>
+struct<CEIL(3.14115, -3):decimal(4,0)>
 -- !query output
 1000
 
@@ -74,7 +74,7 @@ struct<ceil(3.14115, -3):decimal(4,0)>
 -- !query
 SELECT CEIL(9.9, 0)
 -- !query schema
-struct<ceil(9.9, 0):decimal(2,0)>
+struct<CEIL(9.9, 0):decimal(2,0)>
 -- !query output
 10
 
@@ -82,7 +82,7 @@ struct<ceil(9.9, 0):decimal(2,0)>
 -- !query
 SELECT CEIL(CAST(99 AS DECIMAL(2, 0)), -1)
 -- !query schema
-struct<ceil(CAST(99 AS DECIMAL(2,0)), -1):decimal(3,0)>
+struct<CEIL(CAST(99 AS DECIMAL(2,0)), -1):decimal(3,0)>
 -- !query output
 100
 
@@ -163,7 +163,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT FLOOR(2.5, 0)
 -- !query schema
-struct<floor(2.5, 0):decimal(2,0)>
+struct<FLOOR(2.5, 0):decimal(2,0)>
 -- !query output
 2
 
@@ -171,7 +171,7 @@ struct<floor(2.5, 0):decimal(2,0)>
 -- !query
 SELECT FLOOR(3.5, 0)
 -- !query schema
-struct<floor(3.5, 0):decimal(2,0)>
+struct<FLOOR(3.5, 0):decimal(2,0)>
 -- !query output
 3
 
@@ -179,7 +179,7 @@ struct<floor(3.5, 0):decimal(2,0)>
 -- !query
 SELECT FLOOR(-2.5, 0)
 -- !query schema
-struct<floor(-2.5, 0):decimal(2,0)>
+struct<FLOOR(-2.5, 0):decimal(2,0)>
 -- !query output
 -3
 
@@ -187,7 +187,7 @@ struct<floor(-2.5, 0):decimal(2,0)>
 -- !query
 SELECT FLOOR(-3.5, 0)
 -- !query schema
-struct<floor(-3.5, 0):decimal(2,0)>
+struct<FLOOR(-3.5, 0):decimal(2,0)>
 -- !query output
 -4
 
@@ -195,7 +195,7 @@ struct<floor(-3.5, 0):decimal(2,0)>
 -- !query
 SELECT FLOOR(-0.35, 1)
 -- !query schema
-struct<floor(-0.35, 1):decimal(2,1)>
+struct<FLOOR(-0.35, 1):decimal(2,1)>
 -- !query output
 -0.4
 
@@ -203,7 +203,7 @@ struct<floor(-0.35, 1):decimal(2,1)>
 -- !query
 SELECT FLOOR(-35, -1)
 -- !query schema
-struct<floor(-35, -1):decimal(11,0)>
+struct<FLOOR(-35, -1):decimal(11,0)>
 -- !query output
 -40
 
@@ -211,7 +211,7 @@ struct<floor(-35, -1):decimal(11,0)>
 -- !query
 SELECT FLOOR(-0.1, 0)
 -- !query schema
-struct<floor(-0.1, 0):decimal(1,0)>
+struct<FLOOR(-0.1, 0):decimal(1,0)>
 -- !query output
 -1
 
@@ -219,7 +219,7 @@ struct<floor(-0.1, 0):decimal(1,0)>
 -- !query
 SELECT FLOOR(5, 0)
 -- !query schema
-struct<floor(5, 0):decimal(11,0)>
+struct<FLOOR(5, 0):decimal(11,0)>
 -- !query output
 5
 
@@ -227,7 +227,7 @@ struct<floor(5, 0):decimal(11,0)>
 -- !query
 SELECT FLOOR(3.14115, -3)
 -- !query schema
-struct<floor(3.14115, -3):decimal(4,0)>
+struct<FLOOR(3.14115, -3):decimal(4,0)>
 -- !query output
 0
 
@@ -235,7 +235,7 @@ struct<floor(3.14115, -3):decimal(4,0)>
 -- !query
 SELECT FLOOR(-9.9, 0)
 -- !query schema
-struct<floor(-9.9, 0):decimal(2,0)>
+struct<FLOOR(-9.9, 0):decimal(2,0)>
 -- !query output
 -10
 
@@ -243,7 +243,7 @@ struct<floor(-9.9, 0):decimal(2,0)>
 -- !query
 SELECT FLOOR(CAST(-99 AS DECIMAL(2, 0)), -1)
 -- !query schema
-struct<floor(CAST(-99 AS DECIMAL(2,0)), -1):decimal(3,0)>
+struct<FLOOR(CAST(-99 AS DECIMAL(2,0)), -1):decimal(3,0)>
 -- !query output
 -100
 

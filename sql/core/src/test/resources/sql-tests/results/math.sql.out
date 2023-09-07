@@ -2,7 +2,7 @@
 -- !query
 SELECT round(25y, 1)
 -- !query schema
-struct<round(25, 1):tinyint>
+struct<ROUND(25, 1):tinyint>
 -- !query output
 25
 
@@ -10,7 +10,7 @@ struct<round(25, 1):tinyint>
 -- !query
 SELECT round(25y, 0)
 -- !query schema
-struct<round(25, 0):tinyint>
+struct<ROUND(25, 0):tinyint>
 -- !query output
 25
 
@@ -18,7 +18,7 @@ struct<round(25, 0):tinyint>
 -- !query
 SELECT round(25y, -1)
 -- !query schema
-struct<round(25, -1):tinyint>
+struct<ROUND(25, -1):tinyint>
 -- !query output
 30
 
@@ -26,7 +26,7 @@ struct<round(25, -1):tinyint>
 -- !query
 SELECT round(25y, -2)
 -- !query schema
-struct<round(25, -2):tinyint>
+struct<ROUND(25, -2):tinyint>
 -- !query output
 0
 
@@ -34,7 +34,7 @@ struct<round(25, -2):tinyint>
 -- !query
 SELECT round(25y, -3)
 -- !query schema
-struct<round(25, -3):tinyint>
+struct<ROUND(25, -3):tinyint>
 -- !query output
 0
 
@@ -42,7 +42,7 @@ struct<round(25, -3):tinyint>
 -- !query
 SELECT round(127y, -1)
 -- !query schema
-struct<round(127, -1):tinyint>
+struct<ROUND(127, -1):tinyint>
 -- !query output
 -126
 
@@ -50,7 +50,7 @@ struct<round(127, -1):tinyint>
 -- !query
 SELECT round(-128y, -1)
 -- !query schema
-struct<round(-128, -1):tinyint>
+struct<ROUND(-128, -1):tinyint>
 -- !query output
 126
 
@@ -58,7 +58,7 @@ struct<round(-128, -1):tinyint>
 -- !query
 SELECT round(525s, 1)
 -- !query schema
-struct<round(525, 1):smallint>
+struct<ROUND(525, 1):smallint>
 -- !query output
 525
 
@@ -66,7 +66,7 @@ struct<round(525, 1):smallint>
 -- !query
 SELECT round(525s, 0)
 -- !query schema
-struct<round(525, 0):smallint>
+struct<ROUND(525, 0):smallint>
 -- !query output
 525
 
@@ -74,7 +74,7 @@ struct<round(525, 0):smallint>
 -- !query
 SELECT round(525s, -1)
 -- !query schema
-struct<round(525, -1):smallint>
+struct<ROUND(525, -1):smallint>
 -- !query output
 530
 
@@ -82,7 +82,7 @@ struct<round(525, -1):smallint>
 -- !query
 SELECT round(525s, -2)
 -- !query schema
-struct<round(525, -2):smallint>
+struct<ROUND(525, -2):smallint>
 -- !query output
 500
 
@@ -90,7 +90,7 @@ struct<round(525, -2):smallint>
 -- !query
 SELECT round(525s, -3)
 -- !query schema
-struct<round(525, -3):smallint>
+struct<ROUND(525, -3):smallint>
 -- !query output
 1000
 
@@ -98,7 +98,7 @@ struct<round(525, -3):smallint>
 -- !query
 SELECT round(32767s, -1)
 -- !query schema
-struct<round(32767, -1):smallint>
+struct<ROUND(32767, -1):smallint>
 -- !query output
 -32766
 
@@ -106,7 +106,7 @@ struct<round(32767, -1):smallint>
 -- !query
 SELECT round(-32768s, -1)
 -- !query schema
-struct<round(-32768, -1):smallint>
+struct<ROUND(-32768, -1):smallint>
 -- !query output
 32766
 
@@ -114,7 +114,7 @@ struct<round(-32768, -1):smallint>
 -- !query
 SELECT round(525, 1)
 -- !query schema
-struct<round(525, 1):int>
+struct<ROUND(525, 1):int>
 -- !query output
 525
 
@@ -122,7 +122,7 @@ struct<round(525, 1):int>
 -- !query
 SELECT round(525, 0)
 -- !query schema
-struct<round(525, 0):int>
+struct<ROUND(525, 0):int>
 -- !query output
 525
 
@@ -130,7 +130,7 @@ struct<round(525, 0):int>
 -- !query
 SELECT round(525, -1)
 -- !query schema
-struct<round(525, -1):int>
+struct<ROUND(525, -1):int>
 -- !query output
 530
 
@@ -138,7 +138,7 @@ struct<round(525, -1):int>
 -- !query
 SELECT round(525, -2)
 -- !query schema
-struct<round(525, -2):int>
+struct<ROUND(525, -2):int>
 -- !query output
 500
 
@@ -146,7 +146,7 @@ struct<round(525, -2):int>
 -- !query
 SELECT round(525, -3)
 -- !query schema
-struct<round(525, -3):int>
+struct<ROUND(525, -3):int>
 -- !query output
 1000
 
@@ -154,7 +154,7 @@ struct<round(525, -3):int>
 -- !query
 SELECT round(2147483647, -1)
 -- !query schema
-struct<round(2147483647, -1):int>
+struct<ROUND(2147483647, -1):int>
 -- !query output
 -2147483646
 
@@ -162,7 +162,7 @@ struct<round(2147483647, -1):int>
 -- !query
 SELECT round(-2147483647, -1)
 -- !query schema
-struct<round(-2147483647, -1):int>
+struct<ROUND(-2147483647, -1):int>
 -- !query output
 2147483646
 
@@ -170,7 +170,7 @@ struct<round(-2147483647, -1):int>
 -- !query
 SELECT round(525L, 1)
 -- !query schema
-struct<round(525, 1):bigint>
+struct<ROUND(525, 1):bigint>
 -- !query output
 525
 
@@ -178,7 +178,7 @@ struct<round(525, 1):bigint>
 -- !query
 SELECT round(525L, 0)
 -- !query schema
-struct<round(525, 0):bigint>
+struct<ROUND(525, 0):bigint>
 -- !query output
 525
 
@@ -186,7 +186,7 @@ struct<round(525, 0):bigint>
 -- !query
 SELECT round(525L, -1)
 -- !query schema
-struct<round(525, -1):bigint>
+struct<ROUND(525, -1):bigint>
 -- !query output
 530
 
@@ -194,7 +194,7 @@ struct<round(525, -1):bigint>
 -- !query
 SELECT round(525L, -2)
 -- !query schema
-struct<round(525, -2):bigint>
+struct<ROUND(525, -2):bigint>
 -- !query output
 500
 
@@ -202,7 +202,7 @@ struct<round(525, -2):bigint>
 -- !query
 SELECT round(525L, -3)
 -- !query schema
-struct<round(525, -3):bigint>
+struct<ROUND(525, -3):bigint>
 -- !query output
 1000
 
@@ -210,7 +210,7 @@ struct<round(525, -3):bigint>
 -- !query
 SELECT round(9223372036854775807L, -1)
 -- !query schema
-struct<round(9223372036854775807, -1):bigint>
+struct<ROUND(9223372036854775807, -1):bigint>
 -- !query output
 -9223372036854775806
 
@@ -218,7 +218,7 @@ struct<round(9223372036854775807, -1):bigint>
 -- !query
 SELECT round(-9223372036854775808L, -1)
 -- !query schema
-struct<round(-9223372036854775808, -1):bigint>
+struct<ROUND(-9223372036854775808, -1):bigint>
 -- !query output
 9223372036854775806
 
@@ -226,7 +226,7 @@ struct<round(-9223372036854775808, -1):bigint>
 -- !query
 SELECT bround(25y, 1)
 -- !query schema
-struct<bround(25, 1):tinyint>
+struct<BROUND(25, 1):tinyint>
 -- !query output
 25
 
@@ -234,7 +234,7 @@ struct<bround(25, 1):tinyint>
 -- !query
 SELECT bround(25y, 0)
 -- !query schema
-struct<bround(25, 0):tinyint>
+struct<BROUND(25, 0):tinyint>
 -- !query output
 25
 
@@ -242,7 +242,7 @@ struct<bround(25, 0):tinyint>
 -- !query
 SELECT bround(25y, -1)
 -- !query schema
-struct<bround(25, -1):tinyint>
+struct<BROUND(25, -1):tinyint>
 -- !query output
 20
 
@@ -250,7 +250,7 @@ struct<bround(25, -1):tinyint>
 -- !query
 SELECT bround(25y, -2)
 -- !query schema
-struct<bround(25, -2):tinyint>
+struct<BROUND(25, -2):tinyint>
 -- !query output
 0
 
@@ -258,7 +258,7 @@ struct<bround(25, -2):tinyint>
 -- !query
 SELECT bround(25y, -3)
 -- !query schema
-struct<bround(25, -3):tinyint>
+struct<BROUND(25, -3):tinyint>
 -- !query output
 0
 
@@ -266,7 +266,7 @@ struct<bround(25, -3):tinyint>
 -- !query
 SELECT bround(127y, -1)
 -- !query schema
-struct<bround(127, -1):tinyint>
+struct<BROUND(127, -1):tinyint>
 -- !query output
 -126
 
@@ -274,7 +274,7 @@ struct<bround(127, -1):tinyint>
 -- !query
 SELECT bround(-128y, -1)
 -- !query schema
-struct<bround(-128, -1):tinyint>
+struct<BROUND(-128, -1):tinyint>
 -- !query output
 126
 
@@ -282,7 +282,7 @@ struct<bround(-128, -1):tinyint>
 -- !query
 SELECT bround(525s, 1)
 -- !query schema
-struct<bround(525, 1):smallint>
+struct<BROUND(525, 1):smallint>
 -- !query output
 525
 
@@ -290,7 +290,7 @@ struct<bround(525, 1):smallint>
 -- !query
 SELECT bround(525s, 0)
 -- !query schema
-struct<bround(525, 0):smallint>
+struct<BROUND(525, 0):smallint>
 -- !query output
 525
 
@@ -298,7 +298,7 @@ struct<bround(525, 0):smallint>
 -- !query
 SELECT bround(525s, -1)
 -- !query schema
-struct<bround(525, -1):smallint>
+struct<BROUND(525, -1):smallint>
 -- !query output
 520
 
@@ -306,7 +306,7 @@ struct<bround(525, -1):smallint>
 -- !query
 SELECT bround(525s, -2)
 -- !query schema
-struct<bround(525, -2):smallint>
+struct<BROUND(525, -2):smallint>
 -- !query output
 500
 
@@ -314,7 +314,7 @@ struct<bround(525, -2):smallint>
 -- !query
 SELECT bround(525s, -3)
 -- !query schema
-struct<bround(525, -3):smallint>
+struct<BROUND(525, -3):smallint>
 -- !query output
 1000
 
@@ -322,7 +322,7 @@ struct<bround(525, -3):smallint>
 -- !query
 SELECT bround(32767s, -1)
 -- !query schema
-struct<bround(32767, -1):smallint>
+struct<BROUND(32767, -1):smallint>
 -- !query output
 -32766
 
@@ -330,7 +330,7 @@ struct<bround(32767, -1):smallint>
 -- !query
 SELECT bround(-32768s, -1)
 -- !query schema
-struct<bround(-32768, -1):smallint>
+struct<BROUND(-32768, -1):smallint>
 -- !query output
 32766
 
@@ -338,7 +338,7 @@ struct<bround(-32768, -1):smallint>
 -- !query
 SELECT bround(525, 1)
 -- !query schema
-struct<bround(525, 1):int>
+struct<BROUND(525, 1):int>
 -- !query output
 525
 
@@ -346,7 +346,7 @@ struct<bround(525, 1):int>
 -- !query
 SELECT bround(525, 0)
 -- !query schema
-struct<bround(525, 0):int>
+struct<BROUND(525, 0):int>
 -- !query output
 525
 
@@ -354,7 +354,7 @@ struct<bround(525, 0):int>
 -- !query
 SELECT bround(525, -1)
 -- !query schema
-struct<bround(525, -1):int>
+struct<BROUND(525, -1):int>
 -- !query output
 520
 
@@ -362,7 +362,7 @@ struct<bround(525, -1):int>
 -- !query
 SELECT bround(525, -2)
 -- !query schema
-struct<bround(525, -2):int>
+struct<BROUND(525, -2):int>
 -- !query output
 500
 
@@ -370,7 +370,7 @@ struct<bround(525, -2):int>
 -- !query
 SELECT bround(525, -3)
 -- !query schema
-struct<bround(525, -3):int>
+struct<BROUND(525, -3):int>
 -- !query output
 1000
 
@@ -378,7 +378,7 @@ struct<bround(525, -3):int>
 -- !query
 SELECT bround(2147483647, -1)
 -- !query schema
-struct<bround(2147483647, -1):int>
+struct<BROUND(2147483647, -1):int>
 -- !query output
 -2147483646
 
@@ -386,7 +386,7 @@ struct<bround(2147483647, -1):int>
 -- !query
 SELECT bround(-2147483647, -1)
 -- !query schema
-struct<bround(-2147483647, -1):int>
+struct<BROUND(-2147483647, -1):int>
 -- !query output
 2147483646
 
@@ -394,7 +394,7 @@ struct<bround(-2147483647, -1):int>
 -- !query
 SELECT bround(525L, 1)
 -- !query schema
-struct<bround(525, 1):bigint>
+struct<BROUND(525, 1):bigint>
 -- !query output
 525
 
@@ -402,7 +402,7 @@ struct<bround(525, 1):bigint>
 -- !query
 SELECT bround(525L, 0)
 -- !query schema
-struct<bround(525, 0):bigint>
+struct<BROUND(525, 0):bigint>
 -- !query output
 525
 
@@ -410,7 +410,7 @@ struct<bround(525, 0):bigint>
 -- !query
 SELECT bround(525L, -1)
 -- !query schema
-struct<bround(525, -1):bigint>
+struct<BROUND(525, -1):bigint>
 -- !query output
 520
 
@@ -418,7 +418,7 @@ struct<bround(525, -1):bigint>
 -- !query
 SELECT bround(525L, -2)
 -- !query schema
-struct<bround(525, -2):bigint>
+struct<BROUND(525, -2):bigint>
 -- !query output
 500
 
@@ -426,7 +426,7 @@ struct<bround(525, -2):bigint>
 -- !query
 SELECT bround(525L, -3)
 -- !query schema
-struct<bround(525, -3):bigint>
+struct<BROUND(525, -3):bigint>
 -- !query output
 1000
 
@@ -434,7 +434,7 @@ struct<bround(525, -3):bigint>
 -- !query
 SELECT bround(9223372036854775807L, -1)
 -- !query schema
-struct<bround(9223372036854775807, -1):bigint>
+struct<BROUND(9223372036854775807, -1):bigint>
 -- !query output
 -9223372036854775806
 
@@ -442,7 +442,7 @@ struct<bround(9223372036854775807, -1):bigint>
 -- !query
 SELECT bround(-9223372036854775808L, -1)
 -- !query schema
-struct<bround(-9223372036854775808, -1):bigint>
+struct<BROUND(-9223372036854775808, -1):bigint>
 -- !query output
 9223372036854775806
 

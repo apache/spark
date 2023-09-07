@@ -2,77 +2,77 @@
 -- !query
 SELECT CEIL(2.5, 0)
 -- !query analysis
-Project [ceil(2.5, 0) AS ceil(2.5, 0)#x]
+Project [CEIL(2.5, 0) AS CEIL(2.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(3.5, 0)
 -- !query analysis
-Project [ceil(3.5, 0) AS ceil(3.5, 0)#x]
+Project [CEIL(3.5, 0) AS CEIL(3.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(-2.5, 0)
 -- !query analysis
-Project [ceil(-2.5, 0) AS ceil(-2.5, 0)#x]
+Project [CEIL(-2.5, 0) AS CEIL(-2.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(-3.5, 0)
 -- !query analysis
-Project [ceil(-3.5, 0) AS ceil(-3.5, 0)#x]
+Project [CEIL(-3.5, 0) AS CEIL(-3.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(-0.35, 1)
 -- !query analysis
-Project [ceil(-0.35, 1) AS ceil(-0.35, 1)#x]
+Project [CEIL(-0.35, 1) AS CEIL(-0.35, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(-35, -1)
 -- !query analysis
-Project [ceil(cast(-35 as decimal(10,0)), -1) AS ceil(-35, -1)#x]
+Project [CEIL(cast(-35 as decimal(10,0)), -1) AS CEIL(-35, -1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(-0.1, 0)
 -- !query analysis
-Project [ceil(-0.1, 0) AS ceil(-0.1, 0)#x]
+Project [CEIL(-0.1, 0) AS CEIL(-0.1, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(5, 0)
 -- !query analysis
-Project [ceil(cast(5 as decimal(10,0)), 0) AS ceil(5, 0)#x]
+Project [CEIL(cast(5 as decimal(10,0)), 0) AS CEIL(5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(3.14115, -3)
 -- !query analysis
-Project [ceil(3.14115, -3) AS ceil(3.14115, -3)#x]
+Project [CEIL(3.14115, -3) AS CEIL(3.14115, -3)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(9.9, 0)
 -- !query analysis
-Project [ceil(9.9, 0) AS ceil(9.9, 0)#x]
+Project [CEIL(9.9, 0) AS CEIL(9.9, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT CEIL(CAST(99 AS DECIMAL(2, 0)), -1)
 -- !query analysis
-Project [ceil(cast(99 as decimal(2,0)), -1) AS ceil(CAST(99 AS DECIMAL(2,0)), -1)#x]
+Project [CEIL(cast(99 as decimal(2,0)), -1) AS CEIL(CAST(99 AS DECIMAL(2,0)), -1)#x]
 +- OneRowRelation
 
 
@@ -146,77 +146,77 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT FLOOR(2.5, 0)
 -- !query analysis
-Project [floor(2.5, 0) AS floor(2.5, 0)#x]
+Project [FLOOR(2.5, 0) AS FLOOR(2.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(3.5, 0)
 -- !query analysis
-Project [floor(3.5, 0) AS floor(3.5, 0)#x]
+Project [FLOOR(3.5, 0) AS FLOOR(3.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-2.5, 0)
 -- !query analysis
-Project [floor(-2.5, 0) AS floor(-2.5, 0)#x]
+Project [FLOOR(-2.5, 0) AS FLOOR(-2.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-3.5, 0)
 -- !query analysis
-Project [floor(-3.5, 0) AS floor(-3.5, 0)#x]
+Project [FLOOR(-3.5, 0) AS FLOOR(-3.5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-0.35, 1)
 -- !query analysis
-Project [floor(-0.35, 1) AS floor(-0.35, 1)#x]
+Project [FLOOR(-0.35, 1) AS FLOOR(-0.35, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-35, -1)
 -- !query analysis
-Project [floor(cast(-35 as decimal(10,0)), -1) AS floor(-35, -1)#x]
+Project [FLOOR(cast(-35 as decimal(10,0)), -1) AS FLOOR(-35, -1)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-0.1, 0)
 -- !query analysis
-Project [floor(-0.1, 0) AS floor(-0.1, 0)#x]
+Project [FLOOR(-0.1, 0) AS FLOOR(-0.1, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(5, 0)
 -- !query analysis
-Project [floor(cast(5 as decimal(10,0)), 0) AS floor(5, 0)#x]
+Project [FLOOR(cast(5 as decimal(10,0)), 0) AS FLOOR(5, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(3.14115, -3)
 -- !query analysis
-Project [floor(3.14115, -3) AS floor(3.14115, -3)#x]
+Project [FLOOR(3.14115, -3) AS FLOOR(3.14115, -3)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(-9.9, 0)
 -- !query analysis
-Project [floor(-9.9, 0) AS floor(-9.9, 0)#x]
+Project [FLOOR(-9.9, 0) AS FLOOR(-9.9, 0)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT FLOOR(CAST(-99 AS DECIMAL(2, 0)), -1)
 -- !query analysis
-Project [floor(cast(-99 as decimal(2,0)), -1) AS floor(CAST(-99 AS DECIMAL(2,0)), -1)#x]
+Project [FLOOR(cast(-99 as decimal(2,0)), -1) AS FLOOR(CAST(-99 AS DECIMAL(2,0)), -1)#x]
 +- OneRowRelation
 
 

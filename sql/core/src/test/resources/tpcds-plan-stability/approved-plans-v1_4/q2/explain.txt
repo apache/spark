@@ -199,14 +199,14 @@ Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 12]
-Output [8]: [d_week_seq1#42, round((sun_sales1#43 / sun_sales2#70), 2) AS round((sun_sales1 / sun_sales2), 2)#77, round((mon_sales1#44 / mon_sales2#71), 2) AS round((mon_sales1 / mon_sales2), 2)#78, round((tue_sales1#45 / tue_sales2#72), 2) AS round((tue_sales1 / tue_sales2), 2)#79, round((wed_sales1#46 / wed_sales2#73), 2) AS round((wed_sales1 / wed_sales2), 2)#80, round((thu_sales1#47 / thu_sales2#74), 2) AS round((thu_sales1 / thu_sales2), 2)#81, round((fri_sales1#48 / fri_sales2#75), 2) AS round((fri_sales1 / fri_sales2), 2)#82, round((sat_sales1#49 / sat_sales2#76), 2) AS round((sat_sales1 / sat_sales2), 2)#83]
+Output [8]: [d_week_seq1#42, ROUND((sun_sales1#43 / sun_sales2#70), 2) AS ROUND((sun_sales1 / sun_sales2), 2)#77, ROUND((mon_sales1#44 / mon_sales2#71), 2) AS ROUND((mon_sales1 / mon_sales2), 2)#78, ROUND((tue_sales1#45 / tue_sales2#72), 2) AS ROUND((tue_sales1 / tue_sales2), 2)#79, ROUND((wed_sales1#46 / wed_sales2#73), 2) AS ROUND((wed_sales1 / wed_sales2), 2)#80, ROUND((thu_sales1#47 / thu_sales2#74), 2) AS ROUND((thu_sales1 / thu_sales2), 2)#81, ROUND((fri_sales1#48 / fri_sales2#75), 2) AS ROUND((fri_sales1 / fri_sales2), 2)#82, ROUND((sat_sales1#49 / sat_sales2#76), 2) AS ROUND((sat_sales1 / sat_sales2), 2)#83]
 Input [16]: [d_week_seq1#42, sun_sales1#43, mon_sales1#44, tue_sales1#45, wed_sales1#46, thu_sales1#47, fri_sales1#48, sat_sales1#49, d_week_seq2#69, sun_sales2#70, mon_sales2#71, tue_sales2#72, wed_sales2#73, thu_sales2#74, fri_sales2#75, sat_sales2#76]
 
 (36) Exchange
-Input [8]: [d_week_seq1#42, round((sun_sales1 / sun_sales2), 2)#77, round((mon_sales1 / mon_sales2), 2)#78, round((tue_sales1 / tue_sales2), 2)#79, round((wed_sales1 / wed_sales2), 2)#80, round((thu_sales1 / thu_sales2), 2)#81, round((fri_sales1 / fri_sales2), 2)#82, round((sat_sales1 / sat_sales2), 2)#83]
+Input [8]: [d_week_seq1#42, ROUND((sun_sales1 / sun_sales2), 2)#77, ROUND((mon_sales1 / mon_sales2), 2)#78, ROUND((tue_sales1 / tue_sales2), 2)#79, ROUND((wed_sales1 / wed_sales2), 2)#80, ROUND((thu_sales1 / thu_sales2), 2)#81, ROUND((fri_sales1 / fri_sales2), 2)#82, ROUND((sat_sales1 / sat_sales2), 2)#83]
 Arguments: rangepartitioning(d_week_seq1#42 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (37) Sort [codegen id : 13]
-Input [8]: [d_week_seq1#42, round((sun_sales1 / sun_sales2), 2)#77, round((mon_sales1 / mon_sales2), 2)#78, round((tue_sales1 / tue_sales2), 2)#79, round((wed_sales1 / wed_sales2), 2)#80, round((thu_sales1 / thu_sales2), 2)#81, round((fri_sales1 / fri_sales2), 2)#82, round((sat_sales1 / sat_sales2), 2)#83]
+Input [8]: [d_week_seq1#42, ROUND((sun_sales1 / sun_sales2), 2)#77, ROUND((mon_sales1 / mon_sales2), 2)#78, ROUND((tue_sales1 / tue_sales2), 2)#79, ROUND((wed_sales1 / wed_sales2), 2)#80, ROUND((thu_sales1 / thu_sales2), 2)#81, ROUND((fri_sales1 / fri_sales2), 2)#82, ROUND((sat_sales1 / sat_sales2), 2)#83]
 Arguments: [d_week_seq1#42 ASC NULLS FIRST], true, 0
 

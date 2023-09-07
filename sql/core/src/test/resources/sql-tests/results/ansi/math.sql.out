@@ -2,7 +2,7 @@
 -- !query
 SELECT round(25y, 1)
 -- !query schema
-struct<round(25, 1):tinyint>
+struct<ROUND(25, 1):tinyint>
 -- !query output
 25
 
@@ -10,7 +10,7 @@ struct<round(25, 1):tinyint>
 -- !query
 SELECT round(25y, 0)
 -- !query schema
-struct<round(25, 0):tinyint>
+struct<ROUND(25, 0):tinyint>
 -- !query output
 25
 
@@ -18,7 +18,7 @@ struct<round(25, 0):tinyint>
 -- !query
 SELECT round(25y, -1)
 -- !query schema
-struct<round(25, -1):tinyint>
+struct<ROUND(25, -1):tinyint>
 -- !query output
 30
 
@@ -26,7 +26,7 @@ struct<round(25, -1):tinyint>
 -- !query
 SELECT round(25y, -2)
 -- !query schema
-struct<round(25, -2):tinyint>
+struct<ROUND(25, -2):tinyint>
 -- !query output
 0
 
@@ -34,7 +34,7 @@ struct<round(25, -2):tinyint>
 -- !query
 SELECT round(25y, -3)
 -- !query schema
-struct<round(25, -3):tinyint>
+struct<ROUND(25, -3):tinyint>
 -- !query output
 0
 
@@ -90,7 +90,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT round(525s, 1)
 -- !query schema
-struct<round(525, 1):smallint>
+struct<ROUND(525, 1):smallint>
 -- !query output
 525
 
@@ -98,7 +98,7 @@ struct<round(525, 1):smallint>
 -- !query
 SELECT round(525s, 0)
 -- !query schema
-struct<round(525, 0):smallint>
+struct<ROUND(525, 0):smallint>
 -- !query output
 525
 
@@ -106,7 +106,7 @@ struct<round(525, 0):smallint>
 -- !query
 SELECT round(525s, -1)
 -- !query schema
-struct<round(525, -1):smallint>
+struct<ROUND(525, -1):smallint>
 -- !query output
 530
 
@@ -114,7 +114,7 @@ struct<round(525, -1):smallint>
 -- !query
 SELECT round(525s, -2)
 -- !query schema
-struct<round(525, -2):smallint>
+struct<ROUND(525, -2):smallint>
 -- !query output
 500
 
@@ -122,7 +122,7 @@ struct<round(525, -2):smallint>
 -- !query
 SELECT round(525s, -3)
 -- !query schema
-struct<round(525, -3):smallint>
+struct<ROUND(525, -3):smallint>
 -- !query output
 1000
 
@@ -178,7 +178,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT round(525, 1)
 -- !query schema
-struct<round(525, 1):int>
+struct<ROUND(525, 1):int>
 -- !query output
 525
 
@@ -186,7 +186,7 @@ struct<round(525, 1):int>
 -- !query
 SELECT round(525, 0)
 -- !query schema
-struct<round(525, 0):int>
+struct<ROUND(525, 0):int>
 -- !query output
 525
 
@@ -194,7 +194,7 @@ struct<round(525, 0):int>
 -- !query
 SELECT round(525, -1)
 -- !query schema
-struct<round(525, -1):int>
+struct<ROUND(525, -1):int>
 -- !query output
 530
 
@@ -202,7 +202,7 @@ struct<round(525, -1):int>
 -- !query
 SELECT round(525, -2)
 -- !query schema
-struct<round(525, -2):int>
+struct<ROUND(525, -2):int>
 -- !query output
 500
 
@@ -210,7 +210,7 @@ struct<round(525, -2):int>
 -- !query
 SELECT round(525, -3)
 -- !query schema
-struct<round(525, -3):int>
+struct<ROUND(525, -3):int>
 -- !query output
 1000
 
@@ -266,7 +266,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT round(525L, 1)
 -- !query schema
-struct<round(525, 1):bigint>
+struct<ROUND(525, 1):bigint>
 -- !query output
 525
 
@@ -274,7 +274,7 @@ struct<round(525, 1):bigint>
 -- !query
 SELECT round(525L, 0)
 -- !query schema
-struct<round(525, 0):bigint>
+struct<ROUND(525, 0):bigint>
 -- !query output
 525
 
@@ -282,7 +282,7 @@ struct<round(525, 0):bigint>
 -- !query
 SELECT round(525L, -1)
 -- !query schema
-struct<round(525, -1):bigint>
+struct<ROUND(525, -1):bigint>
 -- !query output
 530
 
@@ -290,7 +290,7 @@ struct<round(525, -1):bigint>
 -- !query
 SELECT round(525L, -2)
 -- !query schema
-struct<round(525, -2):bigint>
+struct<ROUND(525, -2):bigint>
 -- !query output
 500
 
@@ -298,7 +298,7 @@ struct<round(525, -2):bigint>
 -- !query
 SELECT round(525L, -3)
 -- !query schema
-struct<round(525, -3):bigint>
+struct<ROUND(525, -3):bigint>
 -- !query output
 1000
 
@@ -354,7 +354,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT bround(25y, 1)
 -- !query schema
-struct<bround(25, 1):tinyint>
+struct<BROUND(25, 1):tinyint>
 -- !query output
 25
 
@@ -362,7 +362,7 @@ struct<bround(25, 1):tinyint>
 -- !query
 SELECT bround(25y, 0)
 -- !query schema
-struct<bround(25, 0):tinyint>
+struct<BROUND(25, 0):tinyint>
 -- !query output
 25
 
@@ -370,7 +370,7 @@ struct<bround(25, 0):tinyint>
 -- !query
 SELECT bround(25y, -1)
 -- !query schema
-struct<bround(25, -1):tinyint>
+struct<BROUND(25, -1):tinyint>
 -- !query output
 20
 
@@ -378,7 +378,7 @@ struct<bround(25, -1):tinyint>
 -- !query
 SELECT bround(25y, -2)
 -- !query schema
-struct<bround(25, -2):tinyint>
+struct<BROUND(25, -2):tinyint>
 -- !query output
 0
 
@@ -386,7 +386,7 @@ struct<bround(25, -2):tinyint>
 -- !query
 SELECT bround(25y, -3)
 -- !query schema
-struct<bround(25, -3):tinyint>
+struct<BROUND(25, -3):tinyint>
 -- !query output
 0
 
@@ -442,7 +442,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT bround(525s, 1)
 -- !query schema
-struct<bround(525, 1):smallint>
+struct<BROUND(525, 1):smallint>
 -- !query output
 525
 
@@ -450,7 +450,7 @@ struct<bround(525, 1):smallint>
 -- !query
 SELECT bround(525s, 0)
 -- !query schema
-struct<bround(525, 0):smallint>
+struct<BROUND(525, 0):smallint>
 -- !query output
 525
 
@@ -458,7 +458,7 @@ struct<bround(525, 0):smallint>
 -- !query
 SELECT bround(525s, -1)
 -- !query schema
-struct<bround(525, -1):smallint>
+struct<BROUND(525, -1):smallint>
 -- !query output
 520
 
@@ -466,7 +466,7 @@ struct<bround(525, -1):smallint>
 -- !query
 SELECT bround(525s, -2)
 -- !query schema
-struct<bround(525, -2):smallint>
+struct<BROUND(525, -2):smallint>
 -- !query output
 500
 
@@ -474,7 +474,7 @@ struct<bround(525, -2):smallint>
 -- !query
 SELECT bround(525s, -3)
 -- !query schema
-struct<bround(525, -3):smallint>
+struct<BROUND(525, -3):smallint>
 -- !query output
 1000
 
@@ -530,7 +530,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT bround(525, 1)
 -- !query schema
-struct<bround(525, 1):int>
+struct<BROUND(525, 1):int>
 -- !query output
 525
 
@@ -538,7 +538,7 @@ struct<bround(525, 1):int>
 -- !query
 SELECT bround(525, 0)
 -- !query schema
-struct<bround(525, 0):int>
+struct<BROUND(525, 0):int>
 -- !query output
 525
 
@@ -546,7 +546,7 @@ struct<bround(525, 0):int>
 -- !query
 SELECT bround(525, -1)
 -- !query schema
-struct<bround(525, -1):int>
+struct<BROUND(525, -1):int>
 -- !query output
 520
 
@@ -554,7 +554,7 @@ struct<bround(525, -1):int>
 -- !query
 SELECT bround(525, -2)
 -- !query schema
-struct<bround(525, -2):int>
+struct<BROUND(525, -2):int>
 -- !query output
 500
 
@@ -562,7 +562,7 @@ struct<bround(525, -2):int>
 -- !query
 SELECT bround(525, -3)
 -- !query schema
-struct<bround(525, -3):int>
+struct<BROUND(525, -3):int>
 -- !query output
 1000
 
@@ -618,7 +618,7 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT bround(525L, 1)
 -- !query schema
-struct<bround(525, 1):bigint>
+struct<BROUND(525, 1):bigint>
 -- !query output
 525
 
@@ -626,7 +626,7 @@ struct<bround(525, 1):bigint>
 -- !query
 SELECT bround(525L, 0)
 -- !query schema
-struct<bround(525, 0):bigint>
+struct<BROUND(525, 0):bigint>
 -- !query output
 525
 
@@ -634,7 +634,7 @@ struct<bround(525, 0):bigint>
 -- !query
 SELECT bround(525L, -1)
 -- !query schema
-struct<bround(525, -1):bigint>
+struct<BROUND(525, -1):bigint>
 -- !query output
 520
 
@@ -642,7 +642,7 @@ struct<bround(525, -1):bigint>
 -- !query
 SELECT bround(525L, -2)
 -- !query schema
-struct<bround(525, -2):bigint>
+struct<BROUND(525, -2):bigint>
 -- !query output
 500
 
@@ -650,7 +650,7 @@ struct<bround(525, -2):bigint>
 -- !query
 SELECT bround(525L, -3)
 -- !query schema
-struct<bround(525, -3):bigint>
+struct<BROUND(525, -3):bigint>
 -- !query output
 1000
 

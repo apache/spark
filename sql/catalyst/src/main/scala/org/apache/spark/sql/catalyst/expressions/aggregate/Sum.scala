@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{EvalMode, _}
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
@@ -68,6 +70,9 @@ case class Sum(
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForAnsiIntervalOrNumericType(child)
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).map(_.toUpperCase(Locale.ROOT)).getOrElse("SUM")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 

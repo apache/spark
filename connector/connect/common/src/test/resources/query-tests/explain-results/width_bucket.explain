@@ -1,2 +1,2 @@
-Project [width_bucket(b#0, b#0, b#0, cast(a#0 as bigint)) AS width_bucket(b, b, b, a)#0L]
+Project [WIDTH_BUCKET(b#0, b#0, b#0, cast(a#0 as bigint)) AS WIDTH_BUCKET(b, b, b, a)#0L]
 +- LocalRelation <empty>, [id#0L, a#0, b#0]

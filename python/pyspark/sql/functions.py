@@ -872,7 +872,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
     ... ).select(sf.try_add("birth", "age")).show()
     +-------------------+
-    |try_add(birth, age)|
+    |TRY_ADD(birth, age)|
     +-------------------+
     |               1997|
     |               1992|
@@ -885,7 +885,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (DATE('2015-09-30')) AS TAB(date)"
     ... ).select(sf.try_add("date", sf.lit(1))).show()
     +----------------+
-    |try_add(date, 1)|
+    |TRY_ADD(date, 1)|
     +----------------+
     |      2015-10-01|
     +----------------+
@@ -897,7 +897,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
     ... ).select(sf.try_add("date", "i")).show()
     +----------------+
-    |try_add(date, i)|
+    |TRY_ADD(date, i)|
     +----------------+
     |      2016-09-30|
     +----------------+
@@ -909,7 +909,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
     ... ).select(sf.try_add("i", "j")).show()
     +-----------------+
-    |    try_add(i, j)|
+    |    TRY_ADD(i, j)|
     +-----------------+
     |INTERVAL '3' YEAR|
     +-----------------+
@@ -935,7 +935,7 @@ def try_avg(col: "ColumnOrName") -> Column:
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
     ... ).select(sf.try_avg("age")).show()
     +------------+
-    |try_avg(age)|
+    |TRY_AVG(age)|
     +------------+
     |         8.5|
     +------------+
@@ -967,7 +967,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     [(6000, 15), (1990, 2), (1234, 0)], ["a", "b"]
     ... ).select(sf.try_divide("a", "b")).show()
     +----------------+
-    |try_divide(a, b)|
+    |TRY_DIVIDE(a, b)|
     +----------------+
     |           400.0|
     |           995.0|
@@ -981,7 +981,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     sf.try_divide(sf.make_interval(sf.lit(1)), "id")
     ... ).show()
     +--------------------------------------------------+
-    |try_divide(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
+    |TRY_DIVIDE(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
     +--------------------------------------------------+
     |                                              NULL|
     |                                           1 years|
@@ -1016,7 +1016,7 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     [(6000, 15), (1990, 2)], ["a", "b"]
     ... ).select(sf.try_multiply("a", "b")).show()
     +------------------+
-    |try_multiply(a, b)|
+    |TRY_MULTIPLY(a, b)|
     +------------------+
     |             90000|
     |              3980|
@@ -1029,7 +1029,7 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     sf.try_multiply(sf.make_interval(sf.lit(0), sf.lit(3)), "id")
     ... ).show()
     +----------------------------------------------------+
-    |try_multiply(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
+    |TRY_MULTIPLY(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
     +----------------------------------------------------+
     |                                           0 seconds|
     |                                            3 months|
@@ -1064,7 +1064,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
     ... ).select(sf.try_subtract("birth", "age")).show()
     +------------------------+
-    |try_subtract(birth, age)|
+    |TRY_SUBTRACT(birth, age)|
     +------------------------+
     |                    1967|
     |                    1988|
@@ -1077,7 +1077,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (DATE('2015-10-01')) AS TAB(date)"
     ... ).select(sf.try_subtract("date", sf.lit(1))).show()
     +---------------------+
-    |try_subtract(date, 1)|
+    |TRY_SUBTRACT(date, 1)|
     +---------------------+
     |           2015-09-30|
     +---------------------+
@@ -1089,7 +1089,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
     ... ).select(sf.try_subtract("date", "i")).show()
     +---------------------+
-    |try_subtract(date, i)|
+    |TRY_SUBTRACT(date, i)|
     +---------------------+
     |           2014-09-30|
     +---------------------+
@@ -1101,7 +1101,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
     ... ).select(sf.try_subtract("i", "j")).show()
     +------------------+
-    |try_subtract(i, j)|
+    |TRY_SUBTRACT(i, j)|
     +------------------+
     |INTERVAL '-1' YEAR|
     +------------------+
@@ -1125,7 +1125,7 @@ def try_sum(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(10).select(sf.try_sum("id")).show()
     +-----------+
-    |try_sum(id)|
+    |TRY_SUM(id)|
     +-----------+
     |         45|
     +-----------+
@@ -1613,7 +1613,7 @@ def sum(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(sum(df["id"])).show()
     +-------+
-    |sum(id)|
+    |SUM(id)|
     +-------+
     |     45|
     +-------+
@@ -1646,7 +1646,7 @@ def avg(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(avg(col("id"))).show()
     +-------+
-    |avg(id)|
+    |AVG(id)|
     +-------+
     |    4.5|
     +-------+
@@ -1680,7 +1680,7 @@ def mean(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(mean(df.id)).show()
     +-------+
-    |avg(id)|
+    |AVG(id)|
     +-------+
     |    4.5|
     +-------+
@@ -1769,7 +1769,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
     >>> df.select(sum_distinct(col("numbers"))).show()
     +---------------------+
-    |sum(DISTINCT numbers)|
+    |SUM(DISTINCT numbers)|
     +---------------------+
     |                    3|
     +---------------------+
@@ -2498,7 +2498,7 @@ def negative(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(3).select(sf.negative("id")).show()
     +------------+
-    |negative(id)|
+    |NEGATIVE(id)|
     +------------+
     |           0|
     |          -1|
@@ -4369,7 +4369,7 @@ def width_bucket(
     ...     ['v', 'min', 'max', 'n'])
     >>> df.select(width_bucket('v', 'min', 'max', 'n')).show()
     +----------------------------+
-    |width_bucket(v, min, max, n)|
+    |WIDTH_BUCKET(v, min, max, n)|
     +----------------------------+
     |                           3|
     |                           0|
@@ -4999,7 +4999,7 @@ def grouping(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
     >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
     +-----+--------------+--------+
-    | name|grouping(name)|sum(age)|
+    | name|grouping(name)|SUM(age)|
     +-----+--------------+--------+
     | NULL|             1|       7|
     |Alice|             0|       2|
@@ -5043,7 +5043,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     ...                             (4, "b", "c")], ["c1", "c2", "c3"])
     >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
     +----+----+-------------+-------+
-    |  c2|  c3|grouping_id()|sum(c1)|
+    |  c2|  c3|grouping_id()|SUM(c1)|
     +----+----+-------------+-------+
     |NULL|NULL|            3|      8|
     |NULL|   a|            2|      4|
@@ -10689,7 +10689,7 @@ def hex(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
-    [Row(hex(a)='414243', hex(b)='3')]
+    [Row(HEX(a)='414243', HEX(b)='3')]
     """
     return _invoke_function_over_columns("hex", col)
 
@@ -10717,7 +10717,7 @@ def unhex(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> spark.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
-    [Row(unhex(a)=bytearray(b'ABC'))]
+    [Row(UNHEX(a)=bytearray(b'ABC'))]
     """
     return _invoke_function_over_columns("unhex", col)
 
@@ -15590,7 +15590,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     +-----------+
     >>> df.select(call_function("avg", col("id"))).show()
     +-------+
-    |avg(id)|
+    |AVG(id)|
     +-------+
     |    2.0|
     +-------+

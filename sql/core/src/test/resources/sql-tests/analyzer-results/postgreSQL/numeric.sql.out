@@ -3723,8 +3723,8 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
     FROM num_data t1, num_data t2
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(round((val + val), 10)#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, id#x, round((val#x + val#x), 10) AS round((val + val), 10)#x]
++- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(ROUND((val + val), 10)#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, id#x, ROUND((val#x + val#x), 10) AS ROUND((val + val), 10)#x]
       +- Join Inner
          :- SubqueryAlias t1
          :  +- SubqueryAlias spark_catalog.default.num_data
@@ -3740,8 +3740,8 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 10) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 10)
 -- !query analysis
-Project [id1#x, id2#x, result#x, round(expected#x, 10) AS expected#x]
-+- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = round(expected#x, 10)))
+Project [id1#x, id2#x, result#x, ROUND(expected#x, 10) AS expected#x]
++- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = ROUND(expected#x, 10)))
    +- Join Inner
       :- SubqueryAlias t1
       :  +- SubqueryAlias spark_catalog.default.num_result
@@ -3801,8 +3801,8 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
     FROM num_data t1, num_data t2
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(round((val - val), 40)#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, id#x, round((val#x - val#x), 40) AS round((val - val), 40)#x]
++- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(ROUND((val - val), 40)#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, id#x, ROUND((val#x - val#x), 40) AS ROUND((val - val), 40)#x]
       +- Join Inner
          :- SubqueryAlias t1
          :  +- SubqueryAlias spark_catalog.default.num_data
@@ -3818,8 +3818,8 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
 -- !query analysis
-Project [id1#x, id2#x, result#x, round(expected#x, 40) AS round(expected, 40)#x]
-+- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = round(expected#x, 40)))
+Project [id1#x, id2#x, result#x, ROUND(expected#x, 40) AS ROUND(expected, 40)#x]
++- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = ROUND(expected#x, 40)))
    +- Join Inner
       :- SubqueryAlias t1
       :  +- SubqueryAlias spark_catalog.default.num_result
@@ -3879,8 +3879,8 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
     FROM num_data t1, num_data t2
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(round((val * val), 30)#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, id#x, round((val#x * val#x), 30) AS round((val * val), 30)#x]
++- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(ROUND((val * val), 30)#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, id#x, ROUND((val#x * val#x), 30) AS ROUND((val * val), 30)#x]
       +- Join Inner
          :- SubqueryAlias t1
          :  +- SubqueryAlias spark_catalog.default.num_data
@@ -3896,8 +3896,8 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 30) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 30)
 -- !query analysis
-Project [id1#x, id2#x, result#x, round(expected#x, 30) AS expected#x]
-+- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = round(expected#x, 30)))
+Project [id1#x, id2#x, result#x, ROUND(expected#x, 30) AS expected#x]
++- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = ROUND(expected#x, 30)))
    +- Join Inner
       :- SubqueryAlias t1
       :  +- SubqueryAlias spark_catalog.default.num_result
@@ -3960,8 +3960,8 @@ INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
     WHERE t2.val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(round((val / val), 80)#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, id#x, round((val#x / val#x), 80) AS round((val / val), 80)#x]
++- Project [cast(id#x as int) AS id1#x, cast(id#x as int) AS id2#x, cast(ROUND((val / val), 80)#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, id#x, ROUND((val#x / val#x), 80) AS ROUND((val / val), 80)#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- Join Inner
             :- SubqueryAlias t1
@@ -3978,8 +3978,8 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 80) as expected
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 80)
 -- !query analysis
-Project [id1#x, id2#x, result#x, round(expected#x, 80) AS expected#x]
-+- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = round(expected#x, 80)))
+Project [id1#x, id2#x, result#x, ROUND(expected#x, 80) AS expected#x]
++- Filter (((id1#x = id1#x) AND (id2#x = id2#x)) AND NOT (result#x = ROUND(expected#x, 80)))
    +- Join Inner
       :- SubqueryAlias t1
       :  +- SubqueryAlias spark_catalog.default.num_result
@@ -4107,8 +4107,8 @@ INSERT INTO num_result SELECT id, 0, POWER(cast('10' as decimal(38, 18)), LN(ABS
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, POWER(cast(cast(10 as decimal(38,18)) as double), ln(cast(abs(round(val#x, 200)) as double))) AS POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(round(val, 200))))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(ROUND(val, 200))))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, POWER(cast(cast(10 as decimal(38,18)) as double), ln(cast(abs(ROUND(val#x, 200)) as double))) AS POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(ROUND(val, 200))))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4315,7 +4315,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round
 -- !query analysis
-Project [a#x, CEIL(a#x) AS CEIL(a)#x, CEILING(a#x) AS CEILING(a)#x, FLOOR(a#x) AS FLOOR(a)#x, round(a#x, 0) AS round(a, 0)#x]
+Project [a#x, CEIL(a#x) AS CEIL(a)#x, CEILING(a#x) AS CEILING(a)#x, FLOOR(a#x) AS FLOOR(a)#x, ROUND(a#x, 0) AS ROUND(a, 0)#x]
 +- SubqueryAlias spark_catalog.default.ceil_floor_round
    +- Relation spark_catalog.default.ceil_floor_round[a#x] parquet
 

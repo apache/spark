@@ -279,15 +279,15 @@ Join type: Inner
 Join condition: None
 
 (49) Project [codegen id : 12]
-Output [8]: [d_week_seq1#44, round((sun_sales1#45 / sun_sales2#89), 2) AS round((sun_sales1 / sun_sales2), 2)#96, round((mon_sales1#46 / mon_sales2#90), 2) AS round((mon_sales1 / mon_sales2), 2)#97, round((tue_sales1#47 / tue_sales2#91), 2) AS round((tue_sales1 / tue_sales2), 2)#98, round((wed_sales1#48 / wed_sales2#92), 2) AS round((wed_sales1 / wed_sales2), 2)#99, round((thu_sales1#49 / thu_sales2#93), 2) AS round((thu_sales1 / thu_sales2), 2)#100, round((fri_sales1#50 / fri_sales2#94), 2) AS round((fri_sales1 / fri_sales2), 2)#101, round((sat_sales1#51 / sat_sales2#95), 2) AS round((sat_sales1 / sat_sales2), 2)#102]
+Output [8]: [d_week_seq1#44, ROUND((sun_sales1#45 / sun_sales2#89), 2) AS ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1#46 / mon_sales2#90), 2) AS ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1#47 / tue_sales2#91), 2) AS ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1#48 / wed_sales2#92), 2) AS ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1#49 / thu_sales2#93), 2) AS ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1#50 / fri_sales2#94), 2) AS ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1#51 / sat_sales2#95), 2) AS ROUND((sat_sales1 / sat_sales2), 2)#101]
 Input [16]: [d_week_seq1#44, sun_sales1#45, mon_sales1#46, tue_sales1#47, wed_sales1#48, thu_sales1#49, fri_sales1#50, sat_sales1#51, d_week_seq2#88, sun_sales2#89, mon_sales2#90, tue_sales2#91, wed_sales2#92, thu_sales2#93, fri_sales2#94, sat_sales2#95]
 
 (50) Exchange
-Input [8]: [d_week_seq1#44, round((sun_sales1 / sun_sales2), 2)#96, round((mon_sales1 / mon_sales2), 2)#97, round((tue_sales1 / tue_sales2), 2)#98, round((wed_sales1 / wed_sales2), 2)#99, round((thu_sales1 / thu_sales2), 2)#100, round((fri_sales1 / fri_sales2), 2)#101, round((sat_sales1 / sat_sales2), 2)#102]
+Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1 / sat_sales2), 2)#101]
 Arguments: rangepartitioning(d_week_seq1#44 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (51) Sort [codegen id : 13]
-Input [8]: [d_week_seq1#44, round((sun_sales1 / sun_sales2), 2)#96, round((mon_sales1 / mon_sales2), 2)#97, round((tue_sales1 / tue_sales2), 2)#98, round((wed_sales1 / wed_sales2), 2)#99, round((thu_sales1 / thu_sales2), 2)#100, round((fri_sales1 / fri_sales2), 2)#101, round((sat_sales1 / sat_sales2), 2)#102]
+Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1 / sat_sales2), 2)#101]
 Arguments: [d_week_seq1#44 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
@@ -324,19 +324,19 @@ Input [2]: [d_week_seq#42, d_year#43]
 Input [1]: [d_week_seq#42]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [buf#103]
-Results [1]: [buf#104]
+Aggregate Attributes [1]: [buf#102]
+Results [1]: [buf#103]
 
 (57) Exchange
-Input [1]: [buf#104]
+Input [1]: [buf#103]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 
 (58) ObjectHashAggregate
-Input [1]: [buf#104]
+Input [1]: [buf#103]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#105]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#105 AS bloomFilter#106]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#104]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#104 AS bloomFilter#105]
 
 Subquery:2 Hosting operator id = 33 Hosting Expression = Subquery scalar-subquery#63, [id=#64]
 ObjectHashAggregate (65)
@@ -370,18 +370,18 @@ Input [2]: [d_week_seq#86, d_year#87]
 Input [1]: [d_week_seq#86]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [buf#107]
-Results [1]: [buf#108]
+Aggregate Attributes [1]: [buf#106]
+Results [1]: [buf#107]
 
 (64) Exchange
-Input [1]: [buf#108]
+Input [1]: [buf#107]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (65) ObjectHashAggregate
-Input [1]: [buf#108]
+Input [1]: [buf#107]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#109]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#109 AS bloomFilter#110]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#108]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#108 AS bloomFilter#109]
 
 

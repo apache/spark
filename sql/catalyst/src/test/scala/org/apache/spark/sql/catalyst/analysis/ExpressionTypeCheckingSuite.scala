@@ -601,7 +601,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "sqlExpr" -> "\"round(intField, intField)\"",
+        "sqlExpr" -> "\"ROUND(intField, intField)\"",
         "inputName" -> "scala",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"intField\""))
@@ -612,7 +612,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"round(intField, booleanField)\"",
+        "sqlExpr" -> "\"ROUND(intField, booleanField)\"",
         "paramIndex" -> "2",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
@@ -623,7 +623,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"round(intField, mapField)\"",
+        "sqlExpr" -> "\"ROUND(intField, mapField)\"",
         "paramIndex" -> "2",
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
@@ -634,7 +634,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"round(booleanField, intField)\"",
+        "sqlExpr" -> "\"ROUND(booleanField, intField)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
@@ -648,7 +648,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "sqlExpr" -> "\"bround(intField, intField)\"",
+        "sqlExpr" -> "\"BROUND(intField, intField)\"",
         "inputName" -> "scala",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"intField\""))
@@ -658,7 +658,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"bround(intField, booleanField)\"",
+        "sqlExpr" -> "\"BROUND(intField, booleanField)\"",
         "paramIndex" -> "2",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
@@ -669,7 +669,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"bround(intField, mapField)\"",
+        "sqlExpr" -> "\"BROUND(intField, mapField)\"",
         "paramIndex" -> "2",
         "inputSql" -> "\"mapField\"",
         "inputType" -> "\"MAP<STRING, BIGINT>\"",
@@ -680,7 +680,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"bround(booleanField, intField)\"",
+        "sqlExpr" -> "\"BROUND(booleanField, intField)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",

@@ -34,6 +34,11 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
+ * note that all mathematical functions should also use uppercase names
+ * to maintain consistency
+ */
+
+/**
  * A leaf expression specifically for math constants. Math constants expect no input.
  *
  * There is no code generation because they should get constant folded by the optimizer.
@@ -454,6 +459,7 @@ case class Conv(
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
+  override def prettyName: String = "CONV"
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
     NumberConverter.convert(
@@ -635,6 +641,8 @@ case class Factorial(child: Expression)
 
   // If the value not in the range of [0, 20], it still will be null, so set it to be true here.
   override def nullable: Boolean = true
+
+  override def prettyName: String = "FACTORIAL"
 
   protected override def nullSafeEval(input: Any): Any = {
     val value = input.asInstanceOf[jl.Integer]
@@ -1004,6 +1012,7 @@ case class Bin(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
+  override def prettyName: String = "BIN"
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
@@ -1113,6 +1122,8 @@ case class Hex(child: Expression)
 
   override def dataType: DataType = StringType
 
+  override def prettyName: String = "HEX"
+
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
     case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
@@ -1154,6 +1165,8 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
+
+  override def prettyName: String = "UNHEX"
 
   protected override def nullSafeEval(num: Any): Any = {
     val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
@@ -1281,6 +1294,8 @@ case class ShiftLeft(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
+  override def prettyName: String = "SHIFTLEFT"
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
@@ -1320,6 +1335,8 @@ case class ShiftRight(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
+  override def prettyName: String = "SHIFTRIGHT"
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
@@ -1358,6 +1375,8 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
 
   override def dataType: DataType = left.dataType
+
+  override def prettyName: String = "SHIFTRIGHTUNSIGNED"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
@@ -1865,7 +1884,7 @@ case class WidthBucket(
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
-  override def prettyName: String = "width_bucket"
+  override def prettyName: String = "WIDTH_BUCKET"
 
   override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
     WidthBucket.computeBucketNumber(

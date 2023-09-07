@@ -277,7 +277,7 @@ Project [ AS three#x, f1#x, (f1#x - cast(-10 as double)) AS x#x]
 SELECT '' AS five, f.f1, round(f.f1) AS round_f1
    FROM FLOAT8_TBL f
 -- !query analysis
-Project [ AS five#x, f1#x, round(f1#x, 0) AS round_f1#x]
+Project [ AS five#x, f1#x, ROUND(f1#x, 0) AS round_f1#x]
 +- SubqueryAlias f
    +- SubqueryAlias spark_catalog.default.float8_tbl
       +- Relation spark_catalog.default.float8_tbl[f1#x] parquet
