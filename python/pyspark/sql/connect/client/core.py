@@ -585,10 +585,35 @@ class SparkConnectClient(object):
 
     @classmethod
     def retry_exception(cls, e: Exception) -> bool:
-        if isinstance(e, grpc.RpcError):
-            return e.code() == grpc.StatusCode.UNAVAILABLE
-        else:
+        """
+        Helper function that is used to identify if an exception thrown by the server
+        can be retried or not.
+
+        Parameters
+        ----------
+        e : Exception
+            The GRPC error as received from the server. Typed as Exception, because other exception
+            thrown during client processing can be passed here as well.
+
+        Returns
+        -------
+        True if the exception can be retried, False otherwise.
+
+        """
+        if not isinstance(e, grpc.RpcError):
             return False
+
+        if e.code() in [grpc.StatusCode.INTERNAL]:
+            msg = str(e)
+
+            # This error happens if another RPC preempts this RPC.
+            if "INVALID_CURSOR.DISCONNECTED" in msg:
+                return True
+
+        if e.code() == grpc.StatusCode.UNAVAILABLE:
+            return True
+
+        return False
 
     def __init__(
         self,
