@@ -29,7 +29,7 @@ To set a config variable or a hive variable use [SET](sql-ref-syntax-aux-conf-mg
 
 ```sql
 SET { VAR | VARIABLE }
-  { variable_name = { expression | DEFAULT } |
+  { variable_name = { expression | DEFAULT } [, ...] |
     ( variable_name [, ...] ) = ( query ) }
 ```
 
