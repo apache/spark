@@ -929,8 +929,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
-      val windowExprs = w.windowExpressions.filter(p.references.contains)
-      val newChild = if (windowExprs.isEmpty) w.child else w.copy(windowExpressions = windowExprs)
+      val projList = w.projectList.filter(p.references.contains)
+      val newChild = if (projList.isEmpty) w.child else w.copy(projectList = projList)
       p.copy(child = newChild)
 
     // Prune WithCTE
@@ -1283,13 +1283,13 @@ object CollapseWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
         if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+      w1.copy(projectList = we2 ++ we1, child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
+        w1.copy(projectList = we2 ++ we1, child = grandChild))
   }
 }
 

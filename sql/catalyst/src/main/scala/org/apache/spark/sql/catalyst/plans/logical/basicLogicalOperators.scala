@@ -1213,19 +1213,27 @@ object Aggregate {
 }
 
 case class Window(
-    windowExpressions: Seq[NamedExpression],
+    projectList: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] =
-    child.output ++ windowExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+    // child.output ++ windowExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet = windowOutputSet
 
   final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
-  def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
+  def windowExpressions: Seq[Alias] = projectList.flatMap { e =>
+    e.collect {
+      case a: Alias if a.child.isInstanceOf[WindowExpression] => a
+    }
+  }
+
+  def windowOutputSet: AttributeSet = AttributeSet(projectList
+    .filter(WindowExpression.hasWindowExpression)
+    .map(_.toAttribute))
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Window =
     copy(child = newChild)

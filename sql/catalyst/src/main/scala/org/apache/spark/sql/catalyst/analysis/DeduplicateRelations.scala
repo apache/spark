@@ -185,8 +185,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         existingRelations,
         w,
         _.windowExpressions.map(_.exprId.id),
-        newWindow => newWindow.copy(windowExpressions =
-          newWindow.windowExpressions.map(_.newInstance())))
+        newWindow => newWindow.copy(projectList = newAliases(newWindow.projectList)))
 
     case s: ScriptTransformation =>
       deduplicateAndRenew[ScriptTransformation](
@@ -421,10 +420,10 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ Window(windowExpressions, _, _, child)
-          if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+      case oldVersion @ Window(projectList, _, _, child)
+          if AttributeSet(projectList.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
-        val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))
+        val newVersion = oldVersion.copy(projectList = newAliases(projectList))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
