@@ -47,7 +47,7 @@ DECLARE [ OR REPLACE ] [ VARIABLE ]
 * **variable_name**
 
     Specifies a name for the variable to be created.
-    The function name may be optionally qualified with a `system`.`session` or `session`.
+    The variable name may be optionally qualified with a `system`.`session` or `session`.
 
     **Syntax:** `[ system . [ session .] ] variable_name`
 
