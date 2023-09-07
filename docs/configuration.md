@@ -350,6 +350,19 @@ of the most common options to set are:
   <td>3.0.0</td>
 </tr>
 <tr>
+<td><code>spark.executor.bindAddress</code></td>
+  <td>(local hostname)</td>
+  <td>
+    Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).
+    <br />It also allows a different address from the local one to be advertised to other
+    executors or external systems. This is useful, for example, when running containers with bridged networking.
+    For this to properly work, the different ports used by the driver (RPC, block manager and UI) need to be
+    forwarded from the container's host.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>
@@ -3028,7 +3041,7 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires one of the following conditions: 
+    This requires one of the following conditions:
     1) enabling external shuffle service through <code>spark.shuffle.service.enabled</code>, or
     2) enabling shuffle tracking through <code>spark.dynamicAllocation.shuffleTracking.enabled</code>, or
     3) enabling shuffle blocks decommission through <code>spark.decommission.enabled</code> and <code>spark.storage.decommission.shuffleBlocks.enabled</code>, or

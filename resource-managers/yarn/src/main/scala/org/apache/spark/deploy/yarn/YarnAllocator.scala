@@ -738,7 +738,6 @@ private[yarn] class YarnAllocator(
     for (container <- containersToUse) {
       val rpId = getResourceProfileIdFromPriority(container.getPriority)
       executorIdCounter += 1
-      val executorBindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS.key, executorHostname)
       val executorHostname = container.getNodeId.getHost
       val executorBindAddress = bindAddress.getOrElse(executorHostname)
       val containerId = container.getId
