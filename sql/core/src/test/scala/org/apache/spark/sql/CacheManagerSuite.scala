@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -43,37 +42,89 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
 
   test("SPARK-45039: Cached table name should be the complete identifier in existing table") {
     val db = "dbtest"
-    spark.sql(s"CREATE DATABASE $db")
-    spark.sql(s"USE $db")
+    sql(s"CREATE DATABASE $db")
+    sql(s"USE $db")
     try {
       val t = "t1"
       val fullIdent = s"spark_catalog.$db.$t"
-      spark.sql(s"CREATE TABLE $db.$t USING parquet AS SELECT 1 AS id")
+      sql(s"CREATE TABLE $db.$t USING parquet AS SELECT 1 AS id")
       Seq(t, s"$db.$t", fullIdent).foreach { table =>
-        spark.sql(s"CACHE TABLE $table")
+
+        sql(s"CACHE TABLE $table")
         assert(isInStorage(fullIdent))
-        spark.sql(s"UNCACHE TABLE $table")
+        sql(s"UNCACHE TABLE $table")
+        assert(!isInStorage(fullIdent))
+
+        spark.catalog.cacheTable(table)
+        spark.table(table).collect()
+        assert(isInStorage(fullIdent))
+        spark.catalog.uncacheTable(table)
         assert(!isInStorage(fullIdent))
       }
     } finally {
-      spark.sql(s"DROP DATABASE $db CASCADE")
+      sql(s"DROP DATABASE $db CASCADE")
     }
   }
 
   test("SPARK-45039: Cached table as select name should be the name of the temporary table") {
     val view = "v1"
-    spark.sql(s"CACHE TABLE $view AS SELECT 1 AS id")
+    sql(s"CACHE TABLE $view AS SELECT 1 AS id")
     assert(isInStorage(view))
-    spark.sql(s"UNCACHE TABLE $view")
+    sql(s"UNCACHE TABLE $view")
     assert(!isInStorage(view))
   }
 
   test("SPARK-45039: Cached table name should be the name of the temporary view") {
     val tmpView = "tmpView"
-    spark.sql(s"CREATE TEMPORARY VIEW $tmpView AS SELECT 1 AS id")
-    spark.sql(s"CACHE TABLE $tmpView")
+
+    sql(s"CREATE TEMPORARY VIEW $tmpView AS SELECT 1 AS id")
+    sql(s"CACHE TABLE $tmpView")
     assert(isInStorage(tmpView))
-    spark.sql(s"UNCACHE TABLE $tmpView")
+    sql(s"UNCACHE TABLE $tmpView")
+    assert(!isInStorage(tmpView))
+
+    spark.catalog.cacheTable(tmpView)
+    spark.table(tmpView).collect()
+    assert(isInStorage(tmpView))
+    spark.catalog.uncacheTable(tmpView)
     assert(!isInStorage(tmpView))
   }
+
+//  test("SPARK-45039: Cached table name should be the complete identifier in a renamed table") {
+//    //TODO V1 table, test with all tupe of identifiers and temporary table
+//    //TODO refactor tests to share whithDatabase
+//    val db = "dbrename"
+//    sql(s"CREATE DATABASE $db")
+//    sql(s"USE $db")
+//    try {
+//      val t1 = "t1"
+//      val t2 = "t2"
+//      sql(s"CREATE TABLE $db.$t1 USING parquet AS SELECT 1 AS id")
+//      sql(s"CACHE TABLE $t1")
+//      assert(isInStorage(s"spark_catalog.$db.$t1"))
+//      sql(s"ALTER TABLE $t1 RENAME TO $t2")
+//      assert(isInStorage(s"spark_catalog.$db.$t2"))
+//    } finally {
+//      sql(s"DROP DATABASE $db CASCADE")
+//    }
+//  }
+//
+//  test("SPARK-45039: Cached table name should be the complete identifier in a renamed V2table") {
+//    val v2Source = classOf[FakeV2Provider].getName
+//    val db = "dbrename"
+//    sql(s"CREATE DATABASE $db")
+//    sql(s"USE $db")
+//    try {
+//      val t1 = "t1"
+//      val t2 = "t2"
+//      sql(s"CREATE TABLE $db.$t1 (id INT) USING $v2Source")
+//      sql(s"INSERT INTO $db.$t1 SELECT 1")
+//      sql(s"CACHE TABLE $t1")
+//      assert(isInStorage(s"spark_catalog.$db.$t1"))
+//      sql(s"ALTER TABLE $t1 RENAME TO $t2")
+//      assert(isInStorage(s"spark_catalog.$db.$t2"))
+//    } finally {
+//      sql(s"DROP DATABASE $db CASCADE")
+//    }
+//  }
 }
