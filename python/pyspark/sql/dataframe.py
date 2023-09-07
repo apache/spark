@@ -3630,7 +3630,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     (2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.selectExpr("age * 2", "abs(age)").show()
         +---------+--------+
-        |(age * 2)|abs(age)|
+        |(age * 2)|ABS(age)|
         +---------+--------+
         |        4|       2|
         |       10|       5|
