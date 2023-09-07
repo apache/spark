@@ -935,7 +935,7 @@ def try_avg(col: "ColumnOrName") -> Column:
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
     ... ).select(sf.try_avg("age")).show()
     +------------+
-    |TRY_AVG(age)|
+    |try_avg(age)|
     +------------+
     |         8.5|
     +------------+
@@ -1125,7 +1125,7 @@ def try_sum(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(10).select(sf.try_sum("id")).show()
     +-----------+
-    |TRY_SUM(id)|
+    |try_sum(id)|
     +-----------+
     |         45|
     +-----------+
@@ -1158,7 +1158,7 @@ def abs(col: "ColumnOrName") -> Column:
     >>> df = spark.range(1)
     >>> df.select(abs(lit(-1))).show()
     +-------+
-    |abs(-1)|
+    |ABS(-1)|
     +-------+
     |      1|
     +-------+
@@ -1613,7 +1613,7 @@ def sum(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(sum(df["id"])).show()
     +-------+
-    |SUM(id)|
+    |sum(id)|
     +-------+
     |     45|
     +-------+
@@ -1646,7 +1646,7 @@ def avg(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(avg(col("id"))).show()
     +-------+
-    |AVG(id)|
+    |avg(id)|
     +-------+
     |    4.5|
     +-------+
@@ -1680,7 +1680,7 @@ def mean(col: "ColumnOrName") -> Column:
     >>> df = spark.range(10)
     >>> df.select(mean(df.id)).show()
     +-------+
-    |AVG(id)|
+    |avg(id)|
     +-------+
     |    4.5|
     +-------+
@@ -1769,7 +1769,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
     >>> df.select(sum_distinct(col("numbers"))).show()
     +---------------------+
-    |SUM(DISTINCT numbers)|
+    |sum(DISTINCT numbers)|
     +---------------------+
     |                    3|
     +---------------------+
@@ -4999,7 +4999,7 @@ def grouping(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
     >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
     +-----+--------------+--------+
-    | name|grouping(name)|SUM(age)|
+    | name|grouping(name)|sum(age)|
     +-----+--------------+--------+
     | NULL|             1|       7|
     |Alice|             0|       2|
@@ -5043,7 +5043,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     ...                             (4, "b", "c")], ["c1", "c2", "c3"])
     >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
     +----+----+-------------+-------+
-    |  c2|  c3|grouping_id()|SUM(c1)|
+    |  c2|  c3|grouping_id()|sum(c1)|
     +----+----+-------------+-------+
     |NULL|NULL|            3|      8|
     |NULL|   a|            2|      4|
@@ -15590,7 +15590,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     +-----------+
     >>> df.select(call_function("avg", col("id"))).show()
     +-------+
-    |AVG(id)|
+    |avg(id)|
     +-------+
     |    2.0|
     +-------+
