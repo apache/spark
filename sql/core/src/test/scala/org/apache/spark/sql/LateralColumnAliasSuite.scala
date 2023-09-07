@@ -273,7 +273,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         sqlState = "0A000",
         parameters = Map(
           "lca" -> "`lca`",
-          "aggFunc" -> "\"AVG(lateralAliasReference(lca))\""
+          "aggFunc" -> "\"avg(lateralAliasReference(lca))\""
         )))
     // doesn't support nested aggregate expressions
     withLCAOn(
@@ -285,7 +285,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         sqlState = "0A000",
         parameters = Map(
           "lca" -> "`a`",
-          "aggFunc" -> "\"AVG(lateralAliasReference(a))\""
+          "aggFunc" -> "\"avg(lateralAliasReference(a))\""
         )))
 
     // literal as LCA, used in various cases of expressions
@@ -891,7 +891,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         },
         errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
         sqlState = "0A000",
-        parameters = Map("lca" -> "`a`", "aggFunc" -> "\"AVG(lateralAliasReference(a))\"")
+        parameters = Map("lca" -> "`a`", "aggFunc" -> "\"avg(lateralAliasReference(a))\"")
       )
     }
   }

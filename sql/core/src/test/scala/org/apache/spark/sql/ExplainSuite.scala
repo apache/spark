@@ -608,7 +608,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |""".stripMargin,
       """
         |(21) AdaptiveSparkPlan
-        |Output [4]: [k#x, count(v1)#xL, SUM(v1)#xL, AVG(v2)#x]
+        |Output [4]: [k#x, count(v1)#xL, sum(v1)#xL, avg(v2)#x]
         |Arguments: isFinalPlan=true
         |""".stripMargin
     )

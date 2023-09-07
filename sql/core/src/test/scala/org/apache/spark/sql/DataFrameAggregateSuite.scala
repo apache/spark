@@ -107,7 +107,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-17124 agg should be ordering preserving") {
     val df = spark.range(2)
     val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
-    assert(ret.schema.map(_.name) == Seq("id", "SUM(id)", "count(id)", "min(id)"))
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
     checkAnswer(
       ret,
       Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
@@ -705,7 +705,7 @@ class DataFrameAggregateSuite extends QueryTest
         testData.groupBy(sum($"key")).count()
       },
       errorClass = "GROUP_BY_AGGREGATE",
-      parameters = Map("sqlExpr" -> "SUM(key)")
+      parameters = Map("sqlExpr" -> "sum(key)")
     )
   }
 
@@ -1336,19 +1336,19 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofSeconds(20)))
     assert(find(sumDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF.schema == StructType(Seq(
-      StructField("SUM(year-month)", YearMonthIntervalType()),
-      StructField("SUM(year)", YearMonthIntervalType(YEAR)),
-      StructField("SUM(month)", YearMonthIntervalType(MONTH)),
-      StructField("SUM(day-second)", DayTimeIntervalType()),
-      StructField("SUM(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
-      StructField("SUM(day-hour)", DayTimeIntervalType(DAY, HOUR)),
-      StructField("SUM(day)", DayTimeIntervalType(DAY)),
-      StructField("SUM(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
-      StructField("SUM(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
-      StructField("SUM(hour)", DayTimeIntervalType(HOUR)),
-      StructField("SUM(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
-      StructField("SUM(minute)", DayTimeIntervalType(MINUTE)),
-      StructField("SUM(second)", DayTimeIntervalType(SECOND)))))
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
 
     val sumDF2 =
       intervalData.groupBy($"class").agg(
@@ -1411,19 +1411,19 @@ class DataFrameAggregateSuite extends QueryTest
       Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("SUM(year-month)", YearMonthIntervalType()),
-      StructField("SUM(year)", YearMonthIntervalType(YEAR)),
-      StructField("SUM(month)", YearMonthIntervalType(MONTH)),
-      StructField("SUM(day-second)", DayTimeIntervalType()),
-      StructField("SUM(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
-      StructField("SUM(day-hour)", DayTimeIntervalType(DAY, HOUR)),
-      StructField("SUM(day)", DayTimeIntervalType(DAY)),
-      StructField("SUM(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
-      StructField("SUM(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
-      StructField("SUM(hour)", DayTimeIntervalType(HOUR)),
-      StructField("SUM(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
-      StructField("SUM(minute)", DayTimeIntervalType(MINUTE)),
-      StructField("SUM(second)", DayTimeIntervalType(SECOND)))))
+      StructField("sum(year-month)", YearMonthIntervalType()),
+      StructField("sum(year)", YearMonthIntervalType(YEAR)),
+      StructField("sum(month)", YearMonthIntervalType(MONTH)),
+      StructField("sum(day-second)", DayTimeIntervalType()),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
+      StructField("sum(day)", DayTimeIntervalType(DAY)),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
+      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
@@ -1472,19 +1472,19 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofSeconds(5)))
     assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF.schema == StructType(Seq(
-      StructField("AVG(year-month)", YearMonthIntervalType()),
-      StructField("AVG(year)", YearMonthIntervalType()),
-      StructField("AVG(month)", YearMonthIntervalType()),
-      StructField("AVG(day-second)", DayTimeIntervalType()),
-      StructField("AVG(day-minute)", DayTimeIntervalType()),
-      StructField("AVG(day-hour)", DayTimeIntervalType()),
-      StructField("AVG(day)", DayTimeIntervalType()),
-      StructField("AVG(hour-second)", DayTimeIntervalType()),
-      StructField("AVG(hour-minute)", DayTimeIntervalType()),
-      StructField("AVG(hour)", DayTimeIntervalType()),
-      StructField("AVG(minute-second)", DayTimeIntervalType()),
-      StructField("AVG(minute)", DayTimeIntervalType()),
-      StructField("AVG(second)", DayTimeIntervalType()))))
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
 
     val avgDF2 =
       intervalData.groupBy($"class").agg(
@@ -1547,19 +1547,19 @@ class DataFrameAggregateSuite extends QueryTest
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(
       StructField("class", IntegerType, false),
-      StructField("AVG(year-month)", YearMonthIntervalType()),
-      StructField("AVG(year)", YearMonthIntervalType()),
-      StructField("AVG(month)", YearMonthIntervalType()),
-      StructField("AVG(day-second)", DayTimeIntervalType()),
-      StructField("AVG(day-minute)", DayTimeIntervalType()),
-      StructField("AVG(day-hour)", DayTimeIntervalType()),
-      StructField("AVG(day)", DayTimeIntervalType()),
-      StructField("AVG(hour-second)", DayTimeIntervalType()),
-      StructField("AVG(hour-minute)", DayTimeIntervalType()),
-      StructField("AVG(hour)", DayTimeIntervalType()),
-      StructField("AVG(minute-second)", DayTimeIntervalType()),
-      StructField("AVG(minute)", DayTimeIntervalType()),
-      StructField("AVG(second)", DayTimeIntervalType()))))
+      StructField("avg(year-month)", YearMonthIntervalType()),
+      StructField("avg(year)", YearMonthIntervalType()),
+      StructField("avg(month)", YearMonthIntervalType()),
+      StructField("avg(day-second)", DayTimeIntervalType()),
+      StructField("avg(day-minute)", DayTimeIntervalType()),
+      StructField("avg(day-hour)", DayTimeIntervalType()),
+      StructField("avg(day)", DayTimeIntervalType()),
+      StructField("avg(hour-second)", DayTimeIntervalType()),
+      StructField("avg(hour-minute)", DayTimeIntervalType()),
+      StructField("avg(hour)", DayTimeIntervalType()),
+      StructField("avg(minute-second)", DayTimeIntervalType()),
+      StructField("avg(minute)", DayTimeIntervalType()),
+      StructField("avg(second)", DayTimeIntervalType()))))
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))

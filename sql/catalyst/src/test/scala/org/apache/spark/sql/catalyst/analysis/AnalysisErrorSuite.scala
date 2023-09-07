@@ -367,7 +367,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `SUM`")
+    messageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `sum`")
   )
 
   errorClassTest(

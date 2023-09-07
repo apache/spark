@@ -190,7 +190,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       plan,
       expectedErrorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
-      expectedMessageParameters = Map("invalidExprSqls" -> "\"SUM(a)\", \"SUM(c)\"")
+      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
     )
   }
 

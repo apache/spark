@@ -787,7 +787,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("", sum :: Nil, testRelation),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
       expectedMessageParameters = Map(
-        "operator" -> "'CollectMetrics , [SUM(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
+        "operator" -> "'CollectMetrics , [sum(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
     )
 
     // No columns
@@ -819,7 +819,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         testRelation),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
-      expectedMessageParameters = Map("expr" -> "\"SUM(DISTINCT a) AS sum\"")
+      expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
     )
 
     // Nested aggregate
@@ -829,7 +829,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
         testRelation),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
-      expectedMessageParameters = Map("expr" -> "\"SUM(SUM(a)) AS sum\"")
+      expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
     )
 
     // Windowed aggregate
@@ -898,7 +898,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
-      expectedMessageParameters = Map("expr" -> "\"SUM(a) FILTER (WHERE true) AS sum\"")
+      expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
     )
   }
 
