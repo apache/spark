@@ -119,12 +119,17 @@ private[sql] object ArrowUtils {
             timeZoneId,
             largeVarTypes)).asJava)
       case CalendarIntervalType =>
-        val structType = StructType(
-          StructField("months", IntegerType, false) ::
-            StructField("days", IntegerType, false) ::
-            StructField("microseconds", LongType, false) ::Nil
+        val fields = Seq(
+          new Field("months", new FieldType(false, toArrowType(IntegerType, timeZoneId,
+            largeVarTypes), null), Seq.empty[Field].asJava),
+          new Field("days", new FieldType(false, toArrowType(IntegerType, timeZoneId,
+            largeVarTypes), null), Seq.empty[Field].asJava),
+          new Field("microseconds", new FieldType(false, toArrowType(LongType, timeZoneId,
+            largeVarTypes), null), Seq.empty[Field].asJava)
         )
-        toArrowField(name, structType, nullable, timeZoneId, largeVarTypes)
+        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null,
+          Map("__is_calendar_interval_type__" -> "true").asJava)
+        new Field(name, fieldType, fields.asJava)
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
       case dataType =>
@@ -145,6 +150,13 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
+      case ArrowType.Struct.INSTANCE
+        if field.getMetadata.containsKey("__is_calendar_interval_type__") =>
+        // TODO: should validate children in this case
+        assert(field.getChildren.size() == 3)
+        assert(field.getMetadata.getOrDefault(
+          "__is_calendar_interval_type__", "") == "true")
+        CalendarIntervalType
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)

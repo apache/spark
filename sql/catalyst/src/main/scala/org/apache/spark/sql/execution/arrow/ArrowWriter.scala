@@ -79,6 +79,12 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
+      case (CalendarIntervalType, vector: StructVector) =>
+        assert(vector.size() == 3)
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
