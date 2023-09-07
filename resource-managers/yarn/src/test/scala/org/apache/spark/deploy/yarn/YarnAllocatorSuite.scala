@@ -172,7 +172,6 @@ class YarnAllocatorSuite extends SparkFunSuite
     ContainerStatus.newInstance(containerId, containerState, diagnostics, exitStatus)
   }
 
-
   test("single container allocated") {
     // request a single container and receive it
     val (handler, _) = createAllocator(1)
@@ -185,6 +184,7 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+    handler.allocatedContainerToBindAddressMap.get(container.getId).get should be ("host1")
     val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(defaultRPId)
     hostTocontainer.get("host1").get should contain(container.getId)
 
@@ -362,7 +362,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     }
   }
 
-  test("container should not be created if requested number if met") {
+  test("container should not be created if requested number is met") {
     // request a single container and receive it
     val (handler, _) = createAllocator(1)
     handler.updateResourceRequests()
@@ -868,4 +868,17 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumExecutorsRunning should be(0)
     handler.getNumExecutorsStarting should be(0)
   }
+
+  test("use requested bind-address") {
+    val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_BIND_ADDRESS.key -> "0.0.0.0"))
+    handler.updateResourceRequests()
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
+
+    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+    handler.allocatedContainerToBindAddressMap.get(container.getId).get should be ("0.0.0.0")
+  }
+
 }
