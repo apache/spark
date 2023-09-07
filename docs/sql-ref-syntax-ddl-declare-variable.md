@@ -64,7 +64,7 @@ DECLARE [ OR REPLACE ] [ VARIABLE ]
     If `data_type` is specified `default_expr` must be castable to the variable type.
     If `data_type` is not specified you must specify a default and its type will become the type of
     the variable.
-    If no default expression is given, the variable is initialized with `NULKL`.
+    If no default expression is given, the variable is initialized with `NULL`.
 
 ### Examples
 
