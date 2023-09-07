@@ -118,6 +118,13 @@ private[sql] object ArrowUtils {
             nullable = false,
             timeZoneId,
             largeVarTypes)).asJava)
+      case CalendarIntervalType =>
+        val structType = StructType(
+          StructField("months", IntegerType, false) ::
+            StructField("days", IntegerType, false) ::
+            StructField("microseconds", LongType, false) ::Nil
+        )
+        toArrowField(name, structType, nullable, timeZoneId, largeVarTypes)
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
       case dataType =>
