@@ -72,13 +72,27 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError(child: Expression, dataType: DataType)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(str: Expression, map: Expression, dataType: DataType)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, NullType)
+  def this(str: Expression) = this(str, NullType)
+
+  def this(message: Expression) = {
+    this(Literal("USER_RAISED_EXCEPTION"), Map("errorMessage" -> message))
+  }
+
+  def this(message: Expression) = {
+    this(message, "USER_RAISED_EXCEPTION", Map[])
+  }
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, MapType)
+
+  override def first: Expression = str
+  override def second: Expression = pos
+  override def third: Expression = len
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"

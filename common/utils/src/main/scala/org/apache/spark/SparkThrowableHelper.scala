@@ -60,6 +60,10 @@ private[spark] object SparkThrowableHelper {
     errorReader.getSqlState(errorClass)
   }
 
+  def validateErrorClass(errorClass: String): Boolean = {
+    errorReader.validateErrorClass(errorClass)
+  }
+
   def isInternalError(errorClass: String): Boolean = {
     errorClass.startsWith("INTERNAL_ERROR")
   }

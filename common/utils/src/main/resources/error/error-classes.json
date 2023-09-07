@@ -3464,6 +3464,12 @@
     ],
     "sqlState" : "P0001"
   },
+  "USER_RAISED_UNKNOWN_EXCEPTION" : {
+    "message" : [
+      "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
+    ],
+    "sqlState" : "P0001"
+  },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the variable <variableName> because it already exists.",

@@ -2720,19 +2720,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def raiseError(errorMessage: String, sqlState: String,
-                 errorClass: String = "USER_RAISED_EXCEPTION",
-                ): RuntimeException = {
-
+                 errorClass: String = "USER_RAISED_EXCEPTION"): RuntimeException = {
     if (errorClass == "USER_RAISED_EXCEPTION") {
         new SparkRuntimeException(
           errorClass = errorClass,
           messageParameters = Map("errorMessage" -> errorMessage))
-    } else if (validateErrorClass(errorClass)) {
+    } else if (SparkThrowableHelper.validateErrorClass(errorClass)) {
       new SparkRuntimeException(
         errorClass = errorClass,
         messageParameters = Map("errorMessage" -> errorMessage))
     } else {
-
+      new SparkRuntimeException(
+        errorClass = "USER_RAISED_UNKNOWN_EXCEPTION",
+        messageParameters = Map("errorClass" -> errorClass))
     }
   }
 }
