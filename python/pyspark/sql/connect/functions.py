@@ -538,8 +538,12 @@ def bin(col: "ColumnOrName") -> Column:
 bin.__doc__ = pysparkfuncs.bin.__doc__
 
 
-def bround(col: "ColumnOrName", scale: int = 0) -> Column:
-    return _invoke_function("bround", _to_col(col), lit(scale))
+def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("bround", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 bround.__doc__ = pysparkfuncs.bround.__doc__
@@ -644,8 +648,12 @@ def factorial(col: "ColumnOrName") -> Column:
 factorial.__doc__ = pysparkfuncs.factorial.__doc__
 
 
-def floor(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("floor", col)
+def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("floor", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 floor.__doc__ = pysparkfuncs.floor.__doc__
@@ -773,8 +781,12 @@ def rint(col: "ColumnOrName") -> Column:
 rint.__doc__ = pysparkfuncs.rint.__doc__
 
 
-def round(col: "ColumnOrName", scale: int = 0) -> Column:
-    return _invoke_function("round", _to_col(col), lit(scale))
+def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    if scale is None:
+        return _invoke_function_over_columns("round", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("round", col, scale)
 
 
 round.__doc__ = pysparkfuncs.round.__doc__

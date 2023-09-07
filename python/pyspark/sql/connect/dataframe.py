@@ -512,6 +512,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -529,6 +535,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",

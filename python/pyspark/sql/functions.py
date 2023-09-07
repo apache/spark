@@ -2346,7 +2346,7 @@ def expm1(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def floor(col: "ColumnOrName") -> Column:
+def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Computes the floor of the given value.
 
@@ -2359,6 +2359,11 @@ def floor(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to find floor for.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
+
 
     Returns
     -------
@@ -2367,15 +2372,27 @@ def floor(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(floor(lit(2.5))).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.floor(sf.lit(2.5))).show()
     +----------+
     |FLOOR(2.5)|
     +----------+
     |         2|
     +----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.floor(sf.lit(2.1267), sf.lit(2))).show()
+    +----------------+
+    |floor(2.1267, 2)|
+    +----------------+
+    |            2.12|
+    +----------------+
     """
-    return _invoke_function_over_columns("floor", col)
+    if scale is None:
+        return _invoke_function_over_columns("floor", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 @try_remote_functions
@@ -5631,7 +5648,7 @@ def randn(seed: Optional[int] = None) -> Column:
 
 
 @try_remote_functions
-def round(col: "ColumnOrName", scale: int = 0) -> Column:
+def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -5645,8 +5662,11 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         input column to round.
-    scale : int optional default 0
-        scale value.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionchanged:: 4.0.0
+                Support Column type.
 
     Returns
     -------
@@ -5655,14 +5675,31 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(2.5,)], ['a']).select(round('a', 0).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.round(sf.lit(2.5))).show()
+    +-------------+
+    |round(2.5, 0)|
+    +-------------+
+    |          3.0|
+    +-------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.round(sf.lit(2.1267), sf.lit(2))).show()
+    +----------------+
+    |round(2.1267, 2)|
+    +----------------+
+    |            2.13|
+    +----------------+
     """
-    return _invoke_function("round", _to_java_column(col), scale)
+    if scale is None:
+        return _invoke_function_over_columns("round", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("round", col, scale)
 
 
 @try_remote_functions
-def bround(col: "ColumnOrName", scale: int = 0) -> Column:
+def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -5676,8 +5713,11 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         input column to round.
-    scale : int optional default 0
-        scale value.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionchanged:: 4.0.0
+                Support Column type.
 
     Returns
     -------
@@ -5686,10 +5726,27 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(2.5,)], ['a']).select(bround('a', 0).alias('r')).collect()
-    [Row(r=2.0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.bround(sf.lit(2.5))).show()
+    +--------------+
+    |bround(2.5, 0)|
+    +--------------+
+    |           2.0|
+    +--------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.bround(sf.lit(2.1267), sf.lit(2))).show()
+    +-----------------+
+    |bround(2.1267, 2)|
+    +-----------------+
+    |             2.13|
+    +-----------------+
     """
-    return _invoke_function("bround", _to_java_column(col), scale)
+    if scale is None:
+        return _invoke_function_over_columns("bround", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 @try_remote_functions
