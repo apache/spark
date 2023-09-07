@@ -154,7 +154,7 @@ NULL
 -- !query
 select 5 div 2
 -- !query schema
-struct<(5 div 2):bigint>
+struct<(5 DIV 2):bigint>
 -- !query output
 2
 
@@ -162,7 +162,7 @@ struct<(5 div 2):bigint>
 -- !query
 select 5 div 0
 -- !query schema
-struct<(5 div 0):bigint>
+struct<(5 DIV 0):bigint>
 -- !query output
 NULL
 
@@ -170,7 +170,7 @@ NULL
 -- !query
 select 5 div null
 -- !query schema
-struct<(5 div NULL):bigint>
+struct<(5 DIV NULL):bigint>
 -- !query output
 NULL
 
@@ -178,7 +178,7 @@ NULL
 -- !query
 select null div 5
 -- !query schema
-struct<(NULL div 5):bigint>
+struct<(NULL DIV 5):bigint>
 -- !query output
 NULL
 
@@ -186,7 +186,7 @@ NULL
 -- !query
 select cast(51 as decimal(10, 0)) div cast(2 as decimal(2, 0))
 -- !query schema
-struct<(CAST(51 AS DECIMAL(10,0)) div CAST(2 AS DECIMAL(2,0))):bigint>
+struct<(CAST(51 AS DECIMAL(10,0)) DIV CAST(2 AS DECIMAL(2,0))):bigint>
 -- !query output
 25
 
@@ -194,7 +194,7 @@ struct<(CAST(51 AS DECIMAL(10,0)) div CAST(2 AS DECIMAL(2,0))):bigint>
 -- !query
 select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0))
 -- !query schema
-struct<(CAST(5 AS DECIMAL(1,0)) div CAST(0 AS DECIMAL(2,0))):bigint>
+struct<(CAST(5 AS DECIMAL(1,0)) DIV CAST(0 AS DECIMAL(2,0))):bigint>
 -- !query output
 NULL
 
@@ -202,7 +202,7 @@ NULL
 -- !query
 select cast(5 as decimal(1, 0)) div cast(null as decimal(2, 0))
 -- !query schema
-struct<(CAST(5 AS DECIMAL(1,0)) div CAST(NULL AS DECIMAL(2,0))):bigint>
+struct<(CAST(5 AS DECIMAL(1,0)) DIV CAST(NULL AS DECIMAL(2,0))):bigint>
 -- !query output
 NULL
 
@@ -210,7 +210,7 @@ NULL
 -- !query
 select cast(null as decimal(1, 0)) div cast(5 as decimal(2, 0))
 -- !query schema
-struct<(CAST(NULL AS DECIMAL(1,0)) div CAST(5 AS DECIMAL(2,0))):bigint>
+struct<(CAST(NULL AS DECIMAL(1,0)) DIV CAST(5 AS DECIMAL(2,0))):bigint>
 -- !query output
 NULL
 
@@ -450,7 +450,7 @@ true
 -- !query
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null)
 -- !query schema
-struct<mod(7, 2):int,mod(7, 0):int,mod(0, 2):int,mod(7, NULL):int,mod(NULL, 2):int,mod(NULL, NULL):double>
+struct<MOD(7, 2):int,MOD(7, 0):int,MOD(0, 2):int,MOD(7, NULL):int,MOD(NULL, 2):int,MOD(NULL, NULL):double>
 -- !query output
 1	NULL	0	NULL	NULL	NULL
 
@@ -490,7 +490,7 @@ struct<octet_length(abc):int>
 -- !query
 select abs(-3.13), abs('-2.19')
 -- !query schema
-struct<abs(-3.13):decimal(3,2),abs(-2.19):double>
+struct<ABS(-3.13):decimal(3,2),ABS(-2.19):double>
 -- !query output
 3.13	2.19
 
@@ -498,7 +498,7 @@ struct<abs(-3.13):decimal(3,2),abs(-2.19):double>
 -- !query
 select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11)
 -- !query schema
-struct<(+ -1.11):double,(+ -1.11):decimal(3,2),negative(-1.11):double,negative(-1.11):decimal(3,2)>
+struct<(+ -1.11):double,(+ -1.11):decimal(3,2),NEGATIVE(-1.11):double,NEGATIVE(-1.11):decimal(3,2)>
 -- !query output
 -1.11	-1.11	1.11	1.11
 
@@ -522,7 +522,7 @@ NULL	NULL
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 5)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, 5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, 5):bigint>
 -- !query output
 3
 
@@ -530,7 +530,7 @@ struct<width_bucket(5.35, 0.024, 10.06, 5):bigint>
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 3 + 2)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, (3 + 2)):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, (3 + 2)):bigint>
 -- !query output
 3
 
@@ -538,7 +538,7 @@ struct<width_bucket(5.35, 0.024, 10.06, (3 + 2)):bigint>
 -- !query
 select width_bucket('5.35', '0.024', '10.06', '5')
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, 5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, 5):bigint>
 -- !query output
 3
 
@@ -546,7 +546,7 @@ struct<width_bucket(5.35, 0.024, 10.06, 5):bigint>
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 2.5)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, 2.5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, 2.5):bigint>
 -- !query output
 2
 
@@ -554,7 +554,7 @@ struct<width_bucket(5.35, 0.024, 10.06, 2.5):bigint>
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 0.5)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, 0.5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, 0.5):bigint>
 -- !query output
 NULL
 
@@ -562,7 +562,7 @@ NULL
 -- !query
 select width_bucket(null, 0.024, 10.06, 5)
 -- !query schema
-struct<width_bucket(NULL, 0.024, 10.06, 5):bigint>
+struct<WIDTH_BUCKET(NULL, 0.024, 10.06, 5):bigint>
 -- !query output
 NULL
 
@@ -570,7 +570,7 @@ NULL
 -- !query
 select width_bucket(5.35, null, 10.06, 5)
 -- !query schema
-struct<width_bucket(5.35, NULL, 10.06, 5):bigint>
+struct<WIDTH_BUCKET(5.35, NULL, 10.06, 5):bigint>
 -- !query output
 NULL
 
@@ -578,7 +578,7 @@ NULL
 -- !query
 select width_bucket(5.35, 0.024, null, -5)
 -- !query schema
-struct<width_bucket(5.35, 0.024, NULL, -5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, NULL, -5):bigint>
 -- !query output
 NULL
 
@@ -586,7 +586,7 @@ NULL
 -- !query
 select width_bucket(5.35, 0.024, 10.06, null)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, NULL):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, NULL):bigint>
 -- !query output
 NULL
 
@@ -594,7 +594,7 @@ NULL
 -- !query
 select width_bucket(5.35, 0.024, 10.06, -5)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, -5):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, -5):bigint>
 -- !query output
 NULL
 
@@ -602,7 +602,7 @@ NULL
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, 9223372036854775807):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, 9223372036854775807):bigint>
 -- !query output
 NULL
 
@@ -610,6 +610,6 @@ NULL
 -- !query
 select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L - 1)
 -- !query schema
-struct<width_bucket(5.35, 0.024, 10.06, (9223372036854775807 - 1)):bigint>
+struct<WIDTH_BUCKET(5.35, 0.024, 10.06, (9223372036854775807 - 1)):bigint>
 -- !query output
 4894746858139549697

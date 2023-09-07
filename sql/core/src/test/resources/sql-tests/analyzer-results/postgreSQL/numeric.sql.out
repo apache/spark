@@ -4000,8 +4000,8 @@ INSERT INTO num_result SELECT id, 0, SQRT(ABS(val))
     FROM num_data
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(SQRT(abs(val))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, SQRT(cast(abs(val#x) as double)) AS SQRT(abs(val))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(SQRT(ABS(val))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, SQRT(cast(ABS(val#x) as double)) AS SQRT(ABS(val))#x]
       +- SubqueryAlias spark_catalog.default.num_data
          +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
 
@@ -4035,8 +4035,8 @@ INSERT INTO num_result SELECT id, 0, LN(ABS(val))
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(ln(abs(val))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, ln(cast(abs(val#x) as double)) AS ln(abs(val))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(ln(ABS(val))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, ln(cast(ABS(val#x) as double)) AS ln(ABS(val))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4071,8 +4071,8 @@ INSERT INTO num_result SELECT id, 0, LOG(cast('10' as decimal(38, 18)), ABS(val)
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(LOG(CAST(10 AS DECIMAL(38,18)), abs(val))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, LOG(cast(cast(10 as decimal(38,18)) as double), cast(abs(val#x) as double)) AS LOG(CAST(10 AS DECIMAL(38,18)), abs(val))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(LOG(CAST(10 AS DECIMAL(38,18)), ABS(val))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, LOG(cast(cast(10 as decimal(38,18)) as double), cast(ABS(val#x) as double)) AS LOG(CAST(10 AS DECIMAL(38,18)), ABS(val))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4107,8 +4107,8 @@ INSERT INTO num_result SELECT id, 0, POWER(cast('10' as decimal(38, 18)), LN(ABS
     WHERE val != '0.0'
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_result, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_result], Append, `spark_catalog`.`default`.`num_result`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_result), [id1, id2, result]
-+- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(ROUND(val, 200))))#x as decimal(38,10)) AS result#x]
-   +- Project [id#x, 0 AS 0#x, POWER(cast(cast(10 as decimal(38,18)) as double), ln(cast(abs(ROUND(val#x, 200)) as double))) AS POWER(CAST(10 AS DECIMAL(38,18)), ln(abs(ROUND(val, 200))))#x]
++- Project [cast(id#x as int) AS id1#x, cast(0#x as int) AS id2#x, cast(POWER(CAST(10 AS DECIMAL(38,18)), ln(ABS(ROUND(val, 200))))#x as decimal(38,10)) AS result#x]
+   +- Project [id#x, 0 AS 0#x, POWER(cast(cast(10 as decimal(38,18)) as double), ln(cast(ABS(ROUND(val#x, 200)) as double))) AS POWER(CAST(10 AS DECIMAL(38,18)), ln(ABS(ROUND(val, 200))))#x]
       +- Filter NOT (cast(val#x as double) = cast(0.0 as double))
          +- SubqueryAlias spark_catalog.default.num_data
             +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
@@ -4330,56 +4330,56 @@ DropTable false, false
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, 0)
 -- !query analysis
-Project [width_bucket(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(0 as bigint)) AS width_bucket(5.0, 3.0, 4.0, 0)#xL]
+Project [WIDTH_BUCKET(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(0 as bigint)) AS WIDTH_BUCKET(5.0, 3.0, 4.0, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, -5)
 -- !query analysis
-Project [width_bucket(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(-5 as bigint)) AS width_bucket(5.0, 3.0, 4.0, -5)#xL]
+Project [WIDTH_BUCKET(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(-5 as bigint)) AS WIDTH_BUCKET(5.0, 3.0, 4.0, -5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(3.5, 3.0, 3.0, 888)
 -- !query analysis
-Project [width_bucket(cast(3.5 as double), cast(3.0 as double), cast(3.0 as double), cast(888 as bigint)) AS width_bucket(3.5, 3.0, 3.0, 888)#xL]
+Project [WIDTH_BUCKET(cast(3.5 as double), cast(3.0 as double), cast(3.0 as double), cast(888 as bigint)) AS WIDTH_BUCKET(3.5, 3.0, 3.0, 888)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0)
 -- !query analysis
-Project [width_bucket(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(0 as bigint)) AS width_bucket(5.0, 3.0, 4.0, 0)#xL]
+Project [WIDTH_BUCKET(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(0 as bigint)) AS WIDTH_BUCKET(5.0, 3.0, 4.0, 0)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5)
 -- !query analysis
-Project [width_bucket(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(-5 as bigint)) AS width_bucket(5.0, 3.0, 4.0, -5)#xL]
+Project [WIDTH_BUCKET(cast(5.0 as double), cast(3.0 as double), cast(4.0 as double), cast(-5 as bigint)) AS WIDTH_BUCKET(5.0, 3.0, 4.0, -5)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888)
 -- !query analysis
-Project [width_bucket(cast(3.5 as double), cast(3.0 as double), cast(3.0 as double), cast(888 as bigint)) AS width_bucket(3.5, 3.0, 3.0, 888)#xL]
+Project [WIDTH_BUCKET(cast(3.5 as double), cast(3.0 as double), cast(3.0 as double), cast(888 as bigint)) AS WIDTH_BUCKET(3.5, 3.0, 3.0, 888)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket('NaN', 3.0, 4.0, 888)
 -- !query analysis
-Project [width_bucket(cast(NaN as double), cast(3.0 as double), cast(4.0 as double), cast(888 as bigint)) AS width_bucket(NaN, 3.0, 4.0, 888)#xL]
+Project [WIDTH_BUCKET(cast(NaN as double), cast(3.0 as double), cast(4.0 as double), cast(888 as bigint)) AS WIDTH_BUCKET(NaN, 3.0, 4.0, 888)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(double(0), 'NaN', double(4.0), 888)
 -- !query analysis
-Project [width_bucket(cast(0 as double), cast(NaN as double), cast(4.0 as double), cast(888 as bigint)) AS width_bucket(0, NaN, 4.0, 888)#xL]
+Project [WIDTH_BUCKET(cast(0 as double), cast(NaN as double), cast(4.0 as double), cast(888 as bigint)) AS WIDTH_BUCKET(0, NaN, 4.0, 888)#xL]
 +- OneRowRelation
 
 
@@ -4433,7 +4433,7 @@ SELECT
     ORDER BY operand_num ASC
 -- !query analysis
 Sort [operand_num#x ASC NULLS FIRST], true
-+- Project [operand_num#x, width_bucket(cast(operand_num#x as double), cast(0 as double), cast(10 as double), cast(5 as bigint)) AS wb_1#xL, width_bucket(operand_f8#x, cast(0 as double), cast(10 as double), cast(5 as bigint)) AS wb_1f#xL, width_bucket(cast(operand_num#x as double), cast(10 as double), cast(0 as double), cast(5 as bigint)) AS wb_2#xL, width_bucket(operand_f8#x, cast(10 as double), cast(0 as double), cast(5 as bigint)) AS wb_2f#xL, width_bucket(cast(operand_num#x as double), cast(2 as double), cast(8 as double), cast(4 as bigint)) AS wb_3#xL, width_bucket(operand_f8#x, cast(2 as double), cast(8 as double), cast(4 as bigint)) AS wb_3f#xL, width_bucket(cast(operand_num#x as double), cast(5.0 as double), cast(5.5 as double), cast(20 as bigint)) AS wb_4#xL, width_bucket(operand_f8#x, cast(5.0 as double), cast(5.5 as double), cast(20 as bigint)) AS wb_4f#xL, width_bucket(cast(operand_num#x as double), cast(-25 as double), cast(25 as double), cast(10 as bigint)) AS wb_5#xL, width_bucket(operand_f8#x, cast(-25 as double), cast(25 as double), cast(10 as bigint)) AS wb_5f#xL]
++- Project [operand_num#x, WIDTH_BUCKET(cast(operand_num#x as double), cast(0 as double), cast(10 as double), cast(5 as bigint)) AS wb_1#xL, WIDTH_BUCKET(operand_f8#x, cast(0 as double), cast(10 as double), cast(5 as bigint)) AS wb_1f#xL, WIDTH_BUCKET(cast(operand_num#x as double), cast(10 as double), cast(0 as double), cast(5 as bigint)) AS wb_2#xL, WIDTH_BUCKET(operand_f8#x, cast(10 as double), cast(0 as double), cast(5 as bigint)) AS wb_2f#xL, WIDTH_BUCKET(cast(operand_num#x as double), cast(2 as double), cast(8 as double), cast(4 as bigint)) AS wb_3#xL, WIDTH_BUCKET(operand_f8#x, cast(2 as double), cast(8 as double), cast(4 as bigint)) AS wb_3f#xL, WIDTH_BUCKET(cast(operand_num#x as double), cast(5.0 as double), cast(5.5 as double), cast(20 as bigint)) AS wb_4#xL, WIDTH_BUCKET(operand_f8#x, cast(5.0 as double), cast(5.5 as double), cast(20 as bigint)) AS wb_4f#xL, WIDTH_BUCKET(cast(operand_num#x as double), cast(-25 as double), cast(25 as double), cast(10 as bigint)) AS wb_5#xL, WIDTH_BUCKET(operand_f8#x, cast(-25 as double), cast(25 as double), cast(10 as bigint)) AS wb_5f#xL]
    +- SubqueryAlias spark_catalog.default.width_bucket_test
       +- Relation spark_catalog.default.width_bucket_test[operand_num#x,operand_f8#x] parquet
 
@@ -4441,14 +4441,14 @@ Sort [operand_num#x ASC NULLS FIRST], true
 -- !query
 SELECT width_bucket(double(0.0), double('Infinity'), 5, 10)
 -- !query analysis
-Project [width_bucket(cast(0.0 as double), cast(Infinity as double), cast(5 as double), cast(10 as bigint)) AS width_bucket(0.0, Infinity, 5, 10)#xL]
+Project [WIDTH_BUCKET(cast(0.0 as double), cast(Infinity as double), cast(5 as double), cast(10 as bigint)) AS WIDTH_BUCKET(0.0, Infinity, 5, 10)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20)
 -- !query analysis
-Project [width_bucket(cast(0.0 as double), cast(5 as double), cast(-Infinity as double), cast(20 as bigint)) AS width_bucket(0.0, 5, -Infinity, 20)#xL]
+Project [WIDTH_BUCKET(cast(0.0 as double), cast(5 as double), cast(-Infinity as double), cast(20 as bigint)) AS WIDTH_BUCKET(0.0, 5, -Infinity, 20)#xL]
 +- OneRowRelation
 
 
@@ -4456,7 +4456,7 @@ Project [width_bucket(cast(0.0 as double), cast(5 as double), cast(-Infinity as 
 SELECT width_bucket(double('Infinity'), 1, 10, 10),
        width_bucket(double('-Infinity'), 1, 10, 10)
 -- !query analysis
-Project [width_bucket(cast(Infinity as double), cast(1 as double), cast(10 as double), cast(10 as bigint)) AS width_bucket(Infinity, 1, 10, 10)#xL, width_bucket(cast(-Infinity as double), cast(1 as double), cast(10 as double), cast(10 as bigint)) AS width_bucket(-Infinity, 1, 10, 10)#xL]
+Project [WIDTH_BUCKET(cast(Infinity as double), cast(1 as double), cast(10 as double), cast(10 as bigint)) AS WIDTH_BUCKET(Infinity, 1, 10, 10)#xL, WIDTH_BUCKET(cast(-Infinity as double), cast(1 as double), cast(10 as double), cast(10 as bigint)) AS WIDTH_BUCKET(-Infinity, 1, 10, 10)#xL]
 +- OneRowRelation
 
 
@@ -4662,49 +4662,49 @@ Project [(cast(999999999999999999999 as decimal(38,0)) / 1000000000000000000000)
 -- !query
 select div(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query analysis
-Project [(cast(999999999999999999999 as decimal(38,0)) div 1000000000000000000000) AS (CAST(999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000)#xL]
+Project [(cast(999999999999999999999 as decimal(38,0)) DIV 1000000000000000000000) AS (CAST(999999999999999999999 AS DECIMAL(38,0)) DIV 1000000000000000000000)#xL]
 +- OneRowRelation
 
 
 -- !query
 select mod(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query analysis
-Project [mod(cast(999999999999999999999 as decimal(38,0)), 1000000000000000000000) AS mod(CAST(999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)#x]
+Project [MOD(cast(999999999999999999999 as decimal(38,0)), 1000000000000000000000) AS MOD(CAST(999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query analysis
-Project [(cast(-9999999999999999999999 as decimal(38,0)) div 1000000000000000000000) AS (CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000)#xL]
+Project [(cast(-9999999999999999999999 as decimal(38,0)) DIV 1000000000000000000000) AS (CAST(-9999999999999999999999 AS DECIMAL(38,0)) DIV 1000000000000000000000)#xL]
 +- OneRowRelation
 
 
 -- !query
 select mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query analysis
-Project [mod(cast(-9999999999999999999999 as decimal(38,0)), 1000000000000000000000) AS mod(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)#x]
+Project [MOD(cast(-9999999999999999999999 as decimal(38,0)), 1000000000000000000000) AS MOD(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000)#x]
 +- OneRowRelation
 
 
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)*1000000000000000000000 + mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query analysis
-Project [((cast((cast(-9999999999999999999999 as decimal(38,0)) div 1000000000000000000000) as decimal(20,0)) * 1000000000000000000000) + mod(cast(-9999999999999999999999 as decimal(38,0)), 1000000000000000000000)) AS (((CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000) * 1000000000000000000000) + mod(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000))#x]
+Project [((cast((cast(-9999999999999999999999 as decimal(38,0)) DIV 1000000000000000000000) as decimal(20,0)) * 1000000000000000000000) + MOD(cast(-9999999999999999999999 as decimal(38,0)), 1000000000000000000000)) AS (((CAST(-9999999999999999999999 AS DECIMAL(38,0)) DIV 1000000000000000000000) * 1000000000000000000000) + MOD(CAST(-9999999999999999999999 AS DECIMAL(38,0)), 1000000000000000000000))#x]
 +- OneRowRelation
 
 
 -- !query
 select mod (70.0,70)
 -- !query analysis
-Project [mod(70.0, cast(70 as decimal(2,0))) AS mod(70.0, 70)#x]
+Project [MOD(70.0, cast(70 as decimal(2,0))) AS MOD(70.0, 70)#x]
 +- OneRowRelation
 
 
 -- !query
 select div (70.0,70)
 -- !query analysis
-Project [(70.0 div cast(70 as decimal(2,0))) AS (70.0 div 70)#xL]
+Project [(70.0 DIV cast(70 as decimal(2,0))) AS (70.0 DIV 70)#xL]
 +- OneRowRelation
 
 

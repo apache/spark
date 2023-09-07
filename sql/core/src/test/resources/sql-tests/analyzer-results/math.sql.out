@@ -394,40 +394,40 @@ Project [BROUND(-9223372036854775808, -1) AS BROUND(-9223372036854775808, -1)#xL
 -- !query
 SELECT conv('100', 2, 10)
 -- !query analysis
-Project [conv(100, 2, 10, false) AS conv(100, 2, 10)#x]
+Project [CONV(100, 2, 10, false) AS CONV(100, 2, 10)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT conv(-10, 16, -10)
 -- !query analysis
-Project [conv(cast(-10 as string), 16, -10, false) AS conv(-10, 16, -10)#x]
+Project [CONV(cast(-10 as string), 16, -10, false) AS CONV(-10, 16, -10)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT conv('9223372036854775808', 10, 16)
 -- !query analysis
-Project [conv(9223372036854775808, 10, 16, false) AS conv(9223372036854775808, 10, 16)#x]
+Project [CONV(9223372036854775808, 10, 16, false) AS CONV(9223372036854775808, 10, 16)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT conv('92233720368547758070', 10, 16)
 -- !query analysis
-Project [conv(92233720368547758070, 10, 16, false) AS conv(92233720368547758070, 10, 16)#x]
+Project [CONV(92233720368547758070, 10, 16, false) AS CONV(92233720368547758070, 10, 16)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT conv('9223372036854775807', 36, 10)
 -- !query analysis
-Project [conv(9223372036854775807, 36, 10, false) AS conv(9223372036854775807, 36, 10)#x]
+Project [CONV(9223372036854775807, 36, 10, false) AS CONV(9223372036854775807, 36, 10)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT conv('-9223372036854775807', 36, 10)
 -- !query analysis
-Project [conv(-9223372036854775807, 36, 10, false) AS conv(-9223372036854775807, 36, 10)#x]
+Project [CONV(-9223372036854775807, 36, 10, false) AS CONV(-9223372036854775807, 36, 10)#x]
 +- OneRowRelation
