@@ -107,29 +107,9 @@ class IndexesSlowTestsMixin:
         psmidx1 = ps.from_pandas(pmidx1)
         psmidx2 = ps.from_pandas(pmidx2)
 
-        # TODO(SPARK-43241): MultiIndex.append not checking names for equality.
-        # Also refer to https://github.com/pandas-dev/pandas/pull/48288.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                pmidx1.append(pmidx2), psmidx1.append(psmidx2).rename([None, None, None])
-            )
-        else:
-            self.assert_eq(pmidx1.append(pmidx2), psmidx1.append(psmidx2))
-
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                pmidx2.append(pmidx1), psmidx2.append(psmidx1).rename([None, None, None])
-            )
-        else:
-            self.assert_eq(pmidx2.append(pmidx1), psmidx2.append(psmidx1))
-
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                pmidx1.append(pmidx2).names,
-                psmidx1.append(psmidx2).rename([None, None, None]).names,
-            )
-        else:
-            self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
+        self.assert_eq(pmidx1.append(pmidx2), psmidx1.append(psmidx2))
+        self.assert_eq(pmidx2.append(pmidx1), psmidx2.append(psmidx1))
+        self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
 
         # Index & MultiIndex is currently not supported
         expected_error_message = r"append\(\) between Index & MultiIndex is currently not supported"

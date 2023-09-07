@@ -2846,6 +2846,15 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2861,6 +2870,15 @@ object functions {
    * @since 3.4.0
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
    * @param e
@@ -4101,6 +4119,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
   /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
+
+  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
@@ -4272,6 +4298,7 @@ object functions {
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4292,13 +4319,20 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4319,11 +4353,17 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
 
   /**

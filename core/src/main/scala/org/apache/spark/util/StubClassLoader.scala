@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
  * whose capturing class contains unknown (and unneeded) classes. The lambda itself does not need
  * the class and therefor is safe to replace by a stub.
  */
-class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
+private[spark] class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
   extends ClassLoader(parent) with Logging {
   override def findClass(name: String): Class[_] = {
     if (!shouldStub(name)) {
@@ -40,7 +40,7 @@ class StubClassLoader(parent: ClassLoader, shouldStub: String => Boolean)
   }
 }
 
-object StubClassLoader {
+private[spark] object StubClassLoader {
   def apply(parent: ClassLoader, binaryName: Seq[String]): StubClassLoader = {
     new StubClassLoader(parent, name => binaryName.exists(p => name.startsWith(p)))
   }
