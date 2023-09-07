@@ -155,6 +155,12 @@ private[sql] object TypeCast {
     } else {
       value
     }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a double. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return false
+    }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (value.nonEmpty && (value.last match {
           case 'd' | 'D' | 'f' | 'F' => true
@@ -171,6 +177,11 @@ private[sql] object TypeCast {
     } else {
       value
     }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
+    }
     (allCatch opt signSafeValue.toInt).isDefined
   }
 
@@ -179,6 +190,11 @@ private[sql] object TypeCast {
       value.substring(1)
     } else {
       value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
     }
     (allCatch opt signSafeValue.toLong).isDefined
   }
