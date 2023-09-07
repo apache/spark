@@ -8,7 +8,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,total_sum,i_cl
               InputAdapter
                 Exchange [_w1,_w2] #1
                   WholeStageCodegen (4)
-                    HashAggregate [i_category,i_class,spark_grouping_id,sum] [sum(UnscaledValue(ws_net_paid)),total_sum,lochierarchy,_w0,_w1,_w2,sum]
+                    HashAggregate [i_category,i_class,spark_grouping_id,sum] [SUM(UnscaledValue(ws_net_paid)),total_sum,lochierarchy,_w0,_w1,_w2,sum]
                       InputAdapter
                         Exchange [i_category,i_class,spark_grouping_id] #2
                           WholeStageCodegen (3)

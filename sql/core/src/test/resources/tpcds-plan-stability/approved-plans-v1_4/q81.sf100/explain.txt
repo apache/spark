@@ -179,7 +179,7 @@ Input [5]: [cr_returning_customer_sk#19, cr_returning_addr_sk#20, cr_return_amt_
 (27) HashAggregate [codegen id : 9]
 Input [3]: [cr_returning_customer_sk#19, cr_return_amt_inc_tax#21, ca_state#26]
 Keys [2]: [cr_returning_customer_sk#19, ca_state#26]
-Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#21))]
+Functions [1]: [partial_SUM(UnscaledValue(cr_return_amt_inc_tax#21))]
 Aggregate Attributes [1]: [sum#27]
 Results [3]: [cr_returning_customer_sk#19, ca_state#26, sum#28]
 
@@ -190,9 +190,9 @@ Arguments: hashpartitioning(cr_returning_customer_sk#19, ca_state#26, 5), ENSURE
 (29) HashAggregate [codegen id : 10]
 Input [3]: [cr_returning_customer_sk#19, ca_state#26, sum#28]
 Keys [2]: [cr_returning_customer_sk#19, ca_state#26]
-Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#21))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#21))#29]
-Results [3]: [cr_returning_customer_sk#19 AS ctr_customer_sk#30, ca_state#26 AS ctr_state#31, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#21))#29,17,2) AS ctr_total_return#32]
+Functions [1]: [SUM(UnscaledValue(cr_return_amt_inc_tax#21))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(cr_return_amt_inc_tax#21))#29]
+Results [3]: [cr_returning_customer_sk#19 AS ctr_customer_sk#30, ca_state#26 AS ctr_state#31, MakeDecimal(SUM(UnscaledValue(cr_return_amt_inc_tax#21))#29,17,2) AS ctr_total_return#32]
 
 (30) Filter [codegen id : 10]
 Input [3]: [ctr_customer_sk#30, ctr_state#31, ctr_total_return#32]
@@ -272,7 +272,7 @@ Input [5]: [cr_returning_customer_sk#33, cr_returning_addr_sk#34, cr_return_amt_
 (47) HashAggregate [codegen id : 17]
 Input [3]: [cr_returning_customer_sk#33, cr_return_amt_inc_tax#35, ca_state#39]
 Keys [2]: [cr_returning_customer_sk#33, ca_state#39]
-Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#35))]
+Functions [1]: [partial_SUM(UnscaledValue(cr_return_amt_inc_tax#35))]
 Aggregate Attributes [1]: [sum#40]
 Results [3]: [cr_returning_customer_sk#33, ca_state#39, sum#41]
 
@@ -283,14 +283,14 @@ Arguments: hashpartitioning(cr_returning_customer_sk#33, ca_state#39, 5), ENSURE
 (49) HashAggregate [codegen id : 18]
 Input [3]: [cr_returning_customer_sk#33, ca_state#39, sum#41]
 Keys [2]: [cr_returning_customer_sk#33, ca_state#39]
-Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#35))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#35))#29]
-Results [2]: [ca_state#39 AS ctr_state#42, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#35))#29,17,2) AS ctr_total_return#43]
+Functions [1]: [SUM(UnscaledValue(cr_return_amt_inc_tax#35))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(cr_return_amt_inc_tax#35))#29]
+Results [2]: [ca_state#39 AS ctr_state#42, MakeDecimal(SUM(UnscaledValue(cr_return_amt_inc_tax#35))#29,17,2) AS ctr_total_return#43]
 
 (50) HashAggregate [codegen id : 18]
 Input [2]: [ctr_state#42, ctr_total_return#43]
 Keys [1]: [ctr_state#42]
-Functions [1]: [partial_avg(ctr_total_return#43)]
+Functions [1]: [partial_AVG(ctr_total_return#43)]
 Aggregate Attributes [2]: [sum#44, count#45]
 Results [3]: [ctr_state#42, sum#46, count#47]
 
@@ -301,27 +301,27 @@ Arguments: hashpartitioning(ctr_state#42, 5), ENSURE_REQUIREMENTS, [plan_id=9]
 (52) HashAggregate [codegen id : 19]
 Input [3]: [ctr_state#42, sum#46, count#47]
 Keys [1]: [ctr_state#42]
-Functions [1]: [avg(ctr_total_return#43)]
-Aggregate Attributes [1]: [avg(ctr_total_return#43)#48]
-Results [2]: [(avg(ctr_total_return#43)#48 * 1.2) AS (avg(ctr_total_return) * 1.2)#49, ctr_state#42]
+Functions [1]: [AVG(ctr_total_return#43)]
+Aggregate Attributes [1]: [AVG(ctr_total_return#43)#48]
+Results [2]: [(AVG(ctr_total_return#43)#48 * 1.2) AS (AVG(ctr_total_return) * 1.2)#49, ctr_state#42]
 
 (53) Filter [codegen id : 19]
-Input [2]: [(avg(ctr_total_return) * 1.2)#49, ctr_state#42]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#49)
+Input [2]: [(AVG(ctr_total_return) * 1.2)#49, ctr_state#42]
+Condition : isnotnull((AVG(ctr_total_return) * 1.2)#49)
 
 (54) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#49, ctr_state#42]
+Input [2]: [(AVG(ctr_total_return) * 1.2)#49, ctr_state#42]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=10]
 
 (55) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ctr_state#31]
 Right keys [1]: [ctr_state#42]
 Join type: Inner
-Join condition: (cast(ctr_total_return#32 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#49)
+Join condition: (cast(ctr_total_return#32 as decimal(24,7)) > (AVG(ctr_total_return) * 1.2)#49)
 
 (56) Project [codegen id : 20]
 Output [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#32]
-Input [19]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#31, ctr_total_return#32, (avg(ctr_total_return) * 1.2)#49, ctr_state#42]
+Input [19]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#31, ctr_total_return#32, (AVG(ctr_total_return) * 1.2)#49, ctr_state#42]
 
 (57) TakeOrderedAndProject
 Input [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#32]

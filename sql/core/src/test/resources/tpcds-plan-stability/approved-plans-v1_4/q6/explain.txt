@@ -155,7 +155,7 @@ Condition : isnotnull(i_category#14)
 (25) HashAggregate [codegen id : 4]
 Input [2]: [i_current_price#13, i_category#14]
 Keys [1]: [i_category#14]
-Functions [1]: [partial_avg(UnscaledValue(i_current_price#13))]
+Functions [1]: [partial_AVG(UnscaledValue(i_current_price#13))]
 Aggregate Attributes [2]: [sum#15, count#16]
 Results [3]: [i_category#14, sum#17, count#18]
 
@@ -166,27 +166,27 @@ Arguments: hashpartitioning(i_category#14, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 (27) HashAggregate [codegen id : 5]
 Input [3]: [i_category#14, sum#17, count#18]
 Keys [1]: [i_category#14]
-Functions [1]: [avg(UnscaledValue(i_current_price#13))]
-Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#13))#19]
-Results [2]: [cast((avg(UnscaledValue(i_current_price#13))#19 / 100.0) as decimal(11,6)) AS avg(i_current_price)#20, i_category#14]
+Functions [1]: [AVG(UnscaledValue(i_current_price#13))]
+Aggregate Attributes [1]: [AVG(UnscaledValue(i_current_price#13))#19]
+Results [2]: [cast((AVG(UnscaledValue(i_current_price#13))#19 / 100.0) as decimal(11,6)) AS AVG(i_current_price)#20, i_category#14]
 
 (28) Filter [codegen id : 5]
-Input [2]: [avg(i_current_price)#20, i_category#14]
-Condition : isnotnull(avg(i_current_price)#20)
+Input [2]: [AVG(i_current_price)#20, i_category#14]
+Condition : isnotnull(AVG(i_current_price)#20)
 
 (29) BroadcastExchange
-Input [2]: [avg(i_current_price)#20, i_category#14]
+Input [2]: [AVG(i_current_price)#20, i_category#14]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=4]
 
 (30) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_category#12]
 Right keys [1]: [i_category#14]
 Join type: Inner
-Join condition: (cast(i_current_price#11 as decimal(14,7)) > (1.2 * avg(i_current_price)#20))
+Join condition: (cast(i_current_price#11 as decimal(14,7)) > (1.2 * AVG(i_current_price)#20))
 
 (31) Project [codegen id : 6]
 Output [1]: [i_item_sk#10]
-Input [5]: [i_item_sk#10, i_current_price#11, i_category#12, avg(i_current_price)#20, i_category#14]
+Input [5]: [i_item_sk#10, i_current_price#11, i_category#12, AVG(i_current_price)#20, i_category#14]
 
 (32) BroadcastExchange
 Input [1]: [i_item_sk#10]

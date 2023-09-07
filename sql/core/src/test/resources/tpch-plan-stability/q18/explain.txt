@@ -71,7 +71,7 @@ Input [2]: [l_orderkey#7, l_quantity#8]
 (9) HashAggregate [codegen id : 1]
 Input [2]: [l_orderkey#7, l_quantity#8]
 Keys [1]: [l_orderkey#7]
-Functions [1]: [partial_sum(l_quantity#8)]
+Functions [1]: [partial_SUM(l_quantity#8)]
 Aggregate Attributes [2]: [sum#9, isEmpty#10]
 Results [3]: [l_orderkey#7, sum#11, isEmpty#12]
 
@@ -82,17 +82,17 @@ Arguments: hashpartitioning(l_orderkey#7, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 (11) HashAggregate [codegen id : 2]
 Input [3]: [l_orderkey#7, sum#11, isEmpty#12]
 Keys [1]: [l_orderkey#7]
-Functions [1]: [sum(l_quantity#8)]
-Aggregate Attributes [1]: [sum(l_quantity#8)#13]
-Results [2]: [l_orderkey#7, sum(l_quantity#8)#13 AS sum(l_quantity#14)#15]
+Functions [1]: [SUM(l_quantity#8)]
+Aggregate Attributes [1]: [SUM(l_quantity#8)#13]
+Results [2]: [l_orderkey#7, SUM(l_quantity#8)#13 AS SUM(l_quantity#14)#15]
 
 (12) Filter [codegen id : 2]
-Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
-Condition : (isnotnull(sum(l_quantity#14)#15) AND (sum(l_quantity#14)#15 > 300))
+Input [2]: [l_orderkey#7, SUM(l_quantity#14)#15]
+Condition : (isnotnull(SUM(l_quantity#14)#15) AND (SUM(l_quantity#14)#15 > 300))
 
 (13) Project [codegen id : 2]
 Output [1]: [l_orderkey#7]
-Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
+Input [2]: [l_orderkey#7, SUM(l_quantity#14)#15]
 
 (14) BroadcastExchange
 Input [1]: [l_orderkey#7]
@@ -158,7 +158,7 @@ Input [7]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, 
 (27) HashAggregate [codegen id : 7]
 Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#14]
 Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
-Functions [1]: [partial_sum(l_quantity#14)]
+Functions [1]: [partial_SUM(l_quantity#14)]
 Aggregate Attributes [2]: [sum#17, isEmpty#18]
 Results [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
 
@@ -169,11 +169,11 @@ Arguments: hashpartitioning(c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, 
 (29) HashAggregate [codegen id : 8]
 Input [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
 Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
-Functions [1]: [sum(l_quantity#14)]
-Aggregate Attributes [1]: [sum(l_quantity#14)#21]
-Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity#14)#21 AS sum(l_quantity)#22]
+Functions [1]: [SUM(l_quantity#14)]
+Aggregate Attributes [1]: [SUM(l_quantity#14)#21]
+Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, SUM(l_quantity#14)#21 AS SUM(l_quantity)#22]
 
 (30) TakeOrderedAndProject
-Input [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#22]
-Arguments: 100, [o_totalprice#5 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#22]
+Input [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, SUM(l_quantity)#22]
+Arguments: 100, [o_totalprice#5 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, SUM(l_quantity)#22]
 

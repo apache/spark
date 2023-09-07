@@ -22,7 +22,7 @@ TakeOrderedAndProject [cnt,state]
                                           BroadcastExchange #3
                                             WholeStageCodegen (3)
                                               Project [i_item_sk]
-                                                BroadcastHashJoin [i_category,i_category,i_current_price,avg(i_current_price)]
+                                                BroadcastHashJoin [i_category,i_category,i_current_price,AVG(i_current_price)]
                                                   Filter [i_current_price,i_category,i_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
@@ -30,8 +30,8 @@ TakeOrderedAndProject [cnt,state]
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (2)
-                                                        Filter [avg(i_current_price)]
-                                                          HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),sum,count]
+                                                        Filter [AVG(i_current_price)]
+                                                          HashAggregate [i_category,sum,count] [AVG(UnscaledValue(i_current_price)),AVG(i_current_price),sum,count]
                                                             InputAdapter
                                                               Exchange [i_category] #5
                                                                 WholeStageCodegen (1)

@@ -133,7 +133,7 @@ Input [9]: [i_brand#2, i_category#3, ss_store_sk#5, ss_sales_price#6, d_year#10,
 (19) HashAggregate [codegen id : 4]
 Input [7]: [i_brand#2, i_category#3, ss_sales_price#6, d_year#10, d_moy#11, s_store_name#13, s_company_name#14]
 Keys [6]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11]
-Functions [1]: [partial_sum(UnscaledValue(ss_sales_price#6))]
+Functions [1]: [partial_SUM(UnscaledValue(ss_sales_price#6))]
 Aggregate Attributes [1]: [sum#15]
 Results [7]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum#16]
 
@@ -144,9 +144,9 @@ Arguments: hashpartitioning(i_category#3, i_brand#2, s_store_name#13, s_company_
 (21) HashAggregate [codegen id : 5]
 Input [7]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum#16]
 Keys [6]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11]
-Functions [1]: [sum(UnscaledValue(ss_sales_price#6))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#6))#17]
-Results [8]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, MakeDecimal(sum(UnscaledValue(ss_sales_price#6))#17,17,2) AS sum_sales#18, MakeDecimal(sum(UnscaledValue(ss_sales_price#6))#17,17,2) AS _w0#19]
+Functions [1]: [SUM(UnscaledValue(ss_sales_price#6))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(ss_sales_price#6))#17]
+Results [8]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, MakeDecimal(SUM(UnscaledValue(ss_sales_price#6))#17,17,2) AS sum_sales#18, MakeDecimal(SUM(UnscaledValue(ss_sales_price#6))#17,17,2) AS _w0#19]
 
 (22) Exchange
 Input [8]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, _w0#19]
@@ -166,11 +166,11 @@ Condition : (isnotnull(d_year#10) AND (d_year#10 = 1999))
 
 (26) Window
 Input [9]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, _w0#19, rn#20]
-Arguments: [avg(_w0#19) windowspecdefinition(i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#21], [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10]
+Arguments: [AVG(_w0#19) windowspecdefinition(i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#21], [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10]
 
 (27) Filter [codegen id : 22]
 Input [10]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, _w0#19, rn#20, avg_monthly_sales#21]
-Condition : ((isnotnull(avg_monthly_sales#21) AND (avg_monthly_sales#21 > 0.000000)) AND CASE WHEN (avg_monthly_sales#21 > 0.000000) THEN ((abs((sum_sales#18 - avg_monthly_sales#21)) / avg_monthly_sales#21) > 0.1000000000000000) END)
+Condition : ((isnotnull(avg_monthly_sales#21) AND (avg_monthly_sales#21 > 0.000000)) AND CASE WHEN (avg_monthly_sales#21 > 0.000000) THEN ((ABS((sum_sales#18 - avg_monthly_sales#21)) / avg_monthly_sales#21) > 0.1000000000000000) END)
 
 (28) Project [codegen id : 22]
 Output [9]: [i_category#3, i_brand#2, s_store_name#13, s_company_name#14, d_year#10, d_moy#11, sum_sales#18, avg_monthly_sales#21, rn#20]
@@ -182,9 +182,9 @@ Output [7]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_ye
 (30) HashAggregate [codegen id : 12]
 Input [7]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_year#26, d_moy#27, sum#28]
 Keys [6]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_year#26, d_moy#27]
-Functions [1]: [sum(UnscaledValue(ss_sales_price#29))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#29))#17]
-Results [7]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_year#26, d_moy#27, MakeDecimal(sum(UnscaledValue(ss_sales_price#29))#17,17,2) AS sum_sales#30]
+Functions [1]: [SUM(UnscaledValue(ss_sales_price#29))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(ss_sales_price#29))#17]
+Results [7]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_year#26, d_moy#27, MakeDecimal(SUM(UnscaledValue(ss_sales_price#29))#17,17,2) AS sum_sales#30]
 
 (31) Exchange
 Input [7]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, d_year#26, d_moy#27, sum_sales#30]

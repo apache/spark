@@ -206,7 +206,7 @@ Input [5]: [l_extendedprice#8, l_discount#9, n_name#13, n_regionkey#14, r_region
 (36) HashAggregate [codegen id : 6]
 Input [3]: [l_extendedprice#8, l_discount#9, n_name#13]
 Keys [1]: [n_name#13]
-Functions [1]: [partial_sum((l_extendedprice#8 * (1 - l_discount#9)))]
+Functions [1]: [partial_SUM((l_extendedprice#8 * (1 - l_discount#9)))]
 Aggregate Attributes [2]: [sum#17, isEmpty#18]
 Results [3]: [n_name#13, sum#19, isEmpty#20]
 
@@ -217,9 +217,9 @@ Arguments: hashpartitioning(n_name#13, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 (38) HashAggregate [codegen id : 7]
 Input [3]: [n_name#13, sum#19, isEmpty#20]
 Keys [1]: [n_name#13]
-Functions [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))]
-Aggregate Attributes [1]: [sum((l_extendedprice#8 * (1 - l_discount#9)))#21]
-Results [2]: [n_name#13, sum((l_extendedprice#8 * (1 - l_discount#9)))#21 AS revenue#22]
+Functions [1]: [SUM((l_extendedprice#8 * (1 - l_discount#9)))]
+Aggregate Attributes [1]: [SUM((l_extendedprice#8 * (1 - l_discount#9)))#21]
+Results [2]: [n_name#13, SUM((l_extendedprice#8 * (1 - l_discount#9)))#21 AS revenue#22]
 
 (39) Exchange
 Input [2]: [n_name#13, revenue#22]

@@ -428,7 +428,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"sum(booleanField)\"",
+        "sqlExpr" -> "\"SUM(booleanField)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
@@ -439,7 +439,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"avg(booleanField)\"",
+        "sqlExpr" -> "\"AVG(booleanField)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",

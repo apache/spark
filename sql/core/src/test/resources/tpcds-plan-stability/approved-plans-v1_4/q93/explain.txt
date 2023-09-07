@@ -117,7 +117,7 @@ Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#8, s
 (21) HashAggregate [codegen id : 6]
 Input [2]: [ss_customer_sk#2, act_sales#14]
 Keys [1]: [ss_customer_sk#2]
-Functions [1]: [partial_sum(act_sales#14)]
+Functions [1]: [partial_SUM(act_sales#14)]
 Aggregate Attributes [2]: [sum#15, isEmpty#16]
 Results [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
 
@@ -128,9 +128,9 @@ Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=
 (23) HashAggregate [codegen id : 7]
 Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
 Keys [1]: [ss_customer_sk#2]
-Functions [1]: [sum(act_sales#14)]
-Aggregate Attributes [1]: [sum(act_sales#14)#19]
-Results [2]: [ss_customer_sk#2, sum(act_sales#14)#19 AS sumsales#20]
+Functions [1]: [SUM(act_sales#14)]
+Aggregate Attributes [1]: [SUM(act_sales#14)#19]
+Results [2]: [ss_customer_sk#2, SUM(act_sales#14)#19 AS sumsales#20]
 
 (24) TakeOrderedAndProject
 Input [2]: [ss_customer_sk#2, sumsales#20]

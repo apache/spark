@@ -3,7 +3,7 @@ WholeStageCodegen (8)
     InputAdapter
       Exchange [revenue] #1
         WholeStageCodegen (7)
-          HashAggregate [n_name,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),revenue,sum,isEmpty]
+          HashAggregate [n_name,sum,isEmpty] [SUM((l_extendedprice * (1 - l_discount))),revenue,sum,isEmpty]
             InputAdapter
               Exchange [n_name] #2
                 WholeStageCodegen (6)

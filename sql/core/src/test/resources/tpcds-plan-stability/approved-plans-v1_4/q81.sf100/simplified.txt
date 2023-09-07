@@ -1,7 +1,7 @@
 TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset,ca_location_type,ctr_total_return]
   WholeStageCodegen (20)
     Project [c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset,ca_location_type,ctr_total_return]
-      BroadcastHashJoin [ctr_state,ctr_state,ctr_total_return,(avg(ctr_total_return) * 1.2)]
+      BroadcastHashJoin [ctr_state,ctr_state,ctr_total_return,(AVG(ctr_total_return) * 1.2)]
         Project [c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset,ca_location_type,ctr_state,ctr_total_return]
           SortMergeJoin [c_customer_sk,ctr_customer_sk]
             InputAdapter
@@ -30,7 +30,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,ca_st
                     Exchange [ctr_customer_sk] #3
                       WholeStageCodegen (10)
                         Filter [ctr_total_return]
-                          HashAggregate [cr_returning_customer_sk,ca_state,sum] [sum(UnscaledValue(cr_return_amt_inc_tax)),ctr_customer_sk,ctr_state,ctr_total_return,sum]
+                          HashAggregate [cr_returning_customer_sk,ca_state,sum] [SUM(UnscaledValue(cr_return_amt_inc_tax)),ctr_customer_sk,ctr_state,ctr_total_return,sum]
                             InputAdapter
                               Exchange [cr_returning_customer_sk,ca_state] #4
                                 WholeStageCodegen (9)
@@ -72,13 +72,13 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,ca_st
         InputAdapter
           BroadcastExchange #8
             WholeStageCodegen (19)
-              Filter [(avg(ctr_total_return) * 1.2)]
-                HashAggregate [ctr_state,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),sum,count]
+              Filter [(AVG(ctr_total_return) * 1.2)]
+                HashAggregate [ctr_state,sum,count] [AVG(ctr_total_return),(AVG(ctr_total_return) * 1.2),sum,count]
                   InputAdapter
                     Exchange [ctr_state] #9
                       WholeStageCodegen (18)
                         HashAggregate [ctr_state,ctr_total_return] [sum,count,sum,count]
-                          HashAggregate [cr_returning_customer_sk,ca_state,sum] [sum(UnscaledValue(cr_return_amt_inc_tax)),ctr_state,ctr_total_return,sum]
+                          HashAggregate [cr_returning_customer_sk,ca_state,sum] [SUM(UnscaledValue(cr_return_amt_inc_tax)),ctr_state,ctr_total_return,sum]
                             InputAdapter
                               Exchange [cr_returning_customer_sk,ca_state] #10
                                 WholeStageCodegen (17)

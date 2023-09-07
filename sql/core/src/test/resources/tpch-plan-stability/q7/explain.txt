@@ -178,7 +178,7 @@ Input [7]: [l_extendedprice#5, l_discount#6, l_shipdate#7, c_nationkey#11, n_nam
 (31) HashAggregate [codegen id : 6]
 Input [4]: [supp_nation#16, cust_nation#17, l_year#18, volume#19]
 Keys [3]: [supp_nation#16, cust_nation#17, l_year#18]
-Functions [1]: [partial_sum(volume#19)]
+Functions [1]: [partial_SUM(volume#19)]
 Aggregate Attributes [2]: [sum#20, isEmpty#21]
 Results [5]: [supp_nation#16, cust_nation#17, l_year#18, sum#22, isEmpty#23]
 
@@ -189,9 +189,9 @@ Arguments: hashpartitioning(supp_nation#16, cust_nation#17, l_year#18, 5), ENSUR
 (33) HashAggregate [codegen id : 7]
 Input [5]: [supp_nation#16, cust_nation#17, l_year#18, sum#22, isEmpty#23]
 Keys [3]: [supp_nation#16, cust_nation#17, l_year#18]
-Functions [1]: [sum(volume#19)]
-Aggregate Attributes [1]: [sum(volume#19)#24]
-Results [4]: [supp_nation#16, cust_nation#17, l_year#18, sum(volume#19)#24 AS revenue#25]
+Functions [1]: [SUM(volume#19)]
+Aggregate Attributes [1]: [SUM(volume#19)#24]
+Results [4]: [supp_nation#16, cust_nation#17, l_year#18, SUM(volume#19)#24 AS revenue#25]
 
 (34) Exchange
 Input [4]: [supp_nation#16, cust_nation#17, l_year#18, revenue#25]

@@ -169,7 +169,7 @@ Input [8]: [ss_customer_sk#1, ss_addr_sk#3, ss_ticket_number#5, ss_ext_sales_pri
 (27) HashAggregate [codegen id : 5]
 Input [7]: [ss_customer_sk#1, ss_addr_sk#3, ss_ticket_number#5, ss_ext_sales_price#6, ss_ext_list_price#7, ss_ext_tax#8, ca_city#18]
 Keys [4]: [ss_ticket_number#5, ss_customer_sk#1, ss_addr_sk#3, ca_city#18]
-Functions [3]: [partial_sum(UnscaledValue(ss_ext_sales_price#6)), partial_sum(UnscaledValue(ss_ext_list_price#7)), partial_sum(UnscaledValue(ss_ext_tax#8))]
+Functions [3]: [partial_SUM(UnscaledValue(ss_ext_sales_price#6)), partial_SUM(UnscaledValue(ss_ext_list_price#7)), partial_SUM(UnscaledValue(ss_ext_tax#8))]
 Aggregate Attributes [3]: [sum#19, sum#20, sum#21]
 Results [7]: [ss_ticket_number#5, ss_customer_sk#1, ss_addr_sk#3, ca_city#18, sum#22, sum#23, sum#24]
 
@@ -180,9 +180,9 @@ Arguments: hashpartitioning(ss_ticket_number#5, ss_customer_sk#1, ss_addr_sk#3, 
 (29) HashAggregate [codegen id : 6]
 Input [7]: [ss_ticket_number#5, ss_customer_sk#1, ss_addr_sk#3, ca_city#18, sum#22, sum#23, sum#24]
 Keys [4]: [ss_ticket_number#5, ss_customer_sk#1, ss_addr_sk#3, ca_city#18]
-Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#6)), sum(UnscaledValue(ss_ext_list_price#7)), sum(UnscaledValue(ss_ext_tax#8))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#6))#25, sum(UnscaledValue(ss_ext_list_price#7))#26, sum(UnscaledValue(ss_ext_tax#8))#27]
-Results [6]: [ss_ticket_number#5, ss_customer_sk#1, ca_city#18 AS bought_city#28, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#6))#25,17,2) AS extended_price#29, MakeDecimal(sum(UnscaledValue(ss_ext_list_price#7))#26,17,2) AS list_price#30, MakeDecimal(sum(UnscaledValue(ss_ext_tax#8))#27,17,2) AS extended_tax#31]
+Functions [3]: [SUM(UnscaledValue(ss_ext_sales_price#6)), SUM(UnscaledValue(ss_ext_list_price#7)), SUM(UnscaledValue(ss_ext_tax#8))]
+Aggregate Attributes [3]: [SUM(UnscaledValue(ss_ext_sales_price#6))#25, SUM(UnscaledValue(ss_ext_list_price#7))#26, SUM(UnscaledValue(ss_ext_tax#8))#27]
+Results [6]: [ss_ticket_number#5, ss_customer_sk#1, ca_city#18 AS bought_city#28, MakeDecimal(SUM(UnscaledValue(ss_ext_sales_price#6))#25,17,2) AS extended_price#29, MakeDecimal(SUM(UnscaledValue(ss_ext_list_price#7))#26,17,2) AS list_price#30, MakeDecimal(SUM(UnscaledValue(ss_ext_tax#8))#27,17,2) AS extended_tax#31]
 
 (30) BroadcastExchange
 Input [6]: [ss_ticket_number#5, ss_customer_sk#1, bought_city#28, extended_price#29, list_price#30, extended_tax#31]

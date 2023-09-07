@@ -257,7 +257,7 @@ Input [11]: [ss_net_profit#5, s_store_id#10, s_store_name#11, i_item_id#13, i_it
 (46) HashAggregate [codegen id : 17]
 Input [7]: [ss_net_profit#5, sr_net_loss#18, cs_net_profit#24, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
 Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [partial_sum(UnscaledValue(ss_net_profit#5)), partial_sum(UnscaledValue(sr_net_loss#18)), partial_sum(UnscaledValue(cs_net_profit#24))]
+Functions [3]: [partial_SUM(UnscaledValue(ss_net_profit#5)), partial_SUM(UnscaledValue(sr_net_loss#18)), partial_SUM(UnscaledValue(cs_net_profit#24))]
 Aggregate Attributes [3]: [sum#27, sum#28, sum#29]
 Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#30, sum#31, sum#32]
 
@@ -268,9 +268,9 @@ Arguments: hashpartitioning(i_item_id#13, i_item_desc#14, s_store_id#10, s_store
 (48) HashAggregate [codegen id : 18]
 Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#30, sum#31, sum#32]
 Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(sr_net_loss#18)), sum(UnscaledValue(cs_net_profit#24))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_net_profit#5))#33, sum(UnscaledValue(sr_net_loss#18))#34, sum(UnscaledValue(cs_net_profit#24))#35]
-Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#33,17,2) AS store_sales_profit#36, MakeDecimal(sum(UnscaledValue(sr_net_loss#18))#34,17,2) AS store_returns_loss#37, MakeDecimal(sum(UnscaledValue(cs_net_profit#24))#35,17,2) AS catalog_sales_profit#38]
+Functions [3]: [SUM(UnscaledValue(ss_net_profit#5)), SUM(UnscaledValue(sr_net_loss#18)), SUM(UnscaledValue(cs_net_profit#24))]
+Aggregate Attributes [3]: [SUM(UnscaledValue(ss_net_profit#5))#33, SUM(UnscaledValue(sr_net_loss#18))#34, SUM(UnscaledValue(cs_net_profit#24))#35]
+Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, MakeDecimal(SUM(UnscaledValue(ss_net_profit#5))#33,17,2) AS store_sales_profit#36, MakeDecimal(SUM(UnscaledValue(sr_net_loss#18))#34,17,2) AS store_returns_loss#37, MakeDecimal(SUM(UnscaledValue(cs_net_profit#24))#35,17,2) AS catalog_sales_profit#38]
 
 (49) TakeOrderedAndProject
 Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, store_sales_profit#36, store_returns_loss#37, catalog_sales_profit#38]

@@ -1,6 +1,6 @@
-TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
+TakeOrderedAndProject [s_store_name,SUM(ss_net_profit)]
   WholeStageCodegen (15)
-    HashAggregate [s_store_name,sum] [sum(UnscaledValue(ss_net_profit)),sum(ss_net_profit),sum]
+    HashAggregate [s_store_name,sum] [SUM(UnscaledValue(ss_net_profit)),SUM(ss_net_profit),sum]
       InputAdapter
         Exchange [s_store_name] #1
           WholeStageCodegen (14)

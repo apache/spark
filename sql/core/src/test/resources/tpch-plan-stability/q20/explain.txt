@@ -124,7 +124,7 @@ Join condition: None
 (19) HashAggregate [codegen id : 3]
 Input [3]: [l_partkey#10, l_suppkey#11, l_quantity#12]
 Keys [2]: [l_partkey#10, l_suppkey#11]
-Functions [1]: [partial_sum(l_quantity#12)]
+Functions [1]: [partial_SUM(l_quantity#12)]
 Aggregate Attributes [2]: [sum#14, isEmpty#15]
 Results [4]: [l_partkey#10, l_suppkey#11, sum#16, isEmpty#17]
 
@@ -135,27 +135,27 @@ Arguments: hashpartitioning(l_partkey#10, l_suppkey#11, 5), ENSURE_REQUIREMENTS,
 (21) HashAggregate [codegen id : 4]
 Input [4]: [l_partkey#10, l_suppkey#11, sum#16, isEmpty#17]
 Keys [2]: [l_partkey#10, l_suppkey#11]
-Functions [1]: [sum(l_quantity#12)]
-Aggregate Attributes [1]: [sum(l_quantity#12)#18]
-Results [3]: [(0.5 * sum(l_quantity#12)#18) AS (0.5 * sum(l_quantity))#19, l_partkey#10, l_suppkey#11]
+Functions [1]: [SUM(l_quantity#12)]
+Aggregate Attributes [1]: [SUM(l_quantity#12)#18]
+Results [3]: [(0.5 * SUM(l_quantity#12)#18) AS (0.5 * SUM(l_quantity))#19, l_partkey#10, l_suppkey#11]
 
 (22) Filter [codegen id : 4]
-Input [3]: [(0.5 * sum(l_quantity))#19, l_partkey#10, l_suppkey#11]
-Condition : isnotnull((0.5 * sum(l_quantity))#19)
+Input [3]: [(0.5 * SUM(l_quantity))#19, l_partkey#10, l_suppkey#11]
+Condition : isnotnull((0.5 * SUM(l_quantity))#19)
 
 (23) BroadcastExchange
-Input [3]: [(0.5 * sum(l_quantity))#19, l_partkey#10, l_suppkey#11]
+Input [3]: [(0.5 * SUM(l_quantity))#19, l_partkey#10, l_suppkey#11]
 Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true], input[2, bigint, true]),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [2]: [ps_partkey#5, ps_suppkey#6]
 Right keys [2]: [l_partkey#10, l_suppkey#11]
 Join type: Inner
-Join condition: (cast(ps_availqty#7 as decimal(22,1)) > (0.5 * sum(l_quantity))#19)
+Join condition: (cast(ps_availqty#7 as decimal(22,1)) > (0.5 * SUM(l_quantity))#19)
 
 (25) Project [codegen id : 5]
 Output [1]: [ps_suppkey#6]
-Input [6]: [ps_partkey#5, ps_suppkey#6, ps_availqty#7, (0.5 * sum(l_quantity))#19, l_partkey#10, l_suppkey#11]
+Input [6]: [ps_partkey#5, ps_suppkey#6, ps_availqty#7, (0.5 * SUM(l_quantity))#19, l_partkey#10, l_suppkey#11]
 
 (26) BroadcastExchange
 Input [1]: [ps_suppkey#6]

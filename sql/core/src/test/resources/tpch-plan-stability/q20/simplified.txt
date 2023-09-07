@@ -15,7 +15,7 @@ WholeStageCodegen (8)
                     BroadcastExchange #2
                       WholeStageCodegen (5)
                         Project [ps_suppkey]
-                          BroadcastHashJoin [ps_partkey,ps_suppkey,l_partkey,l_suppkey,ps_availqty,(0.5 * sum(l_quantity))]
+                          BroadcastHashJoin [ps_partkey,ps_suppkey,l_partkey,l_suppkey,ps_availqty,(0.5 * SUM(l_quantity))]
                             BroadcastHashJoin [ps_partkey,p_partkey]
                               Filter [ps_availqty,ps_partkey,ps_suppkey]
                                 ColumnarToRow
@@ -32,8 +32,8 @@ WholeStageCodegen (8)
                             InputAdapter
                               BroadcastExchange #4
                                 WholeStageCodegen (4)
-                                  Filter [(0.5 * sum(l_quantity))]
-                                    HashAggregate [l_partkey,l_suppkey,sum,isEmpty] [sum(l_quantity),(0.5 * sum(l_quantity)),sum,isEmpty]
+                                  Filter [(0.5 * SUM(l_quantity))]
+                                    HashAggregate [l_partkey,l_suppkey,sum,isEmpty] [SUM(l_quantity),(0.5 * SUM(l_quantity)),sum,isEmpty]
                                       InputAdapter
                                         Exchange [l_partkey,l_suppkey] #5
                                           WholeStageCodegen (3)

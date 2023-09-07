@@ -85,18 +85,18 @@ class GroupedAggPandasUDFTestsMixin:
     @property
     def pandas_agg_mean_udf(self):
         @pandas_udf("double", PandasUDFType.GROUPED_AGG)
-        def avg(v):
+        def AVG(v):
             return v.mean()
 
-        return avg
+        return AVG
 
     @property
     def pandas_agg_sum_udf(self):
         @pandas_udf("double", PandasUDFType.GROUPED_AGG)
-        def sum(v):
+        def SUM(v):
             return v.sum()
 
-        return sum
+        return SUM
 
     @property
     def pandas_agg_weighted_mean_udf(self):
@@ -516,7 +516,7 @@ class GroupedAggPandasUDFTestsMixin:
             df.groupby(df.id).agg(mean_udf(mean_udf(df.v))).collect()
         with self.assertRaisesRegex(
             AnalysisException,
-            "The group aggregate pandas UDF `avg` cannot be invoked together with as other, "
+            "The group aggregate pandas UDF `AVG` cannot be invoked together with as other, "
             "non-pandas aggregate functions.",
         ):
             df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()

@@ -1,11 +1,11 @@
 WholeStageCodegen (21)
-  HashAggregate [sum,sum,count] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),order count ,total shipping cost ,total net profit ,sum,sum,count]
+  HashAggregate [sum,sum,count] [SUM(UnscaledValue(ws_ext_ship_cost)),SUM(UnscaledValue(ws_net_profit)),count(ws_order_number),order count ,total shipping cost ,total net profit ,sum,sum,count]
     InputAdapter
       Exchange #1
         WholeStageCodegen (20)
-          HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),count(ws_order_number),sum,sum,count,sum,sum,count]
-            HashAggregate [ws_order_number] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
-              HashAggregate [ws_order_number,ws_ext_ship_cost,ws_net_profit] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
+          HashAggregate [ws_order_number] [SUM(UnscaledValue(ws_ext_ship_cost)),SUM(UnscaledValue(ws_net_profit)),count(ws_order_number),sum,sum,count,sum,sum,count]
+            HashAggregate [ws_order_number] [SUM(UnscaledValue(ws_ext_ship_cost)),SUM(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
+              HashAggregate [ws_order_number,ws_ext_ship_cost,ws_net_profit] [SUM(UnscaledValue(ws_ext_ship_cost)),SUM(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
                 Project [ws_order_number,ws_ext_ship_cost,ws_net_profit]
                   BroadcastHashJoin [ws_web_site_sk,web_site_sk]
                     Project [ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]

@@ -6,12 +6,12 @@ WholeStageCodegen (12)
           Filter [paid]
             Subquery #1
               WholeStageCodegen (14)
-                HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
+                HashAggregate [sum,count] [AVG(netpaid),(0.05 * AVG(netpaid)),sum,count]
                   InputAdapter
                     Exchange #10
                       WholeStageCodegen (13)
                         HashAggregate [netpaid] [sum,count,sum,count]
-                          HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [sum(UnscaledValue(ss_net_paid)),netpaid,sum]
+                          HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [SUM(UnscaledValue(ss_net_paid)),netpaid,sum]
                             InputAdapter
                               Exchange [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size] #11
                                 WholeStageCodegen (12)
@@ -56,12 +56,12 @@ WholeStageCodegen (12)
                                             Sort [sr_ticket_number,sr_item_sk]
                                               InputAdapter
                                                 ReusedExchange [sr_item_sk,sr_ticket_number] #9
-            HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum,isEmpty]
+            HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [SUM(netpaid),paid,sum,isEmpty]
               InputAdapter
                 Exchange [c_last_name,c_first_name,s_store_name] #2
                   WholeStageCodegen (10)
                     HashAggregate [c_last_name,c_first_name,s_store_name,netpaid] [sum,isEmpty,sum,isEmpty]
-                      HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [sum(UnscaledValue(ss_net_paid)),netpaid,sum]
+                      HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [SUM(UnscaledValue(ss_net_paid)),netpaid,sum]
                         InputAdapter
                           Exchange [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size] #3
                             WholeStageCodegen (9)

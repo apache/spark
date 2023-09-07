@@ -294,22 +294,22 @@ Input [5]: [ws_ship_date_sk#1, ws_order_number#4, ws_ext_ship_cost#5, ws_net_pro
 (53) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Keys [1]: [ws_order_number#4]
-Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#5)), partial_sum(UnscaledValue(ws_net_profit#6))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32]
+Functions [2]: [partial_SUM(UnscaledValue(ws_ext_ship_cost#5)), partial_SUM(UnscaledValue(ws_net_profit#6))]
+Aggregate Attributes [2]: [SUM(UnscaledValue(ws_ext_ship_cost#5))#31, SUM(UnscaledValue(ws_net_profit#6))#32]
 Results [3]: [ws_order_number#4, sum#33, sum#34]
 
 (54) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, sum#33, sum#34]
 Keys [1]: [ws_order_number#4]
-Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32]
+Functions [2]: [merge_SUM(UnscaledValue(ws_ext_ship_cost#5)), merge_SUM(UnscaledValue(ws_net_profit#6))]
+Aggregate Attributes [2]: [SUM(UnscaledValue(ws_ext_ship_cost#5))#31, SUM(UnscaledValue(ws_net_profit#6))#32]
 Results [3]: [ws_order_number#4, sum#33, sum#34]
 
 (55) HashAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, sum#33, sum#34]
 Keys: []
-Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6)), partial_count(distinct ws_order_number#4)]
-Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32, count(ws_order_number#4)#35]
+Functions [3]: [merge_SUM(UnscaledValue(ws_ext_ship_cost#5)), merge_SUM(UnscaledValue(ws_net_profit#6)), partial_count(distinct ws_order_number#4)]
+Aggregate Attributes [3]: [SUM(UnscaledValue(ws_ext_ship_cost#5))#31, SUM(UnscaledValue(ws_net_profit#6))#32, count(ws_order_number#4)#35]
 Results [3]: [sum#33, sum#34, count#36]
 
 (56) Exchange
@@ -319,9 +319,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 (57) HashAggregate [codegen id : 21]
 Input [3]: [sum#33, sum#34, count#36]
 Keys: []
-Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#5)), sum(UnscaledValue(ws_net_profit#6)), count(distinct ws_order_number#4)]
-Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#5))#31, sum(UnscaledValue(ws_net_profit#6))#32, count(ws_order_number#4)#35]
-Results [3]: [count(ws_order_number#4)#35 AS order count #37, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#5))#31,17,2) AS total shipping cost #38, MakeDecimal(sum(UnscaledValue(ws_net_profit#6))#32,17,2) AS total net profit #39]
+Functions [3]: [SUM(UnscaledValue(ws_ext_ship_cost#5)), SUM(UnscaledValue(ws_net_profit#6)), count(distinct ws_order_number#4)]
+Aggregate Attributes [3]: [SUM(UnscaledValue(ws_ext_ship_cost#5))#31, SUM(UnscaledValue(ws_net_profit#6))#32, count(ws_order_number#4)#35]
+Results [3]: [count(ws_order_number#4)#35 AS order count #37, MakeDecimal(SUM(UnscaledValue(ws_ext_ship_cost#5))#31,17,2) AS total shipping cost #38, MakeDecimal(SUM(UnscaledValue(ws_net_profit#6))#32,17,2) AS total net profit #39]
 
 ===== Subqueries =====
 

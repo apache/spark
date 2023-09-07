@@ -75,7 +75,7 @@ Input [5]: [sr_customer_sk#1, sr_store_sk#2, sr_return_amt#3, sr_returned_date_s
 (7) HashAggregate [codegen id : 2]
 Input [3]: [sr_customer_sk#1, sr_store_sk#2, sr_return_amt#3]
 Keys [2]: [sr_customer_sk#1, sr_store_sk#2]
-Functions [1]: [partial_sum(UnscaledValue(sr_return_amt#3))]
+Functions [1]: [partial_SUM(UnscaledValue(sr_return_amt#3))]
 Aggregate Attributes [1]: [sum#7]
 Results [3]: [sr_customer_sk#1, sr_store_sk#2, sum#8]
 
@@ -86,9 +86,9 @@ Arguments: hashpartitioning(sr_customer_sk#1, sr_store_sk#2, 5), ENSURE_REQUIREM
 (9) HashAggregate [codegen id : 8]
 Input [3]: [sr_customer_sk#1, sr_store_sk#2, sum#8]
 Keys [2]: [sr_customer_sk#1, sr_store_sk#2]
-Functions [1]: [sum(UnscaledValue(sr_return_amt#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(sr_return_amt#3))#9]
-Results [3]: [sr_customer_sk#1 AS ctr_customer_sk#10, sr_store_sk#2 AS ctr_store_sk#11, MakeDecimal(sum(UnscaledValue(sr_return_amt#3))#9,17,2) AS ctr_total_return#12]
+Functions [1]: [SUM(UnscaledValue(sr_return_amt#3))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(sr_return_amt#3))#9]
+Results [3]: [sr_customer_sk#1 AS ctr_customer_sk#10, sr_store_sk#2 AS ctr_store_sk#11, MakeDecimal(SUM(UnscaledValue(sr_return_amt#3))#9,17,2) AS ctr_total_return#12]
 
 (10) Filter [codegen id : 8]
 Input [3]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12]
@@ -125,7 +125,7 @@ Input [5]: [sr_customer_sk#13, sr_store_sk#14, sr_return_amt#15, sr_returned_dat
 (17) HashAggregate [codegen id : 4]
 Input [3]: [sr_customer_sk#13, sr_store_sk#14, sr_return_amt#15]
 Keys [2]: [sr_customer_sk#13, sr_store_sk#14]
-Functions [1]: [partial_sum(UnscaledValue(sr_return_amt#15))]
+Functions [1]: [partial_SUM(UnscaledValue(sr_return_amt#15))]
 Aggregate Attributes [1]: [sum#18]
 Results [3]: [sr_customer_sk#13, sr_store_sk#14, sum#19]
 
@@ -136,14 +136,14 @@ Arguments: hashpartitioning(sr_customer_sk#13, sr_store_sk#14, 5), ENSURE_REQUIR
 (19) HashAggregate [codegen id : 5]
 Input [3]: [sr_customer_sk#13, sr_store_sk#14, sum#19]
 Keys [2]: [sr_customer_sk#13, sr_store_sk#14]
-Functions [1]: [sum(UnscaledValue(sr_return_amt#15))]
-Aggregate Attributes [1]: [sum(UnscaledValue(sr_return_amt#15))#9]
-Results [2]: [sr_store_sk#14 AS ctr_store_sk#20, MakeDecimal(sum(UnscaledValue(sr_return_amt#15))#9,17,2) AS ctr_total_return#21]
+Functions [1]: [SUM(UnscaledValue(sr_return_amt#15))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(sr_return_amt#15))#9]
+Results [2]: [sr_store_sk#14 AS ctr_store_sk#20, MakeDecimal(SUM(UnscaledValue(sr_return_amt#15))#9,17,2) AS ctr_total_return#21]
 
 (20) HashAggregate [codegen id : 5]
 Input [2]: [ctr_store_sk#20, ctr_total_return#21]
 Keys [1]: [ctr_store_sk#20]
-Functions [1]: [partial_avg(ctr_total_return#21)]
+Functions [1]: [partial_AVG(ctr_total_return#21)]
 Aggregate Attributes [2]: [sum#22, count#23]
 Results [3]: [ctr_store_sk#20, sum#24, count#25]
 
@@ -154,27 +154,27 @@ Arguments: hashpartitioning(ctr_store_sk#20, 5), ENSURE_REQUIREMENTS, [plan_id=3
 (22) HashAggregate [codegen id : 6]
 Input [3]: [ctr_store_sk#20, sum#24, count#25]
 Keys [1]: [ctr_store_sk#20]
-Functions [1]: [avg(ctr_total_return#21)]
-Aggregate Attributes [1]: [avg(ctr_total_return#21)#26]
-Results [2]: [(avg(ctr_total_return#21)#26 * 1.2) AS (avg(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
+Functions [1]: [AVG(ctr_total_return#21)]
+Aggregate Attributes [1]: [AVG(ctr_total_return#21)#26]
+Results [2]: [(AVG(ctr_total_return#21)#26 * 1.2) AS (AVG(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
 
 (23) Filter [codegen id : 6]
-Input [2]: [(avg(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#27)
+Input [2]: [(AVG(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
+Condition : isnotnull((AVG(ctr_total_return) * 1.2)#27)
 
 (24) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
+Input [2]: [(AVG(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
 Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=4]
 
 (25) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ctr_store_sk#11]
 Right keys [1]: [ctr_store_sk#20]
 Join type: Inner
-Join condition: (cast(ctr_total_return#12 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#27)
+Join condition: (cast(ctr_total_return#12 as decimal(24,7)) > (AVG(ctr_total_return) * 1.2)#27)
 
 (26) Project [codegen id : 8]
 Output [2]: [ctr_customer_sk#10, ctr_store_sk#11]
-Input [5]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12, (avg(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
+Input [5]: [ctr_customer_sk#10, ctr_store_sk#11, ctr_total_return#12, (AVG(ctr_total_return) * 1.2)#27, ctr_store_sk#20]
 
 (27) Scan parquet spark_catalog.default.store
 Output [2]: [s_store_sk#28, s_state#29]

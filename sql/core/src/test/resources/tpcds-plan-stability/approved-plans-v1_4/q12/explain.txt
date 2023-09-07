@@ -80,7 +80,7 @@ Input [8]: [ws_ext_sales_price#2, ws_sold_date_sk#3, i_item_id#6, i_item_desc#7,
 (13) HashAggregate [codegen id : 3]
 Input [6]: [ws_ext_sales_price#2, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
-Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#2))]
+Functions [1]: [partial_SUM(UnscaledValue(ws_ext_sales_price#2))]
 Aggregate Attributes [1]: [sum#12]
 Results [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#13]
 
@@ -91,9 +91,9 @@ Arguments: hashpartitioning(i_item_id#6, i_item_desc#7, i_category#10, i_class#9
 (15) HashAggregate [codegen id : 4]
 Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, sum#13]
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
-Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#2))#14]
-Results [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#14,17,2) AS itemrevenue#15, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#14,17,2) AS _w0#16, i_item_id#6]
+Functions [1]: [SUM(UnscaledValue(ws_ext_sales_price#2))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(ws_ext_sales_price#2))#14]
+Results [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(SUM(UnscaledValue(ws_ext_sales_price#2))#14,17,2) AS itemrevenue#15, MakeDecimal(SUM(UnscaledValue(ws_ext_sales_price#2))#14,17,2) AS _w0#16, i_item_id#6]
 
 (16) Exchange
 Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, i_item_id#6]
@@ -105,7 +105,7 @@ Arguments: [i_class#9 ASC NULLS FIRST], false, 0
 
 (18) Window
 Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, _w0#16, i_item_id#6]
-Arguments: [sum(_w0#16) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#17], [i_class#9]
+Arguments: [SUM(_w0#16) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#17], [i_class#9]
 
 (19) Project [codegen id : 6]
 Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#15, ((_w0#16 * 100) / _we0#17) AS revenueratio#18, i_item_id#6]

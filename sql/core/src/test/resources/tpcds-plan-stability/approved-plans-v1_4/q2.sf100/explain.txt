@@ -113,7 +113,7 @@ Input [5]: [sold_date_sk#3, sales_price#4, d_date_sk#9, d_week_seq#10, d_day_nam
 (14) HashAggregate [codegen id : 4]
 Input [3]: [sales_price#4, d_week_seq#10, d_day_name#11]
 Keys [1]: [d_week_seq#10]
-Functions [7]: [partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))]
+Functions [7]: [partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))]
 Aggregate Attributes [7]: [sum#14, sum#15, sum#16, sum#17, sum#18, sum#19, sum#20]
 Results [8]: [d_week_seq#10, sum#21, sum#22, sum#23, sum#24, sum#25, sum#26, sum#27]
 
@@ -124,9 +124,9 @@ Arguments: hashpartitioning(d_week_seq#10, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 (16) HashAggregate [codegen id : 12]
 Input [8]: [d_week_seq#10, sum#21, sum#22, sum#23, sum#24, sum#25, sum#26, sum#27]
 Keys [1]: [d_week_seq#10]
-Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END)), sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))]
-Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#31, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#32, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#33, sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#34]
-Results [8]: [d_week_seq#10, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#28,17,2) AS sun_sales#35, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#29,17,2) AS mon_sales#36, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#30,17,2) AS tue_sales#37, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#31,17,2) AS wed_sales#38, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#32,17,2) AS thu_sales#39, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#33,17,2) AS fri_sales#40, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#34,17,2) AS sat_sales#41]
+Functions [7]: [SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))]
+Aggregate Attributes [7]: [SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#28, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#29, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#30, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#31, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#32, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#33, SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#34]
+Results [8]: [d_week_seq#10, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Sunday   ) THEN sales_price#4 END))#28,17,2) AS sun_sales#35, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Monday   ) THEN sales_price#4 END))#29,17,2) AS mon_sales#36, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Tuesday  ) THEN sales_price#4 END))#30,17,2) AS tue_sales#37, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Wednesday) THEN sales_price#4 END))#31,17,2) AS wed_sales#38, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Thursday ) THEN sales_price#4 END))#32,17,2) AS thu_sales#39, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Friday   ) THEN sales_price#4 END))#33,17,2) AS fri_sales#40, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#11 = Saturday ) THEN sales_price#4 END))#34,17,2) AS sat_sales#41]
 
 (17) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_week_seq#42, d_year#43]
@@ -221,7 +221,7 @@ Input [5]: [sold_date_sk#54, sales_price#55, d_date_sk#60, d_week_seq#61, d_day_
 (37) HashAggregate [codegen id : 9]
 Input [3]: [sales_price#55, d_week_seq#61, d_day_name#62]
 Keys [1]: [d_week_seq#61]
-Functions [7]: [partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))]
+Functions [7]: [partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END)), partial_SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))]
 Aggregate Attributes [7]: [sum#65, sum#66, sum#67, sum#68, sum#69, sum#70, sum#71]
 Results [8]: [d_week_seq#61, sum#72, sum#73, sum#74, sum#75, sum#76, sum#77, sum#78]
 
@@ -232,9 +232,9 @@ Arguments: hashpartitioning(d_week_seq#61, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 (39) HashAggregate [codegen id : 11]
 Input [8]: [d_week_seq#61, sum#72, sum#73, sum#74, sum#75, sum#76, sum#77, sum#78]
 Keys [1]: [d_week_seq#61]
-Functions [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END)), sum(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))]
-Aggregate Attributes [7]: [sum(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END))#28, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END))#29, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END))#30, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END))#31, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END))#32, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END))#33, sum(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))#34]
-Results [8]: [d_week_seq#61, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END))#28,17,2) AS sun_sales#79, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END))#29,17,2) AS mon_sales#80, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END))#30,17,2) AS tue_sales#81, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END))#31,17,2) AS wed_sales#82, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END))#32,17,2) AS thu_sales#83, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END))#33,17,2) AS fri_sales#84, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))#34,17,2) AS sat_sales#85]
+Functions [7]: [SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END)), SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))]
+Aggregate Attributes [7]: [SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END))#28, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END))#29, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END))#30, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END))#31, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END))#32, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END))#33, SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))#34]
+Results [8]: [d_week_seq#61, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Sunday   ) THEN sales_price#55 END))#28,17,2) AS sun_sales#79, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Monday   ) THEN sales_price#55 END))#29,17,2) AS mon_sales#80, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Tuesday  ) THEN sales_price#55 END))#30,17,2) AS tue_sales#81, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Wednesday) THEN sales_price#55 END))#31,17,2) AS wed_sales#82, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Thursday ) THEN sales_price#55 END))#32,17,2) AS thu_sales#83, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Friday   ) THEN sales_price#55 END))#33,17,2) AS fri_sales#84, MakeDecimal(SUM(UnscaledValue(CASE WHEN (d_day_name#62 = Saturday ) THEN sales_price#55 END))#34,17,2) AS sat_sales#85]
 
 (40) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_week_seq#86, d_year#87]
@@ -279,15 +279,15 @@ Join type: Inner
 Join condition: None
 
 (49) Project [codegen id : 12]
-Output [8]: [d_week_seq1#44, ROUND((sun_sales1#45 / sun_sales2#89), 2) AS ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1#46 / mon_sales2#90), 2) AS ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1#47 / tue_sales2#91), 2) AS ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1#48 / wed_sales2#92), 2) AS ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1#49 / thu_sales2#93), 2) AS ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1#50 / fri_sales2#94), 2) AS ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1#51 / sat_sales2#95), 2) AS ROUND((sat_sales1 / sat_sales2), 2)#101]
+Output [8]: [d_week_seq1#44, ROUND((sun_sales1#45 / sun_sales2#89), 2) AS ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1#46 / mon_sales2#90), 2) AS ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1#47 / tue_sales2#91), 2) AS ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1#48 / wed_sales2#92), 2) AS ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1#49 / thu_sales2#93), 2) AS ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1#50 / fri_sales2#94), 2) AS ROUND((fri_sales1 / fri_sales2), 2)#101, ROUND((sat_sales1#51 / sat_sales2#95), 2) AS ROUND((sat_sales1 / sat_sales2), 2)#102]
 Input [16]: [d_week_seq1#44, sun_sales1#45, mon_sales1#46, tue_sales1#47, wed_sales1#48, thu_sales1#49, fri_sales1#50, sat_sales1#51, d_week_seq2#88, sun_sales2#89, mon_sales2#90, tue_sales2#91, wed_sales2#92, thu_sales2#93, fri_sales2#94, sat_sales2#95]
 
 (50) Exchange
-Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1 / sat_sales2), 2)#101]
+Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#101, ROUND((sat_sales1 / sat_sales2), 2)#102]
 Arguments: rangepartitioning(d_week_seq1#44 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (51) Sort [codegen id : 13]
-Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#13, ROUND((sat_sales1 / sat_sales2), 2)#101]
+Input [8]: [d_week_seq1#44, ROUND((sun_sales1 / sun_sales2), 2)#96, ROUND((mon_sales1 / mon_sales2), 2)#97, ROUND((tue_sales1 / tue_sales2), 2)#98, ROUND((wed_sales1 / wed_sales2), 2)#99, ROUND((thu_sales1 / thu_sales2), 2)#100, ROUND((fri_sales1 / fri_sales2), 2)#101, ROUND((sat_sales1 / sat_sales2), 2)#102]
 Arguments: [d_week_seq1#44 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
@@ -324,19 +324,19 @@ Input [2]: [d_week_seq#42, d_year#43]
 Input [1]: [d_week_seq#42]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [buf#102]
-Results [1]: [buf#103]
+Aggregate Attributes [1]: [buf#103]
+Results [1]: [buf#104]
 
 (57) Exchange
-Input [1]: [buf#103]
+Input [1]: [buf#104]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 
 (58) ObjectHashAggregate
-Input [1]: [buf#103]
+Input [1]: [buf#104]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#104]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#104 AS bloomFilter#105]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#105]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#42, 42), 362, 9656, 0, 0)#105 AS bloomFilter#106]
 
 Subquery:2 Hosting operator id = 33 Hosting Expression = Subquery scalar-subquery#63, [id=#64]
 ObjectHashAggregate (65)
@@ -370,18 +370,18 @@ Input [2]: [d_week_seq#86, d_year#87]
 Input [1]: [d_week_seq#86]
 Keys: []
 Functions [1]: [partial_bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [buf#106]
-Results [1]: [buf#107]
+Aggregate Attributes [1]: [buf#107]
+Results [1]: [buf#108]
 
 (64) Exchange
-Input [1]: [buf#107]
+Input [1]: [buf#108]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 
 (65) ObjectHashAggregate
-Input [1]: [buf#107]
+Input [1]: [buf#108]
 Keys: []
 Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#108]
-Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#108 AS bloomFilter#109]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#109]
+Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#86, 42), 362, 9656, 0, 0)#109 AS bloomFilter#110]
 
 

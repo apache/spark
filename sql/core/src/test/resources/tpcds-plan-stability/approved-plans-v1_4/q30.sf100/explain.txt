@@ -177,7 +177,7 @@ Input [5]: [wr_returning_customer_sk#17, wr_returning_addr_sk#18, wr_return_amt#
 (27) HashAggregate [codegen id : 8]
 Input [3]: [wr_returning_customer_sk#17, wr_return_amt#19, ca_state#24]
 Keys [2]: [wr_returning_customer_sk#17, ca_state#24]
-Functions [1]: [partial_sum(UnscaledValue(wr_return_amt#19))]
+Functions [1]: [partial_SUM(UnscaledValue(wr_return_amt#19))]
 Aggregate Attributes [1]: [sum#25]
 Results [3]: [wr_returning_customer_sk#17, ca_state#24, sum#26]
 
@@ -188,9 +188,9 @@ Arguments: hashpartitioning(wr_returning_customer_sk#17, ca_state#24, 5), ENSURE
 (29) HashAggregate
 Input [3]: [wr_returning_customer_sk#17, ca_state#24, sum#26]
 Keys [2]: [wr_returning_customer_sk#17, ca_state#24]
-Functions [1]: [sum(UnscaledValue(wr_return_amt#19))]
-Aggregate Attributes [1]: [sum(UnscaledValue(wr_return_amt#19))#27]
-Results [3]: [wr_returning_customer_sk#17 AS ctr_customer_sk#28, ca_state#24 AS ctr_state#29, MakeDecimal(sum(UnscaledValue(wr_return_amt#19))#27,17,2) AS ctr_total_return#30]
+Functions [1]: [SUM(UnscaledValue(wr_return_amt#19))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(wr_return_amt#19))#27]
+Results [3]: [wr_returning_customer_sk#17 AS ctr_customer_sk#28, ca_state#24 AS ctr_state#29, MakeDecimal(SUM(UnscaledValue(wr_return_amt#19))#27,17,2) AS ctr_total_return#30]
 
 (30) Filter
 Input [3]: [ctr_customer_sk#28, ctr_state#29, ctr_total_return#30]
@@ -262,7 +262,7 @@ Input [5]: [wr_returning_customer_sk#31, wr_returning_addr_sk#32, wr_return_amt#
 (45) HashAggregate [codegen id : 14]
 Input [3]: [wr_returning_customer_sk#31, wr_return_amt#33, ca_state#37]
 Keys [2]: [wr_returning_customer_sk#31, ca_state#37]
-Functions [1]: [partial_sum(UnscaledValue(wr_return_amt#33))]
+Functions [1]: [partial_SUM(UnscaledValue(wr_return_amt#33))]
 Aggregate Attributes [1]: [sum#38]
 Results [3]: [wr_returning_customer_sk#31, ca_state#37, sum#39]
 
@@ -273,14 +273,14 @@ Arguments: hashpartitioning(wr_returning_customer_sk#31, ca_state#37, 5), ENSURE
 (47) HashAggregate [codegen id : 15]
 Input [3]: [wr_returning_customer_sk#31, ca_state#37, sum#39]
 Keys [2]: [wr_returning_customer_sk#31, ca_state#37]
-Functions [1]: [sum(UnscaledValue(wr_return_amt#33))]
-Aggregate Attributes [1]: [sum(UnscaledValue(wr_return_amt#33))#27]
-Results [2]: [ca_state#37 AS ctr_state#40, MakeDecimal(sum(UnscaledValue(wr_return_amt#33))#27,17,2) AS ctr_total_return#41]
+Functions [1]: [SUM(UnscaledValue(wr_return_amt#33))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(wr_return_amt#33))#27]
+Results [2]: [ca_state#37 AS ctr_state#40, MakeDecimal(SUM(UnscaledValue(wr_return_amt#33))#27,17,2) AS ctr_total_return#41]
 
 (48) HashAggregate [codegen id : 15]
 Input [2]: [ctr_state#40, ctr_total_return#41]
 Keys [1]: [ctr_state#40]
-Functions [1]: [partial_avg(ctr_total_return#41)]
+Functions [1]: [partial_AVG(ctr_total_return#41)]
 Aggregate Attributes [2]: [sum#42, count#43]
 Results [3]: [ctr_state#40, sum#44, count#45]
 
@@ -291,27 +291,27 @@ Arguments: hashpartitioning(ctr_state#40, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 (50) HashAggregate [codegen id : 16]
 Input [3]: [ctr_state#40, sum#44, count#45]
 Keys [1]: [ctr_state#40]
-Functions [1]: [avg(ctr_total_return#41)]
-Aggregate Attributes [1]: [avg(ctr_total_return#41)#46]
-Results [2]: [(avg(ctr_total_return#41)#46 * 1.2) AS (avg(ctr_total_return) * 1.2)#47, ctr_state#40]
+Functions [1]: [AVG(ctr_total_return#41)]
+Aggregate Attributes [1]: [AVG(ctr_total_return#41)#46]
+Results [2]: [(AVG(ctr_total_return#41)#46 * 1.2) AS (AVG(ctr_total_return) * 1.2)#47, ctr_state#40]
 
 (51) Filter [codegen id : 16]
-Input [2]: [(avg(ctr_total_return) * 1.2)#47, ctr_state#40]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#47)
+Input [2]: [(AVG(ctr_total_return) * 1.2)#47, ctr_state#40]
+Condition : isnotnull((AVG(ctr_total_return) * 1.2)#47)
 
 (52) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#47, ctr_state#40]
+Input [2]: [(AVG(ctr_total_return) * 1.2)#47, ctr_state#40]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [plan_id=9]
 
 (53) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ctr_state#29]
 Right keys [1]: [ctr_state#40]
 Join type: Inner
-Join condition: (cast(ctr_total_return#30 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#47)
+Join condition: (cast(ctr_total_return#30 as decimal(24,7)) > (AVG(ctr_total_return) * 1.2)#47)
 
 (54) Project [codegen id : 17]
 Output [13]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, c_preferred_cust_flag#7, c_birth_day#8, c_birth_month#9, c_birth_year#10, c_birth_country#11, c_login#12, c_email_address#13, c_last_review_date#14, ctr_total_return#30]
-Input [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, c_preferred_cust_flag#7, c_birth_day#8, c_birth_month#9, c_birth_year#10, c_birth_country#11, c_login#12, c_email_address#13, c_last_review_date#14, ctr_state#29, ctr_total_return#30, (avg(ctr_total_return) * 1.2)#47, ctr_state#40]
+Input [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, c_preferred_cust_flag#7, c_birth_day#8, c_birth_month#9, c_birth_year#10, c_birth_country#11, c_login#12, c_email_address#13, c_last_review_date#14, ctr_state#29, ctr_total_return#30, (AVG(ctr_total_return) * 1.2)#47, ctr_state#40]
 
 (55) TakeOrderedAndProject
 Input [13]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, c_preferred_cust_flag#7, c_birth_day#8, c_birth_month#9, c_birth_year#10, c_birth_country#11, c_login#12, c_email_address#13, c_last_review_date#14, ctr_total_return#30]

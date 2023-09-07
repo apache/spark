@@ -3,7 +3,7 @@ WholeStageCodegen (10)
     InputAdapter
       Exchange [o_year] #1
         WholeStageCodegen (9)
-          HashAggregate [o_year,sum,isEmpty,sum,isEmpty] [sum(CASE WHEN (nation = BRAZIL) THEN volume ELSE 0 END),sum(volume),mkt_share,sum,isEmpty,sum,isEmpty]
+          HashAggregate [o_year,sum,isEmpty,sum,isEmpty] [SUM(CASE WHEN (nation = BRAZIL) THEN volume ELSE 0 END),SUM(volume),mkt_share,sum,isEmpty,sum,isEmpty]
             InputAdapter
               Exchange [o_year] #2
                 WholeStageCodegen (8)

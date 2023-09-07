@@ -4,8 +4,8 @@
 struct<c_last_name:string,c_first_name:string,c_salutation:string,c_preferred_cust_flag:string,ss_ticket_number:int,cnt:bigint>
 -- !query output
 NULL	NULL	NULL	Y	47915	15
-NULL	NULL	NULL	NULL	126143	15
 NULL	NULL	NULL	NULL	215293	15
+NULL	NULL	NULL	NULL	126143	15
 NULL	NULL	Mrs.      	N	120593	15
 NULL	Rubin               	Sir       	NULL	30056	15
 Adler                         	Justin              	Sir       	Y	226187	15

@@ -1,5 +1,5 @@
 WholeStageCodegen (7)
-  HashAggregate [sum] [sum(UnscaledValue(cs_ext_discount_amt)),excess discount amount,sum]
+  HashAggregate [sum] [SUM(UnscaledValue(cs_ext_discount_amt)),excess discount amount,sum]
     InputAdapter
       Exchange #1
         WholeStageCodegen (6)
@@ -7,7 +7,7 @@ WholeStageCodegen (7)
             Project [cs_ext_discount_amt]
               BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                 Project [cs_ext_discount_amt,cs_sold_date_sk]
-                  BroadcastHashJoin [i_item_sk,cs_item_sk,cs_ext_discount_amt,(1.3 * avg(cs_ext_discount_amt))]
+                  BroadcastHashJoin [i_item_sk,cs_item_sk,cs_ext_discount_amt,(1.3 * AVG(cs_ext_discount_amt))]
                     Project [cs_ext_discount_amt,cs_sold_date_sk,i_item_sk]
                       BroadcastHashJoin [cs_item_sk,i_item_sk]
                         Filter [cs_item_sk,cs_ext_discount_amt]
@@ -33,8 +33,8 @@ WholeStageCodegen (7)
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (4)
-                          Filter [(1.3 * avg(cs_ext_discount_amt))]
-                            HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),sum,count]
+                          Filter [(1.3 * AVG(cs_ext_discount_amt))]
+                            HashAggregate [cs_item_sk,sum,count] [AVG(UnscaledValue(cs_ext_discount_amt)),(1.3 * AVG(cs_ext_discount_amt)),sum,count]
                               InputAdapter
                                 Exchange [cs_item_sk] #5
                                   WholeStageCodegen (3)

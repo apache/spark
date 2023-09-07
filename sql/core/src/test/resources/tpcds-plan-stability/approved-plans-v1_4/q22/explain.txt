@@ -115,7 +115,7 @@ Arguments: [[inv_quantity_on_hand#3, i_product_name#11, i_brand#8, i_class#9, i_
 (20) HashAggregate [codegen id : 4]
 Input [6]: [inv_quantity_on_hand#3, i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
-Functions [1]: [partial_avg(inv_quantity_on_hand#3)]
+Functions [1]: [partial_AVG(inv_quantity_on_hand#3)]
 Aggregate Attributes [2]: [sum#18, count#19]
 Results [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#20, count#21]
 
@@ -126,9 +126,9 @@ Arguments: hashpartitioning(i_product_name#13, i_brand#14, i_class#15, i_categor
 (22) HashAggregate [codegen id : 5]
 Input [7]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17, sum#20, count#21]
 Keys [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, spark_grouping_id#17]
-Functions [1]: [avg(inv_quantity_on_hand#3)]
-Aggregate Attributes [1]: [avg(inv_quantity_on_hand#3)#22]
-Results [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, avg(inv_quantity_on_hand#3)#22 AS qoh#23]
+Functions [1]: [AVG(inv_quantity_on_hand#3)]
+Aggregate Attributes [1]: [AVG(inv_quantity_on_hand#3)#22]
+Results [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, AVG(inv_quantity_on_hand#3)#22 AS qoh#23]
 
 (23) TakeOrderedAndProject
 Input [5]: [i_product_name#13, i_brand#14, i_class#15, i_category#16, qoh#23]

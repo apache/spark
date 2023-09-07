@@ -11,7 +11,7 @@ WholeStageCodegen (88)
                     InputAdapter
                       Exchange [item_sk,store_name,store_zip] #2
                         WholeStageCodegen (42)
-                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_coupon_amt)),product_name,item_sk,store_name,store_zip,b_street_number,b_streen_name,b_city,b_zip,c_street_number,c_street_name,c_city,c_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
+                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),SUM(UnscaledValue(ss_wholesale_cost)),SUM(UnscaledValue(ss_list_price)),SUM(UnscaledValue(ss_coupon_amt)),product_name,item_sk,store_name,store_zip,b_street_number,b_streen_name,b_city,b_zip,c_street_number,c_street_name,c_city,c_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
                             InputAdapter
                               Exchange [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year] #3
                                 WholeStageCodegen (41)
@@ -123,7 +123,7 @@ WholeStageCodegen (88)
                                                                                                                                                                     WholeStageCodegen (10)
                                                                                                                                                                       Project [cs_item_sk]
                                                                                                                                                                         Filter [sale,refund]
-                                                                                                                                                                          HashAggregate [cs_item_sk,sum,sum,isEmpty] [sum(UnscaledValue(cs_ext_list_price)),sum(((cr_refunded_cash + cr_reversed_charge) + cr_store_credit)),sale,refund,sum,sum,isEmpty]
+                                                                                                                                                                          HashAggregate [cs_item_sk,sum,sum,isEmpty] [SUM(UnscaledValue(cs_ext_list_price)),SUM(((cr_refunded_cash + cr_reversed_charge) + cr_store_credit)),sale,refund,sum,sum,isEmpty]
                                                                                                                                                                             InputAdapter
                                                                                                                                                                               Exchange [cs_item_sk] #14
                                                                                                                                                                                 WholeStageCodegen (9)
@@ -249,7 +249,7 @@ WholeStageCodegen (88)
                     InputAdapter
                       Exchange [item_sk,store_name,store_zip] #26
                         WholeStageCodegen (85)
-                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_list_price)),sum(UnscaledValue(ss_coupon_amt)),item_sk,store_name,store_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
+                          HashAggregate [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year,count,sum,sum,sum] [count(1),SUM(UnscaledValue(ss_wholesale_cost)),SUM(UnscaledValue(ss_list_price)),SUM(UnscaledValue(ss_coupon_amt)),item_sk,store_name,store_zip,syear,cnt,s1,s2,s3,count,sum,sum,sum]
                             InputAdapter
                               Exchange [i_product_name,i_item_sk,s_store_name,s_zip,ca_street_number,ca_street_name,ca_city,ca_zip,ca_street_number,ca_street_name,ca_city,ca_zip,d_year,d_year,d_year] #27
                                 WholeStageCodegen (84)

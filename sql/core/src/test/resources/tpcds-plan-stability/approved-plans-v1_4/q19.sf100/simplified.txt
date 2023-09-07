@@ -1,6 +1,6 @@
 TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
   WholeStageCodegen (13)
-    HashAggregate [i_brand,i_brand_id,i_manufact_id,i_manufact,sum] [sum(UnscaledValue(ss_ext_sales_price)),brand_id,brand,ext_price,sum]
+    HashAggregate [i_brand,i_brand_id,i_manufact_id,i_manufact,sum] [SUM(UnscaledValue(ss_ext_sales_price)),brand_id,brand,ext_price,sum]
       InputAdapter
         Exchange [i_brand,i_brand_id,i_manufact_id,i_manufact] #1
           WholeStageCodegen (12)

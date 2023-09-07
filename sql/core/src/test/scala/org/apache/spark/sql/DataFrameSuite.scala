@@ -3124,7 +3124,7 @@ class DataFrameSuite extends QueryTest
     assert(df2.schema.head.name == "CAST(array(struct(id1, id2))[0].id1 AS INT)")
 
     val df3 = df.select(hex(expr("struct(id1, id2).id1")))
-    assert(df3.schema.head.name == "hex(struct(id1, id2).id1)")
+    assert(df3.schema.head.name == "HEX(struct(id1, id2).id1)")
 
     // this test is to make sure we don't have a regression.
     val df4 = df.selectExpr("id1 == null")

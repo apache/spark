@@ -206,7 +206,7 @@ Input [7]: [ss_item_sk#4, ss_ext_sales_price#7, i_item_sk#16, i_brand_id#17, i_b
 (36) HashAggregate [codegen id : 6]
 Input [5]: [ss_ext_sales_price#7, i_brand_id#17, i_brand#18, i_manufact_id#19, i_manufact#20]
 Keys [4]: [i_brand#18, i_brand_id#17, i_manufact_id#19, i_manufact#20]
-Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#7))]
+Functions [1]: [partial_SUM(UnscaledValue(ss_ext_sales_price#7))]
 Aggregate Attributes [1]: [sum#22]
 Results [5]: [i_brand#18, i_brand_id#17, i_manufact_id#19, i_manufact#20, sum#23]
 
@@ -217,9 +217,9 @@ Arguments: hashpartitioning(i_brand#18, i_brand_id#17, i_manufact_id#19, i_manuf
 (38) HashAggregate [codegen id : 7]
 Input [5]: [i_brand#18, i_brand_id#17, i_manufact_id#19, i_manufact#20, sum#23]
 Keys [4]: [i_brand#18, i_brand_id#17, i_manufact_id#19, i_manufact#20]
-Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#7))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#7))#24]
-Results [5]: [i_brand_id#17 AS brand_id#25, i_brand#18 AS brand#26, i_manufact_id#19, i_manufact#20, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#7))#24,17,2) AS ext_price#27]
+Functions [1]: [SUM(UnscaledValue(ss_ext_sales_price#7))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(ss_ext_sales_price#7))#24]
+Results [5]: [i_brand_id#17 AS brand_id#25, i_brand#18 AS brand#26, i_manufact_id#19, i_manufact#20, MakeDecimal(SUM(UnscaledValue(ss_ext_sales_price#7))#24,17,2) AS ext_price#27]
 
 (39) TakeOrderedAndProject
 Input [5]: [brand_id#25, brand#26, i_manufact_id#19, i_manufact#20, ext_price#27]

@@ -3,7 +3,7 @@ WholeStageCodegen (8)
     InputAdapter
       Exchange [nation,o_year] #1
         WholeStageCodegen (7)
-          HashAggregate [nation,o_year,sum,isEmpty] [sum(amount),sum_profit,sum,isEmpty]
+          HashAggregate [nation,o_year,sum,isEmpty] [SUM(amount),sum_profit,sum,isEmpty]
             InputAdapter
               Exchange [nation,o_year] #2
                 WholeStageCodegen (6)

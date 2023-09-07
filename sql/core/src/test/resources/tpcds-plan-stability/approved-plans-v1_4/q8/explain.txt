@@ -234,7 +234,7 @@ Input [4]: [ss_net_profit#2, s_store_name#7, s_zip#8, ca_zip#10]
 (40) HashAggregate [codegen id : 8]
 Input [2]: [ss_net_profit#2, s_store_name#7]
 Keys [1]: [s_store_name#7]
-Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#2))]
+Functions [1]: [partial_SUM(UnscaledValue(ss_net_profit#2))]
 Aggregate Attributes [1]: [sum#20]
 Results [2]: [s_store_name#7, sum#21]
 
@@ -245,13 +245,13 @@ Arguments: hashpartitioning(s_store_name#7, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 (42) HashAggregate [codegen id : 9]
 Input [2]: [s_store_name#7, sum#21]
 Keys [1]: [s_store_name#7]
-Functions [1]: [sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#22]
-Results [2]: [s_store_name#7, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#22,17,2) AS sum(ss_net_profit)#23]
+Functions [1]: [SUM(UnscaledValue(ss_net_profit#2))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(ss_net_profit#2))#22]
+Results [2]: [s_store_name#7, MakeDecimal(SUM(UnscaledValue(ss_net_profit#2))#22,17,2) AS SUM(ss_net_profit)#23]
 
 (43) TakeOrderedAndProject
-Input [2]: [s_store_name#7, sum(ss_net_profit)#23]
-Arguments: 100, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, sum(ss_net_profit)#23]
+Input [2]: [s_store_name#7, SUM(ss_net_profit)#23]
+Arguments: 100, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, SUM(ss_net_profit)#23]
 
 ===== Subqueries =====
 

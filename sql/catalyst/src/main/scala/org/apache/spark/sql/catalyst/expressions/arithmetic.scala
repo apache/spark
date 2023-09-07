@@ -132,7 +132,7 @@ case class UnaryMinus(
 case class UnaryPositive(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def prettyName: String = "positive"
+  override def prettyName: String = "POSITIVE"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -173,6 +173,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndAnsiInterval)
 
   override def dataType: DataType = child.dataType
+
+  override def prettyName: String = "ABS"
 
   private lazy val numeric = (dataType match {
     case _: DayTimeIntervalType => LongExactNumeric

@@ -110,7 +110,7 @@ Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#9, d_date_sk#10]
 (19) HashAggregate [codegen id : 4]
 Input [2]: [cs_sales_price#2, ca_zip#9]
 Keys [1]: [ca_zip#9]
-Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#2))]
+Functions [1]: [partial_SUM(UnscaledValue(cs_sales_price#2))]
 Aggregate Attributes [1]: [sum#11]
 Results [2]: [ca_zip#9, sum#12]
 
@@ -121,13 +121,13 @@ Arguments: hashpartitioning(ca_zip#9, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 (21) HashAggregate [codegen id : 5]
 Input [2]: [ca_zip#9, sum#12]
 Keys [1]: [ca_zip#9]
-Functions [1]: [sum(UnscaledValue(cs_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#13]
-Results [2]: [ca_zip#9, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#13,17,2) AS sum(cs_sales_price)#14]
+Functions [1]: [SUM(UnscaledValue(cs_sales_price#2))]
+Aggregate Attributes [1]: [SUM(UnscaledValue(cs_sales_price#2))#13]
+Results [2]: [ca_zip#9, MakeDecimal(SUM(UnscaledValue(cs_sales_price#2))#13,17,2) AS SUM(cs_sales_price)#14]
 
 (22) TakeOrderedAndProject
-Input [2]: [ca_zip#9, sum(cs_sales_price)#14]
-Arguments: 100, [ca_zip#9 ASC NULLS FIRST], [ca_zip#9, sum(cs_sales_price)#14]
+Input [2]: [ca_zip#9, SUM(cs_sales_price)#14]
+Arguments: 100, [ca_zip#9 ASC NULLS FIRST], [ca_zip#9, SUM(cs_sales_price)#14]
 
 ===== Subqueries =====
 

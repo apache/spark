@@ -257,7 +257,7 @@ Input [11]: [ss_quantity#5, s_store_id#10, s_store_name#11, i_item_id#13, i_item
 (46) HashAggregate [codegen id : 17]
 Input [7]: [ss_quantity#5, sr_return_quantity#18, cs_quantity#24, s_store_id#10, s_store_name#11, i_item_id#13, i_item_desc#14]
 Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [partial_sum(ss_quantity#5), partial_sum(sr_return_quantity#18), partial_sum(cs_quantity#24)]
+Functions [3]: [partial_SUM(ss_quantity#5), partial_SUM(sr_return_quantity#18), partial_SUM(cs_quantity#24)]
 Aggregate Attributes [3]: [sum#28, sum#29, sum#30]
 Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#31, sum#32, sum#33]
 
@@ -268,9 +268,9 @@ Arguments: hashpartitioning(i_item_id#13, i_item_desc#14, s_store_id#10, s_store
 (48) HashAggregate [codegen id : 18]
 Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum#31, sum#32, sum#33]
 Keys [4]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11]
-Functions [3]: [sum(ss_quantity#5), sum(sr_return_quantity#18), sum(cs_quantity#24)]
-Aggregate Attributes [3]: [sum(ss_quantity#5)#34, sum(sr_return_quantity#18)#35, sum(cs_quantity#24)#36]
-Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, sum(ss_quantity#5)#34 AS store_sales_quantity#37, sum(sr_return_quantity#18)#35 AS store_returns_quantity#38, sum(cs_quantity#24)#36 AS catalog_sales_quantity#39]
+Functions [3]: [SUM(ss_quantity#5), SUM(sr_return_quantity#18), SUM(cs_quantity#24)]
+Aggregate Attributes [3]: [SUM(ss_quantity#5)#34, SUM(sr_return_quantity#18)#35, SUM(cs_quantity#24)#36]
+Results [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, SUM(ss_quantity#5)#34 AS store_sales_quantity#37, SUM(sr_return_quantity#18)#35 AS store_returns_quantity#38, SUM(cs_quantity#24)#36 AS catalog_sales_quantity#39]
 
 (49) TakeOrderedAndProject
 Input [7]: [i_item_id#13, i_item_desc#14, s_store_id#10, s_store_name#11, store_sales_quantity#37, store_returns_quantity#38, catalog_sales_quantity#39]

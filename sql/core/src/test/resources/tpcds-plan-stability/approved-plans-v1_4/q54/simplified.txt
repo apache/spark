@@ -5,7 +5,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
         Exchange [segment] #1
           WholeStageCodegen (12)
             HashAggregate [segment] [count,count]
-              HashAggregate [c_customer_sk,sum] [sum(UnscaledValue(ss_ext_sales_price)),segment,sum]
+              HashAggregate [c_customer_sk,sum] [SUM(UnscaledValue(ss_ext_sales_price)),segment,sum]
                 InputAdapter
                   Exchange [c_customer_sk] #2
                     WholeStageCodegen (11)

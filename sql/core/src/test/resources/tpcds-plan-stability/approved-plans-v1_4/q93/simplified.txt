@@ -1,6 +1,6 @@
 TakeOrderedAndProject [sumsales,ss_customer_sk]
   WholeStageCodegen (7)
-    HashAggregate [ss_customer_sk,sum,isEmpty] [sum(act_sales),sumsales,sum,isEmpty]
+    HashAggregate [ss_customer_sk,sum,isEmpty] [SUM(act_sales),sumsales,sum,isEmpty]
       InputAdapter
         Exchange [ss_customer_sk] #1
           WholeStageCodegen (6)

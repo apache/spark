@@ -99,7 +99,7 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 
 (5) BroadcastExchange
 Input [5]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List((SHIFTLEFT(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
 
 (6) Scan parquet spark_catalog.default.web_returns
 Output [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11, wr_returned_date_sk#12]
@@ -145,7 +145,7 @@ Input [7]: [ws_item_sk#1, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6, wr_re
 (15) HashAggregate [codegen id : 3]
 Input [5]: [ws_item_sk#1, ws_quantity#3, ws_net_paid#4, wr_return_quantity#10, wr_return_amt#11]
 Keys [1]: [ws_item_sk#1]
-Functions [4]: [partial_sum(coalesce(wr_return_quantity#10, 0)), partial_sum(coalesce(ws_quantity#3, 0)), partial_sum(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_SUM(coalesce(wr_return_quantity#10, 0)), partial_SUM(coalesce(ws_quantity#3, 0)), partial_SUM(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00)), partial_SUM(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#14, sum#15, sum#16, isEmpty#17, sum#18, isEmpty#19]
 Results [7]: [ws_item_sk#1, sum#20, sum#21, sum#22, isEmpty#23, sum#24, isEmpty#25]
 
@@ -156,9 +156,9 @@ Arguments: hashpartitioning(ws_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 (17) HashAggregate [codegen id : 4]
 Input [7]: [ws_item_sk#1, sum#20, sum#21, sum#22, isEmpty#23, sum#24, isEmpty#25]
 Keys [1]: [ws_item_sk#1]
-Functions [4]: [sum(coalesce(wr_return_quantity#10, 0)), sum(coalesce(ws_quantity#3, 0)), sum(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#10, 0))#26, sum(coalesce(ws_quantity#3, 0))#27, sum(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00))#28, sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29]
-Results [3]: [ws_item_sk#1 AS item#30, (cast(sum(coalesce(wr_return_quantity#10, 0))#26 as decimal(15,4)) / cast(sum(coalesce(ws_quantity#3, 0))#27 as decimal(15,4))) AS return_ratio#31, (cast(sum(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00))#28 as decimal(15,4)) / cast(sum(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29 as decimal(15,4))) AS currency_ratio#32]
+Functions [4]: [SUM(coalesce(wr_return_quantity#10, 0)), SUM(coalesce(ws_quantity#3, 0)), SUM(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00)), SUM(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [SUM(coalesce(wr_return_quantity#10, 0))#26, SUM(coalesce(ws_quantity#3, 0))#27, SUM(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00))#28, SUM(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29]
+Results [3]: [ws_item_sk#1 AS item#30, (cast(SUM(coalesce(wr_return_quantity#10, 0))#26 as decimal(15,4)) / cast(SUM(coalesce(ws_quantity#3, 0))#27 as decimal(15,4))) AS return_ratio#31, (cast(SUM(coalesce(cast(wr_return_amt#11 as decimal(12,2)), 0.00))#28 as decimal(15,4)) / cast(SUM(coalesce(cast(ws_net_paid#4 as decimal(12,2)), 0.00))#29 as decimal(15,4))) AS currency_ratio#32]
 
 (18) Exchange
 Input [3]: [item#30, return_ratio#31, currency_ratio#32]
@@ -209,7 +209,7 @@ Input [6]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, c
 
 (29) BroadcastExchange
 Input [5]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_sold_date_sk#41]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=4]
+Arguments: HashedRelationBroadcastMode(List((SHIFTLEFT(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=4]
 
 (30) Scan parquet spark_catalog.default.catalog_returns
 Output [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45, cr_returned_date_sk#46]
@@ -255,7 +255,7 @@ Input [7]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cs_sold_date_sk#41, c
 (39) HashAggregate [codegen id : 10]
 Input [5]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cr_return_quantity#44, cr_return_amount#45]
 Keys [1]: [cs_item_sk#36]
-Functions [4]: [partial_sum(coalesce(cr_return_quantity#44, 0)), partial_sum(coalesce(cs_quantity#38, 0)), partial_sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_SUM(coalesce(cr_return_quantity#44, 0)), partial_SUM(coalesce(cs_quantity#38, 0)), partial_SUM(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), partial_SUM(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#48, sum#49, sum#50, isEmpty#51, sum#52, isEmpty#53]
 Results [7]: [cs_item_sk#36, sum#54, sum#55, sum#56, isEmpty#57, sum#58, isEmpty#59]
 
@@ -266,9 +266,9 @@ Arguments: hashpartitioning(cs_item_sk#36, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 (41) HashAggregate [codegen id : 11]
 Input [7]: [cs_item_sk#36, sum#54, sum#55, sum#56, isEmpty#57, sum#58, isEmpty#59]
 Keys [1]: [cs_item_sk#36]
-Functions [4]: [sum(coalesce(cr_return_quantity#44, 0)), sum(coalesce(cs_quantity#38, 0)), sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#44, 0))#60, sum(coalesce(cs_quantity#38, 0))#61, sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#62, sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63]
-Results [3]: [cs_item_sk#36 AS item#64, (cast(sum(coalesce(cr_return_quantity#44, 0))#60 as decimal(15,4)) / cast(sum(coalesce(cs_quantity#38, 0))#61 as decimal(15,4))) AS return_ratio#65, (cast(sum(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#62 as decimal(15,4)) / cast(sum(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63 as decimal(15,4))) AS currency_ratio#66]
+Functions [4]: [SUM(coalesce(cr_return_quantity#44, 0)), SUM(coalesce(cs_quantity#38, 0)), SUM(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00)), SUM(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [SUM(coalesce(cr_return_quantity#44, 0))#60, SUM(coalesce(cs_quantity#38, 0))#61, SUM(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#62, SUM(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63]
+Results [3]: [cs_item_sk#36 AS item#64, (cast(SUM(coalesce(cr_return_quantity#44, 0))#60 as decimal(15,4)) / cast(SUM(coalesce(cs_quantity#38, 0))#61 as decimal(15,4))) AS return_ratio#65, (cast(SUM(coalesce(cast(cr_return_amount#45 as decimal(12,2)), 0.00))#62 as decimal(15,4)) / cast(SUM(coalesce(cast(cs_net_paid#39 as decimal(12,2)), 0.00))#63 as decimal(15,4))) AS currency_ratio#66]
 
 (42) Exchange
 Input [3]: [item#64, return_ratio#65, currency_ratio#66]
@@ -319,7 +319,7 @@ Input [6]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, 
 
 (53) BroadcastExchange
 Input [5]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, ss_sold_date_sk#75]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List((SHIFTLEFT(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=7]
 
 (54) Scan parquet spark_catalog.default.store_returns
 Output [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79, sr_returned_date_sk#80]
@@ -365,7 +365,7 @@ Input [7]: [ss_item_sk#70, ss_quantity#72, ss_net_paid#73, ss_sold_date_sk#75, s
 (63) HashAggregate [codegen id : 17]
 Input [5]: [ss_item_sk#70, ss_quantity#72, ss_net_paid#73, sr_return_quantity#78, sr_return_amt#79]
 Keys [1]: [ss_item_sk#70]
-Functions [4]: [partial_sum(coalesce(sr_return_quantity#78, 0)), partial_sum(coalesce(ss_quantity#72, 0)), partial_sum(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_SUM(coalesce(sr_return_quantity#78, 0)), partial_SUM(coalesce(ss_quantity#72, 0)), partial_SUM(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00)), partial_SUM(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#82, sum#83, sum#84, isEmpty#85, sum#86, isEmpty#87]
 Results [7]: [ss_item_sk#70, sum#88, sum#89, sum#90, isEmpty#91, sum#92, isEmpty#93]
 
@@ -376,9 +376,9 @@ Arguments: hashpartitioning(ss_item_sk#70, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 (65) HashAggregate [codegen id : 18]
 Input [7]: [ss_item_sk#70, sum#88, sum#89, sum#90, isEmpty#91, sum#92, isEmpty#93]
 Keys [1]: [ss_item_sk#70]
-Functions [4]: [sum(coalesce(sr_return_quantity#78, 0)), sum(coalesce(ss_quantity#72, 0)), sum(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#78, 0))#94, sum(coalesce(ss_quantity#72, 0))#95, sum(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00))#96, sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97]
-Results [3]: [ss_item_sk#70 AS item#98, (cast(sum(coalesce(sr_return_quantity#78, 0))#94 as decimal(15,4)) / cast(sum(coalesce(ss_quantity#72, 0))#95 as decimal(15,4))) AS return_ratio#99, (cast(sum(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00))#96 as decimal(15,4)) / cast(sum(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97 as decimal(15,4))) AS currency_ratio#100]
+Functions [4]: [SUM(coalesce(sr_return_quantity#78, 0)), SUM(coalesce(ss_quantity#72, 0)), SUM(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00)), SUM(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [SUM(coalesce(sr_return_quantity#78, 0))#94, SUM(coalesce(ss_quantity#72, 0))#95, SUM(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00))#96, SUM(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97]
+Results [3]: [ss_item_sk#70 AS item#98, (cast(SUM(coalesce(sr_return_quantity#78, 0))#94 as decimal(15,4)) / cast(SUM(coalesce(ss_quantity#72, 0))#95 as decimal(15,4))) AS return_ratio#99, (cast(SUM(coalesce(cast(sr_return_amt#79 as decimal(12,2)), 0.00))#96 as decimal(15,4)) / cast(SUM(coalesce(cast(ss_net_paid#73 as decimal(12,2)), 0.00))#97 as decimal(15,4))) AS currency_ratio#100]
 
 (66) Exchange
 Input [3]: [item#98, return_ratio#99, currency_ratio#100]

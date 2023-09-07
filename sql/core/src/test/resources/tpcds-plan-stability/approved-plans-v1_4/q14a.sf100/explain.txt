@@ -433,7 +433,7 @@ Input [7]: [ss_item_sk#1, ss_quantity#2, ss_list_price#3, i_item_sk#37, i_brand_
 (69) HashAggregate [codegen id : 37]
 Input [5]: [ss_quantity#2, ss_list_price#3, i_brand_id#38, i_class_id#39, i_category_id#40]
 Keys [3]: [i_brand_id#38, i_class_id#39, i_category_id#40]
-Functions [2]: [partial_sum((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3)), partial_count(1)]
+Functions [2]: [partial_SUM((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3)), partial_count(1)]
 Aggregate Attributes [3]: [sum#41, isEmpty#42, count#43]
 Results [6]: [i_brand_id#38, i_class_id#39, i_category_id#40, sum#44, isEmpty#45, count#46]
 
@@ -444,9 +444,9 @@ Arguments: hashpartitioning(i_brand_id#38, i_class_id#39, i_category_id#40, 5), 
 (71) HashAggregate [codegen id : 38]
 Input [6]: [i_brand_id#38, i_class_id#39, i_category_id#40, sum#44, isEmpty#45, count#46]
 Keys [3]: [i_brand_id#38, i_class_id#39, i_category_id#40]
-Functions [2]: [sum((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3)), count(1)]
-Aggregate Attributes [2]: [sum((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3))#47, count(1)#48]
-Results [5]: [i_brand_id#38, i_class_id#39, i_category_id#40, sum((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3))#47 AS sales#49, count(1)#48 AS number_sales#50]
+Functions [2]: [SUM((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3)), count(1)]
+Aggregate Attributes [2]: [SUM((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3))#47, count(1)#48]
+Results [5]: [i_brand_id#38, i_class_id#39, i_category_id#40, SUM((cast(ss_quantity#2 as decimal(10,0)) * ss_list_price#3))#47 AS sales#49, count(1)#48 AS number_sales#50]
 
 (72) Filter [codegen id : 38]
 Input [5]: [i_brand_id#38, i_class_id#39, i_category_id#40, sales#49, number_sales#50]
@@ -509,7 +509,7 @@ Input [7]: [cs_item_sk#57, cs_quantity#58, cs_list_price#59, i_item_sk#63, i_bra
 (85) HashAggregate [codegen id : 75]
 Input [5]: [cs_quantity#58, cs_list_price#59, i_brand_id#64, i_class_id#65, i_category_id#66]
 Keys [3]: [i_brand_id#64, i_class_id#65, i_category_id#66]
-Functions [2]: [partial_sum((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59)), partial_count(1)]
+Functions [2]: [partial_SUM((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59)), partial_count(1)]
 Aggregate Attributes [3]: [sum#67, isEmpty#68, count#69]
 Results [6]: [i_brand_id#64, i_class_id#65, i_category_id#66, sum#70, isEmpty#71, count#72]
 
@@ -520,9 +520,9 @@ Arguments: hashpartitioning(i_brand_id#64, i_class_id#65, i_category_id#66, 5), 
 (87) HashAggregate [codegen id : 76]
 Input [6]: [i_brand_id#64, i_class_id#65, i_category_id#66, sum#70, isEmpty#71, count#72]
 Keys [3]: [i_brand_id#64, i_class_id#65, i_category_id#66]
-Functions [2]: [sum((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59)), count(1)]
-Aggregate Attributes [2]: [sum((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59))#73, count(1)#74]
-Results [5]: [i_brand_id#64, i_class_id#65, i_category_id#66, sum((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59))#73 AS sales#75, count(1)#74 AS number_sales#76]
+Functions [2]: [SUM((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59)), count(1)]
+Aggregate Attributes [2]: [SUM((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59))#73, count(1)#74]
+Results [5]: [i_brand_id#64, i_class_id#65, i_category_id#66, SUM((cast(cs_quantity#58 as decimal(10,0)) * cs_list_price#59))#73 AS sales#75, count(1)#74 AS number_sales#76]
 
 (88) Filter [codegen id : 76]
 Input [5]: [i_brand_id#64, i_class_id#65, i_category_id#66, sales#75, number_sales#76]
@@ -585,7 +585,7 @@ Input [7]: [ws_item_sk#78, ws_quantity#79, ws_list_price#80, i_item_sk#84, i_bra
 (101) HashAggregate [codegen id : 113]
 Input [5]: [ws_quantity#79, ws_list_price#80, i_brand_id#85, i_class_id#86, i_category_id#87]
 Keys [3]: [i_brand_id#85, i_class_id#86, i_category_id#87]
-Functions [2]: [partial_sum((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80)), partial_count(1)]
+Functions [2]: [partial_SUM((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80)), partial_count(1)]
 Aggregate Attributes [3]: [sum#88, isEmpty#89, count#90]
 Results [6]: [i_brand_id#85, i_class_id#86, i_category_id#87, sum#91, isEmpty#92, count#93]
 
@@ -596,9 +596,9 @@ Arguments: hashpartitioning(i_brand_id#85, i_class_id#86, i_category_id#87, 5), 
 (103) HashAggregate [codegen id : 114]
 Input [6]: [i_brand_id#85, i_class_id#86, i_category_id#87, sum#91, isEmpty#92, count#93]
 Keys [3]: [i_brand_id#85, i_class_id#86, i_category_id#87]
-Functions [2]: [sum((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80)), count(1)]
-Aggregate Attributes [2]: [sum((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80))#94, count(1)#95]
-Results [5]: [i_brand_id#85, i_class_id#86, i_category_id#87, sum((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80))#94 AS sales#96, count(1)#95 AS number_sales#97]
+Functions [2]: [SUM((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80)), count(1)]
+Aggregate Attributes [2]: [SUM((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80))#94, count(1)#95]
+Results [5]: [i_brand_id#85, i_class_id#86, i_category_id#87, SUM((cast(ws_quantity#79 as decimal(10,0)) * ws_list_price#80))#94 AS sales#96, count(1)#95 AS number_sales#97]
 
 (104) Filter [codegen id : 114]
 Input [5]: [i_brand_id#85, i_class_id#86, i_category_id#87, sales#96, number_sales#97]
@@ -617,7 +617,7 @@ Arguments: [[sales#49, number_sales#50, channel#53, i_brand_id#54, i_class_id#55
 (108) HashAggregate [codegen id : 115]
 Input [7]: [sales#49, number_sales#50, channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, spark_grouping_id#103]
 Keys [5]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, spark_grouping_id#103]
-Functions [2]: [partial_sum(sales#49), partial_sum(number_sales#50)]
+Functions [2]: [partial_SUM(sales#49), partial_SUM(number_sales#50)]
 Aggregate Attributes [3]: [sum#104, isEmpty#105, sum#106]
 Results [8]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, spark_grouping_id#103, sum#107, isEmpty#108, sum#109]
 
@@ -628,13 +628,13 @@ Arguments: hashpartitioning(channel#99, i_brand_id#100, i_class_id#101, i_catego
 (110) HashAggregate [codegen id : 116]
 Input [8]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, spark_grouping_id#103, sum#107, isEmpty#108, sum#109]
 Keys [5]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, spark_grouping_id#103]
-Functions [2]: [sum(sales#49), sum(number_sales#50)]
-Aggregate Attributes [2]: [sum(sales#49)#110, sum(number_sales#50)#111]
-Results [6]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, sum(sales#49)#110 AS sum(sales)#112, sum(number_sales#50)#111 AS sum(number_sales)#113]
+Functions [2]: [SUM(sales#49), SUM(number_sales#50)]
+Aggregate Attributes [2]: [SUM(sales#49)#110, SUM(number_sales#50)#111]
+Results [6]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, SUM(sales#49)#110 AS SUM(sales)#112, SUM(number_sales#50)#111 AS SUM(number_sales)#113]
 
 (111) TakeOrderedAndProject
-Input [6]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, sum(sales)#112, sum(number_sales)#113]
-Arguments: 100, [channel#99 ASC NULLS FIRST, i_brand_id#100 ASC NULLS FIRST, i_class_id#101 ASC NULLS FIRST, i_category_id#102 ASC NULLS FIRST], [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, sum(sales)#112, sum(number_sales)#113]
+Input [6]: [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, SUM(sales)#112, SUM(number_sales)#113]
+Arguments: 100, [channel#99 ASC NULLS FIRST, i_brand_id#100 ASC NULLS FIRST, i_class_id#101 ASC NULLS FIRST, i_category_id#102 ASC NULLS FIRST], [channel#99, i_brand_id#100, i_class_id#101, i_category_id#102, SUM(sales)#112, SUM(number_sales)#113]
 
 ===== Subqueries =====
 
@@ -734,7 +734,7 @@ Input [4]: [ws_quantity#126, ws_list_price#127, ws_sold_date_sk#128, d_date_sk#1
 (128) HashAggregate [codegen id : 7]
 Input [2]: [quantity#118, list_price#119]
 Keys: []
-Functions [1]: [partial_avg((cast(quantity#118 as decimal(10,0)) * list_price#119))]
+Functions [1]: [partial_AVG((cast(quantity#118 as decimal(10,0)) * list_price#119))]
 Aggregate Attributes [2]: [sum#132, count#133]
 Results [2]: [sum#134, count#135]
 
@@ -745,9 +745,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
 (130) HashAggregate [codegen id : 8]
 Input [2]: [sum#134, count#135]
 Keys: []
-Functions [1]: [avg((cast(quantity#118 as decimal(10,0)) * list_price#119))]
-Aggregate Attributes [1]: [avg((cast(quantity#118 as decimal(10,0)) * list_price#119))#136]
-Results [1]: [avg((cast(quantity#118 as decimal(10,0)) * list_price#119))#136 AS average_sales#137]
+Functions [1]: [AVG((cast(quantity#118 as decimal(10,0)) * list_price#119))]
+Aggregate Attributes [1]: [AVG((cast(quantity#118 as decimal(10,0)) * list_price#119))#136]
+Results [1]: [AVG((cast(quantity#118 as decimal(10,0)) * list_price#119))#136 AS average_sales#137]
 
 Subquery:2 Hosting operator id = 112 Hosting Expression = ss_sold_date_sk#116 IN dynamicpruning#12
 

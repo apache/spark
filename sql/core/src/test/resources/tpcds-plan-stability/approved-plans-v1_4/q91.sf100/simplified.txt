@@ -3,7 +3,7 @@ WholeStageCodegen (9)
     InputAdapter
       Exchange [Returns_Loss] #1
         WholeStageCodegen (8)
-          HashAggregate [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status,sum] [sum(UnscaledValue(cr_net_loss)),Call_Center,Call_Center_Name,Manager,Returns_Loss,sum]
+          HashAggregate [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status,sum] [SUM(UnscaledValue(cr_net_loss)),Call_Center,Call_Center_Name,Manager,Returns_Loss,sum]
             InputAdapter
               Exchange [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status] #2
                 WholeStageCodegen (7)

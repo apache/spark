@@ -8,7 +8,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
               InputAdapter
                 Union
                   WholeStageCodegen (21)
-                    HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                    HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [SUM(sales),SUM(returns),SUM(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange [channel,id] #2
                           WholeStageCodegen (20)
@@ -16,7 +16,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                               InputAdapter
                                 Union
                                   WholeStageCodegen (6)
-                                    HashAggregate [s_store_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
+                                    HashAggregate [s_store_id,sum,sum,sum,sum] [SUM(UnscaledValue(sales_price)),SUM(UnscaledValue(return_amt)),SUM(UnscaledValue(profit)),SUM(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
                                       InputAdapter
                                         Exchange [s_store_id] #3
                                           WholeStageCodegen (5)
@@ -58,7 +58,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                             InputAdapter
                                                               Scan parquet spark_catalog.default.store [s_store_sk,s_store_id]
                                   WholeStageCodegen (12)
-                                    HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
+                                    HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [SUM(UnscaledValue(sales_price)),SUM(UnscaledValue(return_amt)),SUM(UnscaledValue(profit)),SUM(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
                                       InputAdapter
                                         Exchange [cp_catalog_page_id] #6
                                           WholeStageCodegen (11)
@@ -93,7 +93,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                             InputAdapter
                                                               Scan parquet spark_catalog.default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
                                   WholeStageCodegen (19)
-                                    HashAggregate [web_site_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
+                                    HashAggregate [web_site_id,sum,sum,sum,sum] [SUM(UnscaledValue(sales_price)),SUM(UnscaledValue(return_amt)),SUM(UnscaledValue(profit)),SUM(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
                                       InputAdapter
                                         Exchange [web_site_id] #8
                                           WholeStageCodegen (18)
@@ -136,20 +136,20 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                             InputAdapter
                                                               Scan parquet spark_catalog.default.web_site [web_site_sk,web_site_id]
                   WholeStageCodegen (43)
-                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [SUM(sales),SUM(returns),SUM(profit),id,SUM(sales),SUM(returns),SUM(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange [channel] #11
                           WholeStageCodegen (42)
                             HashAggregate [channel,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
-                              HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                              HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [SUM(sales),SUM(returns),SUM(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
                                   ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2
                   WholeStageCodegen (65)
-                    HashAggregate [sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                    HashAggregate [sum,isEmpty,sum,isEmpty,sum,isEmpty] [SUM(sales),SUM(returns),SUM(profit),channel,id,SUM(sales),SUM(returns),SUM(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange #12
                           WholeStageCodegen (64)
                             HashAggregate [sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
-                              HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                              HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [SUM(sales),SUM(returns),SUM(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
                                   ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #2
