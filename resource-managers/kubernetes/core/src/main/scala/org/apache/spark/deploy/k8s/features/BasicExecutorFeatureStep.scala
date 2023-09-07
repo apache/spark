@@ -84,7 +84,10 @@ private[spark] class BasicExecutorFeatureStep(
       execResources.cores.get.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
-
+  private val executorRequestEphemeralStorageGiB = kubernetesConf.sparkConf
+    .get(EXECUTOR_REQUEST_EPHEMERAL_STORAGE_GB)
+  private val executorLimitEphemeralStorageGiB = kubernetesConf.sparkConf
+    .get(EXECUTOR_LIMIT_EPHEMERAL_STORAGE_GB)
   private def buildExecutorResourcesQuantities(
       customResources: Set[ExecutorResourceRequest]): Map[String, Quantity] = {
     customResources.map { request =>
@@ -118,6 +121,8 @@ private[spark] class BasicExecutorFeatureStep(
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)
+    val executorRequestEphemeralQuantity = new Quantity(s"${executorRequestEphemeralStorageGiB}Gi")
+    val executorLimitEphemeralQuantity = new Quantity(s"${executorLimitEphemeralStorageGiB}Gi")
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
@@ -204,10 +209,28 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
-    val executorContainerWithConfVolume = if (disableConfigMap) {
+    val executorContainerWithEphemeralRequest = if (executorRequestEphemeralStorageGiB.equals(0)) {
       executorContainer
     } else {
       new ContainerBuilder(executorContainer)
+        .editResources()
+          .addToRequests("ephemeral-storage", executorRequestEphemeralQuantity)
+          .endResources()
+        .build()
+    }
+    val executorContainerWithEphemeralLimit = if (executorLimitEphemeralStorageGiB.equals(0)) {
+      executorContainerWithEphemeralRequest
+    } else {
+      new ContainerBuilder(executorContainerWithEphemeralRequest)
+        .editResources()
+          .addToLimits("ephemeral-storage", executorLimitEphemeralQuantity)
+          .endResources()
+        .build()
+    }
+    val executorContainerWithConfVolume = if (disableConfigMap) {
+      executorContainerWithEphemeralLimit
+    } else {
+      new ContainerBuilder(executorContainerWithEphemeralLimit)
         .addNewVolumeMount()
           .withName(SPARK_CONF_VOLUME_EXEC)
           .withMountPath(SPARK_CONF_DIR_INTERNAL)

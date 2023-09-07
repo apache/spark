@@ -139,6 +139,34 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
+  val EXECUTOR_REQUEST_EPHEMERAL_STORAGE_GB =
+    ConfigBuilder("spark.kubernetes.executor.ephemeralStorageGB.request")
+      .doc("Ephemeral storage to use for the executors.")
+      .intConf
+      .checkValue(_ >= 0, "Ephemeral storage should be a positive integer")
+      .createWithDefault(0)
+
+  val EXECUTOR_LIMIT_EPHEMERAL_STORAGE_GB =
+    ConfigBuilder("spark.kubernetes.executor.ephemeralStorageGB.limit")
+      .doc("Ephemeral storage to use for the executors.")
+      .intConf
+      .checkValue(_ >= 0, "Ephemeral storage should be a positive integer")
+      .createWithDefault(0)
+
+  val DRIVER_REQUEST_EPHEMERAL_STORAGE_GB =
+    ConfigBuilder("spark.kubernetes.driver.ephemeralStorageGB.request")
+      .doc("Ephemeral storage to use for the driver.")
+      .intConf
+      .checkValue(_ >= 0, "Ephemeral storage should be a positive integer")
+      .createWithDefault(0)
+
+  val DRIVER_LIMIT_EPHEMERAL_STORAGE_GB =
+    ConfigBuilder("spark.kubernetes.driver.ephemeralStorageGB.limit")
+      .doc("Ephemeral storage to use for the driver.")
+      .intConf
+      .checkValue(_ >= 0, "Ephemeral storage should be a positive integer")
+      .createWithDefault(0)
+
   val CONTAINER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
       .doc("Kubernetes image pull policy. Valid values are Always, Never, and IfNotPresent.")

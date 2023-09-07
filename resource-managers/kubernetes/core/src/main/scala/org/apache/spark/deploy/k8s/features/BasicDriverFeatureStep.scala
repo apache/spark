@@ -54,6 +54,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
 
+  // Ephemeral storage settings
+  private val driverRequestEphemeralStorageGiB = conf.get(DRIVER_REQUEST_EPHEMERAL_STORAGE_GB)
+  private val driverLimitEphemeralStorageGiB = conf.get(DRIVER_LIMIT_EPHEMERAL_STORAGE_GB)
   // The default memory overhead factor to use, derived from the deprecated
   // `spark.kubernetes.memoryOverheadFactor` config or the default overhead values.
   // If the user has not set it, then use a different default for non-JVM apps. This value is
@@ -90,7 +93,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new Quantity(limitCores))
     }
-
+    val driverRequestEphemeralQuantity = new Quantity(s"${driverRequestEphemeralStorageGiB}Gi")
+    val driverLimitEphemeralQuantity = new Quantity(s"${driverLimitEphemeralStorageGiB}Gi")
     val driverResourceQuantities =
       KubernetesUtils.buildResourcesQuantities(SPARK_DRIVER_PREFIX, conf.sparkConf)
 
@@ -138,7 +142,24 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()
-
+    val driverContainerWithEphemeralRequest = if (driverRequestEphemeralStorageGiB.equals(0)) {
+      driverContainer
+    } else {
+      new ContainerBuilder(driverContainer)
+        .editResources()
+          .addToRequests("ephemeral-storage", driverRequestEphemeralQuantity)
+          .endResources()
+        .build()
+    }
+    val driverContainerWithEphemeralLimit = if (driverLimitEphemeralStorageGiB.equals(0)) {
+      driverContainerWithEphemeralRequest
+    } else {
+      new ContainerBuilder(driverContainerWithEphemeralRequest)
+        .editResources()
+          .addToLimits("ephemeral-storage", driverLimitEphemeralQuantity)
+          .endResources()
+        .build()
+    }
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(driverPodName)
@@ -156,7 +177,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     conf.schedulerName
       .foreach(driverPod.getSpec.setSchedulerName)
 
-    SparkPod(driverPod, driverContainer)
+    SparkPod(driverPod, driverContainerWithEphemeralLimit)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
