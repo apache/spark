@@ -104,7 +104,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
   private lazy val py4jPath = Paths.get(
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
-  private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
+  private[spark] lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
   private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 

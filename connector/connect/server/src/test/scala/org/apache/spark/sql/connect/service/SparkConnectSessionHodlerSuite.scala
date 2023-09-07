@@ -106,7 +106,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
             "f.write(CloudPickleSerializer().dumps((" +
             "lambda df, batchId: batchId)))"),
         None,
-        "PYTHONPATH" -> s"$pysparkPythonPath:${IntegratedUDFTestUtils.pythonPath}").!!
+        "PYTHONPATH" ->
+          s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}").!!
       binaryFunc = Files.readAllBytes(path.toPath)
     }
     assert(binaryFunc != null)
@@ -146,7 +147,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
               s"exec(open('$codePath', 'r').read());" +
               "f.write(CloudPickleSerializer().dumps(listener))"),
           None,
-          "PYTHONPATH" -> s"$pysparkPythonPath:${IntegratedUDFTestUtils.pythonPath}").!!
+          "PYTHONPATH" ->
+            s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}").!!
         binaryFunc = Files.readAllBytes(path.toPath)
       }
     }
