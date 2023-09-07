@@ -766,7 +766,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName),
+      Some(fullTableName(tableName)))
   }
 
   /**
@@ -777,7 +778,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
     sparkSession.sharedState.cacheManager.cacheQuery(
-      sparkSession.table(tableName), Some(tableName), storageLevel)
+      sparkSession.table(tableName), Some(fullTableName(tableName)), storageLevel)
+  }
+
+  private def fullTableName(tableName: String): String = {
+    sparkSession.sessionState.analyzer.execute(
+      UnresolvedIdentifier(sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName),
+        allowTemp = true)) match {
+      case ResolvedIdentifier(FakeSystemCatalog, ident) => ident.toString
+
+      case ResolvedIdentifier(cat, ident) => s"${cat.name()}.$ident"
+    }
   }
 
   /**
