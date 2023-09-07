@@ -3924,7 +3924,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
         ...
 
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
+    def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
@@ -3933,6 +3933,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 4.0.0
+            Supports column ordinal.
 
         Parameters
         ----------
@@ -3945,6 +3948,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`GroupedData`
             Rolled-up data by given columns.
+
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
 
         Examples
         --------
@@ -3959,8 +3967,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
+
+        >>> df.rollup(2, 1).count().orderBy(1, 2).show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | NULL|NULL|    2|
+        |Alice|NULL|    1|
+        |Alice|   2|    1|
+        |  Bob|NULL|    1|
+        |  Bob|   5|    1|
+        +-----+----+-----+
         """
-        jgd = self._jdf.rollup(self._jcols(*cols))
+        jgd = self._jdf.rollup(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
@@ -3983,6 +4002,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Supports column ordinal.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3994,6 +4016,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`GroupedData`
             Cube of the data by given columns.
+
+        Notes
+        -----
+        A column ordinal starts from 1, which is different from the
+        0-based :meth:`__getitem__`.
 
         Examples
         --------
@@ -4010,8 +4037,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
+
+        >>> df.cube(2, 1).count().orderBy(1, 2).show()
+        +-----+----+-----+
+        | name| age|count|
+        +-----+----+-----+
+        | NULL|NULL|    2|
+        | NULL|   2|    1|
+        | NULL|   5|    1|
+        |Alice|NULL|    1|
+        |Alice|   2|    1|
+        |  Bob|NULL|    1|
+        |  Bob|   5|    1|
+        +-----+----+-----+
         """
-        jgd = self._jdf.cube(self._jcols(*cols))
+        jgd = self._jdf.cube(self._jcols_ordinal(*cols))
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
