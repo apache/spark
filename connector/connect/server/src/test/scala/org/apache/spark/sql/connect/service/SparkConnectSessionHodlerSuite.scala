@@ -95,7 +95,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   private def streamingForeachBatchFunction(pysparkPythonPath: String): Array[Byte] = {
-    var binaryPandasFunc: Array[Byte] = null
+    var binaryFunc: Array[Byte] = null
     withTempPath { path =>
       Process(
         Seq(
@@ -106,15 +106,15 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
             "f.write(CloudPickleSerializer().dumps((" +
             "lambda df, batchId: batchId)))"),
         None,
-        "PYTHONPATH" -> s"$pysparkPythonPath").!!
-      binaryPandasFunc = Files.readAllBytes(path.toPath)
+        "PYTHONPATH" -> s"$pysparkPythonPath:${IntegratedUDFTestUtils.pythonPath}").!!
+      binaryFunc = Files.readAllBytes(path.toPath)
     }
-    assert(binaryPandasFunc != null)
-    binaryPandasFunc
+    assert(binaryFunc != null)
+    binaryFunc
   }
 
   private def streamingQueryListenerFunction(pysparkPythonPath: String): Array[Byte] = {
-    var binaryPandasFunc: Array[Byte] = null
+    var binaryFunc: Array[Byte] = null
     val pythonScript =
       """
         |from pyspark.sql.streaming.listener import StreamingQueryListener
@@ -146,12 +146,12 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
               s"exec(open('$codePath', 'r').read());" +
               "f.write(CloudPickleSerializer().dumps(listener))"),
           None,
-          "PYTHONPATH" -> s"$pysparkPythonPath").!!
-        binaryPandasFunc = Files.readAllBytes(path.toPath)
+          "PYTHONPATH" -> s"$pysparkPythonPath:${IntegratedUDFTestUtils.pythonPath}").!!
+        binaryFunc = Files.readAllBytes(path.toPath)
       }
     }
-    assert(binaryPandasFunc != null)
-    binaryPandasFunc
+    assert(binaryFunc != null)
+    binaryFunc
   }
 
   private def dummyPythonFunction(sessionHolder: SessionHolder)(
