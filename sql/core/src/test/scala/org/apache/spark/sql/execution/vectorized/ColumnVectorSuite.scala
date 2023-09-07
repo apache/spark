@@ -423,7 +423,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(testVector.getShorts(0, 3)(2) == 9)
   }
 
-  testVectors("SPARK-44805: getBytes with dictionary", 3, ShortType) { testVector =>
+  testVectors("SPARK-44805: getBytes with dictionary", 3, ByteType) { testVector =>
     val dict = new ColumnDictionary(Array[Int](7, 8, 9))
     testVector.setDictionary(dict)
     testVector.reserveDictionaryIds(3)
