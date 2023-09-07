@@ -198,7 +198,7 @@ Project [cast(9223372036854775808 as bigint) AS CAST(9223372036854775808 AS BIGI
 -- !query
 SELECT HEX(CAST('abc' AS binary))
 -- !query analysis
-Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
+Project [HEX(cast(abc as binary)) AS HEX(CAST(abc AS BINARY))#x]
 +- OneRowRelation
 
 

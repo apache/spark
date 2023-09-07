@@ -207,7 +207,7 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
 -- !query analysis
 Project [ AS five#x, f1#x, (f1#x * cast(cast(2 as smallint) as int)) AS x#x]
-+- Filter (abs(f1#x) < 1073741824)
++- Filter (ABS(f1#x) < 1073741824)
    +- SubqueryAlias i
       +- SubqueryAlias spark_catalog.default.int4_tbl
          +- Relation spark_catalog.default.int4_tbl[f1#x] parquet
@@ -227,7 +227,7 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
 -- !query analysis
 Project [ AS five#x, f1#x, (f1#x * cast(2 as int)) AS x#x]
-+- Filter (abs(f1#x) < 1073741824)
++- Filter (ABS(f1#x) < 1073741824)
    +- SubqueryAlias i
       +- SubqueryAlias spark_catalog.default.int4_tbl
          +- Relation spark_catalog.default.int4_tbl[f1#x] parquet
@@ -411,14 +411,14 @@ Project [(cast((2 + 2) as double) / cast(2 as double)) AS two#x]
 -- !query
 SELECT string(shiftleft(int(-1), 31))
 -- !query analysis
-Project [cast(shiftleft(cast(-1 as int), 31) as string) AS shiftleft(-1, 31)#x]
+Project [cast(SHIFTLEFT(cast(-1 as int), 31) as string) AS SHIFTLEFT(-1, 31)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(int(shiftleft(int(-1), 31))+1)
 -- !query analysis
-Project [cast((cast(shiftleft(cast(-1 as int), 31) as int) + 1) as string) AS (shiftleft(-1, 31) + 1)#x]
+Project [cast((cast(SHIFTLEFT(cast(-1 as int), 31) as int) + 1) as string) AS (SHIFTLEFT(-1, 31) + 1)#x]
 +- OneRowRelation
 
 

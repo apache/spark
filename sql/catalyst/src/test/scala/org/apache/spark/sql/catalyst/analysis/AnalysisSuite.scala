@@ -1292,7 +1292,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |HAVING mean(t.c) > 0d""".stripMargin),
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
-        "sqlExpr" -> "\"MEAN(c)\"",
+        "sqlExpr" -> "\"mean(c)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
@@ -1311,7 +1311,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |HAVING mean(c) > 0d""".stripMargin),
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
-        "sqlExpr" -> "\"MEAN(c)\"",
+        "sqlExpr" -> "\"mean(c)\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",

@@ -198,63 +198,63 @@ Project [cast(9223372036854775808 as bigint) AS CAST(9223372036854775808 AS BIGI
 -- !query
 SELECT HEX(CAST('abc' AS binary))
 -- !query analysis
-Project [hex(cast(abc as binary)) AS hex(CAST(abc AS BINARY))#x]
+Project [HEX(cast(abc as binary)) AS HEX(CAST(abc AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(123 as tinyint) as binary)) AS hex(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
+Project [HEX(cast(cast(123 as tinyint) as binary)) AS HEX(CAST(CAST(123 AS TINYINT) AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
-Project [hex(cast(cast(-123 as tinyint) as binary)) AS hex(CAST(CAST(-123 AS TINYINT) AS BINARY))#x]
+Project [HEX(cast(cast(-123 as tinyint) as binary)) AS HEX(CAST(CAST(-123 AS TINYINT) AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(123S AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
+Project [HEX(cast(123 as binary)) AS HEX(CAST(123 AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
+Project [HEX(cast(-123 as binary)) AS HEX(CAST(-123 AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(123 AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
+Project [HEX(cast(123 as binary)) AS HEX(CAST(123 AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
+Project [HEX(cast(-123 as binary)) AS HEX(CAST(-123 AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(123L AS binary))
 -- !query analysis
-Project [hex(cast(123 as binary)) AS hex(CAST(123 AS BINARY))#x]
+Project [HEX(cast(123 as binary)) AS HEX(CAST(123 AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
-Project [hex(cast(-123 as binary)) AS hex(CAST(-123 AS BINARY))#x]
+Project [HEX(cast(-123 as binary)) AS HEX(CAST(-123 AS BINARY))#x]
 +- OneRowRelation
 
 

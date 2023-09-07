@@ -207,7 +207,7 @@ struct<coalesce(NULL, 1):int>
 -- !query
 SELECT IDENTIFIER('abs')(-1)
 -- !query schema
-struct<abs(-1):int>
+struct<ABS(-1):int>
 -- !query output
 1
 

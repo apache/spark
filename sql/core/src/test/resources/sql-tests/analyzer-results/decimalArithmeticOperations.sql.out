@@ -256,8 +256,8 @@ Union false, false
 :- Project [cast(CAST(20 AS DECIMAL(4,1))#x as decimal(21,1)) AS CAST(20 AS DECIMAL(4,1))#x]
 :  +- Project [cast(20 as decimal(4,1)) AS CAST(20 AS DECIMAL(4,1))#x]
 :     +- OneRowRelation
-+- Project [cast((CAST(10 AS DECIMAL(10,2)) div CAST(3 AS DECIMAL(5,1)))#xL as decimal(21,1)) AS (CAST(10 AS DECIMAL(10,2)) div CAST(3 AS DECIMAL(5,1)))#x]
-   +- Project [(cast(10 as decimal(10,2)) div cast(3 as decimal(5,1))) AS (CAST(10 AS DECIMAL(10,2)) div CAST(3 AS DECIMAL(5,1)))#xL]
++- Project [cast((CAST(10 AS DECIMAL(10,2)) DIV CAST(3 AS DECIMAL(5,1)))#xL as decimal(21,1)) AS (CAST(10 AS DECIMAL(10,2)) DIV CAST(3 AS DECIMAL(5,1)))#x]
+   +- Project [(cast(10 as decimal(10,2)) DIV cast(3 as decimal(5,1))) AS (CAST(10 AS DECIMAL(10,2)) DIV CAST(3 AS DECIMAL(5,1)))#xL]
       +- OneRowRelation
 
 

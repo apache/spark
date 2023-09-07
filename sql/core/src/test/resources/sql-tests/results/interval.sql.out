@@ -3512,7 +3512,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT abs(INTERVAL '-10' YEAR)
 -- !query schema
-struct<abs(INTERVAL '-10' YEAR):interval year>
+struct<ABS(INTERVAL '-10' YEAR):interval year>
 -- !query output
 10-0
 
@@ -3520,7 +3520,7 @@ struct<abs(INTERVAL '-10' YEAR):interval year>
 -- !query
 SELECT abs(INTERVAL -'1 02:03:04.123' DAY TO SECOND)
 -- !query schema
-struct<abs(INTERVAL '-1 02:03:04.123' DAY TO SECOND):interval day to second>
+struct<ABS(INTERVAL '-1 02:03:04.123' DAY TO SECOND):interval day to second>
 -- !query output
 1 02:03:04.123000000
 
@@ -3528,7 +3528,7 @@ struct<abs(INTERVAL '-1 02:03:04.123' DAY TO SECOND):interval day to second>
 -- !query
 SELECT div(INTERVAL '1-1' YEAR TO MONTH, INTERVAL '1' YEAR)
 -- !query schema
-struct<(INTERVAL '1-1' YEAR TO MONTH div INTERVAL '1' YEAR):bigint>
+struct<(INTERVAL '1-1' YEAR TO MONTH DIV INTERVAL '1' YEAR):bigint>
 -- !query output
 1
 
@@ -3536,7 +3536,7 @@ struct<(INTERVAL '1-1' YEAR TO MONTH div INTERVAL '1' YEAR):bigint>
 -- !query
 SELECT div(INTERVAL '1-1' YEAR TO MONTH, INTERVAL '-1' MONTH)
 -- !query schema
-struct<(INTERVAL '1-1' YEAR TO MONTH div INTERVAL '-1' MONTH):bigint>
+struct<(INTERVAL '1-1' YEAR TO MONTH DIV INTERVAL '-1' MONTH):bigint>
 -- !query output
 -13
 
@@ -3544,7 +3544,7 @@ struct<(INTERVAL '1-1' YEAR TO MONTH div INTERVAL '-1' MONTH):bigint>
 -- !query
 SELECT div(INTERVAL '1 06' DAY TO HOUR, INTERVAL '1' DAY)
 -- !query schema
-struct<(INTERVAL '1 06' DAY TO HOUR div INTERVAL '1' DAY):bigint>
+struct<(INTERVAL '1 06' DAY TO HOUR DIV INTERVAL '1' DAY):bigint>
 -- !query output
 1
 
@@ -3552,7 +3552,7 @@ struct<(INTERVAL '1 06' DAY TO HOUR div INTERVAL '1' DAY):bigint>
 -- !query
 SELECT div(INTERVAL '1 06' DAY TO HOUR, INTERVAL '-1' HOUR)
 -- !query schema
-struct<(INTERVAL '1 06' DAY TO HOUR div INTERVAL '-01' HOUR):bigint>
+struct<(INTERVAL '1 06' DAY TO HOUR DIV INTERVAL '-01' HOUR):bigint>
 -- !query output
 -30
 
@@ -3569,7 +3569,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",
-    "sqlExpr" : "\"(INTERVAL '1' MONTH div INTERVAL '-1' DAY)\""
+    "sqlExpr" : "\"(INTERVAL '1' MONTH DIV INTERVAL '-1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3632,7 +3632,7 @@ struct<SIGNUM(INTERVAL '0 00:00:00' DAY TO SECOND):double>
 -- !query
 SELECT width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10)
 -- !query schema
-struct<width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10):bigint>
+struct<WIDTH_BUCKET(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10):bigint>
 -- !query output
 1
 
@@ -3640,7 +3640,7 @@ struct<width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10
 -- !query
 SELECT width_bucket(INTERVAL '-1' YEAR, INTERVAL -'1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10)
 -- !query schema
-struct<width_bucket(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10):bigint>
+struct<WIDTH_BUCKET(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10):bigint>
 -- !query output
 1
 
@@ -3648,7 +3648,7 @@ struct<width_bucket(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL 
 -- !query
 SELECT width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10)
 -- !query schema
-struct<width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10):bigint>
+struct<WIDTH_BUCKET(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10):bigint>
 -- !query output
 1
 
@@ -3656,6 +3656,6 @@ struct<width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10):b
 -- !query
 SELECT width_bucket(INTERVAL '-59' MINUTE, INTERVAL -'1 01' DAY TO HOUR, INTERVAL '1 2:3:4.001' DAY TO SECOND, 10)
 -- !query schema
-struct<width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10):bigint>
+struct<WIDTH_BUCKET(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10):bigint>
 -- !query output
 5

@@ -293,7 +293,7 @@ NULL
 -- !query
 select unhex('-123')
 -- !query schema
-struct<unhex(-123):binary>
+struct<UNHEX(-123):binary>
 -- !query output
 NULL
 

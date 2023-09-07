@@ -432,14 +432,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select +interval '-1 year 1 month'
 -- !query analysis
-Project [positive(INTERVAL '-0-11' YEAR TO MONTH) AS (+ INTERVAL '-0-11' YEAR TO MONTH)#x]
+Project [POSITIVE(INTERVAL '-0-11' YEAR TO MONTH) AS (+ INTERVAL '-0-11' YEAR TO MONTH)#x]
 +- OneRowRelation
 
 
 -- !query
 select +interval '-1 day 1 hour -1 minute 1 second'
 -- !query analysis
-Project [positive(INTERVAL '-0 23:00:59' DAY TO SECOND) AS (+ INTERVAL '-0 23:00:59' DAY TO SECOND)#x]
+Project [POSITIVE(INTERVAL '-0 23:00:59' DAY TO SECOND) AS (+ INTERVAL '-0 23:00:59' DAY TO SECOND)#x]
 +- OneRowRelation
 
 
@@ -465,14 +465,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select +interval -1 year 1 month
 -- !query analysis
-Project [positive(INTERVAL '-0-11' YEAR TO MONTH) AS (+ INTERVAL '-0-11' YEAR TO MONTH)#x]
+Project [POSITIVE(INTERVAL '-0-11' YEAR TO MONTH) AS (+ INTERVAL '-0-11' YEAR TO MONTH)#x]
 +- OneRowRelation
 
 
 -- !query
 select +interval -1 day 1 hour -1 minute 1 second
 -- !query analysis
-Project [positive(INTERVAL '-0 23:00:59' DAY TO SECOND) AS (+ INTERVAL '-0 23:00:59' DAY TO SECOND)#x]
+Project [POSITIVE(INTERVAL '-0 23:00:59' DAY TO SECOND) AS (+ INTERVAL '-0 23:00:59' DAY TO SECOND)#x]
 +- OneRowRelation
 
 
@@ -3052,42 +3052,42 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT abs(INTERVAL '-10' YEAR)
 -- !query analysis
-Project [abs(INTERVAL '-10' YEAR) AS abs(INTERVAL '-10' YEAR)#x]
+Project [ABS(INTERVAL '-10' YEAR) AS ABS(INTERVAL '-10' YEAR)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT abs(INTERVAL -'1 02:03:04.123' DAY TO SECOND)
 -- !query analysis
-Project [abs(INTERVAL '-1 02:03:04.123' DAY TO SECOND) AS abs(INTERVAL '-1 02:03:04.123' DAY TO SECOND)#x]
+Project [ABS(INTERVAL '-1 02:03:04.123' DAY TO SECOND) AS ABS(INTERVAL '-1 02:03:04.123' DAY TO SECOND)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT div(INTERVAL '1-1' YEAR TO MONTH, INTERVAL '1' YEAR)
 -- !query analysis
-Project [(INTERVAL '1-1' YEAR TO MONTH div cast(INTERVAL '1' YEAR as interval year to month)) AS (INTERVAL '1-1' YEAR TO MONTH div INTERVAL '1' YEAR)#xL]
+Project [(INTERVAL '1-1' YEAR TO MONTH DIV cast(INTERVAL '1' YEAR as interval year to month)) AS (INTERVAL '1-1' YEAR TO MONTH DIV INTERVAL '1' YEAR)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT div(INTERVAL '1-1' YEAR TO MONTH, INTERVAL '-1' MONTH)
 -- !query analysis
-Project [(INTERVAL '1-1' YEAR TO MONTH div cast(INTERVAL '-1' MONTH as interval year to month)) AS (INTERVAL '1-1' YEAR TO MONTH div INTERVAL '-1' MONTH)#xL]
+Project [(INTERVAL '1-1' YEAR TO MONTH DIV cast(INTERVAL '-1' MONTH as interval year to month)) AS (INTERVAL '1-1' YEAR TO MONTH DIV INTERVAL '-1' MONTH)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT div(INTERVAL '1 06' DAY TO HOUR, INTERVAL '1' DAY)
 -- !query analysis
-Project [(INTERVAL '1 06' DAY TO HOUR div cast(INTERVAL '1' DAY as interval day to hour)) AS (INTERVAL '1 06' DAY TO HOUR div INTERVAL '1' DAY)#xL]
+Project [(INTERVAL '1 06' DAY TO HOUR DIV cast(INTERVAL '1' DAY as interval day to hour)) AS (INTERVAL '1 06' DAY TO HOUR DIV INTERVAL '1' DAY)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT div(INTERVAL '1 06' DAY TO HOUR, INTERVAL '-1' HOUR)
 -- !query analysis
-Project [(INTERVAL '1 06' DAY TO HOUR div cast(INTERVAL '-01' HOUR as interval day to hour)) AS (INTERVAL '1 06' DAY TO HOUR div INTERVAL '-01' HOUR)#xL]
+Project [(INTERVAL '1 06' DAY TO HOUR DIV cast(INTERVAL '-01' HOUR as interval day to hour)) AS (INTERVAL '1 06' DAY TO HOUR DIV INTERVAL '-01' HOUR)#xL]
 +- OneRowRelation
 
 
@@ -3101,7 +3101,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "left" : "\"INTERVAL MONTH\"",
     "right" : "\"INTERVAL DAY\"",
-    "sqlExpr" : "\"(INTERVAL '1' MONTH div INTERVAL '-1' DAY)\""
+    "sqlExpr" : "\"(INTERVAL '1' MONTH DIV INTERVAL '-1' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3158,26 +3158,26 @@ Project [SIGNUM(INTERVAL '0 00:00:00' DAY TO SECOND) AS SIGNUM(INTERVAL '0 00:00
 -- !query
 SELECT width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10)
 -- !query analysis
-Project [width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, cast(10 as bigint)) AS width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10)#xL]
+Project [WIDTH_BUCKET(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, cast(10 as bigint)) AS WIDTH_BUCKET(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(INTERVAL '-1' YEAR, INTERVAL -'1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10)
 -- !query analysis
-Project [width_bucket(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, cast(10 as bigint)) AS width_bucket(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10)#xL]
+Project [WIDTH_BUCKET(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, cast(10 as bigint)) AS WIDTH_BUCKET(INTERVAL '-1' YEAR, INTERVAL '-1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10)
 -- !query analysis
-Project [width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, cast(10 as bigint)) AS width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10)#xL]
+Project [WIDTH_BUCKET(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, cast(10 as bigint)) AS WIDTH_BUCKET(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10)#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT width_bucket(INTERVAL '-59' MINUTE, INTERVAL -'1 01' DAY TO HOUR, INTERVAL '1 2:3:4.001' DAY TO SECOND, 10)
 -- !query analysis
-Project [width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, cast(10 as bigint)) AS width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10)#xL]
+Project [WIDTH_BUCKET(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, cast(10 as bigint)) AS WIDTH_BUCKET(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10)#xL]
 +- OneRowRelation

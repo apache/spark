@@ -419,196 +419,196 @@ Project [rpad(hi, cast(invalid_length as int),  ) AS rpad(hi, invalid_length,  )
 -- !query
 SELECT hex(lpad(unhex(''), 5))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(, false), 5, 0x00)) AS hex(lpad(unhex(), 5, X'00'))#x]
+Project [HEX(lpad(lpad, UNHEX(, false), 5, 0x00)) AS HEX(lpad(UNHEX(), 5, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aabb'), 5))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aabb, false), 5, 0x00)) AS hex(lpad(unhex(aabb), 5, X'00'))#x]
+Project [HEX(lpad(lpad, UNHEX(aabb, false), 5, 0x00)) AS HEX(lpad(UNHEX(aabb), 5, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aabbcc, false), 2, 0x00)) AS hex(lpad(unhex(aabbcc), 2, X'00'))#x]
+Project [HEX(lpad(lpad, UNHEX(aabbcc, false), 2, 0x00)) AS HEX(lpad(UNHEX(aabbcc), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('123'), 2))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(123, false), 2, 0x00)) AS hex(lpad(unhex(123), 2, X'00'))#x]
+Project [HEX(lpad(lpad, UNHEX(123, false), 2, 0x00)) AS HEX(lpad(UNHEX(123), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('12345'), 2))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(12345, false), 2, 0x00)) AS hex(lpad(unhex(12345), 2, X'00'))#x]
+Project [HEX(lpad(lpad, UNHEX(12345, false), 2, 0x00)) AS HEX(lpad(UNHEX(12345), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(, false), 5, unhex(1f, false))) AS hex(lpad(unhex(), 5, unhex(1f)))#x]
+Project [HEX(lpad(lpad, UNHEX(, false), 5, UNHEX(1f, false))) AS HEX(lpad(UNHEX(), 5, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aa, false), 5, unhex(1f, false))) AS hex(lpad(unhex(aa), 5, unhex(1f)))#x]
+Project [HEX(lpad(lpad, UNHEX(aa, false), 5, UNHEX(1f, false))) AS HEX(lpad(UNHEX(aa), 5, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aa, false), 6, unhex(1f, false))) AS hex(lpad(unhex(aa), 6, unhex(1f)))#x]
+Project [HEX(lpad(lpad, UNHEX(aa, false), 6, UNHEX(1f, false))) AS HEX(lpad(UNHEX(aa), 6, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f2e')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(, false), 5, unhex(1f2e, false))) AS hex(lpad(unhex(), 5, unhex(1f2e)))#x]
+Project [HEX(lpad(lpad, UNHEX(, false), 5, UNHEX(1f2e, false))) AS HEX(lpad(UNHEX(), 5, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aa, false), 5, unhex(1f2e, false))) AS hex(lpad(unhex(aa), 5, unhex(1f2e)))#x]
+Project [HEX(lpad(lpad, UNHEX(aa, false), 5, UNHEX(1f2e, false))) AS HEX(lpad(UNHEX(aa), 5, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aa, false), 6, unhex(1f2e, false))) AS hex(lpad(unhex(aa), 6, unhex(1f2e)))#x]
+Project [HEX(lpad(lpad, UNHEX(aa, false), 6, UNHEX(1f2e, false))) AS HEX(lpad(UNHEX(aa), 6, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex(''), 6, unhex('')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(, false), 6, unhex(, false))) AS hex(lpad(unhex(), 6, unhex()))#x]
+Project [HEX(lpad(lpad, UNHEX(, false), 6, UNHEX(, false))) AS HEX(lpad(UNHEX(), 6, UNHEX()))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 6, unhex('')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aabbcc, false), 6, unhex(, false))) AS hex(lpad(unhex(aabbcc), 6, unhex()))#x]
+Project [HEX(lpad(lpad, UNHEX(aabbcc, false), 6, UNHEX(, false))) AS HEX(lpad(UNHEX(aabbcc), 6, UNHEX()))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query analysis
-Project [hex(lpad(lpad, unhex(aabbcc, false), 2, unhex(ff, false))) AS hex(lpad(unhex(aabbcc), 2, unhex(ff)))#x]
+Project [HEX(lpad(lpad, UNHEX(aabbcc, false), 2, UNHEX(ff, false))) AS HEX(lpad(UNHEX(aabbcc), 2, UNHEX(ff)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex(''), 5))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(, false), 5, 0x00)) AS hex(rpad(unhex(), 5, X'00'))#x]
+Project [HEX(rpad(rpad, UNHEX(, false), 5, 0x00)) AS HEX(rpad(UNHEX(), 5, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aabb'), 5))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aabb, false), 5, 0x00)) AS hex(rpad(unhex(aabb), 5, X'00'))#x]
+Project [HEX(rpad(rpad, UNHEX(aabb, false), 5, 0x00)) AS HEX(rpad(UNHEX(aabb), 5, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aabbcc, false), 2, 0x00)) AS hex(rpad(unhex(aabbcc), 2, X'00'))#x]
+Project [HEX(rpad(rpad, UNHEX(aabbcc, false), 2, 0x00)) AS HEX(rpad(UNHEX(aabbcc), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('123'), 2))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(123, false), 2, 0x00)) AS hex(rpad(unhex(123), 2, X'00'))#x]
+Project [HEX(rpad(rpad, UNHEX(123, false), 2, 0x00)) AS HEX(rpad(UNHEX(123), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('12345'), 2))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(12345, false), 2, 0x00)) AS hex(rpad(unhex(12345), 2, X'00'))#x]
+Project [HEX(rpad(rpad, UNHEX(12345, false), 2, 0x00)) AS HEX(rpad(UNHEX(12345), 2, X'00'))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(, false), 5, unhex(1f, false))) AS hex(rpad(unhex(), 5, unhex(1f)))#x]
+Project [HEX(rpad(rpad, UNHEX(, false), 5, UNHEX(1f, false))) AS HEX(rpad(UNHEX(), 5, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aa, false), 5, unhex(1f, false))) AS hex(rpad(unhex(aa), 5, unhex(1f)))#x]
+Project [HEX(rpad(rpad, UNHEX(aa, false), 5, UNHEX(1f, false))) AS HEX(rpad(UNHEX(aa), 5, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aa, false), 6, unhex(1f, false))) AS hex(rpad(unhex(aa), 6, unhex(1f)))#x]
+Project [HEX(rpad(rpad, UNHEX(aa, false), 6, UNHEX(1f, false))) AS HEX(rpad(UNHEX(aa), 6, UNHEX(1f)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f2e')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(, false), 5, unhex(1f2e, false))) AS hex(rpad(unhex(), 5, unhex(1f2e)))#x]
+Project [HEX(rpad(rpad, UNHEX(, false), 5, UNHEX(1f2e, false))) AS HEX(rpad(UNHEX(), 5, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aa, false), 5, unhex(1f2e, false))) AS hex(rpad(unhex(aa), 5, unhex(1f2e)))#x]
+Project [HEX(rpad(rpad, UNHEX(aa, false), 5, UNHEX(1f2e, false))) AS HEX(rpad(UNHEX(aa), 5, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aa, false), 6, unhex(1f2e, false))) AS hex(rpad(unhex(aa), 6, unhex(1f2e)))#x]
+Project [HEX(rpad(rpad, UNHEX(aa, false), 6, UNHEX(1f2e, false))) AS HEX(rpad(UNHEX(aa), 6, UNHEX(1f2e)))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex(''), 6, unhex('')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(, false), 6, unhex(, false))) AS hex(rpad(unhex(), 6, unhex()))#x]
+Project [HEX(rpad(rpad, UNHEX(, false), 6, UNHEX(, false))) AS HEX(rpad(UNHEX(), 6, UNHEX()))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aabbcc, false), 6, unhex(, false))) AS hex(rpad(unhex(aabbcc), 6, unhex()))#x]
+Project [HEX(rpad(rpad, UNHEX(aabbcc, false), 6, UNHEX(, false))) AS HEX(rpad(UNHEX(aabbcc), 6, UNHEX()))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query analysis
-Project [hex(rpad(rpad, unhex(aabbcc, false), 2, unhex(ff, false))) AS hex(rpad(unhex(aabbcc), 2, unhex(ff)))#x]
+Project [HEX(rpad(rpad, UNHEX(aabbcc, false), 2, UNHEX(ff, false))) AS HEX(rpad(UNHEX(aabbcc), 2, UNHEX(ff)))#x]
 +- OneRowRelation
 
 

@@ -226,7 +226,7 @@ NULL
 -- !query
 SELECT HEX(CAST('abc' AS binary))
 -- !query schema
-struct<hex(CAST(abc AS BINARY)):string>
+struct<HEX(CAST(abc AS BINARY)):string>
 -- !query output
 616263
 
@@ -234,7 +234,7 @@ struct<hex(CAST(abc AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query schema
-struct<hex(CAST(CAST(123 AS TINYINT) AS BINARY)):string>
+struct<HEX(CAST(CAST(123 AS TINYINT) AS BINARY)):string>
 -- !query output
 7B
 
@@ -242,7 +242,7 @@ struct<hex(CAST(CAST(123 AS TINYINT) AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query schema
-struct<hex(CAST(CAST(-123 AS TINYINT) AS BINARY)):string>
+struct<HEX(CAST(CAST(-123 AS TINYINT) AS BINARY)):string>
 -- !query output
 85
 
@@ -250,7 +250,7 @@ struct<hex(CAST(CAST(-123 AS TINYINT) AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(123S AS binary))
 -- !query schema
-struct<hex(CAST(123 AS BINARY)):string>
+struct<HEX(CAST(123 AS BINARY)):string>
 -- !query output
 007B
 
@@ -258,7 +258,7 @@ struct<hex(CAST(123 AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(-123S AS binary))
 -- !query schema
-struct<hex(CAST(-123 AS BINARY)):string>
+struct<HEX(CAST(-123 AS BINARY)):string>
 -- !query output
 FF85
 
@@ -266,7 +266,7 @@ FF85
 -- !query
 SELECT HEX(CAST(123 AS binary))
 -- !query schema
-struct<hex(CAST(123 AS BINARY)):string>
+struct<HEX(CAST(123 AS BINARY)):string>
 -- !query output
 0000007B
 
@@ -274,7 +274,7 @@ struct<hex(CAST(123 AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(-123 AS binary))
 -- !query schema
-struct<hex(CAST(-123 AS BINARY)):string>
+struct<HEX(CAST(-123 AS BINARY)):string>
 -- !query output
 FFFFFF85
 
@@ -282,7 +282,7 @@ FFFFFF85
 -- !query
 SELECT HEX(CAST(123L AS binary))
 -- !query schema
-struct<hex(CAST(123 AS BINARY)):string>
+struct<HEX(CAST(123 AS BINARY)):string>
 -- !query output
 000000000000007B
 
@@ -290,7 +290,7 @@ struct<hex(CAST(123 AS BINARY)):string>
 -- !query
 SELECT HEX(CAST(-123L AS binary))
 -- !query schema
-struct<hex(CAST(-123 AS BINARY)):string>
+struct<HEX(CAST(-123 AS BINARY)):string>
 -- !query output
 FFFFFFFFFFFFFF85
 

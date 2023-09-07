@@ -198,7 +198,7 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i
 WHERE abs(f1) < 16384
 -- !query analysis
 Project [ AS five#x, f1#x, (f1#x * cast(2 as smallint)) AS x#x]
-+- Filter (cast(abs(f1#x) as int) < 16384)
++- Filter (cast(ABS(f1#x) as int) < 16384)
    +- SubqueryAlias i
       +- SubqueryAlias spark_catalog.default.int2_tbl
          +- Relation spark_catalog.default.int2_tbl[f1#x] parquet
@@ -274,14 +274,14 @@ Project [ AS five#x, f1#x, (cast(f1#x as double) / cast(cast(2 as int) as double
 -- !query
 SELECT string(shiftleft(smallint(-1), 15))
 -- !query analysis
-Project [cast(shiftleft(cast(cast(-1 as smallint) as int), 15) as string) AS shiftleft(-1, 15)#x]
+Project [cast(SHIFTLEFT(cast(cast(-1 as smallint) as int), 15) as string) AS SHIFTLEFT(-1, 15)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(smallint(shiftleft(smallint(-1), 15))+1)
 -- !query analysis
-Project [cast((cast(cast(shiftleft(cast(cast(-1 as smallint) as int), 15) as smallint) as int) + 1) as string) AS (shiftleft(-1, 15) + 1)#x]
+Project [cast((cast(cast(SHIFTLEFT(cast(cast(-1 as smallint) as int), 15) as smallint) as int) + 1) as string) AS (SHIFTLEFT(-1, 15) + 1)#x]
 +- OneRowRelation
 
 

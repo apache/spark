@@ -550,7 +550,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT hex(lpad(unhex(''), 5))
 -- !query schema
-struct<hex(lpad(unhex(), 5, X'00')):string>
+struct<HEX(lpad(UNHEX(), 5, X'00')):string>
 -- !query output
 0000000000
 
@@ -558,7 +558,7 @@ struct<hex(lpad(unhex(), 5, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('aabb'), 5))
 -- !query schema
-struct<hex(lpad(unhex(aabb), 5, X'00')):string>
+struct<HEX(lpad(UNHEX(aabb), 5, X'00')):string>
 -- !query output
 000000AABB
 
@@ -566,7 +566,7 @@ struct<hex(lpad(unhex(aabb), 5, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 2, X'00')):string>
+struct<HEX(lpad(UNHEX(aabbcc), 2, X'00')):string>
 -- !query output
 AABB
 
@@ -574,7 +574,7 @@ AABB
 -- !query
 SELECT hex(lpad(unhex('123'), 2))
 -- !query schema
-struct<hex(lpad(unhex(123), 2, X'00')):string>
+struct<HEX(lpad(UNHEX(123), 2, X'00')):string>
 -- !query output
 0123
 
@@ -582,7 +582,7 @@ struct<hex(lpad(unhex(123), 2, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex('12345'), 2))
 -- !query schema
-struct<hex(lpad(unhex(12345), 2, X'00')):string>
+struct<HEX(lpad(UNHEX(12345), 2, X'00')):string>
 -- !query output
 0123
 
@@ -590,7 +590,7 @@ struct<hex(lpad(unhex(12345), 2, X'00')):string>
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(), 5, unhex(1f))):string>
+struct<HEX(lpad(UNHEX(), 5, UNHEX(1f))):string>
 -- !query output
 1F1F1F1F1F
 
@@ -598,7 +598,7 @@ struct<hex(lpad(unhex(), 5, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 5, unhex(1f))):string>
+struct<HEX(lpad(UNHEX(aa), 5, UNHEX(1f))):string>
 -- !query output
 1F1F1F1FAA
 
@@ -606,7 +606,7 @@ struct<hex(lpad(unhex(aa), 5, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 6, unhex(1f))):string>
+struct<HEX(lpad(UNHEX(aa), 6, UNHEX(1f))):string>
 -- !query output
 1F1F1F1F1FAA
 
@@ -614,7 +614,7 @@ struct<hex(lpad(unhex(aa), 6, unhex(1f))):string>
 -- !query
 SELECT hex(lpad(unhex(''), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(), 5, unhex(1f2e))):string>
+struct<HEX(lpad(UNHEX(), 5, UNHEX(1f2e))):string>
 -- !query output
 1F2E1F2E1F
 
@@ -622,7 +622,7 @@ struct<hex(lpad(unhex(), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 5, unhex(1f2e))):string>
+struct<HEX(lpad(UNHEX(aa), 5, UNHEX(1f2e))):string>
 -- !query output
 1F2E1F2EAA
 
@@ -630,7 +630,7 @@ struct<hex(lpad(unhex(aa), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query schema
-struct<hex(lpad(unhex(aa), 6, unhex(1f2e))):string>
+struct<HEX(lpad(UNHEX(aa), 6, UNHEX(1f2e))):string>
 -- !query output
 1F2E1F2E1FAA
 
@@ -638,7 +638,7 @@ struct<hex(lpad(unhex(aa), 6, unhex(1f2e))):string>
 -- !query
 SELECT hex(lpad(unhex(''), 6, unhex('')))
 -- !query schema
-struct<hex(lpad(unhex(), 6, unhex())):string>
+struct<HEX(lpad(UNHEX(), 6, UNHEX())):string>
 -- !query output
 
 
@@ -646,7 +646,7 @@ struct<hex(lpad(unhex(), 6, unhex())):string>
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 6, unhex('')))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 6, unhex())):string>
+struct<HEX(lpad(UNHEX(aabbcc), 6, UNHEX())):string>
 -- !query output
 AABBCC
 
@@ -654,7 +654,7 @@ AABBCC
 -- !query
 SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query schema
-struct<hex(lpad(unhex(aabbcc), 2, unhex(ff))):string>
+struct<HEX(lpad(UNHEX(aabbcc), 2, UNHEX(ff))):string>
 -- !query output
 AABB
 
@@ -662,7 +662,7 @@ AABB
 -- !query
 SELECT hex(rpad(unhex(''), 5))
 -- !query schema
-struct<hex(rpad(unhex(), 5, X'00')):string>
+struct<HEX(rpad(UNHEX(), 5, X'00')):string>
 -- !query output
 0000000000
 
@@ -670,7 +670,7 @@ struct<hex(rpad(unhex(), 5, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex('aabb'), 5))
 -- !query schema
-struct<hex(rpad(unhex(aabb), 5, X'00')):string>
+struct<HEX(rpad(UNHEX(aabb), 5, X'00')):string>
 -- !query output
 AABB000000
 
@@ -678,7 +678,7 @@ AABB000000
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 2, X'00')):string>
+struct<HEX(rpad(UNHEX(aabbcc), 2, X'00')):string>
 -- !query output
 AABB
 
@@ -686,7 +686,7 @@ AABB
 -- !query
 SELECT hex(rpad(unhex('123'), 2))
 -- !query schema
-struct<hex(rpad(unhex(123), 2, X'00')):string>
+struct<HEX(rpad(UNHEX(123), 2, X'00')):string>
 -- !query output
 0123
 
@@ -694,7 +694,7 @@ struct<hex(rpad(unhex(123), 2, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex('12345'), 2))
 -- !query schema
-struct<hex(rpad(unhex(12345), 2, X'00')):string>
+struct<HEX(rpad(UNHEX(12345), 2, X'00')):string>
 -- !query output
 0123
 
@@ -702,7 +702,7 @@ struct<hex(rpad(unhex(12345), 2, X'00')):string>
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(), 5, unhex(1f))):string>
+struct<HEX(rpad(UNHEX(), 5, UNHEX(1f))):string>
 -- !query output
 1F1F1F1F1F
 
@@ -710,7 +710,7 @@ struct<hex(rpad(unhex(), 5, unhex(1f))):string>
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 5, unhex(1f))):string>
+struct<HEX(rpad(UNHEX(aa), 5, UNHEX(1f))):string>
 -- !query output
 AA1F1F1F1F
 
@@ -718,7 +718,7 @@ AA1F1F1F1F
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 6, unhex(1f))):string>
+struct<HEX(rpad(UNHEX(aa), 6, UNHEX(1f))):string>
 -- !query output
 AA1F1F1F1F1F
 
@@ -726,7 +726,7 @@ AA1F1F1F1F1F
 -- !query
 SELECT hex(rpad(unhex(''), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(), 5, unhex(1f2e))):string>
+struct<HEX(rpad(UNHEX(), 5, UNHEX(1f2e))):string>
 -- !query output
 1F2E1F2E1F
 
@@ -734,7 +734,7 @@ struct<hex(rpad(unhex(), 5, unhex(1f2e))):string>
 -- !query
 SELECT hex(rpad(unhex('aa'), 5, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 5, unhex(1f2e))):string>
+struct<HEX(rpad(UNHEX(aa), 5, UNHEX(1f2e))):string>
 -- !query output
 AA1F2E1F2E
 
@@ -742,7 +742,7 @@ AA1F2E1F2E
 -- !query
 SELECT hex(rpad(unhex('aa'), 6, unhex('1f2e')))
 -- !query schema
-struct<hex(rpad(unhex(aa), 6, unhex(1f2e))):string>
+struct<HEX(rpad(UNHEX(aa), 6, UNHEX(1f2e))):string>
 -- !query output
 AA1F2E1F2E1F
 
@@ -750,7 +750,7 @@ AA1F2E1F2E1F
 -- !query
 SELECT hex(rpad(unhex(''), 6, unhex('')))
 -- !query schema
-struct<hex(rpad(unhex(), 6, unhex())):string>
+struct<HEX(rpad(UNHEX(), 6, UNHEX())):string>
 -- !query output
 
 
@@ -758,7 +758,7 @@ struct<hex(rpad(unhex(), 6, unhex())):string>
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 6, unhex())):string>
+struct<HEX(rpad(UNHEX(aabbcc), 6, UNHEX())):string>
 -- !query output
 AABBCC
 
@@ -766,7 +766,7 @@ AABBCC
 -- !query
 SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')))
 -- !query schema
-struct<hex(rpad(unhex(aabbcc), 2, unhex(ff))):string>
+struct<HEX(rpad(UNHEX(aabbcc), 2, UNHEX(ff))):string>
 -- !query output
 AABB
 

@@ -329,7 +329,7 @@ Project [trunc(cast(2018-01-01 as date), a#x) AS trunc(2018-01-01, a)#x]
 -- !query
 select unhex('-123')
 -- !query analysis
-Project [unhex(-123, false) AS unhex(-123)#x]
+Project [UNHEX(-123, false) AS UNHEX(-123)#x]
 +- OneRowRelation
 
 

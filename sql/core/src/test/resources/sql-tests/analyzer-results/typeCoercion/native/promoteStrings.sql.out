@@ -3881,7 +3881,7 @@ Project [NOT (cast(2017-12-11 09:30:00 as date) = cast(1 as date)) AS (NOT (CAST
 -- !query
 SELECT abs('1') FROM t
 -- !query analysis
-Project [abs(cast(1 as double)) AS abs(1)#x]
+Project [ABS(cast(1 as double)) AS ABS(1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -3947,7 +3947,7 @@ Project [-cast(1 as double) AS (- 1)#x]
 -- !query
 SELECT + '1' FROM t
 -- !query analysis
-Project [positive(cast(1 as double)) AS (+ 1)#x]
+Project [POSITIVE(cast(1 as double)) AS (+ 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]

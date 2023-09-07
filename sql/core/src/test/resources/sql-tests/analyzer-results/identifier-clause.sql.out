@@ -189,7 +189,7 @@ Project [coalesce(cast(null as int), 1) AS coalesce(NULL, 1)#x]
 -- !query
 SELECT IDENTIFIER('abs')(-1)
 -- !query analysis
-Project [abs(-1) AS abs(-1)#x]
+Project [ABS(-1) AS ABS(-1)#x]
 +- OneRowRelation
 
 

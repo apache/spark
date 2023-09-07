@@ -601,14 +601,14 @@ Project [replace(yabadoo, bad, ) AS yaoo#x]
 -- !query
 select hex(256*256*256 - 1) AS `ffffff`
 -- !query analysis
-Project [hex(cast((((256 * 256) * 256) - 1) as bigint)) AS ffffff#x]
+Project [HEX(cast((((256 * 256) * 256) - 1) as bigint)) AS ffffff#x]
 +- OneRowRelation
 
 
 -- !query
 select hex(bigint(bigint(bigint(bigint(256)*256)*256)*256) - 1) AS `ffffffff`
 -- !query analysis
-Project [hex((cast((cast((cast((cast(256 as bigint) * cast(256 as bigint)) as bigint) * cast(256 as bigint)) as bigint) * cast(256 as bigint)) as bigint) - cast(1 as bigint))) AS ffffffff#x]
+Project [HEX((cast((cast((cast((cast(256 as bigint) * cast(256 as bigint)) as bigint) * cast(256 as bigint)) as bigint) * cast(256 as bigint)) as bigint) - cast(1 as bigint))) AS ffffffff#x]
 +- OneRowRelation
 
 

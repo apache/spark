@@ -2383,7 +2383,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.floor(sf.lit(2.1267), sf.lit(2))).show()
     +----------------+
-    |floor(2.1267, 2)|
+    |FLOOR(2.1267, 2)|
     +----------------+
     |            2.12|
     +----------------+
@@ -5678,7 +5678,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.5))).show()
     +-------------+
-    |round(2.5, 0)|
+    |ROUND(2.5, 0)|
     +-------------+
     |          3.0|
     +-------------+
@@ -5686,7 +5686,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.1267), sf.lit(2))).show()
     +----------------+
-    |round(2.1267, 2)|
+    |ROUND(2.1267, 2)|
     +----------------+
     |            2.13|
     +----------------+
@@ -5729,7 +5729,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.5))).show()
     +--------------+
-    |bround(2.5, 0)|
+    |BROUND(2.5, 0)|
     +--------------+
     |           2.0|
     +--------------+
@@ -5737,7 +5737,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.1267), sf.lit(2))).show()
     +-----------------+
-    |bround(2.1267, 2)|
+    |BROUND(2.1267, 2)|
     +-----------------+
     |             2.13|
     +-----------------+

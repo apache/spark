@@ -522,7 +522,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select +interval '1 day'
 -- !query analysis
-Project [positive(INTERVAL '1' DAY) AS (+ INTERVAL '1' DAY)#x]
+Project [POSITIVE(INTERVAL '1' DAY) AS (+ INTERVAL '1' DAY)#x]
 +- OneRowRelation
 
 

@@ -3204,7 +3204,7 @@ NULL
 -- !query
 SELECT abs('1') FROM t
 -- !query schema
-struct<abs(1):double>
+struct<ABS(1):double>
 -- !query output
 1.0
 

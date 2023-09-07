@@ -553,7 +553,7 @@ struct<2plus8:bigint,2minus8:bigint,2mul8:bigint,2div8:double>
 -- !query
 SELECT q2, abs(q2) FROM INT8_TBL
 -- !query schema
-struct<q2:bigint,abs(q2):bigint>
+struct<q2:bigint,ABS(q2):bigint>
 -- !query output
 -4567890123456789	4567890123456789
 123	123
@@ -883,7 +883,7 @@ struct<id:bigint>
 -- !query
 SELECT string(shiftleft(bigint(-1), 63))
 -- !query schema
-struct<shiftleft(-1, 63):string>
+struct<SHIFTLEFT(-1, 63):string>
 -- !query output
 -9223372036854775808
 

@@ -2,7 +2,7 @@
 -- !query
 SELECT try_add(1, 1)
 -- !query schema
-struct<try_add(1, 1):int>
+struct<TRY_ADD(1, 1):int>
 -- !query output
 2
 
@@ -10,7 +10,7 @@ struct<try_add(1, 1):int>
 -- !query
 SELECT try_add(2147483647, 1)
 -- !query schema
-struct<try_add(2147483647, 1):int>
+struct<TRY_ADD(2147483647, 1):int>
 -- !query output
 NULL
 
@@ -18,7 +18,7 @@ NULL
 -- !query
 SELECT try_add(-2147483648, -1)
 -- !query schema
-struct<try_add(-2147483648, -1):int>
+struct<TRY_ADD(-2147483648, -1):int>
 -- !query output
 NULL
 
@@ -26,7 +26,7 @@ NULL
 -- !query
 SELECT try_add(9223372036854775807L, 1)
 -- !query schema
-struct<try_add(9223372036854775807, 1):bigint>
+struct<TRY_ADD(9223372036854775807, 1):bigint>
 -- !query output
 NULL
 
@@ -34,7 +34,7 @@ NULL
 -- !query
 SELECT try_add(-9223372036854775808L, -1)
 -- !query schema
-struct<try_add(-9223372036854775808, -1):bigint>
+struct<TRY_ADD(-9223372036854775808, -1):bigint>
 -- !query output
 NULL
 
@@ -42,7 +42,7 @@ NULL
 -- !query
 SELECT try_add(1, (2147483647 + 1))
 -- !query schema
-struct<try_add(1, (2147483647 + 1)):int>
+struct<TRY_ADD(1, (2147483647 + 1)):int>
 -- !query output
 -2147483647
 
@@ -50,7 +50,7 @@ struct<try_add(1, (2147483647 + 1)):int>
 -- !query
 SELECT try_add(1L, (9223372036854775807L + 1L))
 -- !query schema
-struct<try_add(1, (9223372036854775807 + 1)):bigint>
+struct<TRY_ADD(1, (9223372036854775807 + 1)):bigint>
 -- !query output
 -9223372036854775807
 
@@ -58,7 +58,7 @@ struct<try_add(1, (9223372036854775807 + 1)):bigint>
 -- !query
 SELECT try_add(1, 1.0 / 0.0)
 -- !query schema
-struct<try_add(1, (1.0 / 0.0)):decimal(9,6)>
+struct<TRY_ADD(1, (1.0 / 0.0)):decimal(9,6)>
 -- !query output
 NULL
 
@@ -66,7 +66,7 @@ NULL
 -- !query
 SELECT try_add(date'2021-01-01', 1)
 -- !query schema
-struct<try_add(DATE '2021-01-01', 1):date>
+struct<TRY_ADD(DATE '2021-01-01', 1):date>
 -- !query output
 2021-01-02
 
@@ -74,7 +74,7 @@ struct<try_add(DATE '2021-01-01', 1):date>
 -- !query
 SELECT try_add(1, date'2021-01-01')
 -- !query schema
-struct<try_add(1, DATE '2021-01-01'):date>
+struct<TRY_ADD(1, DATE '2021-01-01'):date>
 -- !query output
 2021-01-02
 
@@ -82,7 +82,7 @@ struct<try_add(1, DATE '2021-01-01'):date>
 -- !query
 SELECT try_add(date'2021-01-01', interval 2 year)
 -- !query schema
-struct<try_add(DATE '2021-01-01', INTERVAL '2' YEAR):date>
+struct<TRY_ADD(DATE '2021-01-01', INTERVAL '2' YEAR):date>
 -- !query output
 2023-01-01
 
@@ -90,7 +90,7 @@ struct<try_add(DATE '2021-01-01', INTERVAL '2' YEAR):date>
 -- !query
 SELECT try_add(date'2021-01-01', interval 2 second)
 -- !query schema
-struct<try_add(DATE '2021-01-01', INTERVAL '02' SECOND):timestamp>
+struct<TRY_ADD(DATE '2021-01-01', INTERVAL '02' SECOND):timestamp>
 -- !query output
 2021-01-01 00:00:02
 
@@ -98,7 +98,7 @@ struct<try_add(DATE '2021-01-01', INTERVAL '02' SECOND):timestamp>
 -- !query
 SELECT try_add(interval 2 year, date'2021-01-01')
 -- !query schema
-struct<try_add(INTERVAL '2' YEAR, DATE '2021-01-01'):date>
+struct<TRY_ADD(INTERVAL '2' YEAR, DATE '2021-01-01'):date>
 -- !query output
 2023-01-01
 
@@ -106,7 +106,7 @@ struct<try_add(INTERVAL '2' YEAR, DATE '2021-01-01'):date>
 -- !query
 SELECT try_add(interval 2 second, date'2021-01-01')
 -- !query schema
-struct<try_add(INTERVAL '02' SECOND, DATE '2021-01-01'):timestamp>
+struct<TRY_ADD(INTERVAL '02' SECOND, DATE '2021-01-01'):timestamp>
 -- !query output
 2021-01-01 00:00:02
 
@@ -114,7 +114,7 @@ struct<try_add(INTERVAL '02' SECOND, DATE '2021-01-01'):timestamp>
 -- !query
 SELECT try_add(timestamp_ltz'2021-01-01 00:00:00', interval 2 year)
 -- !query schema
-struct<try_add(TIMESTAMP '2021-01-01 00:00:00', INTERVAL '2' YEAR):timestamp>
+struct<TRY_ADD(TIMESTAMP '2021-01-01 00:00:00', INTERVAL '2' YEAR):timestamp>
 -- !query output
 2023-01-01 00:00:00
 
@@ -122,7 +122,7 @@ struct<try_add(TIMESTAMP '2021-01-01 00:00:00', INTERVAL '2' YEAR):timestamp>
 -- !query
 SELECT try_add(timestamp_ntz'2021-01-01 00:00:00', interval 2 second)
 -- !query schema
-struct<try_add(TIMESTAMP_NTZ '2021-01-01 00:00:00', INTERVAL '02' SECOND):timestamp_ntz>
+struct<TRY_ADD(TIMESTAMP_NTZ '2021-01-01 00:00:00', INTERVAL '02' SECOND):timestamp_ntz>
 -- !query output
 2021-01-01 00:00:02
 
@@ -130,7 +130,7 @@ struct<try_add(TIMESTAMP_NTZ '2021-01-01 00:00:00', INTERVAL '02' SECOND):timest
 -- !query
 SELECT try_add(interval 2 year, timestamp_ltz'2021-01-01 00:00:00')
 -- !query schema
-struct<try_add(INTERVAL '2' YEAR, TIMESTAMP '2021-01-01 00:00:00'):timestamp>
+struct<TRY_ADD(INTERVAL '2' YEAR, TIMESTAMP '2021-01-01 00:00:00'):timestamp>
 -- !query output
 2023-01-01 00:00:00
 
@@ -138,7 +138,7 @@ struct<try_add(INTERVAL '2' YEAR, TIMESTAMP '2021-01-01 00:00:00'):timestamp>
 -- !query
 SELECT try_add(interval 2 second, timestamp_ntz'2021-01-01 00:00:00')
 -- !query schema
-struct<try_add(INTERVAL '02' SECOND, TIMESTAMP_NTZ '2021-01-01 00:00:00'):timestamp_ntz>
+struct<TRY_ADD(INTERVAL '02' SECOND, TIMESTAMP_NTZ '2021-01-01 00:00:00'):timestamp_ntz>
 -- !query output
 2021-01-01 00:00:02
 
@@ -146,7 +146,7 @@ struct<try_add(INTERVAL '02' SECOND, TIMESTAMP_NTZ '2021-01-01 00:00:00'):timest
 -- !query
 SELECT try_add(interval 2 year, interval 2 year)
 -- !query schema
-struct<try_add(INTERVAL '2' YEAR, INTERVAL '2' YEAR):interval year>
+struct<TRY_ADD(INTERVAL '2' YEAR, INTERVAL '2' YEAR):interval year>
 -- !query output
 4-0
 
@@ -154,7 +154,7 @@ struct<try_add(INTERVAL '2' YEAR, INTERVAL '2' YEAR):interval year>
 -- !query
 SELECT try_add(interval 2 second, interval 2 second)
 -- !query schema
-struct<try_add(INTERVAL '02' SECOND, INTERVAL '02' SECOND):interval second>
+struct<TRY_ADD(INTERVAL '02' SECOND, INTERVAL '02' SECOND):interval second>
 -- !query output
 0 00:00:04.000000000
 
@@ -188,7 +188,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_add(interval 2147483647 month, interval 2 month)
 -- !query schema
-struct<try_add(INTERVAL '2147483647' MONTH, INTERVAL '2' MONTH):interval month>
+struct<TRY_ADD(INTERVAL '2147483647' MONTH, INTERVAL '2' MONTH):interval month>
 -- !query output
 NULL
 
@@ -196,7 +196,7 @@ NULL
 -- !query
 SELECT try_add(interval 106751991 day, interval 3 day)
 -- !query schema
-struct<try_add(INTERVAL '106751991' DAY, INTERVAL '3' DAY):interval day>
+struct<TRY_ADD(INTERVAL '106751991' DAY, INTERVAL '3' DAY):interval day>
 -- !query output
 NULL
 
@@ -204,7 +204,7 @@ NULL
 -- !query
 SELECT try_divide(1, 0.5)
 -- !query schema
-struct<try_divide(1, 0.5):decimal(8,6)>
+struct<TRY_DIVIDE(1, 0.5):decimal(8,6)>
 -- !query output
 2.000000
 
@@ -212,7 +212,7 @@ struct<try_divide(1, 0.5):decimal(8,6)>
 -- !query
 SELECT try_divide(1, 0)
 -- !query schema
-struct<try_divide(1, 0):double>
+struct<TRY_DIVIDE(1, 0):double>
 -- !query output
 NULL
 
@@ -220,7 +220,7 @@ NULL
 -- !query
 SELECT try_divide(0, 0)
 -- !query schema
-struct<try_divide(0, 0):double>
+struct<TRY_DIVIDE(0, 0):double>
 -- !query output
 NULL
 
@@ -228,7 +228,7 @@ NULL
 -- !query
 SELECT try_divide(1, (2147483647 + 1))
 -- !query schema
-struct<try_divide(1, (2147483647 + 1)):double>
+struct<TRY_DIVIDE(1, (2147483647 + 1)):double>
 -- !query output
 -4.6566128730773926E-10
 
@@ -236,7 +236,7 @@ struct<try_divide(1, (2147483647 + 1)):double>
 -- !query
 SELECT try_divide(1L, (9223372036854775807L + 1L))
 -- !query schema
-struct<try_divide(1, (9223372036854775807 + 1)):double>
+struct<TRY_DIVIDE(1, (9223372036854775807 + 1)):double>
 -- !query output
 -1.0842021724855044E-19
 
@@ -244,7 +244,7 @@ struct<try_divide(1, (9223372036854775807 + 1)):double>
 -- !query
 SELECT try_divide(1, 1.0 / 0.0)
 -- !query schema
-struct<try_divide(1, (1.0 / 0.0)):decimal(16,9)>
+struct<TRY_DIVIDE(1, (1.0 / 0.0)):decimal(16,9)>
 -- !query output
 NULL
 
@@ -252,7 +252,7 @@ NULL
 -- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
-struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
+struct<TRY_DIVIDE(INTERVAL '2' YEAR, 2):interval year to month>
 -- !query output
 1-0
 
@@ -260,7 +260,7 @@ struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
 -- !query
 SELECT try_divide(interval 2 second, 2)
 -- !query schema
-struct<try_divide(INTERVAL '02' SECOND, 2):interval day to second>
+struct<TRY_DIVIDE(INTERVAL '02' SECOND, 2):interval day to second>
 -- !query output
 0 00:00:01.000000000
 
@@ -268,7 +268,7 @@ struct<try_divide(INTERVAL '02' SECOND, 2):interval day to second>
 -- !query
 SELECT try_divide(interval 2 year, 0)
 -- !query schema
-struct<try_divide(INTERVAL '2' YEAR, 0):interval year to month>
+struct<TRY_DIVIDE(INTERVAL '2' YEAR, 0):interval year to month>
 -- !query output
 NULL
 
@@ -276,7 +276,7 @@ NULL
 -- !query
 SELECT try_divide(interval 2 second, 0)
 -- !query schema
-struct<try_divide(INTERVAL '02' SECOND, 0):interval day to second>
+struct<TRY_DIVIDE(INTERVAL '02' SECOND, 0):interval day to second>
 -- !query output
 NULL
 
@@ -284,7 +284,7 @@ NULL
 -- !query
 SELECT try_divide(interval 2147483647 month, 0.5)
 -- !query schema
-struct<try_divide(INTERVAL '2147483647' MONTH, 0.5):interval year to month>
+struct<TRY_DIVIDE(INTERVAL '2147483647' MONTH, 0.5):interval year to month>
 -- !query output
 NULL
 
@@ -292,7 +292,7 @@ NULL
 -- !query
 SELECT try_divide(interval 106751991 day, 0.5)
 -- !query schema
-struct<try_divide(INTERVAL '106751991' DAY, 0.5):interval day to second>
+struct<TRY_DIVIDE(INTERVAL '106751991' DAY, 0.5):interval day to second>
 -- !query output
 NULL
 
@@ -300,7 +300,7 @@ NULL
 -- !query
 SELECT try_subtract(1, 1)
 -- !query schema
-struct<try_subtract(1, 1):int>
+struct<TRY_SUBTRACT(1, 1):int>
 -- !query output
 0
 
@@ -308,7 +308,7 @@ struct<try_subtract(1, 1):int>
 -- !query
 SELECT try_subtract(2147483647, -1)
 -- !query schema
-struct<try_subtract(2147483647, -1):int>
+struct<TRY_SUBTRACT(2147483647, -1):int>
 -- !query output
 NULL
 
@@ -316,7 +316,7 @@ NULL
 -- !query
 SELECT try_subtract(-2147483648, 1)
 -- !query schema
-struct<try_subtract(-2147483648, 1):int>
+struct<TRY_SUBTRACT(-2147483648, 1):int>
 -- !query output
 NULL
 
@@ -324,7 +324,7 @@ NULL
 -- !query
 SELECT try_subtract(9223372036854775807L, -1)
 -- !query schema
-struct<try_subtract(9223372036854775807, -1):bigint>
+struct<TRY_SUBTRACT(9223372036854775807, -1):bigint>
 -- !query output
 NULL
 
@@ -332,7 +332,7 @@ NULL
 -- !query
 SELECT try_subtract(-9223372036854775808L, 1)
 -- !query schema
-struct<try_subtract(-9223372036854775808, 1):bigint>
+struct<TRY_SUBTRACT(-9223372036854775808, 1):bigint>
 -- !query output
 NULL
 
@@ -340,7 +340,7 @@ NULL
 -- !query
 SELECT try_subtract(1, (2147483647 + 1))
 -- !query schema
-struct<try_subtract(1, (2147483647 + 1)):int>
+struct<TRY_SUBTRACT(1, (2147483647 + 1)):int>
 -- !query output
 NULL
 
@@ -348,7 +348,7 @@ NULL
 -- !query
 SELECT try_subtract(1L, (9223372036854775807L + 1L))
 -- !query schema
-struct<try_subtract(1, (9223372036854775807 + 1)):bigint>
+struct<TRY_SUBTRACT(1, (9223372036854775807 + 1)):bigint>
 -- !query output
 NULL
 
@@ -356,7 +356,7 @@ NULL
 -- !query
 SELECT try_subtract(1, 1.0 / 0.0)
 -- !query schema
-struct<try_subtract(1, (1.0 / 0.0)):decimal(9,6)>
+struct<TRY_SUBTRACT(1, (1.0 / 0.0)):decimal(9,6)>
 -- !query output
 NULL
 
@@ -364,7 +364,7 @@ NULL
 -- !query
 SELECT try_subtract(interval 2 year, interval 3 year)
 -- !query schema
-struct<try_subtract(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
+struct<TRY_SUBTRACT(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
 -- !query output
 -1-0
 
@@ -372,7 +372,7 @@ struct<try_subtract(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
 -- !query
 SELECT try_subtract(interval 3 second, interval 2 second)
 -- !query schema
-struct<try_subtract(INTERVAL '03' SECOND, INTERVAL '02' SECOND):interval second>
+struct<TRY_SUBTRACT(INTERVAL '03' SECOND, INTERVAL '02' SECOND):interval second>
 -- !query output
 0 00:00:01.000000000
 
@@ -380,7 +380,7 @@ struct<try_subtract(INTERVAL '03' SECOND, INTERVAL '02' SECOND):interval second>
 -- !query
 SELECT try_subtract(interval 2147483647 month, interval -2 month)
 -- !query schema
-struct<try_subtract(INTERVAL '2147483647' MONTH, INTERVAL '-2' MONTH):interval month>
+struct<TRY_SUBTRACT(INTERVAL '2147483647' MONTH, INTERVAL '-2' MONTH):interval month>
 -- !query output
 NULL
 
@@ -388,7 +388,7 @@ NULL
 -- !query
 SELECT try_subtract(interval 106751991 day, interval -3 day)
 -- !query schema
-struct<try_subtract(INTERVAL '106751991' DAY, INTERVAL '-3' DAY):interval day>
+struct<TRY_SUBTRACT(INTERVAL '106751991' DAY, INTERVAL '-3' DAY):interval day>
 -- !query output
 NULL
 
@@ -396,7 +396,7 @@ NULL
 -- !query
 SELECT try_multiply(2, 3)
 -- !query schema
-struct<try_multiply(2, 3):int>
+struct<TRY_MULTIPLY(2, 3):int>
 -- !query output
 6
 
@@ -404,7 +404,7 @@ struct<try_multiply(2, 3):int>
 -- !query
 SELECT try_multiply(2147483647, -2)
 -- !query schema
-struct<try_multiply(2147483647, -2):int>
+struct<TRY_MULTIPLY(2147483647, -2):int>
 -- !query output
 NULL
 
@@ -412,7 +412,7 @@ NULL
 -- !query
 SELECT try_multiply(-2147483648, 2)
 -- !query schema
-struct<try_multiply(-2147483648, 2):int>
+struct<TRY_MULTIPLY(-2147483648, 2):int>
 -- !query output
 NULL
 
@@ -420,7 +420,7 @@ NULL
 -- !query
 SELECT try_multiply(9223372036854775807L, 2)
 -- !query schema
-struct<try_multiply(9223372036854775807, 2):bigint>
+struct<TRY_MULTIPLY(9223372036854775807, 2):bigint>
 -- !query output
 NULL
 
@@ -428,7 +428,7 @@ NULL
 -- !query
 SELECT try_multiply(-9223372036854775808L, -2)
 -- !query schema
-struct<try_multiply(-9223372036854775808, -2):bigint>
+struct<TRY_MULTIPLY(-9223372036854775808, -2):bigint>
 -- !query output
 NULL
 
@@ -436,7 +436,7 @@ NULL
 -- !query
 SELECT try_multiply(1, (2147483647 + 1))
 -- !query schema
-struct<try_multiply(1, (2147483647 + 1)):int>
+struct<TRY_MULTIPLY(1, (2147483647 + 1)):int>
 -- !query output
 -2147483648
 
@@ -444,7 +444,7 @@ struct<try_multiply(1, (2147483647 + 1)):int>
 -- !query
 SELECT try_multiply(1L, (9223372036854775807L + 1L))
 -- !query schema
-struct<try_multiply(1, (9223372036854775807 + 1)):bigint>
+struct<TRY_MULTIPLY(1, (9223372036854775807 + 1)):bigint>
 -- !query output
 -9223372036854775808
 
@@ -452,7 +452,7 @@ struct<try_multiply(1, (9223372036854775807 + 1)):bigint>
 -- !query
 SELECT try_multiply(1, 1.0 / 0.0)
 -- !query schema
-struct<try_multiply(1, (1.0 / 0.0)):decimal(10,6)>
+struct<TRY_MULTIPLY(1, (1.0 / 0.0)):decimal(10,6)>
 -- !query output
 NULL
 
@@ -460,7 +460,7 @@ NULL
 -- !query
 SELECT try_multiply(interval 2 year, 2)
 -- !query schema
-struct<try_multiply(INTERVAL '2' YEAR, 2):interval year to month>
+struct<TRY_MULTIPLY(INTERVAL '2' YEAR, 2):interval year to month>
 -- !query output
 4-0
 
@@ -468,7 +468,7 @@ struct<try_multiply(INTERVAL '2' YEAR, 2):interval year to month>
 -- !query
 SELECT try_multiply(interval 2 second, 2)
 -- !query schema
-struct<try_multiply(INTERVAL '02' SECOND, 2):interval day to second>
+struct<TRY_MULTIPLY(INTERVAL '02' SECOND, 2):interval day to second>
 -- !query output
 0 00:00:04.000000000
 
@@ -476,7 +476,7 @@ struct<try_multiply(INTERVAL '02' SECOND, 2):interval day to second>
 -- !query
 SELECT try_multiply(interval 2 year, 0)
 -- !query schema
-struct<try_multiply(INTERVAL '2' YEAR, 0):interval year to month>
+struct<TRY_MULTIPLY(INTERVAL '2' YEAR, 0):interval year to month>
 -- !query output
 0-0
 
@@ -484,7 +484,7 @@ struct<try_multiply(INTERVAL '2' YEAR, 0):interval year to month>
 -- !query
 SELECT try_multiply(interval 2 second, 0)
 -- !query schema
-struct<try_multiply(INTERVAL '02' SECOND, 0):interval day to second>
+struct<TRY_MULTIPLY(INTERVAL '02' SECOND, 0):interval day to second>
 -- !query output
 0 00:00:00.000000000
 
@@ -492,7 +492,7 @@ struct<try_multiply(INTERVAL '02' SECOND, 0):interval day to second>
 -- !query
 SELECT try_multiply(interval 2147483647 month, 2)
 -- !query schema
-struct<try_multiply(INTERVAL '2147483647' MONTH, 2):interval year to month>
+struct<TRY_MULTIPLY(INTERVAL '2147483647' MONTH, 2):interval year to month>
 -- !query output
 NULL
 
@@ -500,6 +500,6 @@ NULL
 -- !query
 SELECT try_multiply(interval 106751991 day, 2)
 -- !query schema
-struct<try_multiply(INTERVAL '106751991' DAY, 2):interval day to second>
+struct<TRY_MULTIPLY(INTERVAL '106751991' DAY, 2):interval day to second>
 -- !query output
 NULL

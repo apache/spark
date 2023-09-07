@@ -456,7 +456,7 @@ Project [(cast(cast(246 as smallint) as bigint) + q1#xL) AS 2plus8#xL, (cast(cas
 -- !query
 SELECT q2, abs(q2) FROM INT8_TBL
 -- !query analysis
-Project [q2#xL, abs(q2#xL) AS abs(q2)#xL]
+Project [q2#xL, ABS(q2#xL) AS ABS(q2)#xL]
 +- SubqueryAlias spark_catalog.default.int8_tbl
    +- Relation spark_catalog.default.int8_tbl[q1#xL,q2#xL] parquet
 
@@ -659,14 +659,14 @@ Project [id#xL]
 -- !query
 SELECT string(shiftleft(bigint(-1), 63))
 -- !query analysis
-Project [cast(shiftleft(cast(-1 as bigint), 63) as string) AS shiftleft(-1, 63)#x]
+Project [cast(SHIFTLEFT(cast(-1 as bigint), 63) as string) AS SHIFTLEFT(-1, 63)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(int(shiftleft(bigint(-1), 63))+1)
 -- !query analysis
-Project [cast((cast(shiftleft(cast(-1 as bigint), 63) as int) + 1) as string) AS (shiftleft(-1, 63) + 1)#x]
+Project [cast((cast(SHIFTLEFT(cast(-1 as bigint), 63) as int) + 1) as string) AS (SHIFTLEFT(-1, 63) + 1)#x]
 +- OneRowRelation
 
 

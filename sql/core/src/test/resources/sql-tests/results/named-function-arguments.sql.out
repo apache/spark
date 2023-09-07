@@ -56,7 +56,7 @@ struct<>
 -- !query
 SELECT hex(count_min_sketch(t2d, seed => 1, epsilon => 0.5d, confidence => 0.5d)) FROM t2
 -- !query schema
-struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
+struct<HEX(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 -- !query output
 00000001000000000000000D0000000100000004000000005D8D6AB90000000000000002000000000000000700000000000000010000000000000003
 
@@ -64,7 +64,7 @@ struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 -- !query
 SELECT hex(count_min_sketch(seed => 1, epsilon => 0.5d, confidence => 0.5d, column => t2d)) FROM t2
 -- !query schema
-struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
+struct<HEX(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 -- !query output
 00000001000000000000000D0000000100000004000000005D8D6AB90000000000000002000000000000000700000000000000010000000000000003
 
@@ -72,7 +72,7 @@ struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 -- !query
 SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2
 -- !query schema
-struct<hex(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
+struct<HEX(count_min_sketch(t2d, 0.5, 0.5, 1)):string>
 -- !query output
 00000001000000000000000D0000000100000004000000005D8D6AB90000000000000002000000000000000700000000000000010000000000000003
 

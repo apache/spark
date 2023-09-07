@@ -600,7 +600,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT HEX(CAST('abc' AS binary))
 -- !query schema
-struct<hex(CAST(abc AS BINARY)):string>
+struct<HEX(CAST(abc AS BINARY)):string>
 -- !query output
 616263
 
