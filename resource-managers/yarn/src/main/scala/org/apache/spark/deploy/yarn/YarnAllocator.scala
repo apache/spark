@@ -733,12 +733,13 @@ private[yarn] class YarnAllocator(
     for (container <- containersToUse) {
       val rpId = getResourceProfileIdFromPriority(container.getPriority)
       executorIdCounter += 1
+      val executorBindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS.key, executorHostname)
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       val yarnResourceForRpId = rpIdToYarnResource.get(rpId)
       assert(container.getResource.getMemorySize >= yarnResourceForRpId.getMemorySize)
-      logInfo(s"Launching container $containerId on host $executorHostname " +
+      logInfo(s"Launching container $containerId on host $executorHostname ($executorBindAddress) " +
         s"for executor with ID $executorId for ResourceProfile Id $rpId")
 
       val rp = rpIdToResourceProfile(rpId)
@@ -763,6 +764,7 @@ private[yarn] class YarnAllocator(
                 sparkConf,
                 driverUrl,
                 executorId,
+                executorBindAddress,
                 executorHostname,
                 containerMem,
                 containerCores,
