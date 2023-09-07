@@ -1673,13 +1673,10 @@ class DataFrame:
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
-        elif isinstance(item, int) and not isinstance(item, bool):
-            if item < 0:
-                raise IndexError(f"Column index must be non-negative but got {item}")
+        elif isinstance(item, int):
             n = len(self.columns)
-            if item >= n:
-                raise IndexError(f"Column index must be in range [0, {n}) but got {item}")
-
+            # 1, convert bool; 2, covert negative index; 3, validate index
+            item = range(0, n)[int(item)]
             return Column(
                 GetColumnByOrdinal(
                     ordinal=item,

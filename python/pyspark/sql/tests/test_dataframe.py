@@ -71,13 +71,17 @@ class DataFrameTestsMixin:
             "AS TAB(a, b, c)"
         )
 
+        # accepted type and values
+        for index in [False, True, 0, 1, 2, -1, -2, -3]:
+            df[index]
+
         # negative cases: ordinal out of range
-        for index in [-10, -1, 3, 10, 100]:
+        for index in [-10, -4, 3, 10, 100]:
             with self.assertRaises(IndexError):
                 df[index]
 
         # negative cases: unsupported types
-        for index in [True, False, None, 1.0, Decimal(1)]:
+        for index in [None, 1.0, Decimal(1)]:
             with self.assertRaises(PySparkTypeError):
                 df[index]
 
