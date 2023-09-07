@@ -201,7 +201,7 @@ Input [8]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#10, ps_su
 (35) HashAggregate [codegen id : 6]
 Input [3]: [nation#18, o_year#19, amount#20]
 Keys [2]: [nation#18, o_year#19]
-Functions [1]: [partial_SUM(amount#20)]
+Functions [1]: [partial_sum(amount#20)]
 Aggregate Attributes [2]: [sum#21, isEmpty#22]
 Results [4]: [nation#18, o_year#19, sum#23, isEmpty#24]
 
@@ -212,9 +212,9 @@ Arguments: hashpartitioning(nation#18, o_year#19, 5), ENSURE_REQUIREMENTS, [plan
 (37) HashAggregate [codegen id : 7]
 Input [4]: [nation#18, o_year#19, sum#23, isEmpty#24]
 Keys [2]: [nation#18, o_year#19]
-Functions [1]: [SUM(amount#20)]
-Aggregate Attributes [1]: [SUM(amount#20)#25]
-Results [3]: [nation#18, o_year#19, SUM(amount#20)#25 AS sum_profit#26]
+Functions [1]: [sum(amount#20)]
+Aggregate Attributes [1]: [sum(amount#20)#25]
+Results [3]: [nation#18, o_year#19, sum(amount#20)#25 AS sum_profit#26]
 
 (38) Exchange
 Input [3]: [nation#18, o_year#19, sum_profit#26]

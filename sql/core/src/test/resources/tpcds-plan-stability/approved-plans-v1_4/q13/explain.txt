@@ -182,7 +182,7 @@ Input [9]: [ss_hdemo_sk#2, ss_quantity#5, ss_sales_price#6, ss_ext_sales_price#7
 (32) HashAggregate [codegen id : 6]
 Input [3]: [ss_quantity#5, ss_ext_sales_price#7, ss_ext_wholesale_cost#8]
 Keys: []
-Functions [4]: [partial_AVG(ss_quantity#5), partial_AVG(UnscaledValue(ss_ext_sales_price#7)), partial_AVG(UnscaledValue(ss_ext_wholesale_cost#8)), partial_SUM(UnscaledValue(ss_ext_wholesale_cost#8))]
+Functions [4]: [partial_avg(ss_quantity#5), partial_avg(UnscaledValue(ss_ext_sales_price#7)), partial_avg(UnscaledValue(ss_ext_wholesale_cost#8)), partial_sum(UnscaledValue(ss_ext_wholesale_cost#8))]
 Aggregate Attributes [7]: [sum#22, count#23, sum#24, count#25, sum#26, count#27, sum#28]
 Results [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
 
@@ -193,9 +193,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 (34) HashAggregate [codegen id : 7]
 Input [7]: [sum#29, count#30, sum#31, count#32, sum#33, count#34, sum#35]
 Keys: []
-Functions [4]: [AVG(ss_quantity#5), AVG(UnscaledValue(ss_ext_sales_price#7)), AVG(UnscaledValue(ss_ext_wholesale_cost#8)), SUM(UnscaledValue(ss_ext_wholesale_cost#8))]
-Aggregate Attributes [4]: [AVG(ss_quantity#5)#36, AVG(UnscaledValue(ss_ext_sales_price#7))#37, AVG(UnscaledValue(ss_ext_wholesale_cost#8))#38, SUM(UnscaledValue(ss_ext_wholesale_cost#8))#39]
-Results [4]: [AVG(ss_quantity#5)#36 AS AVG(ss_quantity)#40, cast((AVG(UnscaledValue(ss_ext_sales_price#7))#37 / 100.0) as decimal(11,6)) AS AVG(ss_ext_sales_price)#41, cast((AVG(UnscaledValue(ss_ext_wholesale_cost#8))#38 / 100.0) as decimal(11,6)) AS AVG(ss_ext_wholesale_cost)#42, MakeDecimal(SUM(UnscaledValue(ss_ext_wholesale_cost#8))#39,17,2) AS SUM(ss_ext_wholesale_cost)#43]
+Functions [4]: [avg(ss_quantity#5), avg(UnscaledValue(ss_ext_sales_price#7)), avg(UnscaledValue(ss_ext_wholesale_cost#8)), sum(UnscaledValue(ss_ext_wholesale_cost#8))]
+Aggregate Attributes [4]: [avg(ss_quantity#5)#36, avg(UnscaledValue(ss_ext_sales_price#7))#37, avg(UnscaledValue(ss_ext_wholesale_cost#8))#38, sum(UnscaledValue(ss_ext_wholesale_cost#8))#39]
+Results [4]: [avg(ss_quantity#5)#36 AS avg(ss_quantity)#40, cast((avg(UnscaledValue(ss_ext_sales_price#7))#37 / 100.0) as decimal(11,6)) AS avg(ss_ext_sales_price)#41, cast((avg(UnscaledValue(ss_ext_wholesale_cost#8))#38 / 100.0) as decimal(11,6)) AS avg(ss_ext_wholesale_cost)#42, MakeDecimal(sum(UnscaledValue(ss_ext_wholesale_cost#8))#39,17,2) AS sum(ss_ext_wholesale_cost)#43]
 
 ===== Subqueries =====
 

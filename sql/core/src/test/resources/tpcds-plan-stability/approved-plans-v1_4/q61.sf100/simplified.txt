@@ -1,7 +1,7 @@
 WholeStageCodegen (15)
   Project [promotions,total]
     BroadcastNestedLoopJoin
-      HashAggregate [sum] [SUM(UnscaledValue(ss_ext_sales_price)),promotions,sum]
+      HashAggregate [sum] [sum(UnscaledValue(ss_ext_sales_price)),promotions,sum]
         InputAdapter
           Exchange #1
             WholeStageCodegen (7)
@@ -74,7 +74,7 @@ WholeStageCodegen (15)
       InputAdapter
         BroadcastExchange #8
           WholeStageCodegen (14)
-            HashAggregate [sum] [SUM(UnscaledValue(ss_ext_sales_price)),total,sum]
+            HashAggregate [sum] [sum(UnscaledValue(ss_ext_sales_price)),total,sum]
               InputAdapter
                 Exchange #9
                   WholeStageCodegen (13)

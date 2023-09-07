@@ -223,7 +223,7 @@ Input [8]: [cd_marital_status#6, cd_education_status#7, cr_call_center_sk#13, cr
 (39) HashAggregate [codegen id : 7]
 Input [6]: [cc_call_center_id#19, cc_name#20, cc_manager#21, cr_net_loss#14, cd_marital_status#6, cd_education_status#7]
 Keys [5]: [cc_call_center_id#19, cc_name#20, cc_manager#21, cd_marital_status#6, cd_education_status#7]
-Functions [1]: [partial_SUM(UnscaledValue(cr_net_loss#14))]
+Functions [1]: [partial_sum(UnscaledValue(cr_net_loss#14))]
 Aggregate Attributes [1]: [sum#22]
 Results [6]: [cc_call_center_id#19, cc_name#20, cc_manager#21, cd_marital_status#6, cd_education_status#7, sum#23]
 
@@ -234,9 +234,9 @@ Arguments: hashpartitioning(cc_call_center_id#19, cc_name#20, cc_manager#21, cd_
 (41) HashAggregate [codegen id : 8]
 Input [6]: [cc_call_center_id#19, cc_name#20, cc_manager#21, cd_marital_status#6, cd_education_status#7, sum#23]
 Keys [5]: [cc_call_center_id#19, cc_name#20, cc_manager#21, cd_marital_status#6, cd_education_status#7]
-Functions [1]: [SUM(UnscaledValue(cr_net_loss#14))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(cr_net_loss#14))#24]
-Results [4]: [cc_call_center_id#19 AS Call_Center#25, cc_name#20 AS Call_Center_Name#26, cc_manager#21 AS Manager#27, MakeDecimal(SUM(UnscaledValue(cr_net_loss#14))#24,17,2) AS Returns_Loss#28]
+Functions [1]: [sum(UnscaledValue(cr_net_loss#14))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_net_loss#14))#24]
+Results [4]: [cc_call_center_id#19 AS Call_Center#25, cc_name#20 AS Call_Center_Name#26, cc_manager#21 AS Manager#27, MakeDecimal(sum(UnscaledValue(cr_net_loss#14))#24,17,2) AS Returns_Loss#28]
 
 (42) Exchange
 Input [4]: [Call_Center#25, Call_Center_Name#26, Manager#27, Returns_Loss#28]

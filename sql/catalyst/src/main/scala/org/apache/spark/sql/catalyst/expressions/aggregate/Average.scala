@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -50,8 +48,7 @@ case class Average(
 
   def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
 
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).map(_.toUpperCase(Locale.ROOT)).getOrElse("AVG")
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))

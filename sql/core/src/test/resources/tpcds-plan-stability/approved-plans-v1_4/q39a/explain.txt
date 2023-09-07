@@ -132,7 +132,7 @@ Input [7]: [inv_quantity_on_hand#3, inv_date_sk#4, i_item_sk#6, w_warehouse_sk#7
 (19) HashAggregate [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#3, i_item_sk#6, w_warehouse_sk#7, w_warehouse_name#8, d_moy#10]
 Keys [4]: [w_warehouse_name#8, w_warehouse_sk#7, i_item_sk#6, d_moy#10]
-Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#3 as double)), partial_AVG(inv_quantity_on_hand#3)]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#3 as double)), partial_avg(inv_quantity_on_hand#3)]
 Aggregate Attributes [5]: [n#11, avg#12, m2#13, sum#14, count#15]
 Results [9]: [w_warehouse_name#8, w_warehouse_sk#7, i_item_sk#6, d_moy#10, n#16, avg#17, m2#18, sum#19, count#20]
 
@@ -143,9 +143,9 @@ Arguments: hashpartitioning(w_warehouse_name#8, w_warehouse_sk#7, i_item_sk#6, d
 (21) HashAggregate [codegen id : 10]
 Input [9]: [w_warehouse_name#8, w_warehouse_sk#7, i_item_sk#6, d_moy#10, n#16, avg#17, m2#18, sum#19, count#20]
 Keys [4]: [w_warehouse_name#8, w_warehouse_sk#7, i_item_sk#6, d_moy#10]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#3 as double)), AVG(inv_quantity_on_hand#3)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#3 as double))#21, AVG(inv_quantity_on_hand#3)#22]
-Results [5]: [w_warehouse_sk#7, i_item_sk#6, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#3 as double))#21 AS stdev#23, AVG(inv_quantity_on_hand#3)#22 AS mean#24]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#3 as double)), avg(inv_quantity_on_hand#3)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#3 as double))#21, avg(inv_quantity_on_hand#3)#22]
+Results [5]: [w_warehouse_sk#7, i_item_sk#6, d_moy#10, stddev_samp(cast(inv_quantity_on_hand#3 as double))#21 AS stdev#23, avg(inv_quantity_on_hand#3)#22 AS mean#24]
 
 (22) Filter [codegen id : 10]
 Input [5]: [w_warehouse_sk#7, i_item_sk#6, d_moy#10, stdev#23, mean#24]
@@ -212,7 +212,7 @@ Input [7]: [inv_quantity_on_hand#28, inv_date_sk#29, i_item_sk#31, w_warehouse_s
 (36) HashAggregate [codegen id : 8]
 Input [5]: [inv_quantity_on_hand#28, i_item_sk#31, w_warehouse_sk#32, w_warehouse_name#33, d_moy#35]
 Keys [4]: [w_warehouse_name#33, w_warehouse_sk#32, i_item_sk#31, d_moy#35]
-Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#28 as double)), partial_AVG(inv_quantity_on_hand#28)]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#28 as double)), partial_avg(inv_quantity_on_hand#28)]
 Aggregate Attributes [5]: [n#36, avg#37, m2#38, sum#39, count#40]
 Results [9]: [w_warehouse_name#33, w_warehouse_sk#32, i_item_sk#31, d_moy#35, n#41, avg#42, m2#43, sum#44, count#45]
 
@@ -223,9 +223,9 @@ Arguments: hashpartitioning(w_warehouse_name#33, w_warehouse_sk#32, i_item_sk#31
 (38) HashAggregate [codegen id : 9]
 Input [9]: [w_warehouse_name#33, w_warehouse_sk#32, i_item_sk#31, d_moy#35, n#41, avg#42, m2#43, sum#44, count#45]
 Keys [4]: [w_warehouse_name#33, w_warehouse_sk#32, i_item_sk#31, d_moy#35]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double)), AVG(inv_quantity_on_hand#28)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double))#21, AVG(inv_quantity_on_hand#28)#22]
-Results [5]: [w_warehouse_sk#32, i_item_sk#31, d_moy#35, stddev_samp(cast(inv_quantity_on_hand#28 as double))#21 AS stdev#46, AVG(inv_quantity_on_hand#28)#22 AS mean#47]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double)), avg(inv_quantity_on_hand#28)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#28 as double))#21, avg(inv_quantity_on_hand#28)#22]
+Results [5]: [w_warehouse_sk#32, i_item_sk#31, d_moy#35, stddev_samp(cast(inv_quantity_on_hand#28 as double))#21 AS stdev#46, avg(inv_quantity_on_hand#28)#22 AS mean#47]
 
 (39) Filter [codegen id : 9]
 Input [5]: [w_warehouse_sk#32, i_item_sk#31, d_moy#35, stdev#46, mean#47]

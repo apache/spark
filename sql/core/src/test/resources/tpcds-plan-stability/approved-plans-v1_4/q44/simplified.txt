@@ -27,7 +27,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                                                     Filter [rank_col]
                                                       Subquery #1
                                                         WholeStageCodegen (2)
-                                                          HashAggregate [ss_store_sk,sum,count] [AVG(UnscaledValue(ss_net_profit)),rank_col,sum,count]
+                                                          HashAggregate [ss_store_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),rank_col,sum,count]
                                                             InputAdapter
                                                               Exchange [ss_store_sk] #4
                                                                 WholeStageCodegen (1)
@@ -37,7 +37,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet spark_catalog.default.store_sales [ss_addr_sk,ss_store_sk,ss_net_profit,ss_sold_date_sk]
-                                                      HashAggregate [ss_item_sk,sum,count] [AVG(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
+                                                      HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
                                                         InputAdapter
                                                           Exchange [ss_item_sk] #3
                                                             WholeStageCodegen (1)
@@ -67,7 +67,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                                                   Sort [rank_col]
                                                     Filter [rank_col]
                                                       ReusedSubquery [rank_col] #1
-                                                      HashAggregate [ss_item_sk,sum,count] [AVG(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
+                                                      HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,sum,count]
                                                         InputAdapter
                                                           ReusedExchange [ss_item_sk,sum,count] #3
             InputAdapter

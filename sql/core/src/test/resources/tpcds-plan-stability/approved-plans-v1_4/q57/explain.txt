@@ -133,7 +133,7 @@ Input [8]: [i_brand#2, i_category#3, cs_call_center_sk#4, cs_sales_price#6, d_ye
 (19) HashAggregate [codegen id : 4]
 Input [6]: [i_brand#2, i_category#3, cs_sales_price#6, d_year#10, d_moy#11, cc_name#13]
 Keys [5]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11]
-Functions [1]: [partial_SUM(UnscaledValue(cs_sales_price#6))]
+Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#6))]
 Aggregate Attributes [1]: [sum#14]
 Results [6]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, sum#15]
 
@@ -144,9 +144,9 @@ Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#13, d_year#10, d_mo
 (21) HashAggregate [codegen id : 5]
 Input [6]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, sum#15]
 Keys [5]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11]
-Functions [1]: [SUM(UnscaledValue(cs_sales_price#6))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(cs_sales_price#6))#16]
-Results [7]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, MakeDecimal(SUM(UnscaledValue(cs_sales_price#6))#16,17,2) AS sum_sales#17, MakeDecimal(SUM(UnscaledValue(cs_sales_price#6))#16,17,2) AS _w0#18]
+Functions [1]: [sum(UnscaledValue(cs_sales_price#6))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#6))#16]
+Results [7]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, MakeDecimal(sum(UnscaledValue(cs_sales_price#6))#16,17,2) AS sum_sales#17, MakeDecimal(sum(UnscaledValue(cs_sales_price#6))#16,17,2) AS _w0#18]
 
 (22) Exchange
 Input [7]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, sum_sales#17, _w0#18]
@@ -166,7 +166,7 @@ Condition : (isnotnull(d_year#10) AND (d_year#10 = 1999))
 
 (26) Window
 Input [8]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, sum_sales#17, _w0#18, rn#19]
-Arguments: [AVG(_w0#18) windowspecdefinition(i_category#3, i_brand#2, cc_name#13, d_year#10, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#20], [i_category#3, i_brand#2, cc_name#13, d_year#10]
+Arguments: [avg(_w0#18) windowspecdefinition(i_category#3, i_brand#2, cc_name#13, d_year#10, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_monthly_sales#20], [i_category#3, i_brand#2, cc_name#13, d_year#10]
 
 (27) Filter [codegen id : 22]
 Input [9]: [i_category#3, i_brand#2, cc_name#13, d_year#10, d_moy#11, sum_sales#17, _w0#18, rn#19, avg_monthly_sales#20]
@@ -182,9 +182,9 @@ Output [6]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25, sum#26]
 (30) HashAggregate [codegen id : 12]
 Input [6]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25, sum#26]
 Keys [5]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25]
-Functions [1]: [SUM(UnscaledValue(cs_sales_price#27))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(cs_sales_price#27))#16]
-Results [6]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25, MakeDecimal(SUM(UnscaledValue(cs_sales_price#27))#16,17,2) AS sum_sales#28]
+Functions [1]: [sum(UnscaledValue(cs_sales_price#27))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#27))#16]
+Results [6]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25, MakeDecimal(sum(UnscaledValue(cs_sales_price#27))#16,17,2) AS sum_sales#28]
 
 (31) Exchange
 Input [6]: [i_category#21, i_brand#22, cc_name#23, d_year#24, d_moy#25, sum_sales#28]

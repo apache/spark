@@ -1,6 +1,6 @@
-TakeOrderedAndProject [SUM(ss_ext_sales_price),d_year,i_category_id,i_category]
+TakeOrderedAndProject [sum(ss_ext_sales_price),d_year,i_category_id,i_category]
   WholeStageCodegen (4)
-    HashAggregate [d_year,i_category_id,i_category,sum] [SUM(UnscaledValue(ss_ext_sales_price)),SUM(ss_ext_sales_price),sum]
+    HashAggregate [d_year,i_category_id,i_category,sum] [sum(UnscaledValue(ss_ext_sales_price)),sum(ss_ext_sales_price),sum]
       InputAdapter
         Exchange [d_year,i_category_id,i_category] #1
           WholeStageCodegen (3)

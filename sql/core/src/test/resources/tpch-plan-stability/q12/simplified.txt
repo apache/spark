@@ -3,7 +3,7 @@ WholeStageCodegen (4)
     InputAdapter
       Exchange [l_shipmode] #1
         WholeStageCodegen (3)
-          HashAggregate [l_shipmode,sum,sum] [SUM(CASE WHEN ((o_orderpriority = 1-URGENT) OR (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),SUM(CASE WHEN (NOT (o_orderpriority = 1-URGENT) AND NOT (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),high_line_count,low_line_count,sum,sum]
+          HashAggregate [l_shipmode,sum,sum] [sum(CASE WHEN ((o_orderpriority = 1-URGENT) OR (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),sum(CASE WHEN (NOT (o_orderpriority = 1-URGENT) AND NOT (o_orderpriority = 2-HIGH)) THEN 1 ELSE 0 END),high_line_count,low_line_count,sum,sum]
             InputAdapter
               Exchange [l_shipmode] #2
                 WholeStageCodegen (2)

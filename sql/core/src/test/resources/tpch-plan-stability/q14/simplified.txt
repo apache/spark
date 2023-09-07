@@ -1,5 +1,5 @@
 WholeStageCodegen (3)
-  HashAggregate [sum,isEmpty,sum,isEmpty] [SUM(CASE WHEN StartsWith(p_type, PROMO) THEN (l_extendedprice * (1 - l_discount)) ELSE 0 END),SUM((l_extendedprice * (1 - l_discount))),promo_revenue,sum,isEmpty,sum,isEmpty]
+  HashAggregate [sum,isEmpty,sum,isEmpty] [sum(CASE WHEN StartsWith(p_type, PROMO) THEN (l_extendedprice * (1 - l_discount)) ELSE 0 END),sum((l_extendedprice * (1 - l_discount))),promo_revenue,sum,isEmpty,sum,isEmpty]
     InputAdapter
       Exchange #1
         WholeStageCodegen (2)

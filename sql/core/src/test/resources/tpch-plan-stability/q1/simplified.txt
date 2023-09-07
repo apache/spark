@@ -3,7 +3,7 @@ WholeStageCodegen (3)
     InputAdapter
       Exchange [l_returnflag,l_linestatus] #1
         WholeStageCodegen (2)
-          HashAggregate [l_returnflag,l_linestatus,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count] [SUM(l_quantity),SUM(l_extendedprice),SUM((l_extendedprice * (1 - l_discount))),SUM(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))),AVG(UnscaledValue(l_quantity)),AVG(UnscaledValue(l_extendedprice)),AVG(UnscaledValue(l_discount)),count(1),sum_qty,sum_base_price,sum_disc_price,sum_charge,avg_qty,avg_price,avg_disc,count_order,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count]
+          HashAggregate [l_returnflag,l_linestatus,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count] [sum(l_quantity),sum(l_extendedprice),sum((l_extendedprice * (1 - l_discount))),sum(((l_extendedprice * (1 - l_discount)) * (1 + l_tax))),avg(UnscaledValue(l_quantity)),avg(UnscaledValue(l_extendedprice)),avg(UnscaledValue(l_discount)),count(1),sum_qty,sum_base_price,sum_disc_price,sum_charge,avg_qty,avg_price,avg_disc,count_order,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,count,sum,count,sum,count,count]
             InputAdapter
               Exchange [l_returnflag,l_linestatus] #2
                 WholeStageCodegen (1)

@@ -5,7 +5,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
         Exchange [segment] #1
           WholeStageCodegen (15)
             HashAggregate [segment] [count,count]
-              HashAggregate [c_customer_sk,sum] [SUM(UnscaledValue(ss_ext_sales_price)),segment,sum]
+              HashAggregate [c_customer_sk,sum] [sum(UnscaledValue(ss_ext_sales_price)),segment,sum]
                 HashAggregate [c_customer_sk,ss_ext_sales_price] [sum,sum]
                   Project [c_customer_sk,ss_ext_sales_price]
                     SortMergeJoin [c_customer_sk,ss_customer_sk]

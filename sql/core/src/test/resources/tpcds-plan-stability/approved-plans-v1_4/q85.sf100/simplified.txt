@@ -1,6 +1,6 @@
-TakeOrderedAndProject [substr(r_reason_desc, 1, 20),AVG(ws_quantity),AVG(wr_refunded_cash),AVG(wr_fee)]
+TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee)]
   WholeStageCodegen (15)
-    HashAggregate [r_reason_desc,sum,count,sum,count,sum,count] [AVG(ws_quantity),AVG(UnscaledValue(wr_refunded_cash)),AVG(UnscaledValue(wr_fee)),substr(r_reason_desc, 1, 20),AVG(ws_quantity),AVG(wr_refunded_cash),AVG(wr_fee),sum,count,sum,count,sum,count]
+    HashAggregate [r_reason_desc,sum,count,sum,count,sum,count] [avg(ws_quantity),avg(UnscaledValue(wr_refunded_cash)),avg(UnscaledValue(wr_fee)),substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee),sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [r_reason_desc] #1
           WholeStageCodegen (14)

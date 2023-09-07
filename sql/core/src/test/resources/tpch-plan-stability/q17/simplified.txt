@@ -1,11 +1,11 @@
 WholeStageCodegen (5)
-  HashAggregate [sum,isEmpty] [SUM(l_extendedprice),avg_yearly,sum,isEmpty]
+  HashAggregate [sum,isEmpty] [sum(l_extendedprice),avg_yearly,sum,isEmpty]
     InputAdapter
       Exchange #1
         WholeStageCodegen (4)
           HashAggregate [l_extendedprice] [sum,isEmpty,sum,isEmpty]
             Project [l_extendedprice]
-              BroadcastHashJoin [p_partkey,l_partkey,l_quantity,(0.2 * AVG(l_quantity))]
+              BroadcastHashJoin [p_partkey,l_partkey,l_quantity,(0.2 * avg(l_quantity))]
                 Project [l_quantity,l_extendedprice,p_partkey]
                   BroadcastHashJoin [l_partkey,p_partkey]
                     Filter [l_partkey,l_quantity]
@@ -23,8 +23,8 @@ WholeStageCodegen (5)
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (3)
-                      Filter [(0.2 * AVG(l_quantity))]
-                        HashAggregate [l_partkey,sum,count] [AVG(UnscaledValue(l_quantity)),(0.2 * AVG(l_quantity)),sum,count]
+                      Filter [(0.2 * avg(l_quantity))]
+                        HashAggregate [l_partkey,sum,count] [avg(UnscaledValue(l_quantity)),(0.2 * avg(l_quantity)),sum,count]
                           InputAdapter
                             Exchange [l_partkey] #4
                               WholeStageCodegen (2)

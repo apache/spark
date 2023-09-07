@@ -256,7 +256,7 @@ Input [6]: [ws_quantity#4, wr_reason_sk#13, wr_fee#15, wr_refunded_cash#16, r_re
 (45) HashAggregate [codegen id : 8]
 Input [4]: [ws_quantity#4, wr_fee#15, wr_refunded_cash#16, r_reason_desc#30]
 Keys [1]: [r_reason_desc#30]
-Functions [3]: [partial_AVG(ws_quantity#4), partial_AVG(UnscaledValue(wr_refunded_cash#16)), partial_AVG(UnscaledValue(wr_fee#15))]
+Functions [3]: [partial_avg(ws_quantity#4), partial_avg(UnscaledValue(wr_refunded_cash#16)), partial_avg(UnscaledValue(wr_fee#15))]
 Aggregate Attributes [6]: [sum#31, count#32, sum#33, count#34, sum#35, count#36]
 Results [7]: [r_reason_desc#30, sum#37, count#38, sum#39, count#40, sum#41, count#42]
 
@@ -267,13 +267,13 @@ Arguments: hashpartitioning(r_reason_desc#30, 5), ENSURE_REQUIREMENTS, [plan_id=
 (47) HashAggregate [codegen id : 9]
 Input [7]: [r_reason_desc#30, sum#37, count#38, sum#39, count#40, sum#41, count#42]
 Keys [1]: [r_reason_desc#30]
-Functions [3]: [AVG(ws_quantity#4), AVG(UnscaledValue(wr_refunded_cash#16)), AVG(UnscaledValue(wr_fee#15))]
-Aggregate Attributes [3]: [AVG(ws_quantity#4)#43, AVG(UnscaledValue(wr_refunded_cash#16))#44, AVG(UnscaledValue(wr_fee#15))#45]
-Results [4]: [substr(r_reason_desc#30, 1, 20) AS substr(r_reason_desc, 1, 20)#46, AVG(ws_quantity#4)#43 AS AVG(ws_quantity)#47, cast((AVG(UnscaledValue(wr_refunded_cash#16))#44 / 100.0) as decimal(11,6)) AS AVG(wr_refunded_cash)#48, cast((AVG(UnscaledValue(wr_fee#15))#45 / 100.0) as decimal(11,6)) AS AVG(wr_fee)#49]
+Functions [3]: [avg(ws_quantity#4), avg(UnscaledValue(wr_refunded_cash#16)), avg(UnscaledValue(wr_fee#15))]
+Aggregate Attributes [3]: [avg(ws_quantity#4)#43, avg(UnscaledValue(wr_refunded_cash#16))#44, avg(UnscaledValue(wr_fee#15))#45]
+Results [4]: [substr(r_reason_desc#30, 1, 20) AS substr(r_reason_desc, 1, 20)#46, avg(ws_quantity#4)#43 AS avg(ws_quantity)#47, cast((avg(UnscaledValue(wr_refunded_cash#16))#44 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#48, cast((avg(UnscaledValue(wr_fee#15))#45 / 100.0) as decimal(11,6)) AS avg(wr_fee)#49]
 
 (48) TakeOrderedAndProject
-Input [4]: [substr(r_reason_desc, 1, 20)#46, AVG(ws_quantity)#47, AVG(wr_refunded_cash)#48, AVG(wr_fee)#49]
-Arguments: 100, [substr(r_reason_desc, 1, 20)#46 ASC NULLS FIRST, AVG(ws_quantity)#47 ASC NULLS FIRST, AVG(wr_refunded_cash)#48 ASC NULLS FIRST, AVG(wr_fee)#49 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#46, AVG(ws_quantity)#47, AVG(wr_refunded_cash)#48, AVG(wr_fee)#49]
+Input [4]: [substr(r_reason_desc, 1, 20)#46, avg(ws_quantity)#47, avg(wr_refunded_cash)#48, avg(wr_fee)#49]
+Arguments: 100, [substr(r_reason_desc, 1, 20)#46 ASC NULLS FIRST, avg(ws_quantity)#47 ASC NULLS FIRST, avg(wr_refunded_cash)#48 ASC NULLS FIRST, avg(wr_fee)#49 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#46, avg(ws_quantity)#47, avg(wr_refunded_cash)#48, avg(wr_fee)#49]
 
 ===== Subqueries =====
 

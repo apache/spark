@@ -108,7 +108,7 @@ Input [4]: [cs_item_sk#7, cs_ext_discount_amt#8, cs_sold_date_sk#9, d_date_sk#10
 (17) HashAggregate [codegen id : 3]
 Input [2]: [cs_item_sk#7, cs_ext_discount_amt#8]
 Keys [1]: [cs_item_sk#7]
-Functions [1]: [partial_AVG(UnscaledValue(cs_ext_discount_amt#8))]
+Functions [1]: [partial_avg(UnscaledValue(cs_ext_discount_amt#8))]
 Aggregate Attributes [2]: [sum#11, count#12]
 Results [3]: [cs_item_sk#7, sum#13, count#14]
 
@@ -119,27 +119,27 @@ Arguments: hashpartitioning(cs_item_sk#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 (19) HashAggregate [codegen id : 4]
 Input [3]: [cs_item_sk#7, sum#13, count#14]
 Keys [1]: [cs_item_sk#7]
-Functions [1]: [AVG(UnscaledValue(cs_ext_discount_amt#8))]
-Aggregate Attributes [1]: [AVG(UnscaledValue(cs_ext_discount_amt#8))#15]
-Results [2]: [(1.3 * cast((AVG(UnscaledValue(cs_ext_discount_amt#8))#15 / 100.0) as decimal(11,6))) AS (1.3 * AVG(cs_ext_discount_amt))#16, cs_item_sk#7]
+Functions [1]: [avg(UnscaledValue(cs_ext_discount_amt#8))]
+Aggregate Attributes [1]: [avg(UnscaledValue(cs_ext_discount_amt#8))#15]
+Results [2]: [(1.3 * cast((avg(UnscaledValue(cs_ext_discount_amt#8))#15 / 100.0) as decimal(11,6))) AS (1.3 * avg(cs_ext_discount_amt))#16, cs_item_sk#7]
 
 (20) Filter [codegen id : 4]
-Input [2]: [(1.3 * AVG(cs_ext_discount_amt))#16, cs_item_sk#7]
-Condition : isnotnull((1.3 * AVG(cs_ext_discount_amt))#16)
+Input [2]: [(1.3 * avg(cs_ext_discount_amt))#16, cs_item_sk#7]
+Condition : isnotnull((1.3 * avg(cs_ext_discount_amt))#16)
 
 (21) BroadcastExchange
-Input [2]: [(1.3 * AVG(cs_ext_discount_amt))#16, cs_item_sk#7]
+Input [2]: [(1.3 * avg(cs_ext_discount_amt))#16, cs_item_sk#7]
 Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [plan_id=3]
 
 (22) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_item_sk#5]
 Right keys [1]: [cs_item_sk#7]
 Join type: Inner
-Join condition: (cast(cs_ext_discount_amt#2 as decimal(14,7)) > (1.3 * AVG(cs_ext_discount_amt))#16)
+Join condition: (cast(cs_ext_discount_amt#2 as decimal(14,7)) > (1.3 * avg(cs_ext_discount_amt))#16)
 
 (23) Project [codegen id : 6]
 Output [2]: [cs_ext_discount_amt#2, cs_sold_date_sk#3]
-Input [5]: [cs_ext_discount_amt#2, cs_sold_date_sk#3, i_item_sk#5, (1.3 * AVG(cs_ext_discount_amt))#16, cs_item_sk#7]
+Input [5]: [cs_ext_discount_amt#2, cs_sold_date_sk#3, i_item_sk#5, (1.3 * avg(cs_ext_discount_amt))#16, cs_item_sk#7]
 
 (24) ReusedExchange [Reuses operator id: 34]
 Output [1]: [d_date_sk#17]
@@ -157,7 +157,7 @@ Input [3]: [cs_ext_discount_amt#2, cs_sold_date_sk#3, d_date_sk#17]
 (27) HashAggregate [codegen id : 6]
 Input [1]: [cs_ext_discount_amt#2]
 Keys: []
-Functions [1]: [partial_SUM(UnscaledValue(cs_ext_discount_amt#2))]
+Functions [1]: [partial_sum(UnscaledValue(cs_ext_discount_amt#2))]
 Aggregate Attributes [1]: [sum#18]
 Results [1]: [sum#19]
 
@@ -168,9 +168,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 (29) HashAggregate [codegen id : 7]
 Input [1]: [sum#19]
 Keys: []
-Functions [1]: [SUM(UnscaledValue(cs_ext_discount_amt#2))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(cs_ext_discount_amt#2))#20]
-Results [1]: [MakeDecimal(SUM(UnscaledValue(cs_ext_discount_amt#2))#20,17,2) AS excess discount amount#21]
+Functions [1]: [sum(UnscaledValue(cs_ext_discount_amt#2))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_ext_discount_amt#2))#20]
+Results [1]: [MakeDecimal(sum(UnscaledValue(cs_ext_discount_amt#2))#20,17,2) AS excess discount amount#21]
 
 ===== Subqueries =====
 

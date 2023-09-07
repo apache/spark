@@ -131,7 +131,7 @@ Input [7]: [c_customer_id#2, c_first_name#3, c_last_name#4, ss_net_paid#6, ss_so
 (13) HashAggregate [codegen id : 3]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, ss_net_paid#6, d_year#10]
 Keys [4]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10]
-Functions [1]: [partial_SUM(UnscaledValue(ss_net_paid#6))]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#6))]
 Aggregate Attributes [1]: [sum#11]
 Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#12]
 
@@ -142,9 +142,9 @@ Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_ye
 (15) HashAggregate [codegen id : 16]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#12]
 Keys [4]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10]
-Functions [1]: [SUM(UnscaledValue(ss_net_paid#6))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ss_net_paid#6))#13]
-Results [2]: [c_customer_id#2 AS customer_id#14, MakeDecimal(SUM(UnscaledValue(ss_net_paid#6))#13,17,2) AS year_total#15]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#6))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#6))#13]
+Results [2]: [c_customer_id#2 AS customer_id#14, MakeDecimal(sum(UnscaledValue(ss_net_paid#6))#13,17,2) AS year_total#15]
 
 (16) Filter [codegen id : 16]
 Input [2]: [customer_id#14, year_total#15]
@@ -209,7 +209,7 @@ Input [7]: [c_customer_id#17, c_first_name#18, c_last_name#19, ss_net_paid#21, s
 (29) HashAggregate [codegen id : 6]
 Input [5]: [c_customer_id#17, c_first_name#18, c_last_name#19, ss_net_paid#21, d_year#25]
 Keys [4]: [c_customer_id#17, c_first_name#18, c_last_name#19, d_year#25]
-Functions [1]: [partial_SUM(UnscaledValue(ss_net_paid#21))]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#21))]
 Aggregate Attributes [1]: [sum#26]
 Results [5]: [c_customer_id#17, c_first_name#18, c_last_name#19, d_year#25, sum#27]
 
@@ -220,9 +220,9 @@ Arguments: hashpartitioning(c_customer_id#17, c_first_name#18, c_last_name#19, d
 (31) HashAggregate [codegen id : 7]
 Input [5]: [c_customer_id#17, c_first_name#18, c_last_name#19, d_year#25, sum#27]
 Keys [4]: [c_customer_id#17, c_first_name#18, c_last_name#19, d_year#25]
-Functions [1]: [SUM(UnscaledValue(ss_net_paid#21))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ss_net_paid#21))#13]
-Results [4]: [c_customer_id#17 AS customer_id#28, c_first_name#18 AS customer_first_name#29, c_last_name#19 AS customer_last_name#30, MakeDecimal(SUM(UnscaledValue(ss_net_paid#21))#13,17,2) AS year_total#31]
+Functions [1]: [sum(UnscaledValue(ss_net_paid#21))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#21))#13]
+Results [4]: [c_customer_id#17 AS customer_id#28, c_first_name#18 AS customer_first_name#29, c_last_name#19 AS customer_last_name#30, MakeDecimal(sum(UnscaledValue(ss_net_paid#21))#13,17,2) AS year_total#31]
 
 (32) BroadcastExchange
 Input [4]: [customer_id#28, customer_first_name#29, customer_last_name#30, year_total#31]
@@ -293,7 +293,7 @@ Input [7]: [c_customer_id#33, c_first_name#34, c_last_name#35, ws_net_paid#37, w
 (46) HashAggregate [codegen id : 10]
 Input [5]: [c_customer_id#33, c_first_name#34, c_last_name#35, ws_net_paid#37, d_year#40]
 Keys [4]: [c_customer_id#33, c_first_name#34, c_last_name#35, d_year#40]
-Functions [1]: [partial_SUM(UnscaledValue(ws_net_paid#37))]
+Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#37))]
 Aggregate Attributes [1]: [sum#41]
 Results [5]: [c_customer_id#33, c_first_name#34, c_last_name#35, d_year#40, sum#42]
 
@@ -304,9 +304,9 @@ Arguments: hashpartitioning(c_customer_id#33, c_first_name#34, c_last_name#35, d
 (48) HashAggregate [codegen id : 11]
 Input [5]: [c_customer_id#33, c_first_name#34, c_last_name#35, d_year#40, sum#42]
 Keys [4]: [c_customer_id#33, c_first_name#34, c_last_name#35, d_year#40]
-Functions [1]: [SUM(UnscaledValue(ws_net_paid#37))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ws_net_paid#37))#43]
-Results [2]: [c_customer_id#33 AS customer_id#44, MakeDecimal(SUM(UnscaledValue(ws_net_paid#37))#43,17,2) AS year_total#45]
+Functions [1]: [sum(UnscaledValue(ws_net_paid#37))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#37))#43]
+Results [2]: [c_customer_id#33 AS customer_id#44, MakeDecimal(sum(UnscaledValue(ws_net_paid#37))#43,17,2) AS year_total#45]
 
 (49) Filter [codegen id : 11]
 Input [2]: [customer_id#44, year_total#45]
@@ -385,7 +385,7 @@ Input [7]: [c_customer_id#47, c_first_name#48, c_last_name#49, ws_net_paid#51, w
 (65) HashAggregate [codegen id : 14]
 Input [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, ws_net_paid#51, d_year#54]
 Keys [4]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#54]
-Functions [1]: [partial_SUM(UnscaledValue(ws_net_paid#51))]
+Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#51))]
 Aggregate Attributes [1]: [sum#55]
 Results [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#54, sum#56]
 
@@ -396,9 +396,9 @@ Arguments: hashpartitioning(c_customer_id#47, c_first_name#48, c_last_name#49, d
 (67) HashAggregate [codegen id : 15]
 Input [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#54, sum#56]
 Keys [4]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#54]
-Functions [1]: [SUM(UnscaledValue(ws_net_paid#51))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ws_net_paid#51))#43]
-Results [2]: [c_customer_id#47 AS customer_id#57, MakeDecimal(SUM(UnscaledValue(ws_net_paid#51))#43,17,2) AS year_total#58]
+Functions [1]: [sum(UnscaledValue(ws_net_paid#51))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#51))#43]
+Results [2]: [c_customer_id#47 AS customer_id#57, MakeDecimal(sum(UnscaledValue(ws_net_paid#51))#43,17,2) AS year_total#58]
 
 (68) BroadcastExchange
 Input [2]: [customer_id#57, year_total#58]

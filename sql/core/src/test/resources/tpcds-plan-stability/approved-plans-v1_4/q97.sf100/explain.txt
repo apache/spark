@@ -127,7 +127,7 @@ Input [4]: [customer_sk#6, item_sk#7, customer_sk#12, item_sk#13]
 (21) HashAggregate [codegen id : 7]
 Input [2]: [customer_sk#6, customer_sk#12]
 Keys: []
-Functions [3]: [partial_SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END), partial_SUM(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END), partial_SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)]
+Functions [3]: [partial_sum(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)]
 Aggregate Attributes [3]: [sum#14, sum#15, sum#16]
 Results [3]: [sum#17, sum#18, sum#19]
 
@@ -138,9 +138,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=3]
 (23) HashAggregate [codegen id : 8]
 Input [3]: [sum#17, sum#18, sum#19]
 Keys: []
-Functions [3]: [SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END), SUM(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END), SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)]
-Aggregate Attributes [3]: [SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END)#20, SUM(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#21, SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#22]
-Results [3]: [SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END)#20 AS store_only#23, SUM(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#21 AS catalog_only#24, SUM(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#22 AS store_and_catalog#25]
+Functions [3]: [sum(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END)#20, sum(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#21, sum(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#22]
+Results [3]: [sum(CASE WHEN (isnotnull(customer_sk#6) AND isnull(customer_sk#12)) THEN 1 ELSE 0 END)#20 AS store_only#23, sum(CASE WHEN (isnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#21 AS catalog_only#24, sum(CASE WHEN (isnotnull(customer_sk#6) AND isnotnull(customer_sk#12)) THEN 1 ELSE 0 END)#22 AS store_and_catalog#25]
 
 ===== Subqueries =====
 

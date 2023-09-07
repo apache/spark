@@ -360,7 +360,7 @@ Input [13]: [cs_bill_customer_sk#1, cs_quantity#4, cs_list_price#5, cs_sales_pri
 (45) HashAggregate [codegen id : 13]
 Input [11]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24, agg1#28, agg2#29, agg3#30, agg4#31, agg5#32, agg6#33, agg7#34]
 Keys [4]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24]
-Functions [7]: [partial_AVG(agg1#28), partial_AVG(agg2#29), partial_AVG(agg3#30), partial_AVG(agg4#31), partial_AVG(agg5#32), partial_AVG(agg6#33), partial_AVG(agg7#34)]
+Functions [7]: [partial_avg(agg1#28), partial_avg(agg2#29), partial_avg(agg3#30), partial_avg(agg4#31), partial_avg(agg5#32), partial_avg(agg6#33), partial_avg(agg7#34)]
 Aggregate Attributes [14]: [sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42, sum#43, count#44, sum#45, count#46, sum#47, count#48]
 Results [18]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24, sum#49, count#50, sum#51, count#52, sum#53, count#54, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62]
 
@@ -371,9 +371,9 @@ Arguments: hashpartitioning(i_item_id#17, ca_country#26, ca_state#25, ca_county#
 (47) HashAggregate [codegen id : 14]
 Input [18]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24, sum#49, count#50, sum#51, count#52, sum#53, count#54, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62]
 Keys [4]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24]
-Functions [7]: [AVG(agg1#28), AVG(agg2#29), AVG(agg3#30), AVG(agg4#31), AVG(agg5#32), AVG(agg6#33), AVG(agg7#34)]
-Aggregate Attributes [7]: [AVG(agg1#28)#63, AVG(agg2#29)#64, AVG(agg3#30)#65, AVG(agg4#31)#66, AVG(agg5#32)#67, AVG(agg6#33)#68, AVG(agg7#34)#69]
-Results [11]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24, AVG(agg1#28)#63 AS agg1#70, AVG(agg2#29)#64 AS agg2#71, AVG(agg3#30)#65 AS agg3#72, AVG(agg4#31)#66 AS agg4#73, AVG(agg5#32)#67 AS agg5#74, AVG(agg6#33)#68 AS agg6#75, AVG(agg7#34)#69 AS agg7#76]
+Functions [7]: [avg(agg1#28), avg(agg2#29), avg(agg3#30), avg(agg4#31), avg(agg5#32), avg(agg6#33), avg(agg7#34)]
+Aggregate Attributes [7]: [avg(agg1#28)#63, avg(agg2#29)#64, avg(agg3#30)#65, avg(agg4#31)#66, avg(agg5#32)#67, avg(agg6#33)#68, avg(agg7#34)#69]
+Results [11]: [i_item_id#17, ca_country#26, ca_state#25, ca_county#24, avg(agg1#28)#63 AS agg1#70, avg(agg2#29)#64 AS agg2#71, avg(agg3#30)#65 AS agg3#72, avg(agg4#31)#66 AS agg4#73, avg(agg5#32)#67 AS agg5#74, avg(agg6#33)#68 AS agg6#75, avg(agg7#34)#69 AS agg7#76]
 
 (48) ReusedExchange [Reuses operator id: 20]
 Output [8]: [cs_bill_customer_sk#77, cs_quantity#78, cs_list_price#79, cs_sales_price#80, cs_coupon_amt#81, cs_net_profit#82, cd_dep_count#83, i_item_id#84]
@@ -474,7 +474,7 @@ Input [12]: [cs_bill_customer_sk#77, cs_quantity#78, cs_list_price#79, cs_sales_
 (70) HashAggregate [codegen id : 27]
 Input [10]: [i_item_id#84, ca_country#92, ca_state#91, agg1#94, agg2#95, agg3#96, agg4#97, agg5#98, agg6#99, agg7#100]
 Keys [3]: [i_item_id#84, ca_country#92, ca_state#91]
-Functions [7]: [partial_AVG(agg1#94), partial_AVG(agg2#95), partial_AVG(agg3#96), partial_AVG(agg4#97), partial_AVG(agg5#98), partial_AVG(agg6#99), partial_AVG(agg7#100)]
+Functions [7]: [partial_avg(agg1#94), partial_avg(agg2#95), partial_avg(agg3#96), partial_avg(agg4#97), partial_avg(agg5#98), partial_avg(agg6#99), partial_avg(agg7#100)]
 Aggregate Attributes [14]: [sum#101, count#102, sum#103, count#104, sum#105, count#106, sum#107, count#108, sum#109, count#110, sum#111, count#112, sum#113, count#114]
 Results [17]: [i_item_id#84, ca_country#92, ca_state#91, sum#115, count#116, sum#117, count#118, sum#119, count#120, sum#121, count#122, sum#123, count#124, sum#125, count#126, sum#127, count#128]
 
@@ -485,9 +485,9 @@ Arguments: hashpartitioning(i_item_id#84, ca_country#92, ca_state#91, 5), ENSURE
 (72) HashAggregate [codegen id : 28]
 Input [17]: [i_item_id#84, ca_country#92, ca_state#91, sum#115, count#116, sum#117, count#118, sum#119, count#120, sum#121, count#122, sum#123, count#124, sum#125, count#126, sum#127, count#128]
 Keys [3]: [i_item_id#84, ca_country#92, ca_state#91]
-Functions [7]: [AVG(agg1#94), AVG(agg2#95), AVG(agg3#96), AVG(agg4#97), AVG(agg5#98), AVG(agg6#99), AVG(agg7#100)]
-Aggregate Attributes [7]: [AVG(agg1#94)#129, AVG(agg2#95)#130, AVG(agg3#96)#131, AVG(agg4#97)#132, AVG(agg5#98)#133, AVG(agg6#99)#134, AVG(agg7#100)#135]
-Results [11]: [i_item_id#84, ca_country#92, ca_state#91, null AS county#136, AVG(agg1#94)#129 AS agg1#137, AVG(agg2#95)#130 AS agg2#138, AVG(agg3#96)#131 AS agg3#139, AVG(agg4#97)#132 AS agg4#140, AVG(agg5#98)#133 AS agg5#141, AVG(agg6#99)#134 AS agg6#142, AVG(agg7#100)#135 AS agg7#143]
+Functions [7]: [avg(agg1#94), avg(agg2#95), avg(agg3#96), avg(agg4#97), avg(agg5#98), avg(agg6#99), avg(agg7#100)]
+Aggregate Attributes [7]: [avg(agg1#94)#129, avg(agg2#95)#130, avg(agg3#96)#131, avg(agg4#97)#132, avg(agg5#98)#133, avg(agg6#99)#134, avg(agg7#100)#135]
+Results [11]: [i_item_id#84, ca_country#92, ca_state#91, null AS county#136, avg(agg1#94)#129 AS agg1#137, avg(agg2#95)#130 AS agg2#138, avg(agg3#96)#131 AS agg3#139, avg(agg4#97)#132 AS agg4#140, avg(agg5#98)#133 AS agg5#141, avg(agg6#99)#134 AS agg6#142, avg(agg7#100)#135 AS agg7#143]
 
 (73) ReusedExchange [Reuses operator id: 20]
 Output [8]: [cs_bill_customer_sk#144, cs_quantity#145, cs_list_price#146, cs_sales_price#147, cs_coupon_amt#148, cs_net_profit#149, cd_dep_count#150, i_item_id#151]
@@ -592,7 +592,7 @@ Input [11]: [cs_bill_customer_sk#144, cs_quantity#145, cs_list_price#146, cs_sal
 (96) HashAggregate [codegen id : 41]
 Input [9]: [i_item_id#151, ca_country#159, agg1#161, agg2#162, agg3#163, agg4#164, agg5#165, agg6#166, agg7#167]
 Keys [2]: [i_item_id#151, ca_country#159]
-Functions [7]: [partial_AVG(agg1#161), partial_AVG(agg2#162), partial_AVG(agg3#163), partial_AVG(agg4#164), partial_AVG(agg5#165), partial_AVG(agg6#166), partial_AVG(agg7#167)]
+Functions [7]: [partial_avg(agg1#161), partial_avg(agg2#162), partial_avg(agg3#163), partial_avg(agg4#164), partial_avg(agg5#165), partial_avg(agg6#166), partial_avg(agg7#167)]
 Aggregate Attributes [14]: [sum#168, count#169, sum#170, count#171, sum#172, count#173, sum#174, count#175, sum#176, count#177, sum#178, count#179, sum#180, count#181]
 Results [16]: [i_item_id#151, ca_country#159, sum#182, count#183, sum#184, count#185, sum#186, count#187, sum#188, count#189, sum#190, count#191, sum#192, count#193, sum#194, count#195]
 
@@ -603,9 +603,9 @@ Arguments: hashpartitioning(i_item_id#151, ca_country#159, 5), ENSURE_REQUIREMEN
 (98) HashAggregate [codegen id : 42]
 Input [16]: [i_item_id#151, ca_country#159, sum#182, count#183, sum#184, count#185, sum#186, count#187, sum#188, count#189, sum#190, count#191, sum#192, count#193, sum#194, count#195]
 Keys [2]: [i_item_id#151, ca_country#159]
-Functions [7]: [AVG(agg1#161), AVG(agg2#162), AVG(agg3#163), AVG(agg4#164), AVG(agg5#165), AVG(agg6#166), AVG(agg7#167)]
-Aggregate Attributes [7]: [AVG(agg1#161)#196, AVG(agg2#162)#197, AVG(agg3#163)#198, AVG(agg4#164)#199, AVG(agg5#165)#200, AVG(agg6#166)#201, AVG(agg7#167)#202]
-Results [11]: [i_item_id#151, ca_country#159, null AS ca_state#203, null AS county#204, AVG(agg1#161)#196 AS agg1#205, AVG(agg2#162)#197 AS agg2#206, AVG(agg3#163)#198 AS agg3#207, AVG(agg4#164)#199 AS agg4#208, AVG(agg5#165)#200 AS agg5#209, AVG(agg6#166)#201 AS agg6#210, AVG(agg7#167)#202 AS agg7#211]
+Functions [7]: [avg(agg1#161), avg(agg2#162), avg(agg3#163), avg(agg4#164), avg(agg5#165), avg(agg6#166), avg(agg7#167)]
+Aggregate Attributes [7]: [avg(agg1#161)#196, avg(agg2#162)#197, avg(agg3#163)#198, avg(agg4#164)#199, avg(agg5#165)#200, avg(agg6#166)#201, avg(agg7#167)#202]
+Results [11]: [i_item_id#151, ca_country#159, null AS ca_state#203, null AS county#204, avg(agg1#161)#196 AS agg1#205, avg(agg2#162)#197 AS agg2#206, avg(agg3#163)#198 AS agg3#207, avg(agg4#164)#199 AS agg4#208, avg(agg5#165)#200 AS agg5#209, avg(agg6#166)#201 AS agg6#210, avg(agg7#167)#202 AS agg7#211]
 
 (99) Scan parquet spark_catalog.default.catalog_sales
 Output [9]: [cs_bill_customer_sk#212, cs_bill_cdemo_sk#213, cs_item_sk#214, cs_quantity#215, cs_list_price#216, cs_sales_price#217, cs_coupon_amt#218, cs_net_profit#219, cs_sold_date_sk#220]
@@ -756,7 +756,7 @@ Input [10]: [cs_item_sk#214, cs_quantity#215, cs_list_price#216, cs_sales_price#
 (131) HashAggregate [codegen id : 49]
 Input [8]: [i_item_id#233, agg1#234, agg2#235, agg3#236, agg4#237, agg5#238, agg6#239, agg7#240]
 Keys [1]: [i_item_id#233]
-Functions [7]: [partial_AVG(agg1#234), partial_AVG(agg2#235), partial_AVG(agg3#236), partial_AVG(agg4#237), partial_AVG(agg5#238), partial_AVG(agg6#239), partial_AVG(agg7#240)]
+Functions [7]: [partial_avg(agg1#234), partial_avg(agg2#235), partial_avg(agg3#236), partial_avg(agg4#237), partial_avg(agg5#238), partial_avg(agg6#239), partial_avg(agg7#240)]
 Aggregate Attributes [14]: [sum#241, count#242, sum#243, count#244, sum#245, count#246, sum#247, count#248, sum#249, count#250, sum#251, count#252, sum#253, count#254]
 Results [15]: [i_item_id#233, sum#255, count#256, sum#257, count#258, sum#259, count#260, sum#261, count#262, sum#263, count#264, sum#265, count#266, sum#267, count#268]
 
@@ -767,9 +767,9 @@ Arguments: hashpartitioning(i_item_id#233, 5), ENSURE_REQUIREMENTS, [plan_id=20]
 (133) HashAggregate [codegen id : 50]
 Input [15]: [i_item_id#233, sum#255, count#256, sum#257, count#258, sum#259, count#260, sum#261, count#262, sum#263, count#264, sum#265, count#266, sum#267, count#268]
 Keys [1]: [i_item_id#233]
-Functions [7]: [AVG(agg1#234), AVG(agg2#235), AVG(agg3#236), AVG(agg4#237), AVG(agg5#238), AVG(agg6#239), AVG(agg7#240)]
-Aggregate Attributes [7]: [AVG(agg1#234)#269, AVG(agg2#235)#270, AVG(agg3#236)#271, AVG(agg4#237)#272, AVG(agg5#238)#273, AVG(agg6#239)#274, AVG(agg7#240)#275]
-Results [11]: [i_item_id#233, null AS ca_country#276, null AS ca_state#277, null AS county#278, AVG(agg1#234)#269 AS agg1#279, AVG(agg2#235)#270 AS agg2#280, AVG(agg3#236)#271 AS agg3#281, AVG(agg4#237)#272 AS agg4#282, AVG(agg5#238)#273 AS agg5#283, AVG(agg6#239)#274 AS agg6#284, AVG(agg7#240)#275 AS agg7#285]
+Functions [7]: [avg(agg1#234), avg(agg2#235), avg(agg3#236), avg(agg4#237), avg(agg5#238), avg(agg6#239), avg(agg7#240)]
+Aggregate Attributes [7]: [avg(agg1#234)#269, avg(agg2#235)#270, avg(agg3#236)#271, avg(agg4#237)#272, avg(agg5#238)#273, avg(agg6#239)#274, avg(agg7#240)#275]
+Results [11]: [i_item_id#233, null AS ca_country#276, null AS ca_state#277, null AS county#278, avg(agg1#234)#269 AS agg1#279, avg(agg2#235)#270 AS agg2#280, avg(agg3#236)#271 AS agg3#281, avg(agg4#237)#272 AS agg4#282, avg(agg5#238)#273 AS agg5#283, avg(agg6#239)#274 AS agg6#284, avg(agg7#240)#275 AS agg7#285]
 
 (134) Scan parquet spark_catalog.default.catalog_sales
 Output [9]: [cs_bill_customer_sk#286, cs_bill_cdemo_sk#287, cs_item_sk#288, cs_quantity#289, cs_list_price#290, cs_sales_price#291, cs_coupon_amt#292, cs_net_profit#293, cs_sold_date_sk#294]
@@ -856,7 +856,7 @@ Input [9]: [cs_bill_customer_sk#286, cs_quantity#289, cs_list_price#290, cs_sale
 (152) HashAggregate [codegen id : 57]
 Input [7]: [agg1#301, agg2#302, agg3#303, agg4#304, agg5#305, agg6#306, agg7#307]
 Keys: []
-Functions [7]: [partial_AVG(agg1#301), partial_AVG(agg2#302), partial_AVG(agg3#303), partial_AVG(agg4#304), partial_AVG(agg5#305), partial_AVG(agg6#306), partial_AVG(agg7#307)]
+Functions [7]: [partial_avg(agg1#301), partial_avg(agg2#302), partial_avg(agg3#303), partial_avg(agg4#304), partial_avg(agg5#305), partial_avg(agg6#306), partial_avg(agg7#307)]
 Aggregate Attributes [14]: [sum#308, count#309, sum#310, count#311, sum#312, count#313, sum#314, count#315, sum#316, count#317, sum#318, count#319, sum#320, count#321]
 Results [14]: [sum#322, count#323, sum#324, count#325, sum#326, count#327, sum#328, count#329, sum#330, count#331, sum#332, count#333, sum#334, count#335]
 
@@ -867,9 +867,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=22]
 (154) HashAggregate [codegen id : 58]
 Input [14]: [sum#322, count#323, sum#324, count#325, sum#326, count#327, sum#328, count#329, sum#330, count#331, sum#332, count#333, sum#334, count#335]
 Keys: []
-Functions [7]: [AVG(agg1#301), AVG(agg2#302), AVG(agg3#303), AVG(agg4#304), AVG(agg5#305), AVG(agg6#306), AVG(agg7#307)]
-Aggregate Attributes [7]: [AVG(agg1#301)#336, AVG(agg2#302)#337, AVG(agg3#303)#338, AVG(agg4#304)#339, AVG(agg5#305)#340, AVG(agg6#306)#341, AVG(agg7#307)#342]
-Results [11]: [null AS i_item_id#343, null AS ca_country#344, null AS ca_state#345, null AS county#346, AVG(agg1#301)#336 AS agg1#347, AVG(agg2#302)#337 AS agg2#348, AVG(agg3#303)#338 AS agg3#349, AVG(agg4#304)#339 AS agg4#350, AVG(agg5#305)#340 AS agg5#351, AVG(agg6#306)#341 AS agg6#352, AVG(agg7#307)#342 AS agg7#353]
+Functions [7]: [avg(agg1#301), avg(agg2#302), avg(agg3#303), avg(agg4#304), avg(agg5#305), avg(agg6#306), avg(agg7#307)]
+Aggregate Attributes [7]: [avg(agg1#301)#336, avg(agg2#302)#337, avg(agg3#303)#338, avg(agg4#304)#339, avg(agg5#305)#340, avg(agg6#306)#341, avg(agg7#307)#342]
+Results [11]: [null AS i_item_id#343, null AS ca_country#344, null AS ca_state#345, null AS county#346, avg(agg1#301)#336 AS agg1#347, avg(agg2#302)#337 AS agg2#348, avg(agg3#303)#338 AS agg3#349, avg(agg4#304)#339 AS agg4#350, avg(agg5#305)#340 AS agg5#351, avg(agg6#306)#341 AS agg6#352, avg(agg7#307)#342 AS agg7#353]
 
 (155) Union
 

@@ -1,5 +1,5 @@
 WholeStageCodegen (2)
-  HashAggregate [sum,isEmpty] [SUM((l_extendedprice * l_discount)),revenue,sum,isEmpty]
+  HashAggregate [sum,isEmpty] [sum((l_extendedprice * l_discount)),revenue,sum,isEmpty]
     InputAdapter
       Exchange #1
         WholeStageCodegen (1)

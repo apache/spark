@@ -120,7 +120,7 @@ Input [5]: [i_manufact_id#5, ss_store_sk#11, ss_sales_price#12, d_qoy#16, s_stor
 (20) HashAggregate [codegen id : 4]
 Input [3]: [i_manufact_id#5, ss_sales_price#12, d_qoy#16]
 Keys [2]: [i_manufact_id#5, d_qoy#16]
-Functions [1]: [partial_SUM(UnscaledValue(ss_sales_price#12))]
+Functions [1]: [partial_sum(UnscaledValue(ss_sales_price#12))]
 Aggregate Attributes [1]: [sum#18]
 Results [3]: [i_manufact_id#5, d_qoy#16, sum#19]
 
@@ -131,9 +131,9 @@ Arguments: hashpartitioning(i_manufact_id#5, d_qoy#16, 5), ENSURE_REQUIREMENTS, 
 (22) HashAggregate [codegen id : 5]
 Input [3]: [i_manufact_id#5, d_qoy#16, sum#19]
 Keys [2]: [i_manufact_id#5, d_qoy#16]
-Functions [1]: [SUM(UnscaledValue(ss_sales_price#12))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ss_sales_price#12))#20]
-Results [3]: [i_manufact_id#5, MakeDecimal(SUM(UnscaledValue(ss_sales_price#12))#20,17,2) AS sum_sales#21, MakeDecimal(SUM(UnscaledValue(ss_sales_price#12))#20,17,2) AS _w0#22]
+Functions [1]: [sum(UnscaledValue(ss_sales_price#12))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#12))#20]
+Results [3]: [i_manufact_id#5, MakeDecimal(sum(UnscaledValue(ss_sales_price#12))#20,17,2) AS sum_sales#21, MakeDecimal(sum(UnscaledValue(ss_sales_price#12))#20,17,2) AS _w0#22]
 
 (23) Exchange
 Input [3]: [i_manufact_id#5, sum_sales#21, _w0#22]
@@ -145,7 +145,7 @@ Arguments: [i_manufact_id#5 ASC NULLS FIRST], false, 0
 
 (25) Window
 Input [3]: [i_manufact_id#5, sum_sales#21, _w0#22]
-Arguments: [AVG(_w0#22) windowspecdefinition(i_manufact_id#5, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_quarterly_sales#23], [i_manufact_id#5]
+Arguments: [avg(_w0#22) windowspecdefinition(i_manufact_id#5, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS avg_quarterly_sales#23], [i_manufact_id#5]
 
 (26) Filter [codegen id : 7]
 Input [4]: [i_manufact_id#5, sum_sales#21, _w0#22, avg_quarterly_sales#23]

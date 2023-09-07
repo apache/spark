@@ -36,7 +36,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,ca_city,bought_city,ss_ticket_nu
               InputAdapter
                 Exchange [ss_customer_sk] #4
                   WholeStageCodegen (14)
-                    HashAggregate [ss_ticket_number,ss_customer_sk,ss_addr_sk,ca_city,sum,sum] [SUM(UnscaledValue(ss_coupon_amt)),SUM(UnscaledValue(ss_net_profit)),bought_city,amt,profit,sum,sum]
+                    HashAggregate [ss_ticket_number,ss_customer_sk,ss_addr_sk,ca_city,sum,sum] [sum(UnscaledValue(ss_coupon_amt)),sum(UnscaledValue(ss_net_profit)),bought_city,amt,profit,sum,sum]
                       HashAggregate [ss_ticket_number,ss_customer_sk,ss_addr_sk,ca_city,ss_coupon_amt,ss_net_profit] [sum,sum,sum,sum]
                         Project [ss_customer_sk,ss_addr_sk,ss_ticket_number,ss_coupon_amt,ss_net_profit,ca_city]
                           SortMergeJoin [ss_addr_sk,ca_address_sk]

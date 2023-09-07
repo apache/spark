@@ -16,7 +16,7 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
                               Exchange [customer_id] #1
                                 WholeStageCodegen (7)
                                   Filter [year_total]
-                                    HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [SUM(UnscaledValue(ss_net_paid)),customer_id,year_total,sum]
+                                    HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [sum(UnscaledValue(ss_net_paid)),customer_id,year_total,sum]
                                       InputAdapter
                                         Exchange [c_customer_id,c_first_name,c_last_name,d_year] #2
                                           WholeStageCodegen (6)
@@ -60,7 +60,7 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
                             InputAdapter
                               Exchange [customer_id] #6
                                 WholeStageCodegen (15)
-                                  HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [SUM(UnscaledValue(ss_net_paid)),customer_id,customer_first_name,customer_last_name,year_total,sum]
+                                  HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [sum(UnscaledValue(ss_net_paid)),customer_id,customer_first_name,customer_last_name,year_total,sum]
                                     InputAdapter
                                       Exchange [c_customer_id,c_first_name,c_last_name,d_year] #7
                                         WholeStageCodegen (14)
@@ -100,7 +100,7 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
                         Exchange [customer_id] #10
                           WholeStageCodegen (24)
                             Filter [year_total]
-                              HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [SUM(UnscaledValue(ws_net_paid)),customer_id,year_total,sum]
+                              HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [sum(UnscaledValue(ws_net_paid)),customer_id,year_total,sum]
                                 InputAdapter
                                   Exchange [c_customer_id,c_first_name,c_last_name,d_year] #11
                                     WholeStageCodegen (23)
@@ -133,7 +133,7 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
               InputAdapter
                 Exchange [customer_id] #13
                   WholeStageCodegen (33)
-                    HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [SUM(UnscaledValue(ws_net_paid)),customer_id,year_total,sum]
+                    HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,sum] [sum(UnscaledValue(ws_net_paid)),customer_id,year_total,sum]
                       InputAdapter
                         Exchange [c_customer_id,c_first_name,c_last_name,d_year] #14
                           WholeStageCodegen (32)

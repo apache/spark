@@ -24,7 +24,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                               InputAdapter
                                                 Exchange [ws_item_sk] #3
                                                   WholeStageCodegen (3)
-                                                    HashAggregate [ws_item_sk,d_date,sum] [SUM(UnscaledValue(ws_sales_price)),item_sk,_w0,sum]
+                                                    HashAggregate [ws_item_sk,d_date,sum] [sum(UnscaledValue(ws_sales_price)),item_sk,_w0,sum]
                                                       InputAdapter
                                                         Exchange [ws_item_sk,d_date] #4
                                                           WholeStageCodegen (2)
@@ -59,7 +59,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                               InputAdapter
                                                 Exchange [ss_item_sk] #7
                                                   WholeStageCodegen (9)
-                                                    HashAggregate [ss_item_sk,d_date,sum] [SUM(UnscaledValue(ss_sales_price)),item_sk,_w0,sum]
+                                                    HashAggregate [ss_item_sk,d_date,sum] [sum(UnscaledValue(ss_sales_price)),item_sk,_w0,sum]
                                                       InputAdapter
                                                         Exchange [ss_item_sk,d_date] #8
                                                           WholeStageCodegen (8)

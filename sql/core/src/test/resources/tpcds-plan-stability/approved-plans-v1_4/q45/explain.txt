@@ -188,7 +188,7 @@ Input [5]: [ws_sales_price#4, ca_city#10, ca_zip#11, i_item_id#14, exists#1]
 (33) HashAggregate [codegen id : 6]
 Input [3]: [ws_sales_price#4, ca_city#10, ca_zip#11]
 Keys [2]: [ca_zip#11, ca_city#10]
-Functions [1]: [partial_SUM(UnscaledValue(ws_sales_price#4))]
+Functions [1]: [partial_sum(UnscaledValue(ws_sales_price#4))]
 Aggregate Attributes [1]: [sum#17]
 Results [3]: [ca_zip#11, ca_city#10, sum#18]
 
@@ -199,13 +199,13 @@ Arguments: hashpartitioning(ca_zip#11, ca_city#10, 5), ENSURE_REQUIREMENTS, [pla
 (35) HashAggregate [codegen id : 7]
 Input [3]: [ca_zip#11, ca_city#10, sum#18]
 Keys [2]: [ca_zip#11, ca_city#10]
-Functions [1]: [SUM(UnscaledValue(ws_sales_price#4))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ws_sales_price#4))#19]
-Results [3]: [ca_zip#11, ca_city#10, MakeDecimal(SUM(UnscaledValue(ws_sales_price#4))#19,17,2) AS SUM(ws_sales_price)#20]
+Functions [1]: [sum(UnscaledValue(ws_sales_price#4))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_sales_price#4))#19]
+Results [3]: [ca_zip#11, ca_city#10, MakeDecimal(sum(UnscaledValue(ws_sales_price#4))#19,17,2) AS sum(ws_sales_price)#20]
 
 (36) TakeOrderedAndProject
-Input [3]: [ca_zip#11, ca_city#10, SUM(ws_sales_price)#20]
-Arguments: 100, [ca_zip#11 ASC NULLS FIRST, ca_city#10 ASC NULLS FIRST], [ca_zip#11, ca_city#10, SUM(ws_sales_price)#20]
+Input [3]: [ca_zip#11, ca_city#10, sum(ws_sales_price)#20]
+Arguments: 100, [ca_zip#11 ASC NULLS FIRST, ca_city#10 ASC NULLS FIRST], [ca_zip#11, ca_city#10, sum(ws_sales_price)#20]
 
 ===== Subqueries =====
 

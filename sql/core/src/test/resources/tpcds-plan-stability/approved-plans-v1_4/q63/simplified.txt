@@ -9,7 +9,7 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                 InputAdapter
                   Exchange [i_manager_id] #1
                     WholeStageCodegen (5)
-                      HashAggregate [i_manager_id,d_moy,sum] [SUM(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
+                      HashAggregate [i_manager_id,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
                         InputAdapter
                           Exchange [i_manager_id,d_moy] #2
                             WholeStageCodegen (4)

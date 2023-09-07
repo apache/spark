@@ -1,6 +1,6 @@
 TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,agg4,agg5,agg6,agg7]
   WholeStageCodegen (14)
-    HashAggregate [i_item_id,ca_country,ca_state,ca_county,spark_grouping_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [AVG(cast(cs_quantity as decimal(12,2))),AVG(cast(cs_list_price as decimal(12,2))),AVG(cast(cs_coupon_amt as decimal(12,2))),AVG(cast(cs_sales_price as decimal(12,2))),AVG(cast(cs_net_profit as decimal(12,2))),AVG(cast(c_birth_year as decimal(12,2))),AVG(cast(cd_dep_count as decimal(12,2))),agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+    HashAggregate [i_item_id,ca_country,ca_state,ca_county,spark_grouping_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(cast(cs_quantity as decimal(12,2))),avg(cast(cs_list_price as decimal(12,2))),avg(cast(cs_coupon_amt as decimal(12,2))),avg(cast(cs_sales_price as decimal(12,2))),avg(cast(cs_net_profit as decimal(12,2))),avg(cast(c_birth_year as decimal(12,2))),avg(cast(cd_dep_count as decimal(12,2))),agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [i_item_id,ca_country,ca_state,ca_county,spark_grouping_id] #1
           WholeStageCodegen (13)

@@ -148,7 +148,7 @@ Input [3]: [ss_quantity#4, ss_sold_date_sk#7, d_date_sk#16]
 (26) HashAggregate [codegen id : 5]
 Input [1]: [ss_quantity#4]
 Keys: []
-Functions [1]: [partial_SUM(ss_quantity#4)]
+Functions [1]: [partial_sum(ss_quantity#4)]
 Aggregate Attributes [1]: [sum#17]
 Results [1]: [sum#18]
 
@@ -159,9 +159,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 (28) HashAggregate [codegen id : 6]
 Input [1]: [sum#18]
 Keys: []
-Functions [1]: [SUM(ss_quantity#4)]
-Aggregate Attributes [1]: [SUM(ss_quantity#4)#19]
-Results [1]: [SUM(ss_quantity#4)#19 AS SUM(ss_quantity)#20]
+Functions [1]: [sum(ss_quantity#4)]
+Aggregate Attributes [1]: [sum(ss_quantity#4)#19]
+Results [1]: [sum(ss_quantity#4)#19 AS sum(ss_quantity)#20]
 
 ===== Subqueries =====
 

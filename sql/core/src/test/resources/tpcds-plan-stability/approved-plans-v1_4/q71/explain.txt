@@ -192,7 +192,7 @@ Input [7]: [i_brand_id#2, i_brand#3, ext_price#11, time_sk#13, t_time_sk#30, t_h
 (34) HashAggregate [codegen id : 9]
 Input [5]: [i_brand_id#2, i_brand#3, ext_price#11, t_hour#31, t_minute#32]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32]
-Functions [1]: [partial_SUM(UnscaledValue(ext_price#11))]
+Functions [1]: [partial_sum(UnscaledValue(ext_price#11))]
 Aggregate Attributes [1]: [sum#34]
 Results [5]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, sum#35]
 
@@ -203,9 +203,9 @@ Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, 5),
 (36) HashAggregate [codegen id : 10]
 Input [5]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, sum#35]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32]
-Functions [1]: [SUM(UnscaledValue(ext_price#11))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ext_price#11))#36]
-Results [5]: [i_brand_id#2 AS brand_id#37, i_brand#3 AS brand#38, t_hour#31, t_minute#32, MakeDecimal(SUM(UnscaledValue(ext_price#11))#36,17,2) AS ext_price#39]
+Functions [1]: [sum(UnscaledValue(ext_price#11))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ext_price#11))#36]
+Results [5]: [i_brand_id#2 AS brand_id#37, i_brand#3 AS brand#38, t_hour#31, t_minute#32, MakeDecimal(sum(UnscaledValue(ext_price#11))#36,17,2) AS ext_price#39]
 
 (37) Exchange
 Input [5]: [brand_id#37, brand#38, t_hour#31, t_minute#32, ext_price#39]

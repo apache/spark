@@ -92,8 +92,8 @@ Input [5]: [ss_quantity#1, ss_wholesale_cost#2, ss_list_price#3, ss_coupon_amt#4
 (5) HashAggregate [codegen id : 1]
 Input [1]: [ss_list_price#3]
 Keys [1]: [ss_list_price#3]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#3)), partial_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
 Results [4]: [ss_list_price#3, sum#8, count#9, count#10]
 
 (6) Exchange
@@ -103,15 +103,15 @@ Arguments: hashpartitioning(ss_list_price#3, 5), ENSURE_REQUIREMENTS, [plan_id=1
 (7) HashAggregate [codegen id : 2]
 Input [4]: [ss_list_price#3, sum#8, count#9, count#10]
 Keys [1]: [ss_list_price#3]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7]
 Results [4]: [ss_list_price#3, sum#8, count#9, count#10]
 
 (8) HashAggregate [codegen id : 2]
 Input [4]: [ss_list_price#3, sum#8, count#9, count#10]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#11]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#3)), merge_count(ss_list_price#3), partial_count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#11]
 Results [4]: [sum#8, count#9, count#10, count#12]
 
 (9) Exchange
@@ -121,9 +121,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 (10) HashAggregate [codegen id : 18]
 Input [4]: [sum#8, count#9, count#10, count#12]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#11]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#3))#6 / 100.0) as decimal(11,6)) AS B1_LP#13, count(ss_list_price#3)#7 AS B1_CNT#14, count(ss_list_price#3)#11 AS B1_CNTD#15]
+Functions [3]: [avg(UnscaledValue(ss_list_price#3)), count(ss_list_price#3), count(distinct ss_list_price#3)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#3))#6, count(ss_list_price#3)#7, count(ss_list_price#3)#11]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#3))#6 / 100.0) as decimal(11,6)) AS B1_LP#13, count(ss_list_price#3)#7 AS B1_CNT#14, count(ss_list_price#3)#11 AS B1_CNTD#15]
 
 (11) Scan parquet spark_catalog.default.store_sales
 Output [5]: [ss_quantity#16, ss_wholesale_cost#17, ss_list_price#18, ss_coupon_amt#19, ss_sold_date_sk#20]
@@ -146,8 +146,8 @@ Input [5]: [ss_quantity#16, ss_wholesale_cost#17, ss_list_price#18, ss_coupon_am
 (15) HashAggregate [codegen id : 3]
 Input [1]: [ss_list_price#18]
 Keys [1]: [ss_list_price#18]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#18)), partial_count(ss_list_price#18)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#18)), partial_count(ss_list_price#18)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22]
 Results [4]: [ss_list_price#18, sum#23, count#24, count#25]
 
 (16) Exchange
@@ -157,15 +157,15 @@ Arguments: hashpartitioning(ss_list_price#18, 5), ENSURE_REQUIREMENTS, [plan_id=
 (17) HashAggregate [codegen id : 4]
 Input [4]: [ss_list_price#18, sum#23, count#24, count#25]
 Keys [1]: [ss_list_price#18]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#18)), merge_count(ss_list_price#18)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#18)), merge_count(ss_list_price#18)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22]
 Results [4]: [ss_list_price#18, sum#23, count#24, count#25]
 
 (18) HashAggregate [codegen id : 4]
 Input [4]: [ss_list_price#18, sum#23, count#24, count#25]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#18)), merge_count(ss_list_price#18), partial_count(distinct ss_list_price#18)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22, count(ss_list_price#18)#26]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#18)), merge_count(ss_list_price#18), partial_count(distinct ss_list_price#18)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22, count(ss_list_price#18)#26]
 Results [4]: [sum#23, count#24, count#25, count#27]
 
 (19) Exchange
@@ -175,9 +175,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 (20) HashAggregate [codegen id : 5]
 Input [4]: [sum#23, count#24, count#25, count#27]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#18)), count(ss_list_price#18), count(distinct ss_list_price#18)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22, count(ss_list_price#18)#26]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#18))#21 / 100.0) as decimal(11,6)) AS B2_LP#28, count(ss_list_price#18)#22 AS B2_CNT#29, count(ss_list_price#18)#26 AS B2_CNTD#30]
+Functions [3]: [avg(UnscaledValue(ss_list_price#18)), count(ss_list_price#18), count(distinct ss_list_price#18)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#18))#21, count(ss_list_price#18)#22, count(ss_list_price#18)#26]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#18))#21 / 100.0) as decimal(11,6)) AS B2_LP#28, count(ss_list_price#18)#22 AS B2_CNT#29, count(ss_list_price#18)#26 AS B2_CNTD#30]
 
 (21) BroadcastExchange
 Input [3]: [B2_LP#28, B2_CNT#29, B2_CNTD#30]
@@ -208,8 +208,8 @@ Input [5]: [ss_quantity#31, ss_wholesale_cost#32, ss_list_price#33, ss_coupon_am
 (27) HashAggregate [codegen id : 6]
 Input [1]: [ss_list_price#33]
 Keys [1]: [ss_list_price#33]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#33)), partial_count(ss_list_price#33)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#33)), partial_count(ss_list_price#33)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37]
 Results [4]: [ss_list_price#33, sum#38, count#39, count#40]
 
 (28) Exchange
@@ -219,15 +219,15 @@ Arguments: hashpartitioning(ss_list_price#33, 5), ENSURE_REQUIREMENTS, [plan_id=
 (29) HashAggregate [codegen id : 7]
 Input [4]: [ss_list_price#33, sum#38, count#39, count#40]
 Keys [1]: [ss_list_price#33]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#33)), merge_count(ss_list_price#33)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#33)), merge_count(ss_list_price#33)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37]
 Results [4]: [ss_list_price#33, sum#38, count#39, count#40]
 
 (30) HashAggregate [codegen id : 7]
 Input [4]: [ss_list_price#33, sum#38, count#39, count#40]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#33)), merge_count(ss_list_price#33), partial_count(distinct ss_list_price#33)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37, count(ss_list_price#33)#41]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#33)), merge_count(ss_list_price#33), partial_count(distinct ss_list_price#33)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37, count(ss_list_price#33)#41]
 Results [4]: [sum#38, count#39, count#40, count#42]
 
 (31) Exchange
@@ -237,9 +237,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 (32) HashAggregate [codegen id : 8]
 Input [4]: [sum#38, count#39, count#40, count#42]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#33)), count(ss_list_price#33), count(distinct ss_list_price#33)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37, count(ss_list_price#33)#41]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#33))#36 / 100.0) as decimal(11,6)) AS B3_LP#43, count(ss_list_price#33)#37 AS B3_CNT#44, count(ss_list_price#33)#41 AS B3_CNTD#45]
+Functions [3]: [avg(UnscaledValue(ss_list_price#33)), count(ss_list_price#33), count(distinct ss_list_price#33)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#33))#36, count(ss_list_price#33)#37, count(ss_list_price#33)#41]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#33))#36 / 100.0) as decimal(11,6)) AS B3_LP#43, count(ss_list_price#33)#37 AS B3_CNT#44, count(ss_list_price#33)#41 AS B3_CNTD#45]
 
 (33) BroadcastExchange
 Input [3]: [B3_LP#43, B3_CNT#44, B3_CNTD#45]
@@ -270,8 +270,8 @@ Input [5]: [ss_quantity#46, ss_wholesale_cost#47, ss_list_price#48, ss_coupon_am
 (39) HashAggregate [codegen id : 9]
 Input [1]: [ss_list_price#48]
 Keys [1]: [ss_list_price#48]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#48)), partial_count(ss_list_price#48)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#48)), partial_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
 Results [4]: [ss_list_price#48, sum#53, count#54, count#55]
 
 (40) Exchange
@@ -281,15 +281,15 @@ Arguments: hashpartitioning(ss_list_price#48, 5), ENSURE_REQUIREMENTS, [plan_id=
 (41) HashAggregate [codegen id : 10]
 Input [4]: [ss_list_price#48, sum#53, count#54, count#55]
 Keys [1]: [ss_list_price#48]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52]
 Results [4]: [ss_list_price#48, sum#53, count#54, count#55]
 
 (42) HashAggregate [codegen id : 10]
 Input [4]: [ss_list_price#48, sum#53, count#54, count#55]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48), partial_count(distinct ss_list_price#48)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#56]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#48)), merge_count(ss_list_price#48), partial_count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#56]
 Results [4]: [sum#53, count#54, count#55, count#57]
 
 (43) Exchange
@@ -299,9 +299,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=10]
 (44) HashAggregate [codegen id : 11]
 Input [4]: [sum#53, count#54, count#55, count#57]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#48)), count(ss_list_price#48), count(distinct ss_list_price#48)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#56]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#48))#51 / 100.0) as decimal(11,6)) AS B4_LP#58, count(ss_list_price#48)#52 AS B4_CNT#59, count(ss_list_price#48)#56 AS B4_CNTD#60]
+Functions [3]: [avg(UnscaledValue(ss_list_price#48)), count(ss_list_price#48), count(distinct ss_list_price#48)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#48))#51, count(ss_list_price#48)#52, count(ss_list_price#48)#56]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#48))#51 / 100.0) as decimal(11,6)) AS B4_LP#58, count(ss_list_price#48)#52 AS B4_CNT#59, count(ss_list_price#48)#56 AS B4_CNTD#60]
 
 (45) BroadcastExchange
 Input [3]: [B4_LP#58, B4_CNT#59, B4_CNTD#60]
@@ -332,8 +332,8 @@ Input [5]: [ss_quantity#61, ss_wholesale_cost#62, ss_list_price#63, ss_coupon_am
 (51) HashAggregate [codegen id : 12]
 Input [1]: [ss_list_price#63]
 Keys [1]: [ss_list_price#63]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#63)), partial_count(ss_list_price#63)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#63)), partial_count(ss_list_price#63)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67]
 Results [4]: [ss_list_price#63, sum#68, count#69, count#70]
 
 (52) Exchange
@@ -343,15 +343,15 @@ Arguments: hashpartitioning(ss_list_price#63, 5), ENSURE_REQUIREMENTS, [plan_id=
 (53) HashAggregate [codegen id : 13]
 Input [4]: [ss_list_price#63, sum#68, count#69, count#70]
 Keys [1]: [ss_list_price#63]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#63)), merge_count(ss_list_price#63)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#63)), merge_count(ss_list_price#63)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67]
 Results [4]: [ss_list_price#63, sum#68, count#69, count#70]
 
 (54) HashAggregate [codegen id : 13]
 Input [4]: [ss_list_price#63, sum#68, count#69, count#70]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#63)), merge_count(ss_list_price#63), partial_count(distinct ss_list_price#63)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67, count(ss_list_price#63)#71]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#63)), merge_count(ss_list_price#63), partial_count(distinct ss_list_price#63)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67, count(ss_list_price#63)#71]
 Results [4]: [sum#68, count#69, count#70, count#72]
 
 (55) Exchange
@@ -361,9 +361,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
 (56) HashAggregate [codegen id : 14]
 Input [4]: [sum#68, count#69, count#70, count#72]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#63)), count(ss_list_price#63), count(distinct ss_list_price#63)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67, count(ss_list_price#63)#71]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#63))#66 / 100.0) as decimal(11,6)) AS B5_LP#73, count(ss_list_price#63)#67 AS B5_CNT#74, count(ss_list_price#63)#71 AS B5_CNTD#75]
+Functions [3]: [avg(UnscaledValue(ss_list_price#63)), count(ss_list_price#63), count(distinct ss_list_price#63)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#63))#66, count(ss_list_price#63)#67, count(ss_list_price#63)#71]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#63))#66 / 100.0) as decimal(11,6)) AS B5_LP#73, count(ss_list_price#63)#67 AS B5_CNT#74, count(ss_list_price#63)#71 AS B5_CNTD#75]
 
 (57) BroadcastExchange
 Input [3]: [B5_LP#73, B5_CNT#74, B5_CNTD#75]
@@ -394,8 +394,8 @@ Input [5]: [ss_quantity#76, ss_wholesale_cost#77, ss_list_price#78, ss_coupon_am
 (63) HashAggregate [codegen id : 15]
 Input [1]: [ss_list_price#78]
 Keys [1]: [ss_list_price#78]
-Functions [2]: [partial_AVG(UnscaledValue(ss_list_price#78)), partial_count(ss_list_price#78)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82]
+Functions [2]: [partial_avg(UnscaledValue(ss_list_price#78)), partial_count(ss_list_price#78)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82]
 Results [4]: [ss_list_price#78, sum#83, count#84, count#85]
 
 (64) Exchange
@@ -405,15 +405,15 @@ Arguments: hashpartitioning(ss_list_price#78, 5), ENSURE_REQUIREMENTS, [plan_id=
 (65) HashAggregate [codegen id : 16]
 Input [4]: [ss_list_price#78, sum#83, count#84, count#85]
 Keys [1]: [ss_list_price#78]
-Functions [2]: [merge_AVG(UnscaledValue(ss_list_price#78)), merge_count(ss_list_price#78)]
-Aggregate Attributes [2]: [AVG(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82]
+Functions [2]: [merge_avg(UnscaledValue(ss_list_price#78)), merge_count(ss_list_price#78)]
+Aggregate Attributes [2]: [avg(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82]
 Results [4]: [ss_list_price#78, sum#83, count#84, count#85]
 
 (66) HashAggregate [codegen id : 16]
 Input [4]: [ss_list_price#78, sum#83, count#84, count#85]
 Keys: []
-Functions [3]: [merge_AVG(UnscaledValue(ss_list_price#78)), merge_count(ss_list_price#78), partial_count(distinct ss_list_price#78)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82, count(ss_list_price#78)#86]
+Functions [3]: [merge_avg(UnscaledValue(ss_list_price#78)), merge_count(ss_list_price#78), partial_count(distinct ss_list_price#78)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82, count(ss_list_price#78)#86]
 Results [4]: [sum#83, count#84, count#85, count#87]
 
 (67) Exchange
@@ -423,9 +423,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
 (68) HashAggregate [codegen id : 17]
 Input [4]: [sum#83, count#84, count#85, count#87]
 Keys: []
-Functions [3]: [AVG(UnscaledValue(ss_list_price#78)), count(ss_list_price#78), count(distinct ss_list_price#78)]
-Aggregate Attributes [3]: [AVG(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82, count(ss_list_price#78)#86]
-Results [3]: [cast((AVG(UnscaledValue(ss_list_price#78))#81 / 100.0) as decimal(11,6)) AS B6_LP#88, count(ss_list_price#78)#82 AS B6_CNT#89, count(ss_list_price#78)#86 AS B6_CNTD#90]
+Functions [3]: [avg(UnscaledValue(ss_list_price#78)), count(ss_list_price#78), count(distinct ss_list_price#78)]
+Aggregate Attributes [3]: [avg(UnscaledValue(ss_list_price#78))#81, count(ss_list_price#78)#82, count(ss_list_price#78)#86]
+Results [3]: [cast((avg(UnscaledValue(ss_list_price#78))#81 / 100.0) as decimal(11,6)) AS B6_LP#88, count(ss_list_price#78)#82 AS B6_CNT#89, count(ss_list_price#78)#86 AS B6_CNTD#90]
 
 (69) BroadcastExchange
 Input [3]: [B6_LP#88, B6_CNT#89, B6_CNTD#90]

@@ -8,7 +8,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
               InputAdapter
                 Exchange [_w1,_w2] #1
                   WholeStageCodegen (9)
-                    HashAggregate [s_state,s_county,spark_grouping_id,sum] [SUM(UnscaledValue(ss_net_profit)),total_sum,lochierarchy,_w0,_w1,_w2,sum]
+                    HashAggregate [s_state,s_county,spark_grouping_id,sum] [sum(UnscaledValue(ss_net_profit)),total_sum,lochierarchy,_w0,_w1,_w2,sum]
                       InputAdapter
                         Exchange [s_state,s_county,spark_grouping_id] #2
                           WholeStageCodegen (8)
@@ -50,7 +50,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                           WindowGroupLimit [s_state,_w0]
                                                             WholeStageCodegen (5)
                                                               Sort [s_state,_w0]
-                                                                HashAggregate [sum] [SUM(UnscaledValue(ss_net_profit)),_w0,s_state,sum]
+                                                                HashAggregate [sum] [sum(UnscaledValue(ss_net_profit)),_w0,s_state,sum]
                                                                   InputAdapter
                                                                     Exchange [s_state] #6
                                                                       WholeStageCodegen (4)

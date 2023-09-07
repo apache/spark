@@ -159,7 +159,7 @@ Input [7]: [store_sk#6, sales_price#8, profit#9, return_amt#10, net_loss#11, s_s
 (19) HashAggregate [codegen id : 5]
 Input [5]: [sales_price#8, profit#9, return_amt#10, net_loss#11, s_store_id#24]
 Keys [1]: [s_store_id#24]
-Functions [4]: [partial_SUM(UnscaledValue(sales_price#8)), partial_SUM(UnscaledValue(return_amt#10)), partial_SUM(UnscaledValue(profit#9)), partial_SUM(UnscaledValue(net_loss#11))]
+Functions [4]: [partial_sum(UnscaledValue(sales_price#8)), partial_sum(UnscaledValue(return_amt#10)), partial_sum(UnscaledValue(profit#9)), partial_sum(UnscaledValue(net_loss#11))]
 Aggregate Attributes [4]: [sum#25, sum#26, sum#27, sum#28]
 Results [5]: [s_store_id#24, sum#29, sum#30, sum#31, sum#32]
 
@@ -170,9 +170,9 @@ Arguments: hashpartitioning(s_store_id#24, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 (21) HashAggregate [codegen id : 6]
 Input [5]: [s_store_id#24, sum#29, sum#30, sum#31, sum#32]
 Keys [1]: [s_store_id#24]
-Functions [4]: [SUM(UnscaledValue(sales_price#8)), SUM(UnscaledValue(return_amt#10)), SUM(UnscaledValue(profit#9)), SUM(UnscaledValue(net_loss#11))]
-Aggregate Attributes [4]: [SUM(UnscaledValue(sales_price#8))#33, SUM(UnscaledValue(return_amt#10))#34, SUM(UnscaledValue(profit#9))#35, SUM(UnscaledValue(net_loss#11))#36]
-Results [5]: [MakeDecimal(SUM(UnscaledValue(sales_price#8))#33,17,2) AS sales#37, MakeDecimal(SUM(UnscaledValue(return_amt#10))#34,17,2) AS returns#38, (MakeDecimal(SUM(UnscaledValue(profit#9))#35,17,2) - MakeDecimal(SUM(UnscaledValue(net_loss#11))#36,17,2)) AS profit#39, store channel AS channel#40, concat(store, s_store_id#24) AS id#41]
+Functions [4]: [sum(UnscaledValue(sales_price#8)), sum(UnscaledValue(return_amt#10)), sum(UnscaledValue(profit#9)), sum(UnscaledValue(net_loss#11))]
+Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#8))#33, sum(UnscaledValue(return_amt#10))#34, sum(UnscaledValue(profit#9))#35, sum(UnscaledValue(net_loss#11))#36]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#8))#33,17,2) AS sales#37, MakeDecimal(sum(UnscaledValue(return_amt#10))#34,17,2) AS returns#38, (MakeDecimal(sum(UnscaledValue(profit#9))#35,17,2) - MakeDecimal(sum(UnscaledValue(net_loss#11))#36,17,2)) AS profit#39, store channel AS channel#40, concat(store, s_store_id#24) AS id#41]
 
 (22) Scan parquet spark_catalog.default.catalog_sales
 Output [4]: [cs_catalog_page_sk#42, cs_ext_sales_price#43, cs_net_profit#44, cs_sold_date_sk#45]
@@ -258,7 +258,7 @@ Input [7]: [page_sk#46, sales_price#48, profit#49, return_amt#50, net_loss#51, c
 (40) HashAggregate [codegen id : 11]
 Input [5]: [sales_price#48, profit#49, return_amt#50, net_loss#51, cp_catalog_page_id#64]
 Keys [1]: [cp_catalog_page_id#64]
-Functions [4]: [partial_SUM(UnscaledValue(sales_price#48)), partial_SUM(UnscaledValue(return_amt#50)), partial_SUM(UnscaledValue(profit#49)), partial_SUM(UnscaledValue(net_loss#51))]
+Functions [4]: [partial_sum(UnscaledValue(sales_price#48)), partial_sum(UnscaledValue(return_amt#50)), partial_sum(UnscaledValue(profit#49)), partial_sum(UnscaledValue(net_loss#51))]
 Aggregate Attributes [4]: [sum#65, sum#66, sum#67, sum#68]
 Results [5]: [cp_catalog_page_id#64, sum#69, sum#70, sum#71, sum#72]
 
@@ -269,9 +269,9 @@ Arguments: hashpartitioning(cp_catalog_page_id#64, 5), ENSURE_REQUIREMENTS, [pla
 (42) HashAggregate [codegen id : 12]
 Input [5]: [cp_catalog_page_id#64, sum#69, sum#70, sum#71, sum#72]
 Keys [1]: [cp_catalog_page_id#64]
-Functions [4]: [SUM(UnscaledValue(sales_price#48)), SUM(UnscaledValue(return_amt#50)), SUM(UnscaledValue(profit#49)), SUM(UnscaledValue(net_loss#51))]
-Aggregate Attributes [4]: [SUM(UnscaledValue(sales_price#48))#73, SUM(UnscaledValue(return_amt#50))#74, SUM(UnscaledValue(profit#49))#75, SUM(UnscaledValue(net_loss#51))#76]
-Results [5]: [MakeDecimal(SUM(UnscaledValue(sales_price#48))#73,17,2) AS sales#77, MakeDecimal(SUM(UnscaledValue(return_amt#50))#74,17,2) AS returns#78, (MakeDecimal(SUM(UnscaledValue(profit#49))#75,17,2) - MakeDecimal(SUM(UnscaledValue(net_loss#51))#76,17,2)) AS profit#79, catalog channel AS channel#80, concat(catalog_page, cp_catalog_page_id#64) AS id#81]
+Functions [4]: [sum(UnscaledValue(sales_price#48)), sum(UnscaledValue(return_amt#50)), sum(UnscaledValue(profit#49)), sum(UnscaledValue(net_loss#51))]
+Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#48))#73, sum(UnscaledValue(return_amt#50))#74, sum(UnscaledValue(profit#49))#75, sum(UnscaledValue(net_loss#51))#76]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#48))#73,17,2) AS sales#77, MakeDecimal(sum(UnscaledValue(return_amt#50))#74,17,2) AS returns#78, (MakeDecimal(sum(UnscaledValue(profit#49))#75,17,2) - MakeDecimal(sum(UnscaledValue(net_loss#51))#76,17,2)) AS profit#79, catalog channel AS channel#80, concat(catalog_page, cp_catalog_page_id#64) AS id#81]
 
 (43) Scan parquet spark_catalog.default.web_sales
 Output [4]: [ws_web_site_sk#82, ws_ext_sales_price#83, ws_net_profit#84, ws_sold_date_sk#85]
@@ -380,7 +380,7 @@ Input [7]: [wsr_web_site_sk#86, sales_price#88, profit#89, return_amt#90, net_lo
 (66) HashAggregate [codegen id : 18]
 Input [5]: [sales_price#88, profit#89, return_amt#90, net_loss#91, web_site_id#109]
 Keys [1]: [web_site_id#109]
-Functions [4]: [partial_SUM(UnscaledValue(sales_price#88)), partial_SUM(UnscaledValue(return_amt#90)), partial_SUM(UnscaledValue(profit#89)), partial_SUM(UnscaledValue(net_loss#91))]
+Functions [4]: [partial_sum(UnscaledValue(sales_price#88)), partial_sum(UnscaledValue(return_amt#90)), partial_sum(UnscaledValue(profit#89)), partial_sum(UnscaledValue(net_loss#91))]
 Aggregate Attributes [4]: [sum#110, sum#111, sum#112, sum#113]
 Results [5]: [web_site_id#109, sum#114, sum#115, sum#116, sum#117]
 
@@ -391,9 +391,9 @@ Arguments: hashpartitioning(web_site_id#109, 5), ENSURE_REQUIREMENTS, [plan_id=7
 (68) HashAggregate [codegen id : 19]
 Input [5]: [web_site_id#109, sum#114, sum#115, sum#116, sum#117]
 Keys [1]: [web_site_id#109]
-Functions [4]: [SUM(UnscaledValue(sales_price#88)), SUM(UnscaledValue(return_amt#90)), SUM(UnscaledValue(profit#89)), SUM(UnscaledValue(net_loss#91))]
-Aggregate Attributes [4]: [SUM(UnscaledValue(sales_price#88))#118, SUM(UnscaledValue(return_amt#90))#119, SUM(UnscaledValue(profit#89))#120, SUM(UnscaledValue(net_loss#91))#121]
-Results [5]: [MakeDecimal(SUM(UnscaledValue(sales_price#88))#118,17,2) AS sales#122, MakeDecimal(SUM(UnscaledValue(return_amt#90))#119,17,2) AS returns#123, (MakeDecimal(SUM(UnscaledValue(profit#89))#120,17,2) - MakeDecimal(SUM(UnscaledValue(net_loss#91))#121,17,2)) AS profit#124, web channel AS channel#125, concat(web_site, web_site_id#109) AS id#126]
+Functions [4]: [sum(UnscaledValue(sales_price#88)), sum(UnscaledValue(return_amt#90)), sum(UnscaledValue(profit#89)), sum(UnscaledValue(net_loss#91))]
+Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#88))#118, sum(UnscaledValue(return_amt#90))#119, sum(UnscaledValue(profit#89))#120, sum(UnscaledValue(net_loss#91))#121]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#88))#118,17,2) AS sales#122, MakeDecimal(sum(UnscaledValue(return_amt#90))#119,17,2) AS returns#123, (MakeDecimal(sum(UnscaledValue(profit#89))#120,17,2) - MakeDecimal(sum(UnscaledValue(net_loss#91))#121,17,2)) AS profit#124, web channel AS channel#125, concat(web_site, web_site_id#109) AS id#126]
 
 (69) Union
 
@@ -404,7 +404,7 @@ Arguments: [[sales#37, returns#38, profit#39, channel#40, id#41, 0], [sales#37, 
 (71) HashAggregate [codegen id : 20]
 Input [6]: [sales#37, returns#38, profit#39, channel#127, id#128, spark_grouping_id#129]
 Keys [3]: [channel#127, id#128, spark_grouping_id#129]
-Functions [3]: [partial_SUM(sales#37), partial_SUM(returns#38), partial_SUM(profit#39)]
+Functions [3]: [partial_sum(sales#37), partial_sum(returns#38), partial_sum(profit#39)]
 Aggregate Attributes [6]: [sum#130, isEmpty#131, sum#132, isEmpty#133, sum#134, isEmpty#135]
 Results [9]: [channel#127, id#128, spark_grouping_id#129, sum#136, isEmpty#137, sum#138, isEmpty#139, sum#140, isEmpty#141]
 
@@ -415,9 +415,9 @@ Arguments: hashpartitioning(channel#127, id#128, spark_grouping_id#129, 5), ENSU
 (73) HashAggregate [codegen id : 21]
 Input [9]: [channel#127, id#128, spark_grouping_id#129, sum#136, isEmpty#137, sum#138, isEmpty#139, sum#140, isEmpty#141]
 Keys [3]: [channel#127, id#128, spark_grouping_id#129]
-Functions [3]: [SUM(sales#37), SUM(returns#38), SUM(profit#39)]
-Aggregate Attributes [3]: [SUM(sales#37)#142, SUM(returns#38)#143, SUM(profit#39)#144]
-Results [5]: [channel#127, id#128, SUM(sales#37)#142 AS sales#145, SUM(returns#38)#143 AS returns#146, SUM(profit#39)#144 AS profit#147]
+Functions [3]: [sum(sales#37), sum(returns#38), sum(profit#39)]
+Aggregate Attributes [3]: [sum(sales#37)#142, sum(returns#38)#143, sum(profit#39)#144]
+Results [5]: [channel#127, id#128, sum(sales#37)#142 AS sales#145, sum(returns#38)#143 AS returns#146, sum(profit#39)#144 AS profit#147]
 
 (74) TakeOrderedAndProject
 Input [5]: [channel#127, id#128, sales#145, returns#146, profit#147]

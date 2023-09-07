@@ -21,7 +21,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                         InputAdapter
                                           Exchange #2
                                             WholeStageCodegen (4)
-                                              HashAggregate [ws_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [SUM(coalesce(wr_return_quantity, 0)),SUM(coalesce(ws_quantity, 0)),SUM(coalesce(cast(wr_return_amt as decimal(12,2)), 0.00)),SUM(coalesce(cast(ws_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
+                                              HashAggregate [ws_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [sum(coalesce(wr_return_quantity, 0)),sum(coalesce(ws_quantity, 0)),sum(coalesce(cast(wr_return_amt as decimal(12,2)), 0.00)),sum(coalesce(cast(ws_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
                                                 InputAdapter
                                                   Exchange [ws_item_sk] #3
                                                     WholeStageCodegen (3)
@@ -67,7 +67,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                         InputAdapter
                                           Exchange #6
                                             WholeStageCodegen (11)
-                                              HashAggregate [cs_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [SUM(coalesce(cr_return_quantity, 0)),SUM(coalesce(cs_quantity, 0)),SUM(coalesce(cast(cr_return_amount as decimal(12,2)), 0.00)),SUM(coalesce(cast(cs_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
+                                              HashAggregate [cs_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [sum(coalesce(cr_return_quantity, 0)),sum(coalesce(cs_quantity, 0)),sum(coalesce(cast(cr_return_amount as decimal(12,2)), 0.00)),sum(coalesce(cast(cs_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
                                                 InputAdapter
                                                   Exchange [cs_item_sk] #7
                                                     WholeStageCodegen (10)
@@ -106,7 +106,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                         InputAdapter
                                           Exchange #9
                                             WholeStageCodegen (18)
-                                              HashAggregate [ss_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [SUM(coalesce(sr_return_quantity, 0)),SUM(coalesce(ss_quantity, 0)),SUM(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),SUM(coalesce(cast(ss_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
+                                              HashAggregate [ss_item_sk,sum,sum,sum,isEmpty,sum,isEmpty] [sum(coalesce(sr_return_quantity, 0)),sum(coalesce(ss_quantity, 0)),sum(coalesce(cast(sr_return_amt as decimal(12,2)), 0.00)),sum(coalesce(cast(ss_net_paid as decimal(12,2)), 0.00)),item,return_ratio,currency_ratio,sum,sum,sum,isEmpty,sum,isEmpty]
                                                 InputAdapter
                                                   Exchange [ss_item_sk] #10
                                                     WholeStageCodegen (17)

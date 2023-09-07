@@ -85,7 +85,7 @@ Arguments: [[ws_net_paid#2, i_category#8, i_class#7, 0], [ws_net_paid#2, i_categ
 (14) HashAggregate [codegen id : 3]
 Input [4]: [ws_net_paid#2, i_category#9, i_class#10, spark_grouping_id#11]
 Keys [3]: [i_category#9, i_class#10, spark_grouping_id#11]
-Functions [1]: [partial_SUM(UnscaledValue(ws_net_paid#2))]
+Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#2))]
 Aggregate Attributes [1]: [sum#12]
 Results [4]: [i_category#9, i_class#10, spark_grouping_id#11, sum#13]
 
@@ -96,9 +96,9 @@ Arguments: hashpartitioning(i_category#9, i_class#10, spark_grouping_id#11, 5), 
 (16) HashAggregate [codegen id : 4]
 Input [4]: [i_category#9, i_class#10, spark_grouping_id#11, sum#13]
 Keys [3]: [i_category#9, i_class#10, spark_grouping_id#11]
-Functions [1]: [SUM(UnscaledValue(ws_net_paid#2))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ws_net_paid#2))#14]
-Results [7]: [MakeDecimal(SUM(UnscaledValue(ws_net_paid#2))#14,17,2) AS total_sum#15, i_category#9, i_class#10, (cast((SHIFTRIGHT(spark_grouping_id#11, 1) & 1) as tinyint) + cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint)) AS lochierarchy#16, MakeDecimal(SUM(UnscaledValue(ws_net_paid#2))#14,17,2) AS _w0#17, (cast((SHIFTRIGHT(spark_grouping_id#11, 1) & 1) as tinyint) + cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint)) AS _w1#18, CASE WHEN (cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint) = 0) THEN i_category#9 END AS _w2#19]
+Functions [1]: [sum(UnscaledValue(ws_net_paid#2))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#2))#14]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS total_sum#15, i_category#9, i_class#10, (cast((SHIFTRIGHT(spark_grouping_id#11, 1) & 1) as tinyint) + cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint)) AS lochierarchy#16, MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#14,17,2) AS _w0#17, (cast((SHIFTRIGHT(spark_grouping_id#11, 1) & 1) as tinyint) + cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint)) AS _w1#18, CASE WHEN (cast((SHIFTRIGHT(spark_grouping_id#11, 0) & 1) as tinyint) = 0) THEN i_category#9 END AS _w2#19]
 
 (17) Exchange
 Input [7]: [total_sum#15, i_category#9, i_class#10, lochierarchy#16, _w0#17, _w1#18, _w2#19]

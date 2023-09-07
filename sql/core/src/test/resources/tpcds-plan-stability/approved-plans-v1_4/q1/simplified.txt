@@ -5,9 +5,9 @@ TakeOrderedAndProject [c_customer_id]
         Project [ctr_customer_sk]
           BroadcastHashJoin [ctr_store_sk,s_store_sk]
             Project [ctr_customer_sk,ctr_store_sk]
-              BroadcastHashJoin [ctr_store_sk,ctr_store_sk,ctr_total_return,(AVG(ctr_total_return) * 1.2)]
+              BroadcastHashJoin [ctr_store_sk,ctr_store_sk,ctr_total_return,(avg(ctr_total_return) * 1.2)]
                 Filter [ctr_total_return]
-                  HashAggregate [sr_customer_sk,sr_store_sk,sum] [SUM(UnscaledValue(sr_return_amt)),ctr_customer_sk,ctr_store_sk,ctr_total_return,sum]
+                  HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_customer_sk,ctr_store_sk,ctr_total_return,sum]
                     InputAdapter
                       Exchange [sr_customer_sk,sr_store_sk] #1
                         WholeStageCodegen (2)
@@ -31,13 +31,13 @@ TakeOrderedAndProject [c_customer_id]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (6)
-                      Filter [(AVG(ctr_total_return) * 1.2)]
-                        HashAggregate [ctr_store_sk,sum,count] [AVG(ctr_total_return),(AVG(ctr_total_return) * 1.2),sum,count]
+                      Filter [(avg(ctr_total_return) * 1.2)]
+                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),sum,count]
                           InputAdapter
                             Exchange [ctr_store_sk] #4
                               WholeStageCodegen (5)
                                 HashAggregate [ctr_store_sk,ctr_total_return] [sum,count,sum,count]
-                                  HashAggregate [sr_customer_sk,sr_store_sk,sum] [SUM(UnscaledValue(sr_return_amt)),ctr_store_sk,ctr_total_return,sum]
+                                  HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_store_sk,ctr_total_return,sum]
                                     InputAdapter
                                       Exchange [sr_customer_sk,sr_store_sk] #5
                                         WholeStageCodegen (4)

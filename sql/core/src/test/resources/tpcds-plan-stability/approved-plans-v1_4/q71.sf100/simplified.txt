@@ -3,7 +3,7 @@ WholeStageCodegen (11)
     InputAdapter
       Exchange [ext_price,brand_id] #1
         WholeStageCodegen (10)
-          HashAggregate [i_brand,i_brand_id,t_hour,t_minute,sum] [SUM(UnscaledValue(ext_price)),brand_id,brand,ext_price,sum]
+          HashAggregate [i_brand,i_brand_id,t_hour,t_minute,sum] [sum(UnscaledValue(ext_price)),brand_id,brand,ext_price,sum]
             InputAdapter
               Exchange [i_brand,i_brand_id,t_hour,t_minute] #2
                 WholeStageCodegen (9)

@@ -1,6 +1,6 @@
-TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,SUM(l_quantity)]
+TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(l_quantity)]
   WholeStageCodegen (8)
-    HashAggregate [c_name,c_custkey,o_orderkey,o_orderdate,o_totalprice,sum,isEmpty] [SUM(l_quantity),SUM(l_quantity),sum,isEmpty]
+    HashAggregate [c_name,c_custkey,o_orderkey,o_orderdate,o_totalprice,sum,isEmpty] [sum(l_quantity),sum(l_quantity),sum,isEmpty]
       InputAdapter
         Exchange [c_name,c_custkey,o_orderkey,o_orderdate,o_totalprice] #1
           WholeStageCodegen (7)
@@ -25,8 +25,8 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,SUM(
                                 BroadcastExchange #3
                                   WholeStageCodegen (2)
                                     Project [l_orderkey]
-                                      Filter [SUM(l_quantity)]
-                                        HashAggregate [l_orderkey,sum,isEmpty] [SUM(l_quantity),SUM(l_quantity),sum,isEmpty]
+                                      Filter [sum(l_quantity)]
+                                        HashAggregate [l_orderkey,sum,isEmpty] [sum(l_quantity),sum(l_quantity),sum,isEmpty]
                                           InputAdapter
                                             Exchange [l_orderkey] #4
                                               WholeStageCodegen (1)

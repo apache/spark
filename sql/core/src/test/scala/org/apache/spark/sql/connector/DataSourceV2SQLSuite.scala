@@ -2986,7 +2986,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         sqlState = None,
         parameters = Map(
-          "sqlExpr" -> "\"abs(true)\"",
+          "sqlExpr" -> "\"ABS(true)\"",
           "paramIndex" -> "1",
           "inputSql" -> "\"true\"",
           "inputType" -> "\"BOOLEAN\"",

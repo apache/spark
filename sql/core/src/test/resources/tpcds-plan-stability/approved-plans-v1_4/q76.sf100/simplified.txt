@@ -1,6 +1,6 @@
 TakeOrderedAndProject [channel,col_name,d_year,d_qoy,i_category,sales_cnt,sales_amt]
   WholeStageCodegen (11)
-    HashAggregate [channel,col_name,d_year,d_qoy,i_category,count,sum] [count(1),SUM(UnscaledValue(ext_sales_price)),sales_cnt,sales_amt,count,sum]
+    HashAggregate [channel,col_name,d_year,d_qoy,i_category,count,sum] [count(1),sum(UnscaledValue(ext_sales_price)),sales_cnt,sales_amt,count,sum]
       InputAdapter
         Exchange [channel,col_name,d_year,d_qoy,i_category] #1
           WholeStageCodegen (10)

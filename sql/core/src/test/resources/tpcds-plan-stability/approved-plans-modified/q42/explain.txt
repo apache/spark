@@ -104,7 +104,7 @@ Input [6]: [d_year#2, ss_item_sk#4, ss_ext_sales_price#5, i_item_sk#7, i_categor
 (18) HashAggregate [codegen id : 3]
 Input [4]: [d_year#2, ss_ext_sales_price#5, i_category_id#8, i_category#9]
 Keys [3]: [d_year#2, i_category_id#8, i_category#9]
-Functions [1]: [partial_SUM(UnscaledValue(ss_ext_sales_price#5))]
+Functions [1]: [partial_sum(UnscaledValue(ss_ext_sales_price#5))]
 Aggregate Attributes [1]: [sum#11]
 Results [4]: [d_year#2, i_category_id#8, i_category#9, sum#12]
 
@@ -115,11 +115,11 @@ Arguments: hashpartitioning(d_year#2, i_category_id#8, i_category#9, 5), ENSURE_
 (20) HashAggregate [codegen id : 4]
 Input [4]: [d_year#2, i_category_id#8, i_category#9, sum#12]
 Keys [3]: [d_year#2, i_category_id#8, i_category#9]
-Functions [1]: [SUM(UnscaledValue(ss_ext_sales_price#5))]
-Aggregate Attributes [1]: [SUM(UnscaledValue(ss_ext_sales_price#5))#13]
-Results [4]: [d_year#2, i_category_id#8, i_category#9, MakeDecimal(SUM(UnscaledValue(ss_ext_sales_price#5))#13,17,2) AS SUM(ss_ext_sales_price)#14]
+Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#5))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#5))#13]
+Results [4]: [d_year#2, i_category_id#8, i_category#9, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#5))#13,17,2) AS sum(ss_ext_sales_price)#14]
 
 (21) TakeOrderedAndProject
-Input [4]: [d_year#2, i_category_id#8, i_category#9, SUM(ss_ext_sales_price)#14]
-Arguments: 100, [SUM(ss_ext_sales_price)#14 DESC NULLS LAST, d_year#2 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST, i_category#9 ASC NULLS FIRST], [d_year#2, i_category_id#8, i_category#9, SUM(ss_ext_sales_price)#14]
+Input [4]: [d_year#2, i_category_id#8, i_category#9, sum(ss_ext_sales_price)#14]
+Arguments: 100, [sum(ss_ext_sales_price)#14 DESC NULLS LAST, d_year#2 ASC NULLS FIRST, i_category_id#8 ASC NULLS FIRST, i_category#9 ASC NULLS FIRST], [d_year#2, i_category_id#8, i_category#9, sum(ss_ext_sales_price)#14]
 

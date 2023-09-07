@@ -334,7 +334,7 @@ Input [8]: [cs_item_sk#19, cs_order_number#20, cs_ext_list_price#21, cr_item_sk#
 (28) HashAggregate [codegen id : 9]
 Input [5]: [cs_item_sk#19, cs_ext_list_price#21, cr_refunded_cash#25, cr_reversed_charge#26, cr_store_credit#27]
 Keys [1]: [cs_item_sk#19]
-Functions [2]: [partial_SUM(UnscaledValue(cs_ext_list_price#21)), partial_SUM(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
+Functions [2]: [partial_sum(UnscaledValue(cs_ext_list_price#21)), partial_sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
 Aggregate Attributes [3]: [sum#29, sum#30, isEmpty#31]
 Results [4]: [cs_item_sk#19, sum#32, sum#33, isEmpty#34]
 
@@ -345,9 +345,9 @@ Arguments: hashpartitioning(cs_item_sk#19, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 (30) HashAggregate [codegen id : 10]
 Input [4]: [cs_item_sk#19, sum#32, sum#33, isEmpty#34]
 Keys [1]: [cs_item_sk#19]
-Functions [2]: [SUM(UnscaledValue(cs_ext_list_price#21)), SUM(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
-Aggregate Attributes [2]: [SUM(UnscaledValue(cs_ext_list_price#21))#35, SUM(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36]
-Results [3]: [cs_item_sk#19, MakeDecimal(SUM(UnscaledValue(cs_ext_list_price#21))#35,17,2) AS sale#37, SUM(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36 AS refund#38]
+Functions [2]: [sum(UnscaledValue(cs_ext_list_price#21)), sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))]
+Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_list_price#21))#35, sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36]
+Results [3]: [cs_item_sk#19, MakeDecimal(sum(UnscaledValue(cs_ext_list_price#21))#35,17,2) AS sale#37, sum(((cr_refunded_cash#25 + cr_reversed_charge#26) + cr_store_credit#27))#36 AS refund#38]
 
 (31) Filter [codegen id : 10]
 Input [3]: [cs_item_sk#19, sale#37, refund#38]
@@ -768,7 +768,7 @@ Input [19]: [ss_item_sk#1, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#
 (124) HashAggregate [codegen id : 41]
 Input [18]: [ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, d_year#40, d_year#51, d_year#53, s_store_name#42, s_zip#43, ca_street_number#64, ca_street_name#65, ca_city#66, ca_zip#67, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, i_item_sk#75, i_product_name#78]
 Keys [15]: [i_product_name#78, i_item_sk#75, s_store_name#42, s_zip#43, ca_street_number#64, ca_street_name#65, ca_city#66, ca_zip#67, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, d_year#40, d_year#51, d_year#53]
-Functions [4]: [partial_count(1), partial_SUM(UnscaledValue(ss_wholesale_cost#9)), partial_SUM(UnscaledValue(ss_list_price#10)), partial_SUM(UnscaledValue(ss_coupon_amt#11))]
+Functions [4]: [partial_count(1), partial_sum(UnscaledValue(ss_wholesale_cost#9)), partial_sum(UnscaledValue(ss_list_price#10)), partial_sum(UnscaledValue(ss_coupon_amt#11))]
 Aggregate Attributes [4]: [count#79, sum#80, sum#81, sum#82]
 Results [19]: [i_product_name#78, i_item_sk#75, s_store_name#42, s_zip#43, ca_street_number#64, ca_street_name#65, ca_city#66, ca_zip#67, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, d_year#40, d_year#51, d_year#53, count#83, sum#84, sum#85, sum#86]
 
@@ -779,9 +779,9 @@ Arguments: hashpartitioning(i_product_name#78, i_item_sk#75, s_store_name#42, s_
 (126) HashAggregate [codegen id : 42]
 Input [19]: [i_product_name#78, i_item_sk#75, s_store_name#42, s_zip#43, ca_street_number#64, ca_street_name#65, ca_city#66, ca_zip#67, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, d_year#40, d_year#51, d_year#53, count#83, sum#84, sum#85, sum#86]
 Keys [15]: [i_product_name#78, i_item_sk#75, s_store_name#42, s_zip#43, ca_street_number#64, ca_street_name#65, ca_city#66, ca_zip#67, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, d_year#40, d_year#51, d_year#53]
-Functions [4]: [count(1), SUM(UnscaledValue(ss_wholesale_cost#9)), SUM(UnscaledValue(ss_list_price#10)), SUM(UnscaledValue(ss_coupon_amt#11))]
-Aggregate Attributes [4]: [count(1)#87, SUM(UnscaledValue(ss_wholesale_cost#9))#88, SUM(UnscaledValue(ss_list_price#10))#89, SUM(UnscaledValue(ss_coupon_amt#11))#90]
-Results [17]: [i_product_name#78 AS product_name#91, i_item_sk#75 AS item_sk#92, s_store_name#42 AS store_name#93, s_zip#43 AS store_zip#94, ca_street_number#64 AS b_street_number#95, ca_street_name#65 AS b_streen_name#96, ca_city#66 AS b_city#97, ca_zip#67 AS b_zip#98, ca_street_number#69 AS c_street_number#99, ca_street_name#70 AS c_street_name#100, ca_city#71 AS c_city#101, ca_zip#72 AS c_zip#102, d_year#40 AS syear#103, count(1)#87 AS cnt#104, MakeDecimal(SUM(UnscaledValue(ss_wholesale_cost#9))#88,17,2) AS s1#105, MakeDecimal(SUM(UnscaledValue(ss_list_price#10))#89,17,2) AS s2#106, MakeDecimal(SUM(UnscaledValue(ss_coupon_amt#11))#90,17,2) AS s3#107]
+Functions [4]: [count(1), sum(UnscaledValue(ss_wholesale_cost#9)), sum(UnscaledValue(ss_list_price#10)), sum(UnscaledValue(ss_coupon_amt#11))]
+Aggregate Attributes [4]: [count(1)#87, sum(UnscaledValue(ss_wholesale_cost#9))#88, sum(UnscaledValue(ss_list_price#10))#89, sum(UnscaledValue(ss_coupon_amt#11))#90]
+Results [17]: [i_product_name#78 AS product_name#91, i_item_sk#75 AS item_sk#92, s_store_name#42 AS store_name#93, s_zip#43 AS store_zip#94, ca_street_number#64 AS b_street_number#95, ca_street_name#65 AS b_streen_name#96, ca_city#66 AS b_city#97, ca_zip#67 AS b_zip#98, ca_street_number#69 AS c_street_number#99, ca_street_name#70 AS c_street_name#100, ca_city#71 AS c_city#101, ca_zip#72 AS c_zip#102, d_year#40 AS syear#103, count(1)#87 AS cnt#104, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#9))#88,17,2) AS s1#105, MakeDecimal(sum(UnscaledValue(ss_list_price#10))#89,17,2) AS s2#106, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#11))#90,17,2) AS s3#107]
 
 (127) Exchange
 Input [17]: [product_name#91, item_sk#92, store_name#93, store_zip#94, b_street_number#95, b_streen_name#96, b_city#97, b_zip#98, c_street_number#99, c_street_name#100, c_city#101, c_zip#102, syear#103, cnt#104, s1#105, s2#106, s3#107]
@@ -1102,7 +1102,7 @@ Input [19]: [ss_item_sk#108, ss_wholesale_cost#116, ss_list_price#117, ss_coupon
 (201) HashAggregate [codegen id : 84]
 Input [18]: [ss_wholesale_cost#116, ss_list_price#117, ss_coupon_amt#118, d_year#125, d_year#136, d_year#138, s_store_name#127, s_zip#128, ca_street_number#149, ca_street_name#150, ca_city#151, ca_zip#152, ca_street_number#154, ca_street_name#155, ca_city#156, ca_zip#157, i_item_sk#160, i_product_name#161]
 Keys [15]: [i_product_name#161, i_item_sk#160, s_store_name#127, s_zip#128, ca_street_number#149, ca_street_name#150, ca_city#151, ca_zip#152, ca_street_number#154, ca_street_name#155, ca_city#156, ca_zip#157, d_year#125, d_year#136, d_year#138]
-Functions [4]: [partial_count(1), partial_SUM(UnscaledValue(ss_wholesale_cost#116)), partial_SUM(UnscaledValue(ss_list_price#117)), partial_SUM(UnscaledValue(ss_coupon_amt#118))]
+Functions [4]: [partial_count(1), partial_sum(UnscaledValue(ss_wholesale_cost#116)), partial_sum(UnscaledValue(ss_list_price#117)), partial_sum(UnscaledValue(ss_coupon_amt#118))]
 Aggregate Attributes [4]: [count#79, sum#162, sum#163, sum#164]
 Results [19]: [i_product_name#161, i_item_sk#160, s_store_name#127, s_zip#128, ca_street_number#149, ca_street_name#150, ca_city#151, ca_zip#152, ca_street_number#154, ca_street_name#155, ca_city#156, ca_zip#157, d_year#125, d_year#136, d_year#138, count#83, sum#165, sum#166, sum#167]
 
@@ -1113,9 +1113,9 @@ Arguments: hashpartitioning(i_product_name#161, i_item_sk#160, s_store_name#127,
 (203) HashAggregate [codegen id : 85]
 Input [19]: [i_product_name#161, i_item_sk#160, s_store_name#127, s_zip#128, ca_street_number#149, ca_street_name#150, ca_city#151, ca_zip#152, ca_street_number#154, ca_street_name#155, ca_city#156, ca_zip#157, d_year#125, d_year#136, d_year#138, count#83, sum#165, sum#166, sum#167]
 Keys [15]: [i_product_name#161, i_item_sk#160, s_store_name#127, s_zip#128, ca_street_number#149, ca_street_name#150, ca_city#151, ca_zip#152, ca_street_number#154, ca_street_name#155, ca_city#156, ca_zip#157, d_year#125, d_year#136, d_year#138]
-Functions [4]: [count(1), SUM(UnscaledValue(ss_wholesale_cost#116)), SUM(UnscaledValue(ss_list_price#117)), SUM(UnscaledValue(ss_coupon_amt#118))]
-Aggregate Attributes [4]: [count(1)#87, SUM(UnscaledValue(ss_wholesale_cost#116))#88, SUM(UnscaledValue(ss_list_price#117))#89, SUM(UnscaledValue(ss_coupon_amt#118))#90]
-Results [8]: [i_item_sk#160 AS item_sk#168, s_store_name#127 AS store_name#169, s_zip#128 AS store_zip#170, d_year#125 AS syear#171, count(1)#87 AS cnt#172, MakeDecimal(SUM(UnscaledValue(ss_wholesale_cost#116))#88,17,2) AS s1#173, MakeDecimal(SUM(UnscaledValue(ss_list_price#117))#89,17,2) AS s2#174, MakeDecimal(SUM(UnscaledValue(ss_coupon_amt#118))#90,17,2) AS s3#175]
+Functions [4]: [count(1), sum(UnscaledValue(ss_wholesale_cost#116)), sum(UnscaledValue(ss_list_price#117)), sum(UnscaledValue(ss_coupon_amt#118))]
+Aggregate Attributes [4]: [count(1)#87, sum(UnscaledValue(ss_wholesale_cost#116))#88, sum(UnscaledValue(ss_list_price#117))#89, sum(UnscaledValue(ss_coupon_amt#118))#90]
+Results [8]: [i_item_sk#160 AS item_sk#168, s_store_name#127 AS store_name#169, s_zip#128 AS store_zip#170, d_year#125 AS syear#171, count(1)#87 AS cnt#172, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#116))#88,17,2) AS s1#173, MakeDecimal(sum(UnscaledValue(ss_list_price#117))#89,17,2) AS s2#174, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#118))#90,17,2) AS s3#175]
 
 (204) Exchange
 Input [8]: [item_sk#168, store_name#169, store_zip#170, syear#171, cnt#172, s1#173, s2#174, s3#175]

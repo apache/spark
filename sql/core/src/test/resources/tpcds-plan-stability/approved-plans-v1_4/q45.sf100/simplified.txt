@@ -1,6 +1,6 @@
-TakeOrderedAndProject [ca_zip,ca_city,SUM(ws_sales_price)]
+TakeOrderedAndProject [ca_zip,ca_city,sum(ws_sales_price)]
   WholeStageCodegen (13)
-    HashAggregate [ca_zip,ca_city,sum] [SUM(UnscaledValue(ws_sales_price)),SUM(ws_sales_price),sum]
+    HashAggregate [ca_zip,ca_city,sum] [sum(UnscaledValue(ws_sales_price)),sum(ws_sales_price),sum]
       InputAdapter
         Exchange [ca_zip,ca_city] #1
           WholeStageCodegen (12)

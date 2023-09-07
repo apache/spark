@@ -230,16 +230,16 @@ Input [7]: [ss_customer_sk#7, ss_addr_sk#9, ss_ticket_number#11, ss_coupon_amt#1
 (41) HashAggregate [codegen id : 14]
 Input [6]: [ss_customer_sk#7, ss_addr_sk#9, ss_ticket_number#11, ss_coupon_amt#12, ss_net_profit#13, ca_city#23]
 Keys [4]: [ss_ticket_number#11, ss_customer_sk#7, ss_addr_sk#9, ca_city#23]
-Functions [2]: [partial_SUM(UnscaledValue(ss_coupon_amt#12)), partial_SUM(UnscaledValue(ss_net_profit#13))]
+Functions [2]: [partial_sum(UnscaledValue(ss_coupon_amt#12)), partial_sum(UnscaledValue(ss_net_profit#13))]
 Aggregate Attributes [2]: [sum#24, sum#25]
 Results [6]: [ss_ticket_number#11, ss_customer_sk#7, ss_addr_sk#9, ca_city#23, sum#26, sum#27]
 
 (42) HashAggregate [codegen id : 14]
 Input [6]: [ss_ticket_number#11, ss_customer_sk#7, ss_addr_sk#9, ca_city#23, sum#26, sum#27]
 Keys [4]: [ss_ticket_number#11, ss_customer_sk#7, ss_addr_sk#9, ca_city#23]
-Functions [2]: [SUM(UnscaledValue(ss_coupon_amt#12)), SUM(UnscaledValue(ss_net_profit#13))]
-Aggregate Attributes [2]: [SUM(UnscaledValue(ss_coupon_amt#12))#28, SUM(UnscaledValue(ss_net_profit#13))#29]
-Results [5]: [ss_ticket_number#11, ss_customer_sk#7, ca_city#23 AS bought_city#30, MakeDecimal(SUM(UnscaledValue(ss_coupon_amt#12))#28,17,2) AS amt#31, MakeDecimal(SUM(UnscaledValue(ss_net_profit#13))#29,17,2) AS profit#32]
+Functions [2]: [sum(UnscaledValue(ss_coupon_amt#12)), sum(UnscaledValue(ss_net_profit#13))]
+Aggregate Attributes [2]: [sum(UnscaledValue(ss_coupon_amt#12))#28, sum(UnscaledValue(ss_net_profit#13))#29]
+Results [5]: [ss_ticket_number#11, ss_customer_sk#7, ca_city#23 AS bought_city#30, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#12))#28,17,2) AS amt#31, MakeDecimal(sum(UnscaledValue(ss_net_profit#13))#29,17,2) AS profit#32]
 
 (43) Exchange
 Input [5]: [ss_ticket_number#11, ss_customer_sk#7, bought_city#30, amt#31, profit#32]
