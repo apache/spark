@@ -179,7 +179,7 @@ def is_remote() -> bool:
     return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
 
-def _try_remote_functions(f: FuncT) -> FuncT:
+def try_remote_functions(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
     @functools.wraps(f)

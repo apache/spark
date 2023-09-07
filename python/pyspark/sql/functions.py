@@ -60,7 +60,7 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import (
     to_str as _to_str,
     has_numpy as _has_numpy,
-    _try_remote_functions,
+    try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
 )
 
