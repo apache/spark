@@ -329,10 +329,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.processedRowsPerSecond === 4.0)
 
         assert(progress.durationMs.get("latestOffset") === 50)
-        assert(progress.durationMs.get("queryPlanning") === 100)
+        assert(progress.durationMs.get("queryPlanning") === 0)
         assert(progress.durationMs.get("walCommit") === 0)
         assert(progress.durationMs.get("commitOffsets") === 0)
-        assert(progress.durationMs.get("addBatch") === 350)
+        assert(progress.durationMs.get("addBatch") === 450)
         assert(progress.durationMs.get("triggerExecution") === 500)
 
         assert(progress.sources.length === 1)
