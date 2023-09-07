@@ -213,7 +213,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public byte[] getBytes(int rowId, int count) {
-    System.out.println("floopsy: offheap getBytes");
     assert(dictionary == null);
     byte[] array = new byte[count];
     Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
@@ -270,7 +269,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public short[] getShorts(int rowId, int count) {
-    System.out.println("floopsy: offheap getShorts");
     assert(dictionary == null);
     short[] array = new short[count];
     Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
@@ -332,7 +330,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int[] getInts(int rowId, int count) {
-    System.out.println("floopsy: offheap getInts");
     assert(dictionary == null);
     int[] array = new int[count];
     Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
@@ -406,7 +403,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public long[] getLongs(int rowId, int count) {
-    System.out.println("floopsy: offheap getLongs");
     assert(dictionary == null);
     long[] array = new long[count];
     Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);

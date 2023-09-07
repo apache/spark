@@ -211,7 +211,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public byte[] getBytes(int rowId, int count) {
-    System.out.println("floopsy: onheap getBytes");
     assert(dictionary == null);
     byte[] array = new byte[count];
     System.arraycopy(byteData, rowId, array, 0, count);
@@ -267,7 +266,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public short[] getShorts(int rowId, int count) {
-    System.out.println("floopsy: onheap getShorts");
     assert(dictionary == null);
     short[] array = new short[count];
     System.arraycopy(shortData, rowId, array, 0, count);
@@ -324,7 +322,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int[] getInts(int rowId, int count) {
-    System.out.println("floopsy: onheap getInts");
     assert(dictionary == null);
     int[] array = new int[count];
     System.arraycopy(intData, rowId, array, 0, count);
@@ -392,7 +389,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public long[] getLongs(int rowId, int count) {
-    System.out.println("floopsy: onheap getLongs");
     assert(dictionary == null);
     long[] array = new long[count];
     System.arraycopy(longData, rowId, array, 0, count);
