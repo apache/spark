@@ -134,8 +134,6 @@ object SQLExecution extends Logging {
             description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
-            // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
-            // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = planInfo,
             time = System.currentTimeMillis(),
             modifiedConfigs = redactedConfigs,

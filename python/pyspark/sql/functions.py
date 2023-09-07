@@ -1323,22 +1323,78 @@ def min(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column on which the minimum value is computed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        column for computed results.
+        A column that contains the minimum value computed.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.avg`
+    :meth:`pyspark.sql.functions.sum`
 
     Examples
     --------
+    Example 1: Compute the minimum value of a numeric column
+
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(10)
-    >>> df.select(min(df.id)).show()
+    >>> df.select(sf.min(df.id)).show()
     +-------+
     |min(id)|
     +-------+
     |      0|
     +-------+
+
+    Example 2: Compute the minimum value of a string column
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("Alice",), ("Bob",), ("Charlie",)], ["name"])
+    >>> df.select(sf.min("name")).show()
+    +---------+
+    |min(name)|
+    +---------+
+    |    Alice|
+    +---------+
+
+    Example 3: Compute the minimum value of a column with null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1,), (None,), (3,)], ["value"])
+    >>> df.select(sf.min("value")).show()
+    +----------+
+    |min(value)|
+    +----------+
+    |         1|
+    +----------+
+
+    Example 4: Compute the minimum value of a column in a grouped DataFrame
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("Alice", 1), ("Alice", 2), ("Bob", 3)], ["name", "value"])
+    >>> df.groupBy("name").agg(sf.min("value")).show()
+    +-----+----------+
+    | name|min(value)|
+    +-----+----------+
+    |Alice|         1|
+    |  Bob|         3|
+    +-----+----------+
+
+    Example 5: Compute the minimum value of a column in a DataFrame with multiple columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("Alice", 1, 100), ("Bob", 2, 200), ("Charlie", 3, 300)],
+    ...     ["name", "value1", "value2"])
+    >>> df.select(sf.min("value1"), sf.min("value2")).show()
+    +-----------+-----------+
+    |min(value1)|min(value2)|
+    +-----------+-----------+
+    |          1|        100|
+    +-----------+-----------+
     """
     return _invoke_function_over_columns("min", col)
 
@@ -2290,7 +2346,7 @@ def expm1(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def floor(col: "ColumnOrName") -> Column:
+def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Computes the floor of the given value.
 
@@ -2303,6 +2359,11 @@ def floor(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to find floor for.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionadded:: 4.0.0
+
 
     Returns
     -------
@@ -2311,15 +2372,27 @@ def floor(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(floor(lit(2.5))).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.floor(sf.lit(2.5))).show()
     +----------+
     |FLOOR(2.5)|
     +----------+
     |         2|
     +----------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.floor(sf.lit(2.1267), sf.lit(2))).show()
+    +----------------+
+    |floor(2.1267, 2)|
+    +----------------+
+    |            2.12|
+    +----------------+
     """
-    return _invoke_function_over_columns("floor", col)
+    if scale is None:
+        return _invoke_function_over_columns("floor", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 @try_remote_functions
@@ -5575,7 +5648,7 @@ def randn(seed: Optional[int] = None) -> Column:
 
 
 @try_remote_functions
-def round(col: "ColumnOrName", scale: int = 0) -> Column:
+def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -5589,8 +5662,11 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         input column to round.
-    scale : int optional default 0
-        scale value.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionchanged:: 4.0.0
+                Support Column type.
 
     Returns
     -------
@@ -5599,14 +5675,31 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(2.5,)], ['a']).select(round('a', 0).alias('r')).collect()
-    [Row(r=3.0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.round(sf.lit(2.5))).show()
+    +-------------+
+    |round(2.5, 0)|
+    +-------------+
+    |          3.0|
+    +-------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.round(sf.lit(2.1267), sf.lit(2))).show()
+    +----------------+
+    |round(2.1267, 2)|
+    +----------------+
+    |            2.13|
+    +----------------+
     """
-    return _invoke_function("round", _to_java_column(col), scale)
+    if scale is None:
+        return _invoke_function_over_columns("round", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("round", col, scale)
 
 
 @try_remote_functions
-def bround(col: "ColumnOrName", scale: int = 0) -> Column:
+def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
@@ -5620,8 +5713,11 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         input column to round.
-    scale : int optional default 0
-        scale value.
+    scale : :class:`~pyspark.sql.Column` or int
+        an optional parameter to control the rounding behavior.
+
+            .. versionchanged:: 4.0.0
+                Support Column type.
 
     Returns
     -------
@@ -5630,10 +5726,27 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(2.5,)], ['a']).select(bround('a', 0).alias('r')).collect()
-    [Row(r=2.0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.bround(sf.lit(2.5))).show()
+    +--------------+
+    |bround(2.5, 0)|
+    +--------------+
+    |           2.0|
+    +--------------+
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.bround(sf.lit(2.1267), sf.lit(2))).show()
+    +-----------------+
+    |bround(2.1267, 2)|
+    +-----------------+
+    |             2.13|
+    +-----------------+
     """
-    return _invoke_function("bround", _to_java_column(col), scale)
+    if scale is None:
+        return _invoke_function_over_columns("bround", col)
+    else:
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 @try_remote_functions
@@ -10846,6 +10959,12 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     values but 'MI' prints a space.
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
+    If `col` is a datetime, `format` shall be a valid datetime pattern, see
+    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    If `col` is a binary, it is converted to a string in one of the formats:
+    'base64': a base 64 string.
+    'hex': a string in the hexadecimal format.
+    'utf-8': the input binary is decoded to UTF-8 string.
 
     .. versionadded:: 3.5.0
 
@@ -10886,6 +11005,12 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     values but 'MI' prints a space.
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
+    If `col` is a datetime, `format` shall be a valid datetime pattern, see
+    <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Patterns</a>.
+    If `col` is a binary, it is converted to a string in one of the formats:
+    'base64': a base 64 string.
+    'hex': a string in the hexadecimal format.
+    'utf-8': the input binary is decoded to UTF-8 string.
 
     .. versionadded:: 3.5.0
 
