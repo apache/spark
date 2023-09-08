@@ -3943,7 +3943,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols : list, str or :class:`Column`
             The columns to roll-up by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
 
         Returns
         -------
@@ -3984,7 +3984,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|   5|    1|
         +-----+----+-----+
 
-        >>> df.rollup(2, 1).count().orderBy(1, 2).show()
+        Example 3: Also Rollup-by 'name' and 'age', but using the column ordinal.
+
+        >>> df.rollup(1, 2).count().orderBy(1, 2).show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
@@ -4026,7 +4028,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols : list, str or :class:`Column`
             The columns to cube by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
 
         Returns
         -------
@@ -4070,7 +4072,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|   5|    1|
         +-----+----+-----+
 
-        >>> df.cube(2, 1).count().orderBy(1, 2).show()
+        Example 3: Also creating a cube on 'name' and 'age', but using the column ordinal.
+
+        >>> df.cube(1, 2).count().orderBy(1, 2).show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
