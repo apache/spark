@@ -699,7 +699,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/b.jar")),
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/c.jar"))).toArray)
     // Expect only a.jar and b.jar to be preloaded
-    assert(client.getPreloadedStatCache(mockFsLookup).size === 2)
+    assert(client.getPreloadedStatCache(sparkConf.get(JARS_TO_DISTRIBUTE), mockFsLookup).size === 2)
   }
 
   private val matching = Seq(

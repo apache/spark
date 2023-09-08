@@ -486,14 +486,14 @@ private[spark] class Client(
    * Preload the statCache with file status. List all files from that directory and add them to the
    * statCache.
    *
+   * @param files: the list of files to upload
    * @param fsLookup: Function for looking up an FS based on a URI; override for testing
    * @return A preloaded statCache with fileStatus
    */
-  private[yarn] def getPreloadedStatCache(
+  private[yarn] def getPreloadedStatCache(files: Seq[String],
       fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
     val statCache = HashMap[URI, FileStatus]()
-    val jars = sparkConf.get(JARS_TO_DISTRIBUTE)
-    directoriesToBePreloaded(jars).foreach { case (dir: URI, filesInDir: HashSet[String]) =>
+    directoriesToBePreloaded(files).foreach { case (dir: URI, filesInDir: HashSet[String]) =>
       fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
         filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
           val uri = fileStatus.getPath.toUri
@@ -532,7 +532,11 @@ private[spark] class Client(
 
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
-      getPreloadedStatCache()
+      // Consider only following configurations, as they involve the distribution of multiple files
+      val files = sparkConf.get(SPARK_JARS).orNull ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
+        sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
+        sparkConf.get(PY_FILES) ++ pySparkArchives
+      getPreloadedStatCache(files)
     } else {
       HashMap[URI, FileStatus]()
     }
