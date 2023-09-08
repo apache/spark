@@ -4626,7 +4626,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
         A new Column object representing the approximate unique count.
 
     See Also
-    ----------
+    --------
     :meth:`pyspark.sql.functions.count_distinct`
 
     Examples
