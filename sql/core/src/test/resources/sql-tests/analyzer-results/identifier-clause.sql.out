@@ -263,10 +263,10 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CACHE TABLE IDENTIFIER('ta' || 'b')
 -- !query analysis
-CacheTable [tab], false, true
-   +- SubqueryAlias spark_catalog.identifier_clauses.tab
-      +- Relation spark_catalog.identifier_clauses.tab[c1#x] csv
-
+CacheTable false, true
+   :- SubqueryAlias spark_catalog.identifier_clauses.tab
+   :  +- Relation spark_catalog.identifier_clauses.tab[c1#x] csv
+   +- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clauses.tab
 
 -- !query
 UNCACHE TABLE IDENTIFIER('ta' || 'b')
