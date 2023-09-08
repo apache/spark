@@ -12575,12 +12575,12 @@ def explode(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
+        Target column to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        one row per array item or map key value.
+        One row per array item or map key value.
 
     See Also
     --------
@@ -12588,18 +12588,125 @@ def explode(col: "ColumnOrName") -> Column:
     :meth:`pyspark.functions.explode_outer`
     :meth:`pyspark.functions.posexplode_outer`
 
+    Notes
+    -----
+    Only one explode is allowed per SELECT clause.
+
     Examples
     --------
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> df.select(explode(df.intlist).alias("anInt")).collect()
-    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+    Example 1: Exploding an array column
 
-    >>> df.select(explode(df.mapfield).alias("key", "value")).show()
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(id=1, values=[1, 2, 3])])
+    >>> df.select(sf.explode(df.values).alias("value")).show()
+    +-----+
+    |value|
+    +-----+
+    |    1|
+    |    2|
+    |    3|
+    +-----+
+
+    Example 2: Exploding a map column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(id=1, values={"a": "b", "c": "d"})])
+    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
     +---+-----+
     |key|value|
     +---+-----+
     |  a|    b|
+    |  c|    d|
+    +---+-----+
+
+    Example 3: Exploding an array column with multiple rows
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(id=1, values=[1, 2]), Row(id=2, values=[3, 4])])
+    >>> df.select("id", sf.explode(df.values).alias("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  1|    1|
+    |  1|    2|
+    |  2|    3|
+    |  2|    4|
+    +---+-----+
+
+    Example 4: Exploding a map column with multiple rows
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(id=1, values={"a": "b", "c": "d"}),
+    ...     Row(id=2, values={"e": "f", "g": "h"})
+    ... ])
+    >>> df.select("id", sf.explode(df.values).alias("key", "value")).show()
+    +---+---+-----+
+    | id|key|value|
+    +---+---+-----+
+    |  1|  a|    b|
+    |  1|  c|    d|
+    |  2|  e|    f|
+    |  2|  g|    h|
+    +---+---+-----+
+
+    Example 5: Exploding multiple array columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(a=1, list1=[1, 2], list2=[3, 4])])
+    >>> df.select(sf.explode(df.list1).alias("list1"), "list2") \
+    ...     .select("list1", sf.explode(df.list2).alias("list2")).show()
+    +-----+-----+
+    |list1|list2|
+    +-----+-----+
+    |    1|    3|
+    |    1|    4|
+    |    2|    3|
+    |    2|    4|
+    +-----+-----+
+
+    Example 6: Exploding an array of struct column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [(1, [(1, 2), (3, 4)])],
+    ...     "id: int, structlist: array<struct<a:int,b:int>>")
+    >>> df = df.select(sf.explode(df.structlist).alias("struct"))
+    >>> df.select("struct.*").show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 7: Exploding an empty array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([(1, [])], "id: int, values: array<int>")
+    >>> df.select(sf.explode(df.values).alias("value")).show()
+    +-----+
+    |value|
+    +-----+
+    +-----+
+
+    Example 8: Exploding an empty map column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([(1, {})], "id: int, values: map<int,int>")
+    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
     +---+-----+
     """
     return _invoke_function_over_columns("explode", col)
