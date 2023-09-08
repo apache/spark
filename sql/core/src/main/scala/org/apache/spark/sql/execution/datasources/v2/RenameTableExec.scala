@@ -56,7 +56,7 @@ case class RenameTableExec(
       cacheTable(
         session,
         newRelation,
-        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+        Some(s"${catalog.name()}.${qualifiedNewIdent.quoted}"), oldStorageLevel)
     }
     Seq.empty
   }
