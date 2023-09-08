@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.IntegerType
 
@@ -117,7 +117,7 @@ class CodeBlockSuite extends SparkFunSuite {
 
   test("Throws exception when interpolating unexpected object in code block") {
     val obj = Tuple2(1, 1)
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[SparkException] {
       code"$obj"
     }
     assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
