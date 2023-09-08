@@ -291,8 +291,8 @@ class FrameReshapingMixin:
         psdf_multi_level_cols2 = ps.from_pandas(pdf_multi_level_cols2)
 
         self.assert_eq(
-            psdf_multi_level_cols2.stack().sort_index()[["weight", "height"]],
-            pdf_multi_level_cols2.stack().sort_index()[["weight", "height"]],
+            psdf_multi_level_cols2.stack().sort_index(),
+            pdf_multi_level_cols2.stack().sort_index(),
         )
 
         pdf = pd.DataFrame(
