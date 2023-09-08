@@ -65,6 +65,8 @@ case class CallMethodViaReflection(children: Seq[Expression])
     } else if (!children.take(2).forall(e => e.dataType == StringType && e.foldable)) {
       // The first two arguments must be string type.
       TypeCheckFailure("first two arguments should be string literals")
+    } else if (children.take(2).exists(_.eval() == null)) {
+      TypeCheckFailure("first two arguments must be non-NULL")
     } else if (!classExists) {
       TypeCheckFailure(s"class $className not found")
     } else if (children.slice(2, children.length)
