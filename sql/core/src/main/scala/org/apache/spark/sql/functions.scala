@@ -6267,8 +6267,8 @@ object functions {
    * }}}
    *
    * @param column the input array column
-   * @param f (col, index) => transformed_col, the lambda function to filter the input column
-   *           given the index. Indices start at 0.
+   * @param f (col, index) => transformed_col, the lambda function to transform the input
+   *           column given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
