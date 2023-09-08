@@ -1321,8 +1321,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
                 s"FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2 " +
                 "ON t1.id = t2.id ORDER BY t1.id, t1data, t2data")
 
-            // Currently SPJ for case where join key not same as partition key
-            // only supported when push-part-values enabled
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
             if (allowJoinKeysSubsetOfPartitionKeys) {
               assert(shuffles.isEmpty, "SPJ should be triggered")
@@ -1528,8 +1526,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
             s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
             "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
 
-          // Currently SPJ for case where join key not same as partition key
-          // only supported when push-part-values enabled
           val shuffles = collectShuffles(df.queryExecution.executedPlan)
           assert(shuffles.size == 1, "SPJ should be triggered")
           checkAnswer(df, Seq(Row(1, "aa", 30.0, 42.0),

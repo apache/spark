@@ -356,8 +356,8 @@ case class KeyGroupedPartitioning(
             // We'll need to find leaf attributes from the partition expressions first.
             val attributes = expressions.flatMap(_.collectLeaves())
 
-            if (SQLConf.get.getConf(
-              SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)) {
+            if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+              // check that all join keys (required clustering keys) contained in partitioning
               requiredClustering.forall(x => attributes.exists(_.semanticEquals(x))) &&
                   expressions.forall(_.collectLeaves().size == 1)
             } else {
@@ -372,19 +372,18 @@ case class KeyGroupedPartitioning(
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    var result = KeyGroupedShuffleSpec(this, distribution)
+    val result = KeyGroupedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
       // If allowing join keys to be subset of clustering keys, we should create a new
       // `KeyGroupedPartitioning` here that is grouped on the join keys instead, and use that as
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedPartitioning = KeyGroupedPartitioning(expressions, joinKeyPositions,
-        partitionValues, originalPartitionValues)
-      result = result.copy(partitioning = projectedPartitioning, joinKeyPositions =
-        Some(joinKeyPositions))
+          partitionValues, originalPartitionValues)
+      result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
+    } else {
+      result
     }
-
-    result
   }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
@@ -709,6 +708,13 @@ case class HashShuffleSpec(
   override def numPartitions: Int = partitioning.numPartitions
 }
 
+/**
+ * [[ShuffleSpec]] created by [[KeyGroupedPartitioning]].
+ * @param partitioning key grouped partitioning
+ * @param distribution distribution
+ * @param joinKeyPosition position of join keys among cluster keys.
+ *                        This is set if joining on a subset of cluster keys is allowed.
+ */
 case class KeyGroupedShuffleSpec(
     partitioning: KeyGroupedPartitioning,
     distribution: ClusteredDistribution,

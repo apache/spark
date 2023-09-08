@@ -1535,8 +1535,8 @@ object SQLConf {
       .doc("Whether to allow storage-partition join in the case where join keys are" +
         "a subset of the partition keys of the source tables.  At planning time, " +
         "Spark will group the partitions by only those keys that are in the join keys." +
-        "This is currently enabled only if spark.sql.sources.v2.bucketing.pushPartValues.enabled " +
-        "is also enabled."
+        "This is currently enabled only if spark.sql.requireAllClusterKeysForDistribution " +
+        "is false."
       )
       .version("4.0.0")
       .booleanConf
