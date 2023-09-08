@@ -710,6 +710,7 @@ case class HashShuffleSpec(
 
 /**
  * [[ShuffleSpec]] created by [[KeyGroupedPartitioning]].
+ *
  * @param partitioning key grouped partitioning
  * @param distribution distribution
  * @param joinKeyPosition position of join keys among cluster keys.
