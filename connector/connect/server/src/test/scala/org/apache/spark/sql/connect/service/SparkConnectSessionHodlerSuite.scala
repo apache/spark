@@ -106,8 +106,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
             "f.write(CloudPickleSerializer().dumps((" +
             "lambda df, batchId: batchId)))"),
         None,
-        "PYTHONPATH" ->
-          s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}").!!
+        "PYTHONPATH" -> pysparkPythonPath).!!
       binaryFunc = Files.readAllBytes(path.toPath)
     }
     assert(binaryFunc != null)
@@ -147,8 +146,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
               s"exec(open('$codePath', 'r').read());" +
               "f.write(CloudPickleSerializer().dumps(listener))"),
           None,
-          "PYTHONPATH" ->
-            s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}").!!
+          "PYTHONPATH" -> pysparkPythonPath).!!
         binaryFunc = Files.readAllBytes(path.toPath)
       }
     }
@@ -159,9 +157,12 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   private def dummyPythonFunction(sessionHolder: SessionHolder)(
       fcn: String => Array[Byte]): SimplePythonFunction = {
     // Needed because pythonPath in PythonWorkerFactory doesn't include test spark home
-    val sparkPythonPath = PythonUtils.mergePythonPaths(
-      Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
-      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator))
+//    val sparkPythonPath = PythonUtils.mergePythonPaths(
+//      Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
+//      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator))
+
+    val sparkPythonPath =
+      s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}"
 
     SimplePythonFunction(
       command = fcn(sparkPythonPath),
