@@ -42,6 +42,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
       "yarn",
       "exec-1",
       "localhost",
+      "localhost",
       1,
       1,
       "application_123_1",
