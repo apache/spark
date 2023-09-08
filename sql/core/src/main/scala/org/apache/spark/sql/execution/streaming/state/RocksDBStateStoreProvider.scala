@@ -90,11 +90,16 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def commit(): Long = synchronized {
-      verify(state == UPDATING, "Cannot commit after already committed or aborted")
-      val newVersion = rocksDB.commit()
-      state = COMMITTED
-      logInfo(s"Committed $newVersion for $id")
-      newVersion
+      try {
+        verify(state == UPDATING, "Cannot commit after already committed or aborted")
+        val newVersion = rocksDB.commit()
+        state = COMMITTED
+        logInfo(s"Committed $newVersion for $id")
+        newVersion
+      } catch {
+        case e: Throwable =>
+          throw QueryExecutionErrors.failedToCommitStateFileError("RocksDB", e)
+      }
     }
 
     override def abort(): Unit = {
@@ -215,7 +220,12 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.doMaintenance()
+    try {
+      rocksDB.doMaintenance()
+    } catch {
+      case e: Throwable =>
+        throw QueryExecutionErrors.failedToDoMaintenanceError(this.getClass.getSimpleName, e)
+    }
   }
 
   override def close(): Unit = {
