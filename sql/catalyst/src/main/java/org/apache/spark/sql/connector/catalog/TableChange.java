@@ -696,9 +696,8 @@ public interface TableChange {
     /**
      * Returns the column default value SQL string (Spark SQL dialect). The default value literal
      * is not provided as updating column default values does not need to back-fill existing data.
-     * Null means dropping the column default value.
+     * Empty string means dropping the column default value.
      */
-    @Nullable
     public String newDefaultValue() { return newDefaultValue; }
 
     @Override
