@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.execution
 
 import java.util.UUID
 
+import io.grpc.StatusRuntimeException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
@@ -64,7 +65,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       // interrupt all RPCs on server
       SparkConnectService.executionManager.interruptAllRPCs()
       assertNoActiveRpcs()
-      val e = intercept[SparkException] {
+      val e = intercept[StatusRuntimeException] {
         while (iter.hasNext) iter.next()
       }
       assert(e.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
@@ -74,7 +75,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("new RPC interrupts previous RPC with INVALID_CURSOR.DISCONNECTED error") {
     // Raw stub does not have retries, auto reattach etc.
     withRawBlockingStub { stub =>
-      val operationId = UUID.randomUUID()
+      val operationId = UUID.randomUUID().toString
       val iter = stub.executePlan(
         buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
       assert(iter.hasNext)
@@ -86,7 +87,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       iter2.next() // open the iterator
 
       // should result in INVALID_CURSOR.DISCONNECTED error on the original iterator
-      val e = intercept[SparkException] {
+      val e = intercept[StatusRuntimeException] {
         while (iter.hasNext) iter.next()
       }
       assert(e.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
@@ -97,7 +98,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       iter3.next() // open the iterator
 
       // should result in INVALID_CURSOR.DISCONNECTED error on the previous reattach iterator
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[StatusRuntimeException] {
         while (iter2.hasNext) iter2.next()
       }
       assert(e2.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
@@ -128,30 +129,28 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     withClient { client =>
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val reattachableIter = getReattachableIterator(iter)
+      val initialInnerIter = reattachableIter.iter.get
       val operationId = getReattachableIterator(iter).operationId
 
       // open the iterator
       assert(iter.hasNext)
-      iter.next()
+      val response = iter.next()
 
       // Send another Reattach request, it should preempt this request with an
       // INVALID_CURSOR.DISCONNECTED error.
-      withRawBlockingStub() { stub =>
-        val reattachReq = buildReattachExecuteRequest(operationId, None)
-        val reattachIter = stub.reattachExecute(reattachReq)
+      withRawBlockingStub { stub =>
+        val reattachIter = stub.reattachExecute(
+          buildReattachExecuteRequest(operationId, Some(response.getResponseId)))
         assert(reattachIter.hasNext)
         reattachIter.next()
 
         // Nevertheless, the original iterator will handle the INVALID_CURSOR.DISCONNECTED error
         assert(iter.hasNext)
-        while (iter.hasNext) iter.next()
-
-        // ... and in turn disconnect the reattachIter
-        val e = intercept[SparkException] {
-          while (reattachIter.hasNext) reattachIter.next()
-        }
-        assert(e.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
+        iter.next()
+        // iterator changed because it had to reconnect
+        assert(reattachableIter.iter.get ne initialInnerIter)
       }
+    }
   }
 
   test("abandoned query gets INVALID_HANDLE.OPERATION_ABANDONED error") {
