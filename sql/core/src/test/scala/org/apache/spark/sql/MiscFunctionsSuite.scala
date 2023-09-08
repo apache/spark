@@ -34,6 +34,14 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
+    val e1 = intercept[AnalysisException] {
+      df.selectExpr("reflect(cast(null as string), 'fromString', a)")
+    }
+    assert(e1.getMessage.contains("first two arguments must be non-NULL"))
+    val e2 = intercept[AnalysisException] {
+      df.selectExpr("reflect('java.util.UUID', cast(null as string), a)")
+    }
+    assert(e2.getMessage.contains("first two arguments must be non-NULL"))
   }
 
   test("version") {
