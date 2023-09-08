@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
@@ -28,7 +27,7 @@ import scala.sys.process.Process
 import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.api.python.{PythonUtils, SimplePythonFunction}
+import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, StreamingForeachBatchHelper}
