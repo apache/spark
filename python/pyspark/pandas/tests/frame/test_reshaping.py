@@ -291,8 +291,7 @@ class FrameReshapingMixin:
         psdf_multi_level_cols2 = ps.from_pandas(pdf_multi_level_cols2)
 
         self.assert_eq(
-            psdf_multi_level_cols2.stack().sort_index(),
-            pdf_multi_level_cols2.stack().sort_index(),
+            psdf_multi_level_cols2.stack().sort_index(), pdf_multi_level_cols2.stack().sort_index()
         )
 
         pdf = pd.DataFrame(
@@ -305,7 +304,7 @@ class FrameReshapingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.stack().sort_index()[["x", "y"]], pdf.stack().sort_index()[["x", "y"]])
+        self.assert_eq(psdf.stack().sort_index(), pdf.stack().sort_index())
         self.assert_eq(psdf[[]].stack().sort_index(), pdf[[]].stack().sort_index(), almost=True)
 
     def test_unstack(self):

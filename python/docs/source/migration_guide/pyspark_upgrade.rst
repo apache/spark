@@ -41,6 +41,8 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``squeeze`` parameter from ``ps.read_csv`` and ``ps.read_excel`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``null_counts`` parameter from ``DataFrame.info`` has been removed from pandas API on Spark, use ``show_counts`` instead.
 * In Spark 4.0, the result of ``MultiIndex.append`` does not keep the index names from pandas API on Spark.
+* In Spark 4.0, ``DataFrameGroupBy.agg`` with lists respecting ``as_index=False`` from pandas API on Spark.
+* In Spark 4.0, ``DataFrame.stack`` guarantees the order of existing columns instead of sorting them lexicographically from pandas API on Spark.
 
 
 Upgrading from PySpark 3.3 to 3.4
