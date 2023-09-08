@@ -1136,14 +1136,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, allowTemp, hint) =>
+      case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case t: ResolvedTable =>
             val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectViewNotTableError(
-              nameParts, cmd, hint, u)
+              nameParts, cmd, suggestAlternative, u)
           case other => other
         }.getOrElse(u)
 
