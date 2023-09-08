@@ -739,8 +739,8 @@ private[yarn] class YarnAllocator(
       val executorId = executorIdCounter.toString
       val yarnResourceForRpId = rpIdToYarnResource.get(rpId)
       assert(container.getResource.getMemorySize >= yarnResourceForRpId.getMemorySize)
-      logInfo(s"Launching container $containerId on host $executorHostname ($executorBindAddress) " +
-        s"for executor with ID $executorId for ResourceProfile Id $rpId")
+      logInfo(s"Launching container $containerId on host $executorHostname " +
+        s"($executorBindAddress) for executor with ID $executorId for ResourceProfile Id $rpId")
 
       val rp = rpIdToResourceProfile(rpId)
       val defaultResources = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
