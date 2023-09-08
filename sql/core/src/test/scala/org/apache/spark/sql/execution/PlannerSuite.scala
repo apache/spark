@@ -109,7 +109,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         val planned = sql(
           """
             |SELECT l.a, l.b
-            |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
+            |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 2) r ON (l.a = r.key)
           """.stripMargin).queryExecution.sparkPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoinExec => join }

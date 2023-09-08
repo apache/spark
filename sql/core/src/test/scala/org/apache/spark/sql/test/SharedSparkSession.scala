@@ -43,6 +43,9 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
   protected override def beforeAll(): Unit = {
     doThreadPreAudit()
+    System.setProperty("javax.xml.parsers.SAXParserFactory",
+      "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
+
     super.beforeAll()
   }
 

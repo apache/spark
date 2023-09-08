@@ -85,6 +85,8 @@ abstract class SparkFunSuite
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }
+    System.setProperty("javax.xml.parsers.SAXParserFactory",
+      "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
     super.beforeAll()
   }
 
