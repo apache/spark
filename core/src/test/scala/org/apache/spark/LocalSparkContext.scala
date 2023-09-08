@@ -32,6 +32,8 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   override def beforeAll(): Unit = {
     super.beforeAll()
     InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE)
+    System.setProperty("javax.xml.parsers.SAXParserFactory",
+      "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
   }
 
   override def afterEach(): Unit = {

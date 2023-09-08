@@ -671,6 +671,8 @@ class SparkSubmitSuite
 
   // SPARK-7287
   test("includes jars passed in through --packages") {
+    System.setProperty("javax.xml.parsers.SAXParserFactory",
+      "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
@@ -682,6 +684,8 @@ class SparkSubmitSuite
         "--packages", Seq(main, dep).mkString(","),
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.driver.extraJavaOptions=-Djavax.xml.parsers.SAXParserFactory=" +
+          "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl",
         "--conf", "spark.master.rest.enabled=false",
         "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
@@ -691,6 +695,8 @@ class SparkSubmitSuite
   }
 
   test("includes jars passed through spark.jars.packages and spark.jars.repositories") {
+    System.setProperty("javax.xml.parsers.SAXParserFactory",
+      "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl")
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
@@ -702,6 +708,8 @@ class SparkSubmitSuite
         "--conf", "spark.jars.packages=my.great.lib:mylib:0.1,my.great.dep:mylib:0.1",
         "--conf", s"spark.jars.repositories=$repo",
         "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.driver.extraJavaOptions=-Djavax.xml.parsers.SAXParserFactory=" +
+          "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl",
         "--conf", "spark.master.rest.enabled=false",
         "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
