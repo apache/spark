@@ -1279,11 +1279,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
+    cannotParseJSONFieldError(parser.getCurrentName, parser.getText, jsonType, dataType)
+  }
+
+  def cannotParseJSONFieldError(
+      fieldName: String,
+      fieldValue: String,
+      jsonType: JsonToken,
+      dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> toSQLValue(parser.getCurrentName, StringType),
-        "fieldValue" -> parser.getText,
+        "fieldName" -> toSQLValue(fieldName, StringType),
+        "fieldValue" -> fieldValue,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }
@@ -1635,7 +1643,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2189",
+      errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION",
       messageParameters = Map.empty)
   }
 

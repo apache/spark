@@ -50,7 +50,7 @@ from pyspark.sql.types import (
     BinaryType,
     YearMonthIntervalType,
 )
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
@@ -1466,6 +1466,98 @@ class ScalarPandasUDFTestsMixin:
                     )
         finally:
             shutil.rmtree(path)
+
+    def test_named_arguments(self):
+        @pandas_udf("int")
+        def test_udf(a, b):
+            return a + 10 * b
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        for i, df in enumerate(
+            [
+                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(0), Row(101)])
+
+    def test_named_arguments_negative(self):
+        @pandas_udf("int")
+        def test_udf(a, b):
+            return a + b
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        ):
+            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+
+        with self.assertRaisesRegex(
+            PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
+        ):
+            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+
+    def test_kwargs(self):
+        @pandas_udf("int")
+        def test_udf(a, **kwargs):
+            return a + 10 * kwargs["b"]
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        for i, df in enumerate(
+            [
+                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(0), Row(101)])
+
+    def test_named_arguments_and_defaults(self):
+        @pandas_udf("int")
+        def test_udf(a, b=0):
+            return a + 10 * b
+
+        self.spark.udf.register("test_udf", test_udf)
+
+        # without "b"
+        for i, df in enumerate(
+            [
+                self.spark.range(2).select(test_udf(col("id"))),
+                self.spark.range(2).select(test_udf(a=col("id"))),
+                self.spark.sql("SELECT test_udf(id) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
+            ]
+        ):
+            with self.subTest(with_b=False, query_no=i):
+                assertDataFrameEqual(df, [Row(0), Row(1)])
+
+        # with "b"
+        for i, df in enumerate(
+            [
+                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+            ]
+        ):
+            with self.subTest(with_b=True, query_no=i):
+                assertDataFrameEqual(df, [Row(0), Row(101)])
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

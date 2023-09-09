@@ -487,6 +487,26 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val VECTORIZED_HUGE_VECTOR_RESERVE_RATIO =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio")
+      .doc("When spark.sql.inMemoryColumnarStorage.hugeVectorThreshold <= 0 or the required " +
+        "memory is smaller than spark.sql.inMemoryColumnarStorage.hugeVectorThreshold, spark " +
+        "reserves required memory * 2 memory; otherwise, spark reserves " +
+        "required memory * this ratio memory, and will release this column vector memory before " +
+        "reading the next batch rows.")
+      .version("4.0.0")
+      .doubleConf
+      .createWithDefault(1.2)
+
+  val VECTORIZED_HUGE_VECTOR_THRESHOLD =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorThreshold")
+      .doc("When the required memory is larger than this, spark reserves required memory * " +
+        s"${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and release this column " +
+        s"vector memory before reading the next batch rows. -1 means disabling the optimization.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(-1)
+
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
@@ -556,7 +576,7 @@ object SQLConf {
       "will introduce shuffle to improve parallelism.")
     .version("3.4.0")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(Long.MaxValue)
+    .createWithDefaultString("128m")
 
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
@@ -1500,6 +1520,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+ val V2_BUCKETING_SHUFFLE_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
+      .doc("During a storage-partitioned join, whether to allow to shuffle only one side." +
+        "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
+        "only shuffle the other side. This optimization will reduce the amount of data that " +
+        s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -1528,7 +1558,7 @@ object SQLConf {
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -4363,10 +4393,32 @@ object SQLConf {
       .internal()
       .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
         "predicates. This configuration is only effective when " +
-        "'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+        s"'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
+    .internal()
+    .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
+      "incorrectly mapped the requested percentile to the sorted range of values in some cases " +
+      "and so returned incorrect results. Also, the new implementation is faster as it doesn't " +
+      "contain the interpolation logic that the old percentile_cont based one did.")
+    .version("3.3.4")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT =
+    buildConf("spark.sql.legacy.negativeIndexInArrayInsert")
+      .internal()
+      .doc("When set to true, restores the legacy behavior of `array_insert` for " +
+        "negative indexes - 0-based: the function inserts new element before the last one " +
+        "for the index -1. For example, `array_insert(['a', 'b'], -1, 'x')` returns " +
+        "`['a', 'x', 'b']`. When set to false, the -1 index points out to the last element, " +
+        "and the given example produces `['a', 'b', 'x']`.")
+      .version("3.4.2")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4630,6 +4682,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
+  def vectorizedHugeVectorThreshold: Int = getConf(VECTORIZED_HUGE_VECTOR_THRESHOLD).toInt
+
+  def vectorizedHugeVectorReserveRatio: Double = getConf(VECTORIZED_HUGE_VECTOR_RESERVE_RATIO)
+
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
@@ -4876,6 +4932,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPartiallyClusteredDistributionEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED)
+
+  def v2BucketingShuffleEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
@@ -5220,6 +5279,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def legacyNegativeIndexInArrayInsert: Boolean = {
+    getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
+  }
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -139,6 +139,9 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
     stream.asInstanceOf[ContinuousStream]
   }
+
+  override def columnarSupportMode(): Scan.ColumnarSupportMode =
+    Scan.ColumnarSupportMode.UNSUPPORTED
 }
 
 /**

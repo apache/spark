@@ -29,19 +29,71 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test("throw SparkArithmeticException") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      intercept[SparkArithmeticException] {
+        spark.sql("select 1/0").collect()
+      }
+    }
+  }
+
+  test("throw NoSuchDatabaseException") {
+    intercept[NoSuchDatabaseException] {
+      spark.sql("use database123")
+    }
+  }
+
+  test("throw NoSuchTableException") {
+    intercept[NoSuchTableException] {
+      spark.catalog.getTable("test_table")
+    }
+  }
+
+  test("throw NamespaceAlreadyExistsException") {
+    try {
+      spark.sql("create database test_db")
+      intercept[NamespaceAlreadyExistsException] {
+        spark.sql("create database test_db")
+      }
+    } finally {
+      spark.sql("drop database test_db")
+    }
+  }
+
+  test("throw TempTableAlreadyExistsException") {
+    try {
+      spark.sql("create temporary view test_view as select 1")
+      intercept[TempTableAlreadyExistsException] {
+        spark.sql("create temporary view test_view as select 1")
+      }
+    } finally {
+      spark.sql("drop view test_view")
+    }
+  }
+
+  test("throw TableAlreadyExistsException") {
+    withTable("testcat.test_table") {
+      spark.sql(s"create table testcat.test_table (id int)")
+      intercept[TableAlreadyExistsException] {
+        spark.sql(s"create table testcat.test_table (id int)")
+      }
+    }
+  }
 
   test("throw ParseException") {
     intercept[ParseException] {
@@ -55,6 +107,18 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       df = df.union(spark.range(a, a + 1))
     }
     assert(df.collect().length == 501)
+  }
+
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
   }
 
   test("many tables") {

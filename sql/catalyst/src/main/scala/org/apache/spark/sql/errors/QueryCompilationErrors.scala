@@ -157,6 +157,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId("format_string")))
   }
 
+  def binaryFormatError(funcName: String, invalidFormat: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.BINARY_FORMAT",
+      messageParameters = Map(
+        "parameter" -> toSQLId("format"),
+        "functionName" -> toSQLId(funcName),
+        "invalidFormat" -> toSQLValue(invalidFormat, StringType)))
+  }
+
+  def nullArgumentError(funcName: String, parameter: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.NULL",
+      messageParameters = Map(
+        "parameter" -> toSQLId(parameter),
+        "functionName" -> toSQLId(funcName)))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -1198,14 +1215,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "failFastMode" -> FailFastMode.name))
   }
 
-  def requireLiteralParameter(
-      funcName: String, argName: String, requiredType: String): Throwable = {
+  def nonFoldableArgumentError(
+      funcName: String,
+      paramName: String,
+      paramType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1100",
+      errorClass = "NON_FOLDABLE_ARGUMENT",
       messageParameters = Map(
-        "argName" -> argName,
-        "funcName" -> funcName,
-        "requiredType" -> requiredType))
+        "funcName" -> toSQLId(funcName),
+        "paramName" -> toSQLId(paramName),
+        "paramType" -> toSQLType(paramType)))
   }
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
@@ -2148,25 +2167,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotWriteTooManyColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def cannotWriteNotEnoughColumnsToTableError(
       tableName: String,
       expected: Seq[String],
-      query: LogicalPlan): Throwable = {
+      queryOutput: Seq[Attribute]): Throwable = {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
-        "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+        "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def incompatibleDataToTableCannotFindDataError(
@@ -2187,6 +2206,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colName" -> toSQLId(colName)
+      )
+    )
+  }
+
+  def incompatibleDataToTableExtraColumnsError(
+      tableName: String, extraColumns: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "extraColumns" -> extraColumns
       )
     )
   }
@@ -3301,6 +3331,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("jsonSchema" -> toSQLType(schema)))
   }
 
+  def invalidXmlSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_XML_SCHEMA_MAP_TYPE",
+      messageParameters = Map("xmlSchema" -> toSQLType(schema)))
+  }
+
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1332",
@@ -3747,5 +3783,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new SparkUnsupportedOperationException(
       errorClass = "CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG", messageParameters = Map.empty
     )
+  }
+
+  def tableValuedFunctionRequiredMetadataIncompatibleWithCall(
+      functionName: String,
+      requestedMetadata: String,
+      invalidFunctionCallProperty: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "requestedMetadata" -> requestedMetadata,
+        "invalidFunctionCallProperty" -> invalidFunctionCallProperty))
+  }
+
+  def tableValuedFunctionRequiredMetadataInvalid(
+      functionName: String,
+      reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+      messageParameters = Map(
+        "functionName" -> functionName,
+        "reason" -> reason))
   }
 }

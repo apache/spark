@@ -86,12 +86,34 @@ class RollingTestsMixin:
     def test_rolling_sum(self):
         self._test_rolling_func("sum")
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43451): Enable RollingTests.test_rolling_count for pandas 2.0.0.",
-    )
     def test_rolling_count(self):
-        self._test_rolling_func("count")
+        pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.rolling(2).count(), pser.rolling(2, min_periods=1).count())
+        self.assert_eq(psser.rolling(2).count().sum(), pser.rolling(2, min_periods=1).count().sum())
+
+        # TODO(SPARK-43432): Fix `min_periods` for Rolling.count() to work same as pandas
+        # Multiindex
+        pser = pd.Series(
+            [1, 2, 3],
+            index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")]),
+            name="a",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.rolling(2).count(), pser.rolling(2, min_periods=1).count())
+
+        pdf = pd.DataFrame(
+            {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.rolling(2).count(), pdf.rolling(2, min_periods=1).count())
+        self.assert_eq(psdf.rolling(2).count().sum(), pdf.rolling(2, min_periods=1).count().sum())
+
+        # Multiindex column
+        columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
+        pdf.columns = columns
+        psdf.columns = columns
+        self.assert_eq(psdf.rolling(2).count(), pdf.rolling(2, min_periods=1).count())
 
     def test_rolling_std(self):
         self._test_rolling_func("std")
@@ -138,33 +160,18 @@ class RollingTestsMixin:
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
         psdf = ps.from_pandas(pdf)
 
-        # The behavior of GroupBy.rolling is changed from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a).rolling(2)).sort_index(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).rolling(2)).sum(),
-                pd_func(pdf.groupby(pdf.a).rolling(2)).sum(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a + 1).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a + 1).rolling(2)).sort_index(),
-            )
-        else:
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a).rolling(2)).drop("a", axis=1).sort_index(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).rolling(2)).sum(),
-                pd_func(pdf.groupby(pdf.a).rolling(2)).sum().drop("a"),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a + 1).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a + 1).rolling(2)).drop("a", axis=1).sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a).rolling(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a).rolling(2)).sort_index(),
+        )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a).rolling(2)).sum(),
+            pd_func(pdf.groupby(pdf.a).rolling(2)).sum(),
+        )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a + 1).rolling(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a + 1).rolling(2)).sort_index(),
+        )
 
         self.assert_eq(
             ps_func(psdf.b.groupby(psdf.a).rolling(2)).sort_index(),
@@ -184,36 +191,84 @@ class RollingTestsMixin:
         pdf.columns = columns
         psdf.columns = columns
 
-        # The behavior of GroupBy.rolling is changed from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                ps_func(psdf.groupby(("a", "x")).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(("a", "x")).rolling(2)).sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby(("a", "x")).rolling(2)).sort_index(),
+            pd_func(pdf.groupby(("a", "x")).rolling(2)).sort_index(),
+        )
 
-            self.assert_eq(
-                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2)).sort_index(),
-                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2)).sort_index(),
-            )
-        else:
-            self.assert_eq(
-                ps_func(psdf.groupby(("a", "x")).rolling(2)).sort_index(),
-                pd_func(pdf.groupby(("a", "x")).rolling(2)).drop(("a", "x"), axis=1).sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2)).sort_index(),
+            pd_func(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2)).sort_index(),
+        )
 
-            self.assert_eq(
-                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2)).sort_index(),
-                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2))
-                .drop([("a", "x"), ("a", "y")], axis=1)
-                .sort_index(),
-            )
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43452): Enable RollingTests.test_groupby_rolling_count for pandas 2.0.0.",
-    )
     def test_groupby_rolling_count(self):
-        self._test_groupby_rolling_func("count")
+        pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
+        psser = ps.from_pandas(pser)
+        # TODO(SPARK-43432): Fix `min_periods` for Rolling.count() to work same as pandas
+        self.assert_eq(
+            psser.groupby(psser).rolling(2).count().sort_index(),
+            pser.groupby(pser).rolling(2, min_periods=1).count().sort_index(),
+        )
+        self.assert_eq(
+            psser.groupby(psser).rolling(2).count().sum(),
+            pser.groupby(pser).rolling(2, min_periods=1).count().sum(),
+        )
+
+        # Multiindex
+        pser = pd.Series(
+            [1, 2, 3, 2],
+            index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z"), ("c", "z")]),
+            name="a",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.groupby(psser).rolling(2).count().sort_index(),
+            pser.groupby(pser).rolling(2, min_periods=1).count().sort_index(),
+        )
+
+        pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            psdf.groupby(psdf.a).rolling(2).count().sort_index(),
+            pdf.groupby(pdf.a).rolling(2, min_periods=1).count().sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(psdf.a).rolling(2).count().sum(),
+            pdf.groupby(pdf.a).rolling(2, min_periods=1).count().sum(),
+        )
+        self.assert_eq(
+            psdf.groupby(psdf.a + 1).rolling(2).count().sort_index(),
+            pdf.groupby(pdf.a + 1).rolling(2, min_periods=1).count().sort_index(),
+        )
+
+        self.assert_eq(
+            psdf.b.groupby(psdf.a).rolling(2).count().sort_index(),
+            pdf.b.groupby(pdf.a).rolling(2, min_periods=1).count().sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(psdf.a)["b"].rolling(2).count().sort_index(),
+            pdf.groupby(pdf.a)["b"].rolling(2, min_periods=1).count().sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(psdf.a)[["b"]].rolling(2).count().sort_index(),
+            pdf.groupby(pdf.a)[["b"]].rolling(2, min_periods=1).count().sort_index(),
+        )
+
+        # Multiindex column
+        columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
+        pdf.columns = columns
+        psdf.columns = columns
+
+        self.assert_eq(
+            psdf.groupby(("a", "x")).rolling(2).count().sort_index(),
+            pdf.groupby(("a", "x")).rolling(2, min_periods=1).count().sort_index(),
+        )
+
+        self.assert_eq(
+            psdf.groupby([("a", "x"), ("a", "y")]).rolling(2).count().sort_index(),
+            pdf.groupby([("a", "x"), ("a", "y")]).rolling(2, min_periods=1).count().sort_index(),
+        )
 
     def test_groupby_rolling_min(self):
         self._test_groupby_rolling_func("min")

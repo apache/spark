@@ -659,6 +659,54 @@ struct<>
 
 
 -- !query
+DECLARE var = 'sometable'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE IDENTIFIER(var)(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR var = 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(var) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+SET VAR var = 'some'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IDENTIFIER(var || 'table')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`)
 -- !query schema
 struct<>

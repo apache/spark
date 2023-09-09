@@ -431,6 +431,14 @@ of the most common options to set are:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.driver.log.localDir</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies a local directory to write driver logs and enable Driver Log UI Tab.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.log.dfsDir</code></td>
   <td>(none)</td>
   <td>
@@ -460,7 +468,7 @@ of the most common options to set are:
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex</td>
   <td>
-    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
+    The layout for the driver logs that are synced to <code>spark.driver.log.localDir</code> and <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
     use the default layout.
   </td>
