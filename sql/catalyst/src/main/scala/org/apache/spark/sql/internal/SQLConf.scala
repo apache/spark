@@ -1535,7 +1535,7 @@ object SQLConf {
       .doc("Whether to allow storage-partition join in the case where join keys are" +
         "a subset of the partition keys of the source tables. At planning time, " +
         "Spark will group the partitions by only those keys that are in the join keys." +
-        s"This is currently enabled only if $REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION is false." +
+        s"This is currently enabled only if $REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION is false."
       )
       .version("4.0.0")
       .booleanConf
