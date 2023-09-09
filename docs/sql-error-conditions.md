@@ -289,6 +289,18 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
+### CLUSTER_BY_NOT_ALLOWED_FOR_SESSION_CATALOG
+
+SQLSTATE: none assigned
+
+CLUSTER BY is not allowed for the session catalog.
+
+### CLUSTER_BY_NOT_ALLOWED_FOR_V1_TABLES
+
+SQLSTATE: none assigned
+
+CLUSTER BY is not allowed for V1 tables.
+
 ### CODEC_NOT_AVAILABLE
 
 SQLSTATE: none assigned
@@ -1706,6 +1718,18 @@ sortBy must be used together with bucketBy.
 SQLSTATE: none assigned
 
 Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime.
+
+### SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and CLUSTERED BY INTO BUCKETS.
+
+### SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED
+
+[SQLSTATE: 42908](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot specify both CLUSTER BY and PARTITIONED BY.
 
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
