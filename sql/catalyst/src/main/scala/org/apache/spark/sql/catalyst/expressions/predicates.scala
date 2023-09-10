@@ -442,6 +442,10 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
+  def this(valueAndList: Seq[Expression]) = {
+    this(valueAndList.head, valueAndList.tail)
+  }
+
   require(list != null, "list should not be null")
 
   override def checkInputDataTypes(): TypeCheckResult = {

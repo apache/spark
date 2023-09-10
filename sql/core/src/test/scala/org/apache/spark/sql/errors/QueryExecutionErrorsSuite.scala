@@ -222,7 +222,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-      "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
+      "type" -> "unknown"),
       sqlState = "0A000")
   }
 

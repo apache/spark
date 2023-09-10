@@ -464,7 +464,7 @@ class RelationalGroupedDataset protected[sql](
               Literal.apply(v)
             } catch {
               case _: SparkRuntimeException =>
-                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr.dataType)
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr)
             }
         })
         new RelationalGroupedDataset(
@@ -708,7 +708,7 @@ private[sql] object RelationalGroupedDataset {
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case e if !e.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 

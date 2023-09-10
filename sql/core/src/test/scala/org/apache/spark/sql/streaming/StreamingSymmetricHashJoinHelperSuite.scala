@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, GreaterThan, LessThan}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
 import org.apache.spark.sql.types._
@@ -30,10 +29,6 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   val leftAttributeB = AttributeReference("b", IntegerType)()
   val rightAttributeC = AttributeReference("c", IntegerType)()
   val rightAttributeD = AttributeReference("d", IntegerType)()
-  val leftColA = new Column(leftAttributeA)
-  val leftColB = new Column(leftAttributeB)
-  val rightColC = new Column(rightAttributeC)
-  val rightColD = new Column(rightAttributeD)
 
   val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
   val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
@@ -49,7 +44,12 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   test("only literals") {
     // Literal-only conjuncts end up on the left side because that's the first bucket they fit in.
     // There's no semantic reason they couldn't be in any bucket.
-    val predicate = (lit(1) < lit(5) && lit(6) < lit(7) && lit(0) === lit(-1)).expr
+    val predicate =
+      And(
+        And(
+          LessThan(lit(1).expr, lit(5).expr),
+          LessThan(lit(6).expr, lit(7).expr)),
+        EqualTo(lit(0).expr, lit(-1).expr))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.contains(predicate))
@@ -59,7 +59,12 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("only left") {
-    val predicate = (leftColA > lit(1) && leftColB > lit(5) && leftColA < leftColB).expr
+    val predicate =
+      And(
+        And(
+          GreaterThan(leftAttributeA, lit(1).expr),
+          GreaterThan(leftAttributeB, lit(5).expr)),
+        LessThan(leftAttributeA, leftAttributeB))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.contains(predicate))
@@ -69,7 +74,12 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("only right") {
-    val predicate = (rightColC > lit(1) && rightColD > lit(5) && rightColD < rightColC).expr
+    val predicate =
+      And(
+        And(
+          GreaterThan(rightAttributeC, lit(1).expr),
+          GreaterThan(rightAttributeD, lit(5).expr)),
+        LessThan(rightAttributeD, rightAttributeC))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.isEmpty)
@@ -80,30 +90,42 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
 
   test("mixed conjuncts") {
     val predicate =
-      (leftColA > leftColB
-        && rightColC > rightColD
-        && leftColA === rightColC
-        && lit(1) === lit(1)).expr
+      And(
+        And(
+          And(
+            GreaterThan(leftAttributeA, leftAttributeB),
+            GreaterThan(rightAttributeC, rightAttributeD)),
+          EqualTo(leftAttributeA, rightAttributeC)),
+        EqualTo(lit(1).expr, lit(1).expr))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
-    assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
-    assert(split.bothSides.contains((leftColA === rightColC).expr))
+    assert(split.leftSideOnly.contains(
+      And(GreaterThan(leftAttributeA, leftAttributeB), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.rightSideOnly.contains(
+      And(GreaterThan(rightAttributeC, rightAttributeD), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.bothSides.contains(EqualTo(leftAttributeA, rightAttributeC)))
     assert(split.full.contains(predicate))
   }
 
   test("conjuncts after nondeterministic") {
     val predicate =
-      (rand(9) > lit(0)
-        && leftColA > leftColB
-        && rightColC > rightColD
-        && leftColA === rightColC
-        && lit(1) === lit(1)).expr
+      And(
+        And(
+          And(
+            And(
+              GreaterThan(rand(9).expr, lit(0).expr),
+              GreaterThan(leftAttributeA, leftAttributeB)),
+            GreaterThan(rightAttributeC, rightAttributeD)),
+          EqualTo(leftAttributeA, rightAttributeC)),
+        EqualTo(lit(1).expr, lit(1).expr))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
-    assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
-    assert(split.bothSides.contains((leftColA === rightColC && rand(9) > lit(0)).expr))
+    assert(split.leftSideOnly.contains(
+      And(GreaterThan(leftAttributeA, leftAttributeB), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.rightSideOnly.contains(
+      And(GreaterThan(rightAttributeC, rightAttributeD), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.bothSides.contains(
+      And(EqualTo(leftAttributeA, rightAttributeC), GreaterThan(rand(9).expr, lit(0).expr))))
     assert(split.full.contains(predicate))
   }
 
@@ -111,16 +133,23 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   test("conjuncts before nondeterministic") {
     val randCol = rand()
     val predicate =
-      (leftColA > leftColB
-        && rightColC > rightColD
-        && leftColA === rightColC
-        && lit(1) === lit(1)
-        && randCol > lit(0)).expr
+      And(
+        And(
+          And(
+            And(
+              GreaterThan(leftAttributeA, leftAttributeB),
+              GreaterThan(rightAttributeC, rightAttributeD)),
+            EqualTo(leftAttributeA, rightAttributeC)),
+          EqualTo(lit(1).expr, lit(1).expr)),
+        GreaterThan(randCol.expr, lit(0).expr))
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
-    assert(split.rightSideOnly.contains((rightColC > rightColD && lit(1) === lit(1)).expr))
-    assert(split.bothSides.contains((leftColA === rightColC && randCol > lit(0)).expr))
+    assert(split.leftSideOnly.contains(
+      And(GreaterThan(leftAttributeA, leftAttributeB), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.rightSideOnly.contains(
+      And(GreaterThan(rightAttributeC, rightAttributeD), EqualTo(lit(1).expr, lit(1).expr))))
+    assert(split.bothSides.contains(
+      And(EqualTo(leftAttributeA, rightAttributeC), GreaterThan(randCol.expr, lit(0).expr))))
     assert(split.full.contains(predicate))
   }
 }

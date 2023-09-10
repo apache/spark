@@ -319,12 +319,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "type" ->  v.getClass.toString))
   }
 
-  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+  def pivotColumnUnsupportedError(v: Any, expr: Expression): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       messageParameters = Map(
         "value" -> v.toString,
-        "type" ->  toSQLType(dataType)))
+        "type" -> (if (expr.resolved) toSQLType(expr.dataType) else "unknown")))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): SparkException = {
