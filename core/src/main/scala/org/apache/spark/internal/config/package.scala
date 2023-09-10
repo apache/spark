@@ -253,11 +253,6 @@ package object config {
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
-  private[spark] val EXECUTOR_BIND_ADDRESS = ConfigBuilder("spark.executor.bindAddress")
-    .doc("Address where to bind network listen sockets on the executor.")
-    .stringConf
-    .createWithDefault(Utils.localHostName())
-
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
       .version("1.0.0")
