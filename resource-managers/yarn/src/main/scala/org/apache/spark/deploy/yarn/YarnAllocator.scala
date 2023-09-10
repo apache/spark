@@ -85,6 +85,9 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   val allocatedContainerToHostMap = new HashMap[ContainerId, String]
 
+  @GuardedBy("this")
+  val allocatedContainerToBindAddressMap = new HashMap[ContainerId, String]
+
   // Containers that we no longer care about. We've either already told the RM to release them or
   // will on the next heartbeat. Containers get removed from this map after the RM tells us they've
   // completed.
@@ -168,6 +171,8 @@ private[yarn] class YarnAllocator(
     new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
+
+  private val bindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS)
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
@@ -734,7 +739,7 @@ private[yarn] class YarnAllocator(
       val rpId = getResourceProfileIdFromPriority(container.getPriority)
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
-      val executorBindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS.key, executorHostname)
+      val executorBindAddress = bindAddress.getOrElse(executorHostname)
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       val yarnResourceForRpId = rpIdToYarnResource.get(rpId)
@@ -814,6 +819,7 @@ private[yarn] class YarnAllocator(
         new HashSet[ContainerId])
       containerSet += containerId
       allocatedContainerToHostMap.put(containerId, executorHostname)
+      allocatedContainerToBindAddressMap.put(containerId, bindAddress.getOrElse(executorHostname))
       launchingExecutorContainerIds.remove(containerId)
     }
     getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
@@ -920,6 +926,7 @@ private[yarn] class YarnAllocator(
         }
 
         allocatedContainerToHostMap.remove(containerId)
+        allocatedContainerToBindAddressMap.remove(containerId)
       }
 
       containerIdToExecutorIdAndResourceProfileId.remove(containerId).foreach { case (eid, _) =>

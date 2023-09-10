@@ -500,15 +500,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
-</tr>
-<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -527,6 +518,25 @@ To use a custom metrics.properties for the application master and executors, upd
   running against earlier versions, this property will be ignored.
   </td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.bindAddress</code></td>
+  <td><code>(executor hostname)</code></td>
+  <td>
+  Hostname or IP address where to bind listening sockets in YARN cluster mode.
+  <br />It also allows a different address from the local one to be advertised to other
+  executors or external systems.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for executor failure tracking.
+  Executor failures which are older than the validity interval will be ignored.
+  </td>
+  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>

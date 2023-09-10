@@ -339,6 +339,13 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val EXECUTOR_BIND_ADDRESS =
+    ConfigBuilder("spark.yarn.executor.bindAddress")
+      .doc("Address where to bind network listen sockets on the executor.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   /* Unmanaged AM configuration. */
 
   private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM.enabled")
