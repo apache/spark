@@ -190,7 +190,7 @@ private[yarn] class ExecutorRunnable(
       Seq("org.apache.spark.executor.YarnCoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,
         "--executor-id", executorId,
-        "--bindAddress", bindAddress,
+        "--bind-address", bindAddress,
         "--hostname", hostname,
         "--cores", executorCores.toString,
         "--app-id", appId,
