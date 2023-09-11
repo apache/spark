@@ -149,7 +149,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     blockId match {
       case _: ShuffleDataBlockId =>
         if (dataFile == null || !dataFile.exists()) {
-          false // Fail because the data file file doesn't exist.
+          false // Fail because the data file doesn't exist.
         } else if (checksumFile == null || !checksumFile.exists()) {
           true // Pass if the checksum file doesn't exist.
         } else if (checksumFile.length() == 0 || checksumFile.length() % 8 != 0) {
