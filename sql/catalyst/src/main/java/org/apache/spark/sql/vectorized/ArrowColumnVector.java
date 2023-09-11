@@ -115,6 +115,12 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
+  public CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getInterval(rowId);
+  }
+
+  @Override
   public byte[] getBinary(int rowId) {
     if (isNullAt(rowId)) return null;
     return accessor.getBinary(rowId);
