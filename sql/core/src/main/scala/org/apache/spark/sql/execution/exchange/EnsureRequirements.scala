@@ -380,7 +380,8 @@ case class EnsureRequirements(
     val rightSpec = specs(1)
 
     var isCompatible = false
-    if (!conf.v2BucketingPushPartValuesEnabled) {
+    if (!conf.v2BucketingPushPartValuesEnabled &&
+        !conf.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
       isCompatible = leftSpec.isCompatibleWith(rightSpec)
     } else {
       logInfo("Pushing common partition values for storage-partitioned join")
@@ -505,10 +506,10 @@ case class EnsureRequirements(
         }
 
         // Now we need to push-down the common partition key to the scan in each child
-        newLeft = populatePartitionValues(
-          left, mergedPartValues, applyPartialClustering, replicateLeftSide)
-        newRight = populatePartitionValues(
-          right, mergedPartValues, applyPartialClustering, replicateRightSide)
+        newLeft = populatePartitionValues(left, mergedPartValues, leftSpec.joinKeyPositions,
+          applyPartialClustering, replicateLeftSide)
+        newRight = populatePartitionValues(right, mergedPartValues, rightSpec.joinKeyPositions,
+          applyPartialClustering, replicateRightSide)
       }
     }
 
@@ -530,19 +531,21 @@ case class EnsureRequirements(
   private def populatePartitionValues(
       plan: SparkPlan,
       values: Seq[(InternalRow, Int)],
+      joinKeyPositions: Option[Seq[Int]],
       applyPartialClustering: Boolean,
       replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
       scan.copy(
         spjParams = scan.spjParams.copy(
           commonPartitionValues = Some(values),
+          joinKeyPositions = joinKeyPositions,
           applyPartialClustering = applyPartialClustering,
           replicatePartitions = replicatePartitions
         )
       )
     case node =>
       node.mapChildren(child => populatePartitionValues(
-        child, values, applyPartialClustering, replicatePartitions))
+        child, values, joinKeyPositions, applyPartialClustering, replicatePartitions))
   }
 
   /**
