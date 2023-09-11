@@ -79,15 +79,11 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
-      case (CalendarIntervalType, vector: StructVector) =>
-        assert(vector.size() == 3)
-        val children = (0 until vector.size()).map { ordinal =>
-          createFieldWriter(vector.getChildByOrdinal(ordinal))
-        }
-        new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
+      case (_: CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
+        new IntervalMonthDayNanoWriter(vector)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
@@ -468,5 +464,17 @@ private[arrow] class DurationWriter(val valueVector: DurationVector)
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.set(count, input.getLong(ordinal))
+  }
+}
+
+private[arrow] class IntervalMonthDayNanoWriter(val valueVector: IntervalMonthDayNanoVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val ci = input.getInterval(ordinal)
+    valueVector.setSafe(count, ci.months, ci.days, ci.microseconds * 1000)
   }
 }

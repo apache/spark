@@ -25,6 +25,7 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -193,6 +194,8 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new IntervalYearAccessor((IntervalYearVector) vector);
     } else if (vector instanceof DurationVector) {
       accessor = new DurationAccessor((DurationVector) vector);
+    } else if (vector instanceof IntervalMonthDayNanoVector) {
+      accessor = new IntervalMonthDayNanoAccessor((IntervalMonthDayNanoVector) vector);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -243,6 +246,10 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     double getDouble(int rowId) {
+      throw new UnsupportedOperationException();
+    }
+
+    CalendarInterval getInterval(int rowId) {
       throw new UnsupportedOperationException();
     }
 
@@ -600,6 +607,25 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final long getLong(int rowId) {
       return DurationVector.get(accessor.getDataBuffer(), rowId);
+    }
+  }
+
+  static class IntervalMonthDayNanoAccessor extends ArrowVectorAccessor {
+
+    private final IntervalMonthDayNanoVector accessor;
+
+    IntervalMonthDayNanoAccessor(IntervalMonthDayNanoVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    CalendarInterval getInterval(int rowId) {
+      PeriodDuration pd = accessor.getObject(rowId);
+      return new CalendarInterval(
+        pd.getPeriod().getMonths(),
+        pd.getPeriod().getDays(),
+             pd.getDuration().getNano() / 1000);
     }
   }
 }
