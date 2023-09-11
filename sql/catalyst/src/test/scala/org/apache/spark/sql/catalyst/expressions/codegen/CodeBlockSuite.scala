@@ -117,10 +117,13 @@ class CodeBlockSuite extends SparkFunSuite {
 
   test("Throws exception when interpolating unexpected object in code block") {
     val obj = Tuple2(1, 1)
-    val e = intercept[SparkException] {
-      code"$obj"
-    }
-    assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
+    checkError(
+      exception = intercept[SparkException] {
+        code"$obj"
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"Can not interpolate ${obj.getClass.getName} into code block.")
+    )
   }
 
   test("transform expr in code block") {
