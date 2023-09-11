@@ -619,6 +619,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             everything, then use only numeric data. False is not supported.
             This parameter is mainly for pandas compatibility.
 
+            .. versionadded:: 3.4.0
             .. versionchanged:: 4.0.0
 
         Returns
