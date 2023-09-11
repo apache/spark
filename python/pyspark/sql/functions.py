@@ -3617,33 +3617,64 @@ def kurtosis(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_list(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: returns a list of objects with duplicates.
+    Aggregate function: Collects the values from a column into a list,
+    maintaining duplicates, and returns this list of objects.
 
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    Notes
-    -----
-    The function is non-deterministic because the order of collected results depends
-    on the order of the rows which may be non-deterministic after a shuffle.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column on which the function is computed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        list of objects with duplicates.
+        A new Column object representing a list of collected values, with duplicate values included.
+
+    Notes
+    -----
+    The function is non-deterministic as the order of collected results depends
+    on the order of the rows, which possibly becomes non-deterministic after shuffle operations.
 
     Examples
     --------
-    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(collect_list('age')).collect()
-    [Row(collect_list(age)=[2, 5, 5])]
+    Example 1: Collect values from a single column DataFrame
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.collect_list('age')).show()
+    +-----------------+
+    |collect_list(age)|
+    +-----------------+
+    |        [2, 5, 5]|
+    +-----------------+
+
+    Example 2: Collect values from a DataFrame with multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.collect_list('id')).show()
+    +----+----------------+
+    |name|collect_list(id)|
+    +----+----------------+
+    |John|          [1, 2]|
+    | Ana|             [3]|
+    +----+----------------+
+
+    Example 3: Collect values from a DataFrame and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
+    >>> df.select(sf.array_sort(sf.collect_list('value')).alias('sorted_list')).show()
+    +-----------+
+    |sorted_list|
+    +-----------+
+    |  [1, 2, 2]|
+    +-----------+
     """
     return _invoke_function_over_columns("collect_list", col)
 
@@ -3677,33 +3708,64 @@ def array_agg(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: returns a set of objects with duplicate elements eliminated.
+    Aggregate function: Collects the values from a column into a set,
+    eliminating duplicates, and returns this set of objects.
 
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    Notes
-    -----
-    The function is non-deterministic because the order of collected results depends
-    on the order of the rows which may be non-deterministic after a shuffle.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column on which the function is computed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        list of objects with no duplicates.
+        A new Column object representing a set of collected values, duplicates excluded.
+
+    Notes
+    -----
+    This function is non-deterministic as the order of collected results depends
+    on the order of the rows, which may be non-deterministic after any shuffle operations.
 
     Examples
     --------
-    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
-    [Row(c=[2, 5])]
+    Example 1: Collect values from a single column DataFrame
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.collect_set('age')).show()
+    +----------------+
+    |collect_set(age)|
+    +----------------+
+    |          [5, 2]|
+    +----------------+
+
+    Example 2: Collect values from a DataFrame with multiple columns
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.collect_set('id')).show()
+    +----+---------------+
+    |name|collect_set(id)|
+    +----+---------------+
+    |John|         [1, 2]|
+    | Ana|            [3]|
+    +----+---------------+
+
+    Example 3: Collect values from a DataFrame and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
+    >>> df.select(sf.array_sort(sf.collect_set('value')).alias('sorted_set')).show()
+    +----------+
+    |sorted_set|
+    +----------+
+    |    [1, 2]|
+    +----------+
     """
     return _invoke_function_over_columns("collect_set", col)
 
