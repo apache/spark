@@ -657,7 +657,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer = Project(Seq(x), Project(Seq(x, y, z),
       Filter(GreaterThanOrEqual(1, alias.toAttribute),
-        Window(Seq(alias, x, y, z), Seq(x), Nil, testRelation2))))
+        Window(Seq(alias), Seq(x), Nil, testRelation2))))
     check(outputPlan, joinCond, correctAnswer, Seq(x === a))
   }
 
@@ -679,7 +679,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer = Project(Seq(x, a), Project(Seq(a, x, y, z),
       Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
-        Window(Seq(rowNumberAlias, a, x, y, z), Seq(a), Seq(SortOrder(x, Ascending)),
+        Window(Seq(rowNumberAlias), Seq(a), Seq(SortOrder(x, Ascending)),
           Filter(GreaterThan(a, x),
             DomainJoin(Seq(a), testRelation2))))))
     check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
@@ -705,7 +705,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val rowNumberAlias = Alias(rowNumber, alias.name)()
     val correctAnswer = Project(Seq(x, a), Project(Seq(minY.toAttribute, x, a),
       Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
-        Window(Seq(rowNumberAlias, minY.toAttribute, x, a), Seq(a),
+        Window(Seq(rowNumberAlias), Seq(a),
           Seq(SortOrder(minY.toAttribute, Ascending)),
           Aggregate(Seq(x, a), Seq(minY, x, a),
             Filter(GreaterThan(a, x),
@@ -731,7 +731,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer = Project(Seq(x, a), Project(Seq(a, x, y, z),
       Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
-        Window(Seq(rowNumberAlias, a, x, y, z), Seq(a), Seq(SortOrder(a, Ascending)),
+        Window(Seq(rowNumberAlias), Seq(a), Seq(SortOrder(a, Ascending)),
           Filter(GreaterThan(a, x),
             DomainJoin(Seq(a), testRelation2))))))
     check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
