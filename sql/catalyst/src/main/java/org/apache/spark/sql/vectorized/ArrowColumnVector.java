@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.vectorized;
 
+import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
+import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
@@ -614,6 +616,9 @@ public class ArrowColumnVector extends ColumnVector {
 
     private final IntervalMonthDayNanoVector accessor;
 
+    private final NullableIntervalMonthDayNanoHolder result =
+            new NullableIntervalMonthDayNanoHolder();
+
     IntervalMonthDayNanoAccessor(IntervalMonthDayNanoVector vector) {
       super(vector);
       this.accessor = vector;
@@ -621,11 +626,12 @@ public class ArrowColumnVector extends ColumnVector {
 
     @Override
     CalendarInterval getInterval(int rowId) {
-      PeriodDuration pd = accessor.getObject(rowId);
-      return new CalendarInterval(
-        pd.getPeriod().getMonths(),
-        pd.getPeriod().getDays(),
-             pd.getDuration().getNano() / 1000);
+      accessor.get(rowId, result);
+      if (result.isSet == 0) {
+        return null;
+      } else {
+        return new CalendarInterval(result.months, result.days, result.nanoseconds / 1000);
+      }
     }
   }
 }
