@@ -26,6 +26,7 @@ from typing import (
     TYPE_CHECKING,
 )
 from warnings import warn
+import pandas as pd
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
@@ -383,7 +384,7 @@ class SparkConversionMixin:
                 _check_series_convert_timestamps_tz_local,
                 _get_local_timezone,
             )
-            from pandas.core.dtypes.common import is_datetime64tz_dtype, is_timedelta64_dtype
+            from pandas.core.dtypes.common import is_timedelta64_dtype
 
             copied = False
             if isinstance(schema, StructType):
@@ -482,7 +483,11 @@ class SparkConversionMixin:
                 should_localize = not is_timestamp_ntz_preferred()
                 for column, series in pdf.items():
                     s = series
-                    if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
+                    if (
+                        should_localize
+                        and isinstance(s.dtype, pd.DatetimeTZDtype)
+                        and s.dt.tz is not None
+                    ):
                         s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
                         if not copied:
@@ -581,7 +586,6 @@ class SparkConversionMixin:
 
         from pandas.api.types import (  # type: ignore[attr-defined]
             is_datetime64_dtype,
-            is_datetime64tz_dtype,
         )
         import pyarrow as pa
 
@@ -607,7 +611,9 @@ class SparkConversionMixin:
         else:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
-                TimestampType() if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
+                TimestampType()
+                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                else None
                 for t in pdf.dtypes
             ]
 
