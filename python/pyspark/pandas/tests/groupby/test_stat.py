@@ -113,7 +113,7 @@ class GroupbyStatMixin:
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
         self.assert_eq(
             psdf.groupby("A").sum().sort_index(),
-            pdf.groupby("A").sum(numeric_only=True).sort_index(),
+            pdf.groupby("A").sum().sort_index(),
             check_exact=False,
         )
 

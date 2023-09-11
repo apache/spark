@@ -135,7 +135,7 @@ trait ColumnResolutionHelper extends Logging {
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
-      allowOuter: Boolean): Expression = {
+      includeLastResort: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved) return e
       val resolved = e match {
@@ -196,8 +196,11 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      val withOuterResolved = if (allowOuter) resolveOuterRef(resolved) else resolved
-      resolveVariables(withOuterResolved)
+      if (includeLastResort) {
+        resolveColsLastResort(resolved)
+      } else {
+        resolved
+      }
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -421,7 +424,7 @@ trait ColumnResolutionHelper extends Logging {
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
       expr,
       resolveColumnByName = nameParts => {
@@ -429,7 +432,7 @@ trait ColumnResolutionHelper extends Logging {
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
   }
 
   /**
@@ -443,7 +446,7 @@ trait ColumnResolutionHelper extends Logging {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
       // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
       // expression are from Spark Connect, and need to be resolved in this way:
@@ -467,7 +470,16 @@ trait ColumnResolutionHelper extends Logging {
         q.children.head.output
       },
       throws = true,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
+  }
+
+  /**
+   * The last resort to resolve columns. Currently it does two things:
+   *  - Try to resolve column names as outer references
+   *  - Try to resolve column names as SQL variable
+   */
+  protected def resolveColsLastResort(e: Expression): Expression = {
+    resolveVariables(resolveOuterRef(e))
   }
 
   def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {

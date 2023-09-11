@@ -405,12 +405,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
-      codeType: String, dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2015",
-      messageParameters = Map(
-        "codeType" -> codeType,
-        "dataType" -> dataType.catalogString))
+      codeType: String, dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"Cannot generate $codeType code for incomparable type: ${toSQLType(dataType)}.")
   }
 
   def cannotInterpolateClassIntoCodeBlockError(arg: Any): SparkIllegalArgumentException = {
