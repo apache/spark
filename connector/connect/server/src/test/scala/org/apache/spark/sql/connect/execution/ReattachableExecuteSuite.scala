@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.execution
 import java.util.UUID
 
 import io.grpc.StatusRuntimeException
+import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
@@ -37,34 +38,29 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     withClient { client =>
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val reattachableIter = getReattachableIterator(iter)
-      val initialInnerIter = reattachableIter.iter.get
+      val initialInnerIter = reattachableIter.innerIterator
 
       // open the iterator
-      assert(iter.hasNext)
       iter.next()
       // expire all RPCs on server
       SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
-      assertNoActiveRpcs()
+      assertEventuallyNoActiveRpcs()
       // iterator should reattach
       // (but not necessarily at first next, as there might have been messages buffered client side)
-      while (iter.hasNext && (reattachableIter.iter.get eq initialInnerIter)) {
+      while (iter.hasNext && (reattachableIter.innerIterator eq initialInnerIter)) {
         iter.next()
       }
-      assert(reattachableIter.iter.get ne initialInnerIter) // reattach changed the inner iterator.
-
-      iter.close()
-      reattachableIter.close()
+      assert(reattachableIter.innerIterator ne initialInnerIter) // reattach changed the inner iter
     }
   }
 
-  test("interrupted RPC results in INVALID_CURSOR.DISCONNECTED error") {
+  test("raw interrupted RPC results in INVALID_CURSOR.DISCONNECTED error") {
     withRawBlockingStub { stub =>
       val iter = stub.executePlan(buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY)))
-      assert(iter.hasNext)
       iter.next() // open the iterator
       // interrupt all RPCs on server
       SparkConnectService.executionManager.interruptAllRPCs()
-      assertNoActiveRpcs()
+      assertEventuallyNoActiveRpcs()
       val e = intercept[StatusRuntimeException] {
         while (iter.hasNext) iter.next()
       }
@@ -72,18 +68,16 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
-  test("new RPC interrupts previous RPC with INVALID_CURSOR.DISCONNECTED error") {
+  test("raw new RPC interrupts previous RPC with INVALID_CURSOR.DISCONNECTED error") {
     // Raw stub does not have retries, auto reattach etc.
     withRawBlockingStub { stub =>
       val operationId = UUID.randomUUID().toString
       val iter = stub.executePlan(
         buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
-      assert(iter.hasNext)
       iter.next() // open the iterator
 
       // send reattach
       val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
-      assert(iter2.hasNext)
       iter2.next() // open the iterator
 
       // should result in INVALID_CURSOR.DISCONNECTED error on the original iterator
@@ -105,35 +99,35 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
-  test("INVALID_CURSOR.DISCONNECTED error is retried when rpc sender gets interrupted") {
+  test("client INVALID_CURSOR.DISCONNECTED error is retried when rpc sender gets interrupted") {
     withClient { client =>
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val reattachableIter = getReattachableIterator(iter)
+      val initialInnerIter = reattachableIter.innerIterator
       val operationId = getReattachableIterator(iter).operationId
 
       // open the iterator
-      assert(iter.hasNext)
       iter.next()
 
       // interrupt all RPCs on server
       SparkConnectService.executionManager.interruptAllRPCs()
-      assertNoActiveRpcs()
+      assertEventuallyNoActiveRpcs()
 
       // Nevertheless, the original iterator will handle the INVALID_CURSOR.DISCONNECTED error
-      assert(iter.hasNext)
-      while (iter.hasNext) iter.next()
+      iter.next()
+      // iterator changed because it had to reconnect
+      assert(reattachableIter.innerIterator ne initialInnerIter)
     }
   }
 
-  test("INVALID_CURSOR.DISCONNECTED error is retried when other RPC preempts this one") {
+  test("client INVALID_CURSOR.DISCONNECTED error is retried when other RPC preempts this one") {
     withClient { client =>
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val reattachableIter = getReattachableIterator(iter)
-      val initialInnerIter = reattachableIter.iter.get
+      val initialInnerIter = reattachableIter.innerIterator
       val operationId = getReattachableIterator(iter).operationId
 
       // open the iterator
-      assert(iter.hasNext)
       val response = iter.next()
 
       // Send another Reattach request, it should preempt this request with an
@@ -145,10 +139,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         reattachIter.next()
 
         // Nevertheless, the original iterator will handle the INVALID_CURSOR.DISCONNECTED error
-        assert(iter.hasNext)
         iter.next()
         // iterator changed because it had to reconnect
-        assert(reattachableIter.iter.get ne initialInnerIter)
+        assert(reattachableIter.innerIterator ne initialInnerIter)
       }
     }
   }
@@ -159,11 +152,10 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val operationId = getReattachableIterator(iter).operationId
       // open the iterator
-      assert(iter.hasNext)
       iter.next()
       // disconnect and remove on server
       SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
-      assertNoActiveRpcs()
+      assertEventuallyNoActiveRpcs()
       SparkConnectService.executionManager.periodicMaintenance(0)
       assertNoActiveExecutions()
       // check that it throws abandoned error
@@ -190,6 +182,120 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
+  test("client releases responses directly after consuming them") {
+    withClient { client =>
+      val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
+      val reattachableIter = getReattachableIterator(iter)
+      val initialInnerIter = reattachableIter.innerIterator
+      val operationId = getReattachableIterator(iter).operationId
+
+      assert(iter.hasNext) // open iterator
+      val execution = getExecutionHolder
+      assert(execution.responseObserver.releasedUntilIndex == 0)
+
+      // get two responses, check on the server that ReleaseExecute releases them afterwards
+      val response1 = iter.next()
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(execution.responseObserver.releasedUntilIndex == 1)
+      }
+
+      val response2 = iter.next()
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(execution.responseObserver.releasedUntilIndex == 2)
+      }
+
+      withRawBlockingStub { stub =>
+        // Reattach after response1 should fail with INVALID_CURSOR.POSITION_NOT_AVAILABLE
+        val reattach1 = stub.reattachExecute(
+           buildReattachExecuteRequest(operationId, Some(response1.getResponseId)))
+        val e = intercept[StatusRuntimeException] {
+          reattach1.hasNext()
+        }
+        assert(e.getMessage.contains("INVALID_CURSOR.POSITION_NOT_AVAILABLE"))
+
+        // Reattach after response2 should work
+        val reattach2 = stub.reattachExecute(
+          buildReattachExecuteRequest(operationId, Some(response2.getResponseId)))
+        val response3 = reattach2.next()
+        val response4 = reattach2.next()
+        val response5 = reattach2.next()
+
+        // The original client iterator will handle the INVALID_CURSOR.DISCONNECTED error,
+        // and reconnect back. Since the raw iterator was not releasing responses, client iterator
+        // should be able to continue where it left off (server shouldn't have released yet)
+        assert(execution.responseObserver.releasedUntilIndex == 2)
+        assert(iter.hasNext)
+
+        val r3 = iter.next()
+        assert(r3.getResponseId == response3.getResponseId)
+        val r4 = iter.next()
+        assert(r4.getResponseId == response4.getResponseId)
+        val r5 = iter.next()
+        assert(r5.getResponseId == response5.getResponseId)
+        // inner iterator changed because it had to reconnect
+        assert(reattachableIter.innerIterator ne initialInnerIter)
+      }
+    }
+  }
+
+  test("server releases responses automatically when client moves ahead") {
+    // make server buffer 200 kilobytes of responses before throwing them away, so that it's
+    // small enough for MEDIUM_RESULTS_QUERY, but also big enough so that server pushing it into
+    // grpc internal buffers doesn't get too far ahead, and 2nd reattach works.
+    withSparkEnvConfs(
+      (Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE.key, "200k")) {
+      withRawBlockingStub { stub =>
+        val operationId = UUID.randomUUID().toString
+        val iter = stub.executePlan(
+          buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+        var lastSeenResponse: String = null
+
+        iter.hasNext // open iterator
+        val execution = getExecutionHolder
+
+        // after consuming enough from the iterator, server should automatically start releasing
+        var lastSeenIndex = 0
+        while (iter.hasNext && execution.responseObserver.releasedUntilIndex == 0) {
+          val r = iter.next()
+          lastSeenResponse = r.getResponseId()
+          lastSeenIndex += 1
+        }
+        assert(iter.hasNext)
+        assert(execution.responseObserver.releasedUntilIndex > 0)
+
+        // Reattach from the beginning is not available.
+        val reattach = stub.reattachExecute(
+          buildReattachExecuteRequest(operationId, None))
+        val e = intercept[StatusRuntimeException] {
+          reattach.hasNext()
+        }
+        assert(e.getMessage.contains("INVALID_CURSOR.POSITION_NOT_AVAILABLE"))
+
+        // Original iterator got disconnected by the reattach and gets INVALID_CURSOR.DISCONNECTED
+        val e2 = intercept[StatusRuntimeException] {
+          while (iter.hasNext) iter.next()
+        }
+        assert(e2.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
+
+        Eventually.eventually(timeout(eventuallyTimeout)) {
+          // Even though we didn't consume more from the iterator, the server thinks that
+          // it sent more, because GRPC stream onNext() can push into internal GRPC buffer without
+          // client picking it up.
+          assert(execution.responseObserver.highestConsumedIndex > lastSeenIndex)
+        }
+        // but CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE is big enough that the last
+        // response we've seen is still in range
+        assert(execution.responseObserver.releasedUntilIndex < lastSeenIndex)
+
+        // and a new reattach can continue after what there.
+        val reattach2 = stub.reattachExecute(
+          buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
+        assert(reattach2.hasNext)
+        while (reattach2.hasNext) reattach2.next()
+      }
+    }
+  }
+
   // A few integration tests with large results.
   // They should run significantly faster than the LARGE_QUERY_TIMEOUT
   // - big query (4 seconds, 871 milliseconds)
@@ -209,17 +315,23 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("big query") {
     // regular query with large results
     runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT)
+    // Check that execution is released on the server.
+    assertEventuallyNoActiveExecutions()
   }
 
   test("big query and slow client") {
     // regular query with large results, but client is slow so sender will need to control flow
-    runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT, 50)
+    runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT, iterSleep = 50)
+    // Check that execution is released on the server.
+    assertEventuallyNoActiveExecutions()
   }
 
   test("big query with frequent reattach") {
     // will reattach every 100kB
     withSparkEnvConfs((Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE.key, "100k")) {
       runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT)
+      // Check that execution is released on the server.
+      assertEventuallyNoActiveExecutions()
     }
   }
 
@@ -227,7 +339,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     // will reattach every 100kB, and in addition the client is slow,
     // so sender will need to control flow
     withSparkEnvConfs((Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE.key, "100k")) {
-      runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT, 50)
+      runQuery(LARGE_RESULTS_QUERY, LARGE_QUERY_TIMEOUT, iterSleep = 50)
+      // Check that execution is released on the server.
+      assertEventuallyNoActiveExecutions()
     }
   }
 
@@ -236,6 +350,8 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     withSparkEnvConfs(
       (Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "1s")) {
       runQuery("select sleep(10000) as s", 30.seconds)
+      // Check that execution is released on the server.
+      assertEventuallyNoActiveExecutions()
     }
   }
 }

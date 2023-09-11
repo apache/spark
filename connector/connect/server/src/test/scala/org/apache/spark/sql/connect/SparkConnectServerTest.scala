@@ -28,7 +28,7 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -40,6 +40,8 @@ class SparkConnectServerTest extends SharedSparkSession {
   // Server port
   val serverPort: Int =
     ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+
+  val eventuallyTimeout = 30.seconds
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -72,8 +74,7 @@ class SparkConnectServerTest extends SharedSparkSession {
   }
 
   protected def clearAllExecutions(): Unit = {
-    SparkConnectService.executionManager.interruptAllRPCs()
-    assertNoActiveRpcs()
+    SparkConnectService.executionManager.listExecuteHolders.foreach(_.close())
     SparkConnectService.executionManager.periodicMaintenance(0)
     assertNoActiveExecutions()
   }
@@ -138,25 +139,53 @@ class SparkConnectServerTest extends SharedSparkSession {
   }
 
   protected def assertNoActiveRpcs(): Unit = {
-    Eventually.eventually(timeout(30.seconds)) {
-      SparkConnectService.executionManager.listActiveExecutions match {
-        case Left(_) => true // nothing running, good
-        case Right(executions) =>
-          // all rpc detached.
-          assert(
-            executions.forall(_.lastAttachedRpcTime.isDefined),
-            s"Expected no RPCs, but got $executions")
-      }
+    SparkConnectService.executionManager.listActiveExecutions match {
+      case Left(_) => // nothing running, good
+      case Right(executions) =>
+        // all rpc detached.
+        assert(
+          executions.forall(_.lastAttachedRpcTime.isDefined),
+          s"Expected no RPCs, but got $executions")
+    }
+  }
+
+  protected def assertEventuallyNoActiveRpcs(): Unit = {
+    Eventually.eventually(timeout(eventuallyTimeout)) {
+      assertNoActiveRpcs()
     }
   }
 
   protected def assertNoActiveExecutions(): Unit = {
-    Eventually.eventually(timeout(30.seconds)) {
-      SparkConnectService.executionManager.listActiveExecutions match {
-        case Left(_) => // cleaned up
-        case Right(executions) => fail(s"Expected empty, but got $executions")
-      }
+    SparkConnectService.executionManager.listActiveExecutions match {
+      case Left(_) => // cleaned up
+      case Right(executions) => fail(s"Expected empty, but got $executions")
     }
+  }
+
+  protected def assertEventuallyNoActiveExecutions(): Unit = {
+    Eventually.eventually(timeout(eventuallyTimeout)) {
+      assertNoActiveExecutions()
+    }
+  }
+
+  protected def assertExecutionReleased(operationId: String): Unit = {
+    SparkConnectService.executionManager.listActiveExecutions match {
+      case Left(_) => // cleaned up
+      case Right(executions) => assert(!executions.exists(_.operationId == operationId))
+    }
+  }
+
+  protected def assertEventuallyExecutionReleased(operationId: String): Unit = {
+    Eventually.eventually(timeout(eventuallyTimeout)) {
+      assertExecutionReleased(operationId)
+    }
+  }
+
+  // Get ExecutionHolder, assuming that only one execution is active
+  protected def getExecutionHolder: ExecuteHolder = {
+    val executions = SparkConnectService.executionManager.listExecuteHolders
+    assert(executions.length == 1)
+    executions.head
   }
 
   protected def withClient(f: SparkConnectClient => Unit): Unit = {
@@ -200,18 +229,28 @@ class SparkConnectServerTest extends SharedSparkSession {
     withClient { client =>
       TimeLimits.failAfter(queryTimeout) {
         val iter = client.execute(plan)
+        var operationId: Option[String] = None
+        var r: proto.ExecutePlanResponse = null
         val reattachableIter = getReattachableIterator(iter)
         while (iter.hasNext) {
-          iter.next()
+          r = iter.next()
+          operationId match {
+            case None => operationId = Some(r.getOperationId)
+            case Some(id) => assert(r.getOperationId == id)
+          }
           if (iterSleep > 0) {
             Thread.sleep(iterSleep)
           }
         }
-        // Check that client released execution
+        // Check that last response had ResultComplete indicator
+        assert(r != null)
+        assert(r.hasResultComplete)
+        // ... that client sent ReleaseExecute based on it
         assert(reattachableIter.resultComplete)
+        // ... and that the server released the execution.
+        assert(operationId.isDefined)
+        assertEventuallyExecutionReleased(operationId.get)
       }
-      // Check that execution is released on the server.
-      assertNoActiveExecutions()
     }
   }
 

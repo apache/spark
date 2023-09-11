@@ -241,8 +241,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(finished == false)
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
-          // will exit in the enxt loop iterattion.
-          assert(deadlineLimitReached)
+          // or it was intterupted. Will exit in the next loop iterattion.
+          assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
         // Stream is finished and all responses have been sent
@@ -310,7 +310,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         val sleepStart = System.nanoTime()
         var sleepEnd = 0L
         // Conditions for exiting the inner loop
-        // 1. was detached
+        // 1. was interrupted
         // 2. grpcCallObserver is ready to send more data
         // 3. time deadline is reached
         while (!interrupted &&

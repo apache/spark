@@ -192,7 +192,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       executions.values.foreach { executeHolder =>
         executeHolder.lastAttachedRpcTime match {
           case Some(detached) =>
-            if (detached + timeout < nowMs) {
+            if (detached + timeout <= nowMs) {
               toRemove += executeHolder
             }
           case _ => // execution is active
@@ -219,5 +219,9 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   // For testing.
   private[connect] def interruptAllRPCs() = executionsLock.synchronized {
     executions.values.foreach(_.interruptGrpcResponseSenders())
+  }
+
+  private[connect] def listExecuteHolders = executionsLock.synchronized {
+    executions.values.toBuffer.toSeq
   }
 }
