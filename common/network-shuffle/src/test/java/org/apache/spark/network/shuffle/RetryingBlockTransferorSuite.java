@@ -80,7 +80,7 @@ public class RetryingBlockTransferorSuite {
         .build()
       );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener).onBlockTransferSuccess("b0", block0);
     verify(listener).onBlockTransferSuccess("b1", block1);
@@ -99,7 +99,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener).onBlockTransferFailure(eq("b0"), any());
     verify(listener).onBlockTransferSuccess("b1", block1);
@@ -123,7 +123,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -146,7 +146,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -175,7 +175,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -208,7 +208,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
@@ -239,7 +239,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
@@ -263,7 +263,7 @@ public class RetryingBlockTransferorSuite {
             .build()
     );
 
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslTimeoutException);
     verify(listener).getTransferType();
@@ -284,7 +284,7 @@ public class RetryingBlockTransferorSuite {
             .build()
     );
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
@@ -307,7 +307,7 @@ public class RetryingBlockTransferorSuite {
       );
     }
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslTimeoutException);
     verify(listener, times(3)).getTransferType();
     verifyNoMoreInteractions(listener);
@@ -332,7 +332,7 @@ public class RetryingBlockTransferorSuite {
           .build()
     );
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
     verify(listener, atLeastOnce()).getTransferType();
@@ -365,7 +365,7 @@ public class RetryingBlockTransferorSuite {
             ImmutableMap.of("b0", block0)
     );
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
-    performInteractions(interactions, listener, false);
+    performInteractions(interactions, listener);
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslExceptionFinal);
     verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
@@ -384,7 +384,14 @@ public class RetryingBlockTransferorSuite {
             .build()
     );
 
-    performInteractions(interactions, listener, true);
+    configureInteractions(interactions, listener);
+    _retryingBlockTransferor = spy(_retryingBlockTransferor);
+    // Throw an OOM when initiating retries.
+    doThrow(OutOfMemoryError.class).when(_retryingBlockTransferor).initiateRetry(any());
+    // Override listener, so that it delegates to the spied instance and not the original class.
+    _retryingBlockTransferor.setCurrentListener(
+        _retryingBlockTransferor.new RetryingBlockTransferListener());
+    _retryingBlockTransferor.start();
 
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b0"), any());
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -400,12 +407,16 @@ public class RetryingBlockTransferorSuite {
    * If multiple interactions are supplied, they will be used in order. This is useful for encoding
    * retries -- the first interaction may include an IOException, which causes a retry of some
    * subset of the original blocks in a second interaction.
-   *
-   * If mockInitiateRetryFailure is set to true, we mock initiateRetry() and throw an exception.
    */
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
-                                          BlockFetchingListener listener,
-                                          boolean mockInitiateRetryFailure)
+                                          BlockFetchingListener listener)
+      throws IOException, InterruptedException {
+    configureInteractions(interactions, listener);
+    _retryingBlockTransferor.start();
+  }
+
+  private static void configureInteractions(List<? extends Map<String, Object>> interactions,
+                                          BlockFetchingListener listener)
     throws IOException, InterruptedException {
 
     MapConfigProvider provider = new MapConfigProvider(configMap);
@@ -461,10 +472,6 @@ public class RetryingBlockTransferorSuite {
     stub.when(fetchStarter).createAndStart(any(), any());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
     _retryingBlockTransferor =
-        spy(new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener));
-    if (mockInitiateRetryFailure) {
-      doThrow(OutOfMemoryError.class).when(_retryingBlockTransferor).initiateRetry(any());
-    }
-    _retryingBlockTransferor.start();
+        new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener);
   }
 }

@@ -144,12 +144,16 @@ public class RetryingBlockTransferor {
     this(conf, transferStarter, blockIds, listener, ErrorHandler.NOOP_ERROR_HANDLER);
   }
 
+  @VisibleForTesting
+  synchronized void setCurrentListener(RetryingBlockTransferListener listener) {
+    this.currentListener = listener;
+  }
+
   /**
    * Initiates the transfer of all blocks provided in the constructor, with possible retries
    * in the event of transient IOExceptions.
    */
   public void start() {
-    currentListener = new RetryingBlockTransferListener();
     transferAllOutstanding();
   }
 
@@ -198,7 +202,7 @@ public class RetryingBlockTransferor {
    * calling transferAllOutstanding() after a configured wait time.
    */
   @VisibleForTesting
-  public synchronized void initiateRetry(Throwable e) {
+  synchronized void initiateRetry(Throwable e) {
     if (enableSaslRetries && e instanceof SaslTimeoutException) {
       saslRetryCount += 1;
     }
@@ -248,7 +252,8 @@ public class RetryingBlockTransferor {
    * listener. Note that in the event of a retry, we will immediately replace the 'currentListener'
    * field, indicating that any responses from non-current Listeners should be ignored.
    */
-  private class RetryingBlockTransferListener implements
+  @VisibleForTesting
+  class RetryingBlockTransferListener implements
       BlockFetchingListener, BlockPushingListener {
     private void handleBlockTransferSuccess(String blockId, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is
