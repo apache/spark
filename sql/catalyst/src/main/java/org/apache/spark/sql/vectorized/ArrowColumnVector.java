@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.vectorized;
 
-import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
