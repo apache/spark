@@ -959,7 +959,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           None
         } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType ||
             attr.dataType == DateType) {
-          Some(attr.name)
+          if ("date".equals(attr.name)) {
+            Some("`" + attr.name + "`")
+          } else {
+            Some(attr.name)
+          }
         } else {
           None
         }

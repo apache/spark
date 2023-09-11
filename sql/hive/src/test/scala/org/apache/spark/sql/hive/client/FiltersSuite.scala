@@ -68,6 +68,10 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     (a("datecol", DateType) === Literal(Date.valueOf("2019-01-01"))) :: Nil,
     "datecol = \"2019-01-01\"")
 
+  filterTest("SPARK-45102 Support keyword columns on filters that interact with HMS",
+    (a("date", DateType) === Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "`date` = \"2019-01-01\"")
+
   filterTest("date filter with IN predicate",
     (a("datecol", DateType) in
       (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-07")))) :: Nil,
