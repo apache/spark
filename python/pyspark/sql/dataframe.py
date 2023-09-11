@@ -597,8 +597,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         level : int, optional, default None
             How many levels to print for nested schemas.
 
-            .. versionchanged:: 3.5.0
-                Added Level parameter.
+            .. versionadded:: 3.5.0
 
         Examples
         --------
@@ -2864,13 +2863,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
         cols : int, str, list or :class:`Column`, optional
             list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -2928,13 +2927,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
         cols : int, str, list, or :class:`Column`, optional
              list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -3826,15 +3825,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
+        cols : list, str, int or :class:`Column`
             The columns to group by.
             Each element can be a column name (string) or an expression (:class:`Column`)
             or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
@@ -3935,15 +3934,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
+        cols : list, str, int or :class:`Column`
             The columns to roll-up by.
             Each element should be a column name (string) or an expression (:class:`Column`)
             or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
@@ -4020,15 +4019,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
+        cols : list, str, int or :class:`Column`
             The columns to cube by.
             Each element should be a column name (string) or an expression (:class:`Column`)
             or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
