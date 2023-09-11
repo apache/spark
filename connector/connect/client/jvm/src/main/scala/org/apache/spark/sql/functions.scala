@@ -2624,7 +2624,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ln(e: Column): Column = log(e)
+  def ln(e: Column): Column = Column.fn("ln", e)
 
   /**
    * Computes the natural logarithm of the given value.
@@ -3503,7 +3503,7 @@ object functions {
       mode: Column,
       padding: Column,
       aad: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding, aad)
+    Column.fn("aes_decrypt", input, key, mode, padding, aad)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3515,7 +3515,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding)
+    Column.fn("aes_decrypt", input, key, mode, padding)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3527,7 +3527,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode)
+    Column.fn("aes_decrypt", input, key, mode)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3539,7 +3539,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column): Column =
-    Column.fn("aes_encrypt", input, key)
+    Column.fn("aes_decrypt", input, key)
 
   /**
    * This is a special version of `aes_decrypt` that performs the same operation, but returns a
