@@ -2032,7 +2032,7 @@ object functions {
    * @group math_funcs
    * @since 3.4.0
    */
-  def log(e: Column): Column = Column.fn("log", e)
+  def log(e: Column): Column = Column.fn("ln", e)
 
   /**
    * Computes the natural logarithm of the given column.
