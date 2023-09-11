@@ -46,7 +46,7 @@ class ShuffleChecksumUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("verifyChecksum succeeds if a checksum file doesnt' exist") {
+  test("verifyChecksum succeeds if a checksum file doesn't exist") {
     withTempDir { dir =>
       val dataFile = new File(dir, dataBlockId.name)
       dataFile.createNewFile()
