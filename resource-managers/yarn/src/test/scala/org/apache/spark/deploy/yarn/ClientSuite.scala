@@ -675,7 +675,8 @@ class ClientSuite extends SparkFunSuite
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
     ("files URI match test3", "file://host/file1", "file://host/file2"),
     ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
-    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+    ("hdfs URI match test1", "hdfs:/path1", "hdfs:/path1"),
+    ("hdfs URI match test2", "hdfs://localhost:8080", "hdfs://127.0.0.1:8080")
   )
 
   matching.foreach { t =>
@@ -691,7 +692,7 @@ class ClientSuite extends SparkFunSuite
     ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
     ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
     ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
-    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("s3 URI unmatch test", "s3a://user:pass@bucket1/", "s3a://user2:pass2@bucket1/"),
     ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
     ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
   )

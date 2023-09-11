@@ -2882,6 +2882,17 @@ object functions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = withExpr {
+    Round(e.expr, scale.expr)
+  }
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2897,6 +2908,17 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = withExpr {
+    BRound(e.expr, scale.expr)
+  }
 
   /**
    * @param e angle in radians
@@ -6245,8 +6267,8 @@ object functions {
    * }}}
    *
    * @param column the input array column
-   * @param f (col, index) => transformed_col, the lambda function to filter the input column
-   *           given the index. Indices start at 0.
+   * @param f (col, index) => transformed_col, the lambda function to transform the input
+   *           column given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0

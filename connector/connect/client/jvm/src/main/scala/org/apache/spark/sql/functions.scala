@@ -2624,7 +2624,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ln(e: Column): Column = log(e)
+  def ln(e: Column): Column = Column.fn("ln", e)
 
   /**
    * Computes the natural logarithm of the given value.
@@ -2846,6 +2846,15 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2861,6 +2870,15 @@ object functions {
    * @since 3.4.0
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
    * @param e
@@ -3485,7 +3503,7 @@ object functions {
       mode: Column,
       padding: Column,
       aad: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding, aad)
+    Column.fn("aes_decrypt", input, key, mode, padding, aad)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3497,7 +3515,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding)
+    Column.fn("aes_decrypt", input, key, mode, padding)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3509,7 +3527,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode)
+    Column.fn("aes_decrypt", input, key, mode)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3521,7 +3539,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column): Column =
-    Column.fn("aes_encrypt", input, key)
+    Column.fn("aes_decrypt", input, key)
 
   /**
    * This is a special version of `aes_decrypt` that performs the same operation, but returns a
