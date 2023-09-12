@@ -128,8 +128,12 @@ private[spark] class ContextCleaner(
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
-    periodicGCService.scheduleAtFixedRate(() => System.gc(),
-      periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
+    periodicGCService.scheduleAtFixedRate(
+      ContextCleaner.doCleanupJVM,
+      periodicGCInterval,
+      periodicGCInterval,
+      TimeUnit.SECONDS
+    )
   }
 
   /**
@@ -305,6 +309,12 @@ private[spark] class ContextCleaner(
 
 private object ContextCleaner {
   private val REF_QUEUE_POLL_TIMEOUT = 100
+
+  /** Actions done periodically to clean up the JVM. */
+  private val doCleanupJVM: Runnable = () => {
+    System.gc()
+    System.runFinalization()
+  }
 }
 
 /**
