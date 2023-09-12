@@ -140,7 +140,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
             val signal = new Object
             val partitions = new Array[Array[Batch]](numPartitions)
-            val numFinishedPartitions = 0
+            var numFinishedPartitions = 0
             var totalNumRows: Long = 0
             var error: Option[Throwable] = None
 
@@ -150,9 +150,9 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
               signal.synchronized {
                 partitions(partitionId) = partition
-                totalNumRows += partition._2
+                totalNumRows += partition.map(_._2).sum
                 numFinishedPartitions += 1
-                if (numFinishedParttions == numPartitions) {
+                if (numFinishedPartitions == numPartitions) {
                   // Execution is finished, when all partitions returned results.
                   executePlan.eventsManager.postFinished(Some(totalNumRows))
                 }
