@@ -75,16 +75,6 @@
       }
     }
   },
-  "AVRO_INCORRECT_TYPE" : {
-    "message" : [
-      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: <key>."
-    ]
-  },
-  "AVRO_LOWER_PRECISION" : {
-    "message" : [
-      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: <key>."
-    ]
-  },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."
@@ -589,6 +579,11 @@
           "<errors>"
         ]
       },
+      "INVALID_XML_MAP_KEY_TYPE" : {
+        "message" : [
+          "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -926,6 +921,11 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ]
   },
+  "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
+    "message" : [
+      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
+    ]
+  },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."
@@ -1033,6 +1033,11 @@
       "CANNOT_SAFELY_CAST" : {
         "message" : [
           "Cannot safely cast <colName> <srcType> to <targetType>."
+        ]
+      },
+      "EXTRA_COLUMNS" : {
+        "message" : [
+          "Cannot write extra columns <extraColumns>."
         ]
       },
       "EXTRA_STRUCT_FIELDS" : {
@@ -1552,6 +1557,11 @@
           "Handle must be an UUID string of the format '00112233-4455-6677-8899-aabbccddeeff'"
         ]
       },
+      "OPERATION_ABANDONED" : {
+        "message" : [
+          "Operation was considered abandoned because of inactivity and removed."
+        ]
+      },
       "OPERATION_ALREADY_EXISTS" : {
         "message" : [
           "Operation already exists."
@@ -1577,7 +1587,7 @@
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
     ]
   },
   "INVALID_IDENTIFIER" : {
@@ -1788,9 +1798,19 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "BINARY_FORMAT" : {
+        "message" : [
+          "expects one of binary formats 'base64', 'hex', 'utf-8', but got <invalidFormat>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "expects a non-NULL value."
         ]
       },
       "PATTERN" : {
@@ -2204,6 +2224,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NON_FOLDABLE_ARGUMENT" : {
+    "message" : [
+      "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
+    ],
+    "sqlState" : "22024"
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
@@ -2676,6 +2702,18 @@
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
     ]
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata <requestedMetadata>, but the function call <invalidFunctionCallProperty>."
+    ],
+    "sqlState" : "22023"
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata was invalid; <reason>."
+    ],
+    "sqlState" : "22023"
   },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
@@ -3389,11 +3427,45 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_OPERATION" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_VIEW_OPERATION" : {
+    "message" : [
+      "The view <viewName> does not support <operation>."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -3424,6 +3496,11 @@
       "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
     ],
     "sqlState" : "42P07"
+  },
+  "VIEW_EXCEED_MAX_NESTED_DEPTH" : {
+    "message" : [
+      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
+    ]
   },
   "VIEW_NOT_FOUND" : {
     "message" : [
@@ -3697,16 +3774,6 @@
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1009" : {
-    "message" : [
-      "The depth of view <identifier> exceeds the maximum view resolution depth (<maxNestedViewDepth>). Analysis is aborted to avoid errors. Increase the value of <config> to work around this."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1010" : {
-    "message" : [
-      "Inserting into a view is not allowed. View: <identifier>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1011" : {
     "message" : [
       "Writing into a view is not allowed. View: <identifier>."
@@ -3715,26 +3782,6 @@
   "_LEGACY_ERROR_TEMP_1012" : {
     "message" : [
       "Cannot write into v1 table: <identifier>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1013" : {
-    "message" : [
-      "<nameParts> is a <viewStr>. '<cmd>' expects a table.<hintStr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1014" : {
-    "message" : [
-      "<nameParts> is a temp view. '<cmd>' expects a permanent view."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1015" : {
-    "message" : [
-      "<identifier> is a table. '<cmd>' expects a view.<hintStr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1016" : {
-    "message" : [
-      "<nameParts> is a temp view. '<cmd>' expects a table or permanent view."
     ]
   },
   "_LEGACY_ERROR_TEMP_1017" : {
@@ -3991,11 +4038,6 @@
   "_LEGACY_ERROR_TEMP_1099" : {
     "message" : [
       "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1100" : {
-    "message" : [
-      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -4637,11 +4679,6 @@
       "The logical plan that represents the view is not analyzed."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1278" : {
-    "message" : [
-      "<name> is not a view."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1280" : {
     "message" : [
       "It is not allowed to create a persisted view from the Dataset API."
@@ -4888,16 +4925,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2015" : {
-    "message" : [
-      "Cannot generate <codeType> code for incomparable type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2016" : {
-    "message" : [
-      "Can not interpolate <arg> into code block."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
@@ -5621,11 +5648,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2189" : {
-    "message" : [
-      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
     ]
   },
   "_LEGACY_ERROR_TEMP_2190" : {

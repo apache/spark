@@ -22,13 +22,16 @@ import numpy as np
 import tempfile
 import unittest
 
-from pyspark.ml.connect.feature import (
-    MaxAbsScaler,
-    MaxAbsScalerModel,
-    StandardScaler,
-    StandardScalerModel,
-)
 from pyspark.sql import SparkSession
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+if should_test_connect:
+    from pyspark.ml.connect.feature import (
+        MaxAbsScaler,
+        MaxAbsScalerModel,
+        StandardScaler,
+        StandardScalerModel,
+    )
 
 
 class FeatureTestsMixin:
@@ -136,6 +139,7 @@ class FeatureTestsMixin:
                 np.testing.assert_allclose(sk_result, expected_result)
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class FeatureTests(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

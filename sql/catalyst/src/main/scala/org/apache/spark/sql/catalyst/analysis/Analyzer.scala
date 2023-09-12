@@ -209,13 +209,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
-      try {
-        checkAnalysis(analyzed)
-        analyzed
-      } catch {
-        case e: AnalysisException =>
-          throw new ExtendedAnalysisException(e, analyzed)
-      }
+      checkAnalysis(analyzed)
+      analyzed
     }
   }
 
@@ -688,7 +683,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       //       of the analysis phase.
       val colResolved = h.mapExpressions { e =>
         resolveExpressionByPlanOutput(
-          resolveColWithAgg(e, aggForResolving), aggForResolving, allowOuter = true)
+          resolveColWithAgg(e, aggForResolving), aggForResolving, includeLastResort = true)
       }
       val cond = if (SubqueryExpression.hasSubquery(colResolved.havingCondition)) {
         val fake = Project(Alias(colResolved.havingCondition, "fake")() :: Nil, aggregate.child)
@@ -1129,33 +1124,33 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         resolveRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
 
-      case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
+      case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.expectTableNotViewError(
-              nameParts, isTemp = false, cmd, relationTypeMismatchHint, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(
+              nameParts, cmd, suggestAlternative, u)
           case _: ResolvedTempView =>
-            throw QueryCompilationErrors.expectTableNotViewError(
-              identifier, isTemp = true, cmd, relationTypeMismatchHint, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(
+              identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, allowTemp, relationTypeMismatchHint) =>
+      case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
-            throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case t: ResolvedTable =>
+            val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectViewNotTableError(
-              t, cmd, relationTypeMismatchHint, u)
+              nameParts, cmd, suggestAlternative, u)
           case other => other
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
         lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
-              identifier, cmd, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case other => other
         }.getOrElse(u)
     }
@@ -1454,6 +1449,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    *    e.g. `SELECT col, current_date FROM t`.
    * 4. Resolves the columns to outer references with the outer plan if we are resolving subquery
    *    expressions.
+   * 5. Resolves the columns to SQL variables.
    *
    * Some plan nodes have special column reference resolution logic, please read these sub-rules for
    * details:
@@ -1572,7 +1568,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
 
       case g @ Generate(generator, join, outer, qualifier, output, child) =>
-        val newG = resolveExpressionByPlanOutput(generator, child, throws = true, allowOuter = true)
+        val newG = resolveExpressionByPlanOutput(
+          generator, child, throws = true, includeLastResort = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
@@ -1588,7 +1585,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case plan => plan
         }
         val resolvedOrder = mg.dataOrder
-            .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
+          .map(resolveExpressionByPlanOutput(_, planForResolve).asInstanceOf[SortOrder])
         mg.copy(dataOrder = resolvedOrder)
 
       // Left and right sort expression have to be resolved against the respective child plan only
@@ -1618,13 +1615,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Special case for Project as it supports lateral column alias.
       case p: Project =>
-        val resolvedNoOuter = p.projectList
-          .map(resolveExpressionByPlanChildren(_, p, allowOuter = false))
+        val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
         // Lateral column alias has higher priority than outer reference.
-        val resolvedWithLCA = resolveLateralColumnAlias(resolvedNoOuter)
-        val resolvedWithOuter = resolvedWithLCA.map(resolveOuterRef)
-        val resolvedWithVariables = resolvedWithOuter.map(p => resolveVariables(p))
-        p.copy(projectList = resolvedWithVariables.map(_.asInstanceOf[NamedExpression]))
+        val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
+        val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
+        p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -1718,7 +1713,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // Columns in HAVING should be resolved with `agg.child.output` first, to follow the SQL
           // standard. See more details in SPARK-31519.
           val resolvedWithAgg = resolveColWithAgg(e, agg)
-          resolveExpressionByPlanChildren(resolvedWithAgg, u, allowOuter = true)
+          resolveExpressionByPlanChildren(resolvedWithAgg, u, includeLastResort = true)
         }
 
       // RepartitionByExpression can host missing attributes that are from a descendant node.
@@ -1728,32 +1723,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // node, and project them way at the end via an extra Project.
       case r @ RepartitionByExpression(partitionExprs, child, _, _)
         if !r.resolved || r.missingInput.nonEmpty =>
-        val resolvedNoOuter = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
-        val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedNoOuter, child)
-        // Outer reference has lower priority than this. See the doc of `ResolveReferences`.
-        val resolvedWithOuter = newPartitionExprs.map(resolveOuterRef)
-        val finalPartitionExprs = resolvedWithOuter.map(e => resolveVariables(e))
+        val resolvedBasic = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
+        val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedBasic, child)
+        // Missing columns should be resolved right after basic column resolution.
+        // See the doc of `ResolveReferences`.
+        val resolvedFinal = newPartitionExprs.map(resolveColsLastResort)
         if (child.output == newChild.output) {
-          r.copy(finalPartitionExprs, newChild)
+          r.copy(resolvedFinal, newChild)
         } else {
-          Project(child.output, r.copy(finalPartitionExprs, newChild))
+          Project(child.output, r.copy(resolvedFinal, newChild))
         }
 
       // Filter can host both grouping expressions/aggregate functions and missing attributes.
       // The grouping expressions/aggregate functions resolution takes precedence over missing
       // attributes. See the classdoc of `ResolveReferences` for details.
       case f @ Filter(cond, child) if !cond.resolved || f.missingInput.nonEmpty =>
-        val resolvedNoOuter = resolveExpressionByPlanChildren(cond, f)
-        val resolvedWithAgg = resolveColWithAgg(resolvedNoOuter, child)
+        val resolvedBasic = resolveExpressionByPlanChildren(cond, f)
+        val resolvedWithAgg = resolveColWithAgg(resolvedBasic, child)
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
-        // Outer reference has lowermost priority. See the doc of `ResolveReferences`.
-        val resolvedWithOuter = resolveOuterRef(newCond.head)
-        val finalCond = resolveVariables(resolvedWithOuter)
+        // Missing columns should be resolved right after basic column resolution.
+        // See the doc of `ResolveReferences`.
+        val resolvedFinal = resolveColsLastResort(newCond.head)
         if (child.output == newChild.output) {
-          f.copy(condition = finalCond)
+          f.copy(condition = resolvedFinal)
         } else {
           // Add missing attributes and then project them away.
-          val newFilter = Filter(finalCond, newChild)
+          val newFilter = Filter(resolvedFinal, newChild)
           Project(child.output, newFilter)
         }
 
@@ -1762,7 +1757,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionByPlanChildren(_, q, allowOuter = true))
+        q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))
     }
 
     private object MergeResolvePolicy extends Enumeration {
@@ -2085,7 +2080,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+            val resolvedTvf = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
@@ -2095,20 +2090,54 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   catalog, "table-valued functions")
               }
             }
-
+            // Resolve Python UDTF calls if needed.
+            val resolvedFunc = resolvedTvf match {
+              case g @ Generate(u: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                val analyzeResult: PythonUDTFAnalyzeResult =
+                  u.resolveElementMetadata(u.func, u.children)
+                g.copy(generator =
+                  PythonUDTF(u.name, u.func, analyzeResult.schema, u.children,
+                    u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes,
+                    analyzeResult = Some(analyzeResult)))
+              case other =>
+                other
+            }
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
+            val functionTableSubqueryArgs =
+              mutable.ArrayBuffer.empty[FunctionTableSubqueryArgumentExpression]
             val tvf = resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
-                resolvedFunc match {
-                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this clause")
+                val (
+                  pythonUDTFName: String,
+                  pythonUDTFAnalyzeResult: Option[PythonUDTFAnalyzeResult]) =
+                  resolvedFunc match {
+                    case Generate(p: PythonUDTF, _, _, _, _, _) =>
+                      (p.name,
+                        p.analyzeResult)
+                    case _ =>
+                      assert(!t.hasRepartitioning,
+                        "Cannot evaluate the table-valued function call because it included the " +
+                          "PARTITION BY clause, but only Python table functions support this " +
+                          "clause")
+                      ("", None)
+                  }
+                // Check if this is a call to a Python user-defined table function whose polymorphic
+                // 'analyze' method returned metadata indicated requested partitioning and/or
+                // ordering properties of the input relation. In that event, make sure that the UDTF
+                // call did not include any explicit PARTITION BY and/or ORDER BY clauses for the
+                // corresponding TABLE argument, and then update the TABLE argument representation
+                // to apply the requested partitioning and/or ordering.
+                pythonUDTFAnalyzeResult.map { analyzeResult =>
+                  val newTableArgument: FunctionTableSubqueryArgumentExpression =
+                    analyzeResult.applyToTableArgument(pythonUDTFName, t)
+                  tableArgs.append(SubqueryAlias(alias, newTableArgument.evaluable))
+                  functionTableSubqueryArgs.append(newTableArgument)
+                }.getOrElse {
+                  tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                  functionTableSubqueryArgs.append(t)
                 }
-                tableArgs.append(SubqueryAlias(alias, t.evaluable))
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
@@ -2117,11 +2146,34 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   tableArgs.size)
               }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
+              // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
+              def assignUDTFPartitionColumnIndexes(
+                  fn: PythonUDTFPartitionColumnIndexes => LogicalPlan): Option[LogicalPlan] = {
+                val indexes: Seq[Int] = functionTableSubqueryArgs.headOption
+                  .map(_.partitioningExpressionIndexes).getOrElse(Seq.empty)
+                if (indexes.nonEmpty) {
+                  Some(fn(PythonUDTFPartitionColumnIndexes(indexes)))
+                } else {
+                  None
+                }
+              }
+              val tvfWithTableColumnIndexes: LogicalPlan = tvf match {
+                case g@Generate(p: PythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
+                case g@Generate(p: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                  assignUDTFPartitionColumnIndexes(
+                    i => g.copy(generator = p.copy(pythonUDTFPartitionColumnIndexes = Some(i))))
+                    .getOrElse(g)
+                case _ =>
+                  tvf
+              }
               Project(
                 Seq(UnresolvedStar(Some(Seq(alias)))),
                 LateralJoin(
                   tableArgs.reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
-                  LateralSubquery(SubqueryAlias(alias, tvf)), Inner, None)
+                  LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
               )
             } else {
               tvf
@@ -2197,9 +2249,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
-            val elementSchema = u.resolveElementSchema(u.func, u.children)
+            val elementSchema = u.resolveElementMetadata(u.func, u.children).schema
             PythonUDTF(u.name, u.func, elementSchema, u.children,
-              u.evalType, u.udfDeterministic, u.resultId)
+              u.evalType, u.udfDeterministic, u.resultId, u.pythonUDTFPartitionColumnIndexes)
           }
         }
     }
@@ -2981,6 +3033,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // we need to make sure that col1 to col5 are all projected from the child of the Window
       // operator.
       val extractedExprMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
+      def getOrExtract(key: Expression, value: Expression): Expression = {
+        extractedExprMap.getOrElseUpdate(key.canonicalized,
+          Alias(value, s"_w${extractedExprMap.size}")()).toAttribute
+      }
       def extractExpr(expr: Expression): Expression = expr match {
         case ne: NamedExpression =>
           // If a named expression is not in regularExpressions, add it to
@@ -2994,11 +3050,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           ne
         case e: Expression if e.foldable =>
           e // No need to create an attribute reference if it will be evaluated as a Literal.
+        case e: NamedArgumentExpression =>
+          // For NamedArgumentExpression, we extract the value and replace it with
+          // an AttributeReference (with an internal column name, e.g. "_w0").
+          NamedArgumentExpression(e.key, getOrExtract(e, e.value))
         case e: Expression =>
           // For other expressions, we extract it and replace it with an AttributeReference (with
           // an internal column name, e.g. "_w0").
-          extractedExprMap.getOrElseUpdate(e.canonicalized,
-            Alias(e, s"_w${extractedExprMap.size}")()).toAttribute
+          getOrExtract(e, e)
       }
 
       // Now, we extract regular expressions from expressionsWithWindowFunctions

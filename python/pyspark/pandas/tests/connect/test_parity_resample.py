@@ -30,9 +30,7 @@ class ResampleParityTests(
 class ResampleWithTimezoneTests(
     ResampleWithTimezoneMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("SPARK-44731: Support 'spark.sql.timestampType' in Python Spark Connect client")
-    def test_series_resample_with_timezone(self):
-        super().test_series_resample_with_timezone()
+    pass
 
 
 if __name__ == "__main__":

@@ -17,22 +17,22 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.DataOutputStream
+
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-/**
- * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
- */
-class ArrowPythonRunner(
+abstract class BaseArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    protected override val schema: StructType,
-    protected override val timeZoneId: String,
+    _schema: StructType,
+    _timeZoneId: String,
     protected override val largeVarTypes: Boolean,
     protected override val workerConf: Map[String, String],
     val pythonMetrics: Map[String, SQLMetric],
@@ -50,11 +50,58 @@ class ArrowPythonRunner(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
+  // constructor.
+  override protected lazy val timeZoneId: String = _timeZoneId
+  override protected lazy val schema: StructType = _schema
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(
     bufferSize >= 4,
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
+}
+
+/**
+ * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
+ */
+class ArrowPythonRunner(
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    _schema: StructType,
+    _timeZoneId: String,
+    largeVarTypes: Boolean,
+    workerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BaseArrowPythonRunner(
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    pythonMetrics, jobArtifactUUID) {
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit =
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+}
+
+/**
+ * Similar to `PythonUDFWithNamedArgumentsRunner`, but exchange data with Python worker
+ * via Arrow stream.
+ */
+class ArrowPythonWithNamedArgumentRunner(
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argMetas: Array[Array[ArgumentMetadata]],
+    _schema: StructType,
+    _timeZoneId: String,
+    largeVarTypes: Boolean,
+    workerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String])
+  extends BaseArrowPythonRunner(
+    funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
+    pythonMetrics, jobArtifactUUID) {
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit =
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
 }
 
 object ArrowPythonRunner {

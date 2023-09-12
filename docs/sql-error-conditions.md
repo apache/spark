@@ -93,18 +93,6 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
-### AVRO_INCORRECT_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
-
 ### BATCH_METADATA_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -587,6 +575,12 @@ SQLSTATE: none assigned
 
 A column cannot have both a default value and a generation expression but column `<colName>` has default value: (`<defaultValue>`) and generation expression: (`<genExpr>`).
 
+### GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION
+
+SQLSTATE: none assigned
+
+Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
+
 ### GRAPHITE_SINK_INVALID_PROTOCOL
 
 SQLSTATE: none assigned
@@ -977,7 +971,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 SQLSTATE: none assigned
 
-Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -1310,6 +1304,12 @@ Cannot call function `<functionName>` because named argument references are not 
 [SQLSTATE: 42607](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
+
+### NON_FOLDABLE_ARGUMENT
+
+[SQLSTATE: 22024](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The function `<funcName>` requires the parameter `<paramName>` to be a foldable expression of the type `<paramType>`, but the actual argument is a non-foldable.
 
 ### NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION
 
@@ -1764,6 +1764,18 @@ SQLSTATE: none assigned
 
 Failed to analyze the Python user defined table function: `<msg>`
 
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata `<requestedMetadata>`, but the function call `<invalidFunctionCallProperty>`.
+
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata was invalid; `<reason>`.
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -2080,11 +2092,27 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
+### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
+
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
+
+### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
+
+SQLSTATE: none assigned
+
+The view `<viewName>` does not support `<operation>`.
+
+For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2116,6 +2144,12 @@ To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 Cannot create view `<relationName>` because it already exists.
 Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects.
+
+### VIEW_EXCEED_MAX_NESTED_DEPTH
+
+SQLSTATE: none assigned
+
+The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 

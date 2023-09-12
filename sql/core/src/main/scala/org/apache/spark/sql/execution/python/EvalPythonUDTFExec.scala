@@ -21,11 +21,12 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -45,7 +46,7 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
   protected def evaluate(
-      argOffsets: Array[Int],
+      argMetas: Array[ArgumentMetadata],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]]
@@ -55,7 +56,6 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(context, iter)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -68,13 +68,19 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = udtf.children.map { e =>
-        if (allInputs.exists(_.semanticEquals(e))) {
-          allInputs.indexWhere(_.semanticEquals(e))
+      val argMetas = udtf.children.map { e =>
+        val (key, value) = e match {
+          case NamedArgumentExpression(key, value) =>
+            (Some(key), value)
+          case _ =>
+            (None, e)
+        }
+        if (allInputs.exists(_.semanticEquals(value))) {
+          ArgumentMetadata(allInputs.indexWhere(_.semanticEquals(value)), key)
         } else {
-          allInputs += e
-          dataTypes += e.dataType
-          allInputs.length - 1
+          allInputs += value
+          dataTypes += value.dataType
+          ArgumentMetadata(allInputs.length - 1, key)
         }
       }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
@@ -87,13 +93,13 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       // Also keep track of the number rows added to the queue.
       // This is needed to process extra output rows from the `terminate()` call of the UDTF.
       var count = 0L
-      val projectedRowIter = contextAwareIterator.map { inputRow =>
+      val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         count += 1
         projection(inputRow)
       }
 
-      val outputRowIterator = evaluate(argOffsets, projectedRowIter, schema, context)
+      val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (child.outputSet == AttributeSet(requiredChildOutput)) {

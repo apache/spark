@@ -86,10 +86,10 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
 
   // Statistics about cached responses.
-  private var cachedSizeUntilHighestConsumed = CachedSize()
-  private var cachedSizeUntilLastProduced = CachedSize()
-  private var autoRemovedSize = CachedSize()
-  private var totalSize = CachedSize()
+  private val cachedSizeUntilHighestConsumed = CachedSize()
+  private val cachedSizeUntilLastProduced = CachedSize()
+  private val autoRemovedSize = CachedSize()
+  private val totalSize = CachedSize()
 
   /**
    * Total size of response to be held buffered after giving out with getResponse. 0 for none, any
@@ -148,8 +148,8 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
 
   /** Attach a new consumer (ExecuteResponseGRPCSender). */
   def attachConsumer(newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
-    // detach the current sender before attaching new one
-    responseSender.foreach(_.detach())
+    // interrupt the current sender before attaching new one
+    responseSender.foreach(_.interrupt())
     responseSender = Some(newSender)
   }
 
@@ -239,11 +239,6 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Returns if the stream is finished. */
   def completed(): Boolean = synchronized {
     finalProducedIndex.isDefined
-  }
-
-  /** Consumer (ExecuteResponseGRPCSender) waits on the monitor of ExecuteResponseObserver. */
-  private def notifyConsumer(): Unit = {
-    notifyAll()
   }
 
   /**

@@ -58,23 +58,23 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       case _ => a
     }
 
-    val resolvedGroupExprsNoOuter = a.groupingExpressions
-      .map(resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
-    val resolvedAggExprsNoOuter = a.aggregateExpressions.map(
-      resolveExpressionByPlanChildren(_, planForResolve, allowOuter = false))
-    val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsNoOuter)
-    val resolvedAggExprsWithOuter = resolvedAggExprsWithLCA.map(resolveOuterRef)
+    val resolvedGroupExprsBasic = a.groupingExpressions
+      .map(resolveExpressionByPlanChildren(_, planForResolve))
+    val resolvedAggExprsBasic = a.aggregateExpressions.map(
+      resolveExpressionByPlanChildren(_, planForResolve))
+    val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsBasic)
+    val resolvedAggExprsFinal = resolvedAggExprsWithLCA.map(resolveColsLastResort)
       .map(_.asInstanceOf[NamedExpression])
     // `groupingExpressions` may rely on `aggregateExpressions`, due to features like GROUP BY alias
     // and GROUP BY ALL. We only do basic resolution for `groupingExpressions`, and will further
     // resolve it after `aggregateExpressions` are all resolved. Note: the basic resolution is
     // needed as `aggregateExpressions` may rely on `groupingExpressions` as well, for the session
     // window feature. See the rule `SessionWindowing` for more details.
-    val resolvedGroupExprs = if (resolvedAggExprsWithOuter.forall(_.resolved)) {
+    val resolvedGroupExprs = if (resolvedAggExprsFinal.forall(_.resolved)) {
       val resolved = resolveGroupByAll(
-        resolvedAggExprsWithOuter,
-        resolveGroupByAlias(resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
-      ).map(resolveOuterRef)
+        resolvedAggExprsFinal,
+        resolveGroupByAlias(resolvedAggExprsFinal, resolvedGroupExprsBasic)
+      ).map(resolveColsLastResort)
       resolved
     } else {
       // Do not resolve columns in grouping expressions to outer references here, as the aggregate
@@ -82,7 +82,7 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       // alias/ALL in the next iteration. If aggregate expressions end up as unresolved, we don't
       // need to resolve grouping expressions at all, as `CheckAnalysis` will report error for
       // aggregate expressions first.
-      resolvedGroupExprsNoOuter
+      resolvedGroupExprsBasic
     }
     a.copy(
       // The aliases in grouping expressions are useless and will be removed at the end of analysis
@@ -98,7 +98,7 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
         //       GROUP BY will be removed eventually, by following iterations.
         if (e.resolved) trimAliases(e) else e
       },
-      aggregateExpressions = resolvedAggExprsWithOuter)
+      aggregateExpressions = resolvedAggExprsFinal)
   }
 
   private def resolveGroupByAlias(

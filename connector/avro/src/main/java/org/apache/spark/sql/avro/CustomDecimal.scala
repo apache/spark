@@ -22,14 +22,14 @@ import org.apache.avro.Schema
 
 import org.apache.spark.sql.types.DecimalType
 
-object CustomDecimal {
+private[spark] object CustomDecimal {
   val TYPE_NAME = "custom-decimal"
 }
 
 // A customized logical type, which will be registered to Avro. This logical type is similar to
 // Avro's builtin Decimal type, but is meant to be registered for long type. It indicates that
 // the long type should be converted to Spark's Decimal type, with provided precision and scale.
-private class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
+private[spark] class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
   val scale : Int = {
     val obj = schema.getObjectProp("scale")
     obj match {

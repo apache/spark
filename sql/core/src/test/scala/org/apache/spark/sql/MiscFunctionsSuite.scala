@@ -48,15 +48,16 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("version()"), df.select(version()))
   }
 
-  test("SPARK-21957: get current_user in normal spark apps") {
+  test("SPARK-21957, SPARK-44860: get current_user, session_user in normal spark apps") {
     val user = spark.sparkContext.sparkUser
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val df = sql("select current_user(), current_user, user, user()")
-      checkAnswer(df, Row(user, user, user, user))
+      val df =
+        sql("select current_user(), current_user, user, user(), session_user(), session_user")
+      checkAnswer(df, Row(user, user, user, user, user, user))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
-      Seq("user", "current_user").foreach { func =>
+      Seq("user", "current_user", "session_user").foreach { func =>
         checkAnswer(sql(s"select $func"), Row(user))
         checkError(
           exception = intercept[ParseException](sql(s"select $func()")),
@@ -232,6 +233,26 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2")))
     checkAnswer(df.select(reflect(lit("java.util.UUID"), lit("fromString"), col("a"))),
       Seq(Row("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2")))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("reflect(cast(null as string), 'fromString', a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "`class`",
+        "sqlExpr" -> "\"reflect(CAST(NULL AS STRING), fromString, a)\""),
+      context = ExpectedContext("", "", 0, 45, "reflect(cast(null as string), 'fromString', a)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("reflect('java.util.UUID', cast(null as string), a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "`method`",
+        "sqlExpr" -> "\"reflect(java.util.UUID, CAST(NULL AS STRING), a)\""),
+      context = ExpectedContext("", "", 0, 49,
+        "reflect('java.util.UUID', cast(null as string), a)"))
   }
 
   test("java_method") {

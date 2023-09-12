@@ -1096,15 +1096,20 @@ object TypeCoercion extends TypeCoercionBase {
       }
     }
 
+    private def isIntervalType(dt: DataType): Boolean = dt match {
+      case _: CalendarIntervalType | _: AnsiIntervalType => true
+      case _ => false
+    }
+
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
-        if right.dataType != CalendarIntervalType =>
+        if !isIntervalType(right.dataType) =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringTypeExpression())
-        if left.dataType != CalendarIntervalType =>
+        if !isIntervalType(left.dataType) =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp

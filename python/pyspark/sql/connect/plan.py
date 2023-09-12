@@ -41,7 +41,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    IllegalArgumentException,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -393,9 +398,6 @@ class CachedLocalRelation(LogicalPlan):
         plan = self._create_proto_relation()
         clr = plan.cached_local_relation
 
-        if session._user_id:
-            clr.userId = session._user_id
-        clr.sessionId = session._session_id
         clr.hash = self._hash
 
         return plan
@@ -459,7 +461,6 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._columns = list(columns)
-        self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
@@ -579,7 +580,7 @@ class Hint(LogicalPlan):
         self._name = name
 
         for param in parameters:
-            assert isinstance(param, (list, str, float, int))
+            assert isinstance(param, (list, str, float, int, Column))
             if isinstance(param, list):
                 assert all(isinstance(p, (str, float, int)) for p in param)
 
@@ -854,7 +855,7 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise PySparkNotImplementedError(
+            raise IllegalArgumentException(
                 error_class="UNSUPPORTED_JOIN_TYPE",
                 message_parameters={"join_type": how},
             )
@@ -2206,7 +2207,7 @@ class PythonUDTF:
         try:
             udtf.command = CloudPickleSerializer().dumps(self._func)
         except pickle.PicklingError:
-            raise PySparkRuntimeError(
+            raise PySparkPicklingError(
                 error_class="UDTF_SERIALIZATION_ERROR",
                 message_parameters={
                     "name": self._name,

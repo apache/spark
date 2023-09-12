@@ -113,6 +113,8 @@ class SeriesTestsMixin:
             self.assert_eq(ps.from_pandas(pser_a), pser_a)
             self.assert_eq(ps.from_pandas(pser_b), pser_b)
 
+        self.assertTrue(pser_a.empty)
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")

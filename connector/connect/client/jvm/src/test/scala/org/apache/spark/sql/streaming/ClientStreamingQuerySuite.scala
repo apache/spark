@@ -27,12 +27,13 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession, SQLHelper}
-import org.apache.spark.sql.connect.client.util.QueryTest
+import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.util.SparkFileUtils
 
 class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
@@ -268,6 +269,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
     q.stop()
     assert(!q1.isActive)
+
+    assert(spark.streams.get(q.id) == null)
   }
 
   test("streaming query listener") {
@@ -410,11 +413,13 @@ class EventCollector extends StreamingQueryListener {
   }
 }
 
-class ForeachBatchFn(val viewName: String) extends ((DataFrame, Long) => Unit) with Serializable {
-  override def apply(df: DataFrame, batchId: Long): Unit = {
+class ForeachBatchFn(val viewName: String)
+    extends VoidFunction2[DataFrame, java.lang.Long]
+    with Serializable {
+  override def call(df: DataFrame, batchId: java.lang.Long): Unit = {
     val count = df.count()
     df.sparkSession
-      .createDataFrame(Seq((batchId, count)))
+      .createDataFrame(Seq((batchId.toLong, count)))
       .createOrReplaceGlobalTempView(viewName)
   }
 }

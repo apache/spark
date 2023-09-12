@@ -97,7 +97,8 @@ case class ApproximatePercentile(
   }
 
   // Mark as lazy so that accuracyExpression is not evaluated during tree transformation.
-  private lazy val accuracy: Long = accuracyExpression.eval().asInstanceOf[Number].longValue
+  private lazy val accuracyNum = accuracyExpression.eval().asInstanceOf[Number]
+  private lazy val accuracy: Long = accuracyNum.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
@@ -138,6 +139,10 @@ case class ApproximatePercentile(
           "inputExpr" -> toSQLExpr(accuracyExpression)
         )
       )
+    } else if (accuracyNum == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "accuracy"))
     } else if (accuracy <= 0 || accuracy > Int.MaxValue) {
       DataTypeMismatch(
         errorSubClass = "VALUE_OUT_OF_RANGE",

@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import sbt._
-import sbt.Classpaths.publishTask
+import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
@@ -324,8 +324,10 @@ object SparkBuild extends PomBuild {
         .withLogging(ivyLoggingLevel.value),
     (MavenCompile / publishMavenStyle) := true,
     (SbtCompile / publishMavenStyle) := false,
-    (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
-    (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
+    (MavenCompile / publishLocal) := publishOrSkip((MavenCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
+    (SbtCompile / publishLocal) := publishOrSkip((SbtCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
@@ -774,7 +776,6 @@ object SparkConnect {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -840,14 +841,7 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkConnectClient {
@@ -866,7 +860,6 @@ object SparkConnectClient {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
-
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
@@ -924,14 +917,7 @@ object SparkConnectClient {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    Seq(
-      (Compile / PB.targets) := Seq(
-        PB.gens.java -> (Compile / sourceManaged).value,
-        PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-      )
-    )
-  }
+  )
 }
 
 object SparkProtobuf {
@@ -1010,8 +996,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
   )
 }
 
@@ -1608,6 +1593,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
+    (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
     (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",

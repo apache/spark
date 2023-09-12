@@ -113,14 +113,15 @@ Now Spark server is running and ready to accept Spark Connect sessions from clie
 applications. In the next section we will walk through how to use Spark Connect
 when writing client applications.
 
-## Use Spark Connect in client applications
+## Use Spark Connect for interactive analysis
+<div class="codetabs">
 
+<div data-lang="python" markdown="1">
 When creating a Spark session, you can specify that you want to use Spark Connect
 and there are a few ways to do that outlined as follows.
 
 If you do not use one of the mechanisms outlined here, your Spark session will
-work just like before, without leveraging Spark Connect, and your application code
-will run on the Spark driver node.
+work just like before, without leveraging Spark Connect.
 
 ### Set SPARK_REMOTE environment variable
 
@@ -138,9 +139,6 @@ export SPARK_REMOTE="sc://localhost"
 
 And start the Spark shell as usual:
 
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
 {% highlight bash %}
 ./bin/pyspark
 {% endhighlight %}
@@ -150,25 +148,6 @@ The PySpark shell is now connected to Spark using Spark Connect as indicated in 
 {% highlight python %}
 Client connected to the Spark Connect server at localhost
 {% endhighlight %}
-</div>
-
-</div>
-
-And if you write your own program, create a Spark session as shown in this example:
-
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.getOrCreate()
-{% endhighlight %}
-</div>
-
-</div>
-
-This will create a Spark Connect session from your application by reading the
-`SPARK_REMOTE` environment variable we set previously.
 
 ### Specify Spark Connect when creating Spark session
 
@@ -178,9 +157,6 @@ create a Spark session.
 For example, you can launch the PySpark shell with Spark Connect as
 illustrated here.
 
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
 To launch the PySpark shell with Spark Connect, simply include the `remote`
 parameter and specify the location of your Spark server. We are using `localhost`
 in this example to connect to the local Spark server we started previously:
@@ -219,29 +195,175 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 |  2|Maria|
 +---+-----+
 {% endhighlight %}
-</div>
 
 </div>
 
-Or, when writing your own code, include the `remote` function with a reference to
-your Spark server when you create a Spark session, as in this example:
+<div data-lang="scala"  markdown="1">
+For the Scala shell, we use an Ammonite-based REPL that is currently not included in the Apache Spark package.
+
+To set up the new Scala shell, first download and install [Coursier CLI](https://get-coursier.io/docs/cli-installation).
+Then, install the REPL using the following command in a terminal window:
+{% highlight bash %}
+cs install –-contrib spark-connect-repl
+{% endhighlight %}
+
+And now you can start the Ammonite-based Scala REPL/shell to connect to your Spark server like this:
+
+{% highlight bash %}
+spark-connect-repl
+{% endhighlight %}
+
+A greeting message will appear when the REPL successfully initializes:
+{% highlight bash %}
+Spark session available as 'spark'.
+   _____                  __      ______                            __
+  / ___/____  ____ ______/ /__   / ____/___  ____  ____  ___  _____/ /_
+  \__ \/ __ \/ __ `/ ___/ //_/  / /   / __ \/ __ \/ __ \/ _ \/ ___/ __/
+ ___/ / /_/ / /_/ / /  / ,<    / /___/ /_/ / / / / / / /  __/ /__/ /_
+/____/ .___/\__,_/_/  /_/|_|   \____/\____/_/ /_/_/ /_/\___/\___/\__/
+    /_/
+{% endhighlight %}
+
+By default, the REPL will attempt to connect to a local Spark Server.
+Run the following Scala code in the shell to see Spark Connect in action:
+
+{% highlight scala %}
+@ spark.range(10).count
+res0: Long = 10L
+{% endhighlight %}
+
+### Configure client-server connection
+
+By default, the REPL will attempt to connect to a local Spark Server on port 15002.
+The connection, however, may be configured in several ways as described in this configuration
+[reference](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+
+#### Set SPARK_REMOTE environment variable
+
+The SPARK_REMOTE environment variable can be set on the client machine to customize the client-server
+connection that is initialized at REPL startup.
+
+{% highlight bash %}
+export SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG"
+spark-connect-repl
+{% endhighlight %}
+or
+{% highlight bash %}
+SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG" spark-connect-repl
+{% endhighlight %}
+
+#### Use CLI arguments
+
+The customizations may also be passed in through CLI arguments as shown below:
+{% highlight bash %}
+spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
+{% endhighlight %}
+
+The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
+
+#### Configure programmatically with a connection ctring
+
+The connection may also be programmatically created using _SparkSession#builder_ as in this example:
+{% highlight scala %}
+@ import org.apache.spark.sql.SparkSession
+@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").build()
+{% endhighlight %}
+
+</div>
+</div>
+
+## Use Spark Connect in standalone applications
 
 <div class="codetabs">
 
+
 <div data-lang="python"  markdown="1">
+
+First, install PySpark with `pip install pyspark==3.5.0` or if building a packaged PySpark application/library,
+add it your setup.py file as:
+{% highlight python %}
+install_requires=[
+'pyspark==3.5.0'
+]
+{% endhighlight %}
+
+When writing your own code, include the `remote` function with a reference to
+your Spark server when you create a Spark session, as in this example:
+
 {% highlight python %}
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
 {% endhighlight %}
+
+
+For illustration purposes, we’ll create a simple Spark Connect application, SimpleApp.py:
+{% highlight python %}
+"""SimpleApp.py"""
+from pyspark.sql import SparkSession
+
+logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
+spark = SparkSession.builder.remote("sc://localhost").appName("SimpleApp").getOrCreate()
+logData = spark.read.text(logFile).cache()
+
+numAs = logData.filter(logData.value.contains('a')).count()
+numBs = logData.filter(logData.value.contains('b')).count()
+
+print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
+
+spark.stop()
+{% endhighlight %}
+
+This program just counts the number of lines containing ‘a’ and the number containing ‘b’ in a text file.
+Note that you’ll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
+
+We can run this application with the regular Python interpreter as follows:
+{% highlight python %}
+# Use the Python interpreter to run your application
+$ python SimpleApp.py
+...
+Lines with a: 72, lines with b: 39
+{% endhighlight %}
 </div>
 
+
 <div data-lang="scala"  markdown="1">
+To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
+Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file: 
+{% highlight sbt %}
+libraryDependencies += "org.apache.spark" %% "spark-sql-api" % "3.5.0"
+libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "3.5.0"
+{% endhighlight %}
+
+When writing your own code, include the `remote` function with a reference to
+your Spark server when you create a Spark session, as in this example:
+
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
 val spark = SparkSession.builder().remote("sc://localhost").build()
 {% endhighlight %}
-</div>
 
+
+**Note**: Operations that reference User Defined Code such as UDFs, filter, map, etc require a
+[ClassFinder](https://github.com/apache/spark/blob/bb41cd889efdd0602385e70b4c8f1c93740db332/connector/connect/common/src/main/scala/org/apache/spark/sql/connect/client/ClassFinder.scala#L26)
+to be registered to pickup and upload any required classfiles. Also, any JAR dependencies must be uploaded to the server using `SparkSession#AddArtifact`.
+
+Example:
+{% highlight scala %}
+import org.apache.spark.sql.connect.client.REPLClassDirMonitor
+// Register a ClassFinder to monitor and upload the classfiles from the build output.
+val classFinder = new REPLClassDirMonitor(<ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR>)
+spark.registerClassFinder(classfinder)
+
+// Upload JAR dependencies
+spark.addArtifact(<ABSOLUTE_PATH_JAR_DEP>)
+{% endhighlight %}
+Here, `ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR` is the output directory where the build system writes classfiles into
+and `ABSOLUTE_PATH_JAR_DEP` is the location of the JAR on the local file system.
+
+The `REPLClassDirMonitor` is a provided implementation of `ClassFinder` that monitors a specific directory but
+one may implement their own class extending `ClassFinder` for customized search and monitoring.
+
+</div>
 </div>
 
 # Client application authentication
@@ -265,9 +387,23 @@ supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the
 APIs you are using are available before migrating existing code to Spark Connect.
 
-**Scala**: In Spark 3.4, Spark Connect supports most Scala APIs, including
+**Scala**: In Spark 3.5, Spark Connect supports most Scala APIs, including
 [Dataset](api/scala/org/apache/spark/sql/Dataset.html),
-[functions](api/scala/org/apache/spark/sql/functions$.html), and
-[Column](api/scala/org/apache/spark/sql/Column.html).
+[functions](api/scala/org/apache/spark/sql/functions$.html),
+[Column](api/scala/org/apache/spark/sql/Column.html),
+[Catalog](api/scala/org/apache/spark/sql/catalog/Catalog.html) and
+[KeyValueGroupedDataset](api/scala/org/apache/spark/sql/KeyValueGroupedDataset.html).
+
+User-Defined Functions (UDFs) are supported, by default for the shell and in standalone applications with
+additional set-up requirements.
+
+Majority of the Streaming API is supported, including
+[DataStreamReader](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html),
+[DataStreamWriter](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.htmll),
+[StreamingQuery](api/scala/org/apache/spark/sql/streaming/StreamingQuery.html) and
+[StreamingQueryListener](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html).
+
+APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
+and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are deprecated in all Spark Connect versions.
 
 Support for more APIs is planned for upcoming Spark releases.

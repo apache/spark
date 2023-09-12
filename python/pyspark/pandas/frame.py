@@ -83,6 +83,7 @@ from pyspark.sql.types import (
     DecimalType,
     TimestampType,
     TimestampNTZType,
+    NullType,
 )
 from pyspark.sql.window import Window
 
@@ -797,7 +798,7 @@ class DataFrame(Frame, Generic[T]):
                     new_column_labels.append(label)
 
             if len(exprs) == 1:
-                return Series([])
+                return Series([], dtype="float64")
 
             sdf = self._internal.spark_frame.select(*exprs)
 
@@ -6096,6 +6097,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
                 numeric_col_names.append(psser.name)
 
+        if len(numeric_col_names) == 0:
+            raise TypeError(
+                "Cannot interpolate with all object-dtype columns in the DataFrame. "
+                "Try setting at least one column to a numeric dtype."
+            )
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
             lambda psser: psser._interpolate(
@@ -11947,12 +11953,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
 
-    # TODO(SPARK-41619): Add `show_counts` parameter and replace with `null_counts`.
     def info(
         self,
         verbose: Optional[bool] = None,
         buf: Optional[IO[str]] = None,
         max_cols: Optional[int] = None,
+        show_counts: Optional[bool] = None,
     ) -> None:
         """
         Print a concise summary of a DataFrame.
@@ -11972,10 +11978,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             When to switch from the verbose to the truncated output. If the
             DataFrame has more than `max_cols` columns, the truncated output
             is used.
-        null_counts : bool, optional
+        show_counts : bool, optional
             Whether to show the non-null counts.
 
-            .. deprecated:: 3.4.0
+            .. versionadded:: 4.0.0
 
         Returns
         -------
@@ -12065,6 +12071,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     buf=buf,
                     max_cols=max_cols,
                     memory_usage=False,
+                    show_counts=show_counts,  # type: ignore
                 )
             finally:
                 del self._data
@@ -12128,11 +12135,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0.50  3.0  7.0
         0.75  4.0  8.0
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
@@ -12155,7 +12157,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         def quantile(psser: "Series") -> PySparkColumn:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-            if isinstance(spark_type, (BooleanType, NumericType)):
+            if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), qq, accuracy)
             else:
                 raise TypeError(
