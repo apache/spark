@@ -94,6 +94,8 @@ BASE_DIR=$(pwd)
 init_java
 init_maven_sbt
 
+PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
+
 if [[ "$1" == "finalize" ]]; then
   if [[ -z "$PYPI_PASSWORD" ]]; then
     error 'The environment variable PYPI_PASSWORD is not set. Exiting.'
@@ -109,9 +111,17 @@ if [[ "$1" == "finalize" ]]; then
   cd spark
   git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
   git push origin "v$RELEASE_VERSION"
+  echo "git tag v$RELEASE_VERSION created"
+
+  # Update python api docs versions.json
+  echo "Update python api docs versions.json"
+  $PYTHON_EXECUTABLE "dev/create-release/utils-update-docs-versions.py" "python/docs/source/_static/versions.json" $RELEASE_VERSION
+  git add "python/docs/source/_static/versions.json"
+  git commit -m "Update python api docs versions.json for Apache Spark $RELEASE_VERSION"
+  git push origin HEAD:master
+  echo "git update python api docs versions.json for Apache Spark $RELEASE_VERSION"
   cd ..
   rm -rf spark
-  echo "git tag v$RELEASE_VERSION created"
 
   # download PySpark binary from the dev directory and upload to PyPi.
   echo "Uploading PySpark to PyPi"
