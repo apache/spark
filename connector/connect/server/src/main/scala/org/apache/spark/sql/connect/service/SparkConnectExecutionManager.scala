@@ -71,15 +71,14 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       // The latter is to prevent double execution when a client retries execution, thinking it
       // never reached the server, but in fact it did, and already got removed as abandoned.
       if (executions.get(executeHolder.key).isDefined) {
-        if (getAbandonedTombstone(executeHolder.key).isDefined) {
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
-            messageParameters = Map("handle" -> executeHolder.operationId))
-        } else {
-          throw new SparkSQLException(
-            errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-            messageParameters = Map("handle" -> executeHolder.operationId))
-        }
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+          messageParameters = Map("handle" -> executeHolder.operationId))
+      }
+      if (getAbandonedTombstone(executeHolder.key).isDefined) {
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
+          messageParameters = Map("handle" -> executeHolder.operationId))
       }
       sessionHolder.addExecuteHolder(executeHolder)
       executions.put(executeHolder.key, executeHolder)
@@ -141,12 +140,17 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     abandonedTombstones.asMap.asScala.values.toBuffer.toSeq
   }
 
-  private[service] def shutdown(): Unit = executionsLock.synchronized {
+  private[connect] def shutdown(): Unit = executionsLock.synchronized {
     scheduledExecutor.foreach { executor =>
       executor.shutdown()
       executor.awaitTermination(1, TimeUnit.MINUTES)
     }
     scheduledExecutor = None
+    executions.clear()
+    abandonedTombstones.invalidateAll()
+    if (!lastExecutionTime.isDefined) {
+      lastExecutionTime = Some(System.currentTimeMillis())
+    }
   }
 
   /**
@@ -188,7 +192,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       executions.values.foreach { executeHolder =>
         executeHolder.lastAttachedRpcTime match {
           case Some(detached) =>
-            if (detached + timeout < nowMs) {
+            if (detached + timeout <= nowMs) {
               toRemove += executeHolder
             }
           case _ => // execution is active
@@ -205,5 +209,19 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       }
     }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
+  }
+
+  // For testing.
+  private[connect] def setAllRPCsDeadline(deadlineMs: Long) = executionsLock.synchronized {
+    executions.values.foreach(_.setGrpcResponseSendersDeadline(deadlineMs))
+  }
+
+  // For testing.
+  private[connect] def interruptAllRPCs() = executionsLock.synchronized {
+    executions.values.foreach(_.interruptGrpcResponseSenders())
+  }
+
+  private[connect] def listExecuteHolders = executionsLock.synchronized {
+    executions.values.toBuffer.toSeq
   }
 }
