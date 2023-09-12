@@ -1124,34 +1124,33 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         resolveRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
 
-      case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
+      case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.expectTableNotViewError(
-              nameParts, isTemp = false, cmd, true, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(
+              nameParts, cmd, suggestAlternative, u)
           case _: ResolvedTempView =>
-            throw QueryCompilationErrors.expectTableNotViewError(
-              identifier, isTemp = true, cmd, true, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(
+              identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, allowTemp, hint) =>
+      case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
-            throw QueryCompilationErrors.expectViewNotTempViewError(identifier, cmd, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case t: ResolvedTable =>
             val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectViewNotTableError(
-              nameParts, cmd, hint, u)
+              nameParts, cmd, suggestAlternative, u)
           case other => other
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
         lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
-              identifier, cmd, u)
+            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case other => other
         }.getOrElse(u)
     }
