@@ -22,14 +22,14 @@ import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{Map, Set, Stack}
+import scala.collection.mutable.{Map, Queue, Set, Stack}
 
 import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
 /**
@@ -46,10 +46,17 @@ private[spark] object ClosureCleaner extends Logging {
       null
     } else {
       val baos = new ByteArrayOutputStream(128)
-      Utils.copyStream(resourceStream, baos, true)
+
+      SparkStreamUtils.copyStream(resourceStream, baos, closeStreams = true)
       new ClassReader(new ByteArrayInputStream(baos.toByteArray))
     }
   }
+
+  private[util] def isAmmoniteCommandOrHelper(clazz: Class[_]): Boolean = clazz.getName.matches(
+    "^ammonite\\.\\$sess\\.cmd[0-9]*(\\$Helper\\$?)?")
+
+  private[util] def isDefinedInAmmonite(clazz: Class[_]): Boolean = clazz.getName.matches(
+    "^ammonite\\.\\$sess\\.cmd[0-9]*.*")
 
   // Check whether a class represents a Scala closure
   private def isClosure(cls: Class[_]): Boolean = {
@@ -146,21 +153,8 @@ private[spark] object ClosureCleaner extends Logging {
     clone
   }
 
-  /**
-   * Clean the given closure in place.
-   *
-   * More specifically, this renders the given closure serializable as long as it does not
-   * explicitly reference unserializable objects.
-   *
-   * @param closure the closure to clean
-   * @param checkSerializable whether to verify that the closure is serializable after cleaning
-   * @param cleanTransitively whether to clean enclosing closures transitively
-   */
-  def clean(
-      closure: AnyRef,
-      checkSerializable: Boolean = true,
-      cleanTransitively: Boolean = true): Unit = {
-    clean(closure, checkSerializable, cleanTransitively, Map.empty)
+  def clean(func: AnyRef, cleanTransitively: Boolean = true): Unit = {
+    clean(func, cleanTransitively, Map.empty)
   }
 
   /**
@@ -198,15 +192,15 @@ private[spark] object ClosureCleaner extends Logging {
    * pointer of a cloned scope "one" and set it the parent of scope "two", such that scope "two"
    * no longer references SomethingNotSerializable transitively.
    *
-   * @param func the starting closure to clean
-   * @param checkSerializable whether to verify that the closure is serializable after cleaning
-   * @param cleanTransitively whether to clean enclosing closures transitively
-   * @param accessedFields a map from a class to a set of its fields that are accessed by
-   *                       the starting closure
+   * @param func
+   *   the starting closure to clean
+   * @param cleanTransitively
+   *   whether to clean enclosing closures transitively
+   * @param accessedFields
+   *   a map from a class to a set of its fields that are accessed by the starting closure
    */
   private def clean(
       func: AnyRef,
-      checkSerializable: Boolean,
       cleanTransitively: Boolean,
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
@@ -318,9 +312,7 @@ private[spark] object ClosureCleaner extends Logging {
         // the already populated accessed fields map of the starting closure
         if (cleanTransitively && isClosure(clone.getClass)) {
           logDebug(s" + cleaning cloned closure recursively (${cls.getName})")
-          // No need to check serializable here for the outer closures because we're
-          // only interested in the serializability of the starting closure
-          clean(clone, checkSerializable = false, cleanTransitively, accessedFields)
+          clean(clone, cleanTransitively, accessedFields)
         }
         parent = clone
       }
@@ -359,62 +351,212 @@ private[spark] object ClosureCleaner extends Logging {
       val capturingClassReader = getClassReader(capturingClass)
       capturingClassReader.accept(new ReturnStatementFinder(Option(implMethodName)), 0)
 
-      val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
-        capturingClassName.endsWith("$iw")
-      val outerThisOpt = if (lambdaProxy.getCapturedArgCount > 0) {
-        Option(lambdaProxy.getCapturedArg(0))
+      val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
+        lambdaProxy.getCapturedArg(0)
       } else {
-        None
+        return
       }
 
       // only need to clean when there is an enclosing "this" captured by the closure, and it
-      // should be something cleanable, i.e. a Scala REPL line object
-      val needsCleaning = isClosureDeclaredInScalaRepl &&
-        outerThisOpt.isDefined && outerThisOpt.get.getClass.getName == capturingClassName
-
-      if (needsCleaning) {
-        // indylambda closures do not reference enclosing closures via an `$outer` chain, so no
-        // transitive cleaning on the `$outer` chain is needed.
-        // Thus clean() shouldn't be recursively called with a non-empty accessedFields.
-        assert(accessedFields.isEmpty)
-
-        initAccessedFields(accessedFields, Seq(capturingClass))
-        IndylambdaScalaClosures.findAccessedFields(
-          lambdaProxy, classLoader, accessedFields, cleanTransitively)
-
-        logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
-        accessedFields.foreach { f => logDebug("     " + f) }
-
-        if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
-          // clone and clean the enclosing `this` only when there are fields to null out
-
-          val outerThis = outerThisOpt.get
-
-          logDebug(s" + cloning instance of REPL class $capturingClassName")
-          val clonedOuterThis = cloneAndSetFields(
-            parent = null, outerThis, capturingClass, accessedFields)
-
-          val outerField = func.getClass.getDeclaredField("arg$1")
-          // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-          // the content of `outerField` cannot be set by reflect api directly.
-          // But we can remove the `final` modifier of `outerField` before set value
-          // and reset the modifier after set value.
-          val modifiersField = getFinalModifiersFieldForJava17(outerField)
-          modifiersField
-            .foreach(m => m.setInt(outerField, outerField.getModifiers & ~Modifier.FINAL))
-          outerField.setAccessible(true)
-          outerField.set(func, clonedOuterThis)
-          modifiersField
-            .foreach(m => m.setInt(outerField, outerField.getModifiers | Modifier.FINAL))
+      // should be something cleanable, i.e. a Scala REPL line object or
+      // Ammonite command helper object
+      // For Ammonite closures, we do not care about actual capturing class name,
+      // as closure needs to be cleaned if it captures Ammonite command helper object
+      if (isDefinedInAmmonite(outerThis.getClass)) {
+        // If outerThis is a lambda, we have to clean that instead
+        IndylambdaScalaClosures.getSerializationProxy(outerThis).foreach { _ =>
+          clean(outerThis)
+          return
+        }
+        cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
+      } else {
+        val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
+          capturingClassName.endsWith("$iw")
+        if (isClosureDeclaredInScalaRepl && outerThis.getClass.getName == capturingClassName) {
+          assert(accessedFields.isEmpty)
+          cleanupScalaReplClosure(func, lambdaProxy, outerThis, accessedFields, cleanTransitively)
         }
       }
 
       logDebug(s" +++ indylambda closure ($implMethodName) is now cleaned +++")
     }
+  }
 
-    if (checkSerializable) {
-      ensureSerializable(func)
+  /**
+   * Null out fields of enclosing class which are not actually accessed by a closure
+   * @param func the starting closure to clean
+   * @param lambdaProxy starting closure proxy
+   * @param outerThis lambda enclosing class
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   */
+  private def cleanupScalaReplClosure(
+      func: AnyRef,
+      lambdaProxy: SerializedLambda,
+      outerThis: AnyRef,
+      cleanTransitively: Boolean): Unit = {
+
+    val capturingClass = outerThis.getClass
+    val accessedFields: Map[Class[_], Set[String]] = Map.empty
+    initAccessedFields(accessedFields, Seq(capturingClass))
+
+    IndylambdaScalaClosures.findAccessedFields(
+      lambdaProxy,
+      func.getClass.getClassLoader,
+      accessedFields,
+      Map.empty,
+      Map.empty,
+      cleanTransitively)
+
+
+    logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
+    accessedFields.foreach { f => logDebug("     " + f) }
+    if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
+      // clone and clean the enclosing `this` only when there are fields to null out
+      logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
+      val clonedOuterThis = cloneAndSetFields(
+        parent = null, outerThis, capturingClass, accessedFields)
+
+      val outerField = func.getClass.getDeclaredField("arg$1")
+      // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+      // the content of `outerField` cannot be set by reflect api directly.
+      // But we can remove the `final` modifier of `outerField` before set value
+      // and reset the modifier after set value.
+      setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
     }
+  }
+
+
+  /**
+   * Cleans up Ammonite closures and nulls out fields captured from cmd & cmd$Helper objects
+   * but not actually accessed by the closure. To achieve this, it does:
+   * 1. Identify all accessed Ammonite cmd & cmd$Helper objects
+   * 2. Clone all accessed cmdX objects
+   * 3. Clone all accessed cmdX$Helper objects and set their $outer field to the cmdX clone
+   * 4. Iterate over these clones and set all other accessed fields to
+   *   - a clone, if the field refers to an Ammonite object
+   *   - a previous value otherwise
+   * 5. In case if capturing object is an inner class of Ammonite cmd$Helper object, clone & update
+   * this capturing object as well
+   *
+   * As a result:
+   *   - For all accessed cmdX objects all their references to cmdY$Helper objects are
+   * either nulled out or updated to cmdY clone
+   *   - For cmdX$Helper objects it means that variables defined in this command are
+   * nulled out if not accessed
+   * - lambda enclosing class is cleaned up as it's done for normal Scala closures
+   *
+   * @param func              the starting closure to clean
+   * @param lambdaProxy       starting closure proxy
+   * @param outerThis         lambda enclosing class
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   */
+  private def cleanupAmmoniteReplClosure(
+      func: AnyRef,
+      lambdaProxy: SerializedLambda,
+      outerThis: AnyRef,
+      cleanTransitively: Boolean): Unit = {
+
+    val accessedFields: Map[Class[_], Set[String]] = Map.empty
+    initAccessedFields(accessedFields, Seq(outerThis.getClass))
+
+    // Ammonite generates 3 classes for a command number X:
+    //   - cmdX class containing all dependencies needed to execute the command
+    //   (i.e. previous command helpers)
+    //   - cmdX$Helper - inner class of cmdX - containing the user code. It pulls
+    //   required dependencies (i.e. variables defined in other commands) from outer command
+    //   - cmdX companion object holding an instance of cmdX and cmdX$Helper classes.
+    // Here, we care only about command objects and their helpers, companion objects are
+    // not captured by closure
+
+    // instances of cmdX and cmdX$Helper
+    val ammCmdInstances: Map[Class[_], AnyRef] = Map.empty
+    // fields accessed in those commands
+    val accessedAmmCmdFields: Map[Class[_], Set[String]] = Map.empty
+    // outer class may be either Ammonite cmd / cmd$Helper class or an inner class
+    // defined in a user code. We need to clean up Ammonite classes only
+    if (isAmmoniteCommandOrHelper(outerThis.getClass)) {
+      ammCmdInstances(outerThis.getClass) = outerThis
+      accessedAmmCmdFields(outerThis.getClass) = Set.empty
+    }
+
+    IndylambdaScalaClosures.findAccessedFields(
+      lambdaProxy,
+      func.getClass.getClassLoader,
+      accessedFields,
+      accessedAmmCmdFields,
+      ammCmdInstances,
+      cleanTransitively)
+
+    logTrace(s" + command fields accessed by starting closure: " +
+      s"${accessedAmmCmdFields.size} classes")
+    accessedAmmCmdFields.foreach { f => logTrace("     " + f) }
+
+    val cmdClones = Map[Class[_], AnyRef]()
+    for ((cmdClass, _) <- ammCmdInstances if !cmdClass.getName.contains("Helper")) {
+      logDebug(s" + Cloning instance of Ammonite command class ${cmdClass.getName}")
+      cmdClones(cmdClass) = instantiateClass(cmdClass, enclosingObject = null)
+    }
+    for ((cmdHelperClass, cmdHelperInstance) <- ammCmdInstances
+         if cmdHelperClass.getName.contains("Helper")) {
+      val cmdHelperOuter = cmdHelperClass.getDeclaredFields
+        .find(_.getName == "$outer")
+        .map { field =>
+          field.setAccessible(true)
+          field.get(cmdHelperInstance)
+        }
+      val outerClone = cmdHelperOuter.flatMap(o => cmdClones.get(o.getClass)).orNull
+      logDebug(s" + Cloning instance of Ammonite command helper class ${cmdHelperClass.getName}")
+      cmdClones(cmdHelperClass) =
+        instantiateClass(cmdHelperClass, enclosingObject = outerClone)
+    }
+
+    // set accessed fields
+    for ((_, cmdClone) <- cmdClones) {
+      val cmdClass = cmdClone.getClass
+      val accessedFields = accessedAmmCmdFields(cmdClass)
+      for (field <- cmdClone.getClass.getDeclaredFields
+           // outer fields were initialized during clone construction
+           if accessedFields.contains(field.getName) && field.getName != "$outer") {
+        // get command clone if exists, otherwise use an original field value
+        val value = cmdClones.getOrElse(field.getType, {
+          field.setAccessible(true)
+          field.get(ammCmdInstances(cmdClass))
+        })
+        setFieldAndIgnoreModifiers(cmdClone, field, value)
+      }
+    }
+
+    val outerThisClone = if (!isAmmoniteCommandOrHelper(outerThis.getClass)) {
+      // if outer class is not Ammonite helper / command object then is was not cloned
+      // in the code above. We still need to clone it and update accessed fields
+      logDebug(s" + Cloning instance of lambda capturing class ${outerThis.getClass.getName}")
+      val clone = cloneAndSetFields(parent = null, outerThis, outerThis.getClass, accessedFields)
+      // making sure that the code below will update references to Ammonite objects if they exist
+      for (field <- outerThis.getClass.getDeclaredFields) {
+        field.setAccessible(true)
+        cmdClones.get(field.getType).foreach { value =>
+          setFieldAndIgnoreModifiers(clone, field, value)
+        }
+      }
+      clone
+    } else {
+      cmdClones(outerThis.getClass)
+    }
+
+    val outerField = func.getClass.getDeclaredField("arg$1")
+    // update lambda capturing class reference
+    setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+  }
+
+  private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
+    val modifiersField = getFinalModifiersFieldForJava17(field)
+    modifiersField
+      .foreach(m => m.setInt(field, field.getModifiers & ~Modifier.FINAL))
+    field.setAccessible(true)
+    field.set(obj, value)
+
+    modifiersField
+      .foreach(m => m.setInt(field, field.getModifiers | Modifier.FINAL))
   }
 
   /**
@@ -435,19 +577,7 @@ private[spark] object ClosureCleaner extends Logging {
     } else None
   }
 
-  private def ensureSerializable(func: AnyRef): Unit = {
-    try {
-      if (SparkEnv.get != null) {
-        SparkEnv.get.closureSerializer.newInstance().serialize(func)
-      }
-    } catch {
-      case ex: Exception => throw new SparkException("Task not serializable", ex)
-    }
-  }
-
-  private def instantiateClass(
-      cls: Class[_],
-      enclosingObject: AnyRef): AnyRef = {
+  private def instantiateClass(cls: Class[_], enclosingObject: AnyRef): AnyRef = {
     // Use reflection to instantiate object without calling constructor
     val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
     val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
@@ -562,6 +692,9 @@ private[spark] object IndylambdaScalaClosures extends Logging {
    * same for all three combined, so they can be fused together easily while maintaining the same
    * ordering as the existing implementation.
    *
+   * It also visits transitively Ammonite cmd and cmd%Helper objects it encounters
+   * and populates accessed fields for them to be able to clean up these as well
+   *
    * Precondition: this function expects the `accessedFields` to be populated with all known
    *               outer classes and their super classes to be in the map as keys, e.g.
    *               initializing via ClosureCleaner.initAccessedFields.
@@ -631,6 +764,8 @@ private[spark] object IndylambdaScalaClosures extends Logging {
       lambdaProxy: SerializedLambda,
       lambdaClassLoader: ClassLoader,
       accessedFields: Map[Class[_], Set[String]],
+      accessedAmmCmdFields: Map[Class[_], Set[String]],
+      ammCmdInstances: Map[Class[_], AnyRef],
       findTransitively: Boolean): Unit = {
 
     // We may need to visit the same class multiple times for different methods on it, and we'll
@@ -678,18 +813,45 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     // Depth-first search for inner closures and track the fields that were accessed in them.
     // Start from the lambda body's implementation method, follow method invocations
     val visited = Set.empty[MethodIdentifier[_]]
-    val stack = Stack[MethodIdentifier[_]](implMethodId)
+    val queue = Queue[MethodIdentifier[_]](implMethodId)
     def pushIfNotVisited(methodId: MethodIdentifier[_]): Unit = {
       if (!visited.contains(methodId)) {
-        stack.push(methodId)
+        queue.enqueue(methodId)
       }
     }
 
-    while (!stack.isEmpty) {
-      val currentId = stack.pop
+    def addAmmoniteCommandFieldsToTracking(currentClass: Class[_]): Unit = {
+      // get an instance of currentClass. It can be either lambda enclosing this
+      // or another already processed Ammonite object
+      val currentInstance = if (currentClass == lambdaProxy.getCapturedArg(0).getClass) {
+        Some(lambdaProxy.getCapturedArg(0))
+      } else {
+        ammCmdInstances.get(currentClass)
+      }
+      currentInstance.foreach { cmdInstance =>
+        // track only cmdX and cmdX$Helper objects generated by Ammonite
+        for (otherCmdField <- cmdInstance.getClass.getDeclaredFields
+             if ClosureCleaner.isAmmoniteCommandOrHelper(otherCmdField.getType)) {
+          otherCmdField.setAccessible(true)
+          val otherCmdHelperRef = otherCmdField.get(cmdInstance)
+          val otherCmdClass = otherCmdField.getType
+          // Ammonite is clever enough to sometimes nullify references to unused commands.
+          // Ignoring these references for simplicity
+          if (otherCmdHelperRef != null && !ammCmdInstances.contains(otherCmdClass)) {
+            logTrace(s"      started tracking ${otherCmdClass.getName} Ammonite object")
+            ammCmdInstances(otherCmdClass) = otherCmdHelperRef
+            accessedAmmCmdFields(otherCmdClass) = Set()
+          }
+        }
+      }
+    }
+
+    while (queue.nonEmpty) {
+      val currentId = queue.dequeue()
       visited += currentId
 
       val currentClass = currentId.cls
+      addAmmoniteCommandFieldsToTracking(currentClass)
       val currentMethodNode = methodNodeById(currentId)
       logTrace(s"  scanning ${currentId.cls.getName}.${currentId.name}${currentId.desc}")
       currentMethodNode.accept(new MethodVisitor(ASM9) {
@@ -705,6 +867,10 @@ private[spark] object IndylambdaScalaClosures extends Logging {
               logTrace(s"    found field access $name on $ownerExternalName")
               accessedFields(cl) += name
             }
+            for (cl <- accessedAmmCmdFields.keys if cl.getName == ownerExternalName) {
+              logTrace(s"    found Ammonite command field access $name on $ownerExternalName")
+              accessedAmmCmdFields(cl) += name
+            }
           }
         }
 
@@ -715,6 +881,10 @@ private[spark] object IndylambdaScalaClosures extends Logging {
             logTrace(s"    found intra class call to $ownerExternalName.$name$desc")
             // could be invoking a helper method or a field accessor method, just follow it.
             pushIfNotVisited(MethodIdentifier(currentClass, name, desc))
+          } else if (owner.startsWith("ammonite/$sess/cmd")) {
+            // we're inside Ammonite command / command helper object, track all calls from here
+            val classInfo = getOrUpdateClassInfo(owner)
+            pushIfNotVisited(MethodIdentifier(classInfo._1, name, desc))
           } else if (isInnerClassCtorCapturingOuter(
               op, owner, name, desc, currentClassInternalName)) {
             // Discover inner classes.
@@ -893,10 +1063,12 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
           op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
         val argTypes = Type.getArgumentTypes(desc)
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
-            && argTypes(0).toString.startsWith("L") // is it an object?
-            && argTypes(0).getInternalName == myName) {
-          output += Utils.classForName(owner.replace('/', '.'),
-            initialize = false, noSparkClassLoader = true)
+          && argTypes(0).toString.startsWith("L") // is it an object?
+          && argTypes(0).getInternalName == myName) {
+          output += SparkClassUtils.classForName(
+            owner.replace('/', '.'),
+            initialize = false,
+            noSparkClassLoader = true)
         }
       }
     }
