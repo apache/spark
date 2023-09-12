@@ -1406,7 +1406,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           checkPlan(g.child, aggregated, canContainOuter)
 
         // Correlated subquery can have a LIMIT clause
-        case l@Limit(_, input) =>
+        case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
           checkPlan(input, aggregated, canContainOuter)
 

@@ -60,10 +60,10 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   }
 
   private def check(
-                     outputPlan: LogicalPlan,
-                     joinCond: Seq[Expression],
-                     correctAnswer: LogicalPlan,
-                     conditions: Seq[Expression]): Unit = {
+      outputPlan: LogicalPlan,
+      joinCond: Seq[Expression],
+      correctAnswer: LogicalPlan,
+      conditions: Seq[Expression]): Unit = {
     assert(!hasOuterReferences(outputPlan))
     comparePlans(outputPlan, correctAnswer)
     assert(joinCond.length == conditions.length)
