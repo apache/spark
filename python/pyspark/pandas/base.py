@@ -505,7 +505,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.DataFrame({}, index=list('abc')).index.empty
         False
         """
-        return self._internal.resolved_copy.spark_frame.rdd.isEmpty()
+        return self._internal.resolved_copy.spark_frame.isEmpty()
 
     @property
     def hasnans(self) -> bool:
