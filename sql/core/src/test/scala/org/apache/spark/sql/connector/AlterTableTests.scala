@@ -366,24 +366,6 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
-  test("AlterTable: add complex column") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
-
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))))))
-    }
-  }
-
   test("SPARK-45075: ALTER COLUMN with invalid default value") {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
@@ -404,6 +386,24 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
                 " resolve as a valid expression: [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A" +
                 " column or function parameter with name `badvalue` cannot be resolved. ;"))
       }
+    }
+  }
+
+  test("AlterTable: add complex column") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
+
+      val tableName = fullTableName(t)
+      val table = getTableMetadata(tableName)
+
+      assert(table.name === tableName)
+      assert(table.schema === new StructType()
+        .add("id", IntegerType)
+        .add("points", ArrayType(StructType(Seq(
+          StructField("x", DoubleType),
+          StructField("y", DoubleType))))))
     }
   }
 
