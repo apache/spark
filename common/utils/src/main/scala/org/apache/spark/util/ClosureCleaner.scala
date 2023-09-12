@@ -374,7 +374,7 @@ private[spark] object ClosureCleaner extends Logging {
           capturingClassName.endsWith("$iw")
         if (isClosureDeclaredInScalaRepl && outerThis.getClass.getName == capturingClassName) {
           assert(accessedFields.isEmpty)
-          cleanupScalaReplClosure(func, lambdaProxy, outerThis, accessedFields, cleanTransitively)
+          cleanupScalaReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
         }
       }
 
