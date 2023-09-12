@@ -48,10 +48,12 @@ private[sql] class GrpcRetryHandler(
    *   The type of the response.
    */
   class RetryIterator[T, U](request: T, call: T => CloseableIterator[U])
-      extends CloseableIterator[U] {
+      extends WrappedCloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
     private var iter = call(request)
+
+    override def innerIterator: Iterator[U] = iter
 
     private def retryIter[V](f: Iterator[U] => V) = {
       if (!opened) {
