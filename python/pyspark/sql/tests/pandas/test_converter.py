@@ -584,7 +584,7 @@ class TypesTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_types import *  # noqa: F401
+    from pyspark.sql.tests.pandas.test_converter import *  # noqa: F401
 
     try:
         import xmlrunner
