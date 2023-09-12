@@ -857,10 +857,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
         >>> df.groupby("A").sum().sort_index()
-           B  C
+           B  C   D
         A
-        1  1  6
-        2  1  8
+        1  1  6  ab
+        2  1  8  aa
 
         >>> df.groupby("D").sum().sort_index()
            A  B   C
@@ -900,17 +900,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             unsupported = [
                 col.name
                 for col in self._agg_columns
-                if not isinstance(col.spark.data_type, (NumericType, BooleanType))
+                if not isinstance(col.spark.data_type, (NumericType, BooleanType, StringType))
             ]
             if len(unsupported) > 0:
                 log_advice(
-                    "GroupBy.sum() can only support numeric and bool columns even if"
+                    "GroupBy.sum() can only support numeric, bool and string columns even if"
                     f"numeric_only=False, skip unsupported columns: {unsupported}"
                 )
 
         return self._reduce_for_stat_function(
             F.sum,
-            accepted_spark_types=(NumericType, BooleanType),
+            accepted_spark_types=(NumericType, BooleanType, StringType),
             bool_to_numeric=True,
             min_count=min_count,
         )
@@ -3534,7 +3534,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for label in psdf._internal.column_labels:
                 psser = psdf._psser_for(label)
                 input_scol = psser._dtype_op.nan_to_null(psser).spark.column
-                output_scol = sfun(input_scol)
+                if sfun.__name__ == "sum" and isinstance(
+                    psdf._internal.spark_type_for(label), StringType
+                ):
+                    input_scol_name = psser._internal.data_spark_column_names[0]
+                    # Sort data with natural order column to ensure order of data
+                    sorted_array = F.array_sort(
+                        F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
+                    )
+
+                    # Using transform to extract strings
+                    output_scol = F.concat_ws(
+                        "", F.transform(sorted_array, lambda x: x.getField(input_scol_name))
+                    )
+                else:
+                    output_scol = sfun(input_scol)
 
                 if min_count > 0:
                     output_scol = F.when(
@@ -3591,7 +3605,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             ):
                 agg_columns.append(psser)
         sdf = self._psdf._internal.spark_frame.select(
-            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+            *groupkey_scols,
+            *[psser.spark.column for psser in agg_columns],
+            NATURAL_ORDER_COLUMN_NAME,
         )
         internal = InternalFrame(
             spark_frame=sdf,

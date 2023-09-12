@@ -2373,11 +2373,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         cf_fn = {name for (name, value) in getmembers(CF, isfunction) if name[0] != "_"}
 
         # Functions in vanilla PySpark we do not expect to be available in Spark Connect
-        sf_excluded_fn = {
-            "get_active_spark_context",  # internal helper function
-            "try_remote_functions",  # internal helper function
-            "to_str",  # internal helper function
-        }
+        sf_excluded_fn = set()
 
         self.assertEqual(
             sf_fn - cf_fn,

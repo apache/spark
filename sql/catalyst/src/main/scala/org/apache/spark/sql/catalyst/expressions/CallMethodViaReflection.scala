@@ -85,6 +85,10 @@ case class CallMethodViaReflection(
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
+        case (e, 0) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("class")))
         case (e, 1) if !(e.dataType == StringType && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
@@ -94,6 +98,10 @@ case class CallMethodViaReflection(
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
+        case (e, 1) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("method")))
         case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
