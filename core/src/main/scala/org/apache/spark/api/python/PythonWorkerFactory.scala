@@ -392,7 +392,6 @@ private[spark] class PythonWorkerFactory(
           }
         }
       } else {
-        // manual test: comment out this line and see if tests fail
         simpleWorkers.get(worker).foreach(_.destroy())
       }
     }
