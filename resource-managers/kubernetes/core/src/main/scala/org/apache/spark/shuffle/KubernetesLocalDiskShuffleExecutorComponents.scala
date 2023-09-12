@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_CHECKSUM_ENABLED}
-import org.apache.spark.shuffle.ShuffleChecksumUtils.compareChecksums
+import org.apache.spark.shuffle.ShuffleChecksumUtils.{compareChecksums, getChecksumFileName}
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.{BlockId, BlockManager, ShuffleDataBlockId, StorageLevel, UnrecognizedBlockId}
@@ -96,14 +96,17 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
     logInfo(s"Found ${dataFiles.size} data files, ${indexFiles.size} index files, " +
         s"and ${checksumFiles.size} checksum files.")
 
-    // Build hashmaps for faster access with data file name as a key
+    // Build a hashmap with checksum file name as a key
     val checksumFileMap = new mutable.HashMap[String, File]()
     val algorithm = conf.get(SHUFFLE_CHECKSUM_ALGORITHM)
     checksumFiles.foreach { f =>
-      checksumFileMap.put(f.getName.replace(".checksum." + algorithm, ".data"), f)
+      logInfo(s"${f.getName} -> ${f.getAbsolutePath}")
+      checksumFileMap.put(f.getName, f)
     }
+    // Build a hashmap with shuffle data file name as a key
     val indexFileMap = new mutable.HashMap[String, File]()
     indexFiles.foreach { f =>
+      logInfo(s"${f.getName.replace(".index", ".data")} -> ${f.getAbsolutePath}")
       indexFileMap.put(f.getName.replace(".index", ".data"), f)
     }
 
@@ -119,7 +122,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
         if (id.isShuffle) {
           // For index files, skipVerification is true and checksumFile and indexFile are ignored.
           val skipVerification = checksumDisabled || f.getName.endsWith(".index")
-          val checksumFile = checksumFileMap.getOrElse(f.getName, null)
+          val checksumFile = checksumFileMap.getOrElse(getChecksumFileName(id, algorithm), null)
           val indexFile = indexFileMap.getOrElse(f.getName, null)
           if (skipVerification || verifyChecksum(algorithm, id, checksumFile, indexFile, f)) {
             val decryptedSize = f.length()
