@@ -289,7 +289,13 @@ public abstract class ColumnVector implements AutoCloseable {
    * is a long type vector, containing all the microsecond values of all the interval values in this
    * vector.
    */
-  public abstract CalendarInterval getInterval(int rowId);
+  public CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    final int months = getChild(0).getInt(rowId);
+    final int days = getChild(1).getInt(rowId);
+    final long microseconds = getChild(2).getLong(rowId);
+    return new CalendarInterval(months, days, microseconds);
+  }
 
   /**
    * @return child {@link ColumnVector} at the given ordinal.
