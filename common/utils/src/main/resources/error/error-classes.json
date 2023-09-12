@@ -1587,7 +1587,7 @@
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
     ]
   },
   "INVALID_IDENTIFIER" : {
