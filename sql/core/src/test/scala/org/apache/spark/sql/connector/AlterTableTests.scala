@@ -366,6 +366,29 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
+  test("SPARK-45075: ALTER COLUMN with invalid default value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      withTable("t") {
+        sql(s"create table t(i boolean) using $v2Format")
+        // The default value fails to analyze.
+        assert(intercept[AnalysisException](
+          sql("alter table t add column s bigint default badvalue")
+        ).getMessage.contains("Failed to execute ALTER TABLE command because the destination" +
+                " table column s has a DEFAULT value of badvalue which fails to resolve as a" +
+                " valid expression: [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column or function" +
+                " parameter with name `badvalue` cannot be resolved. ;"))
+
+        sql("alter table t add column s bigint default 3L")
+        assert(intercept[AnalysisException](
+          sql("alter table t alter column s set default badvalue")
+        ).getMessage.contains("Failed to execute ALTER TABLE ALTER COLUMN command because the" +
+                " destination table column s has a DEFAULT value of badvalue which fails to" +
+                " resolve as a valid expression: [UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A" +
+                " column or function parameter with name `badvalue` cannot be resolved. ;"))
+      }
+    }
+  }
+
   test("AlterTable: add complex column") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
