@@ -81,7 +81,11 @@ class PipelineTestsMixin:
         model2 = pipeline2.fit(train_dataset)
         result2 = model2.transform(eval_dataset).toPandas()
         self._check_result(result2, expected_predictions, expected_probabilities)
-        local_transform_result2 = model2.transform(eval_dataset.toPandas())
+        local_eval_dataset = eval_dataset.toPandas()
+        input_cols = local_eval_dataset.columns.tolist()
+        local_transform_result2 = model2.transform(local_eval_dataset)
+        assert local_eval_dataset.columns.tolist() == input_cols, \
+            "pandas dataframe input columns should be intact."
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
         with tempfile.TemporaryDirectory() as tmp_dir:

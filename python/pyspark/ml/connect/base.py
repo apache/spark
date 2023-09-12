@@ -154,8 +154,9 @@ class Transformer(Params, metaclass=ABCMeta):
         The dataset can be either pandas dataframe or spark dataframe,
         if it is a spark DataFrame, the result of transformation is a new spark DataFrame
         that contains all existing columns and output columns with names.
-        if it is a pandas DataFrame, the input pandas dataframe is appended with output
-        columns in place.
+        if it is a pandas DataFrame, the input pandas dataframe is intact, and the output
+        dataframe shallow copies all existing columns from input dataframe and appends
+        output columns.
 
         Note: Transformers does not allow output column having the same name with
         existing columns.

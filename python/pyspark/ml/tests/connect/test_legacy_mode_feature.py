@@ -57,7 +57,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
+        input_cols = local_df1.columns.tolist()
         local_transform_result = local_fit_model.transform(local_df1)
+        assert local_df1.columns.tolist() == input_cols, \
+            "pandas dataframe input columns should be intact."
         assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
@@ -110,7 +113,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
+        input_cols = local_df1.columns.tolist()
         local_transform_result = local_fit_model.transform(local_df1)
+        assert local_df1.columns.tolist() == input_cols, \
+            "pandas dataframe input columns should be intact."
         assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
