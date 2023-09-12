@@ -398,9 +398,6 @@ class CachedLocalRelation(LogicalPlan):
         plan = self._create_proto_relation()
         clr = plan.cached_local_relation
 
-        if session._user_id:
-            clr.userId = session._user_id
-        clr.sessionId = session._session_id
         clr.hash = self._hash
 
         return plan
