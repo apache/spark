@@ -114,12 +114,12 @@ if [[ "$1" == "finalize" ]]; then
   echo "git tag v$RELEASE_VERSION created"
 
   # Update python api docs versions.json
-  echo "Update python api docs versions.json"
+  echo "Update PySpark dropdown box version selection file versions.json"
   $PYTHON_EXECUTABLE "dev/create-release/utils-update-docs-versions.py" "python/docs/source/_static/versions.json" $RELEASE_VERSION
   git add "python/docs/source/_static/versions.json"
-  git commit -m "Update python api docs versions.json for Apache Spark $RELEASE_VERSION"
+  git commit -m "Update PySpark dropdown box version selection file versions.json for Apache Spark $RELEASE_VERSION"
   git push origin HEAD:master
-  echo "git update python api docs versions.json for Apache Spark $RELEASE_VERSION"
+  echo "git update PySpark dropdown box version selection file versions.json for Apache Spark $RELEASE_VERSION"
   cd ..
   rm -rf spark
 

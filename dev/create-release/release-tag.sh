@@ -92,7 +92,7 @@ if [[ $RELEASE_VERSION == 3.0* ]] || [[ $RELEASE_VERSION == 3.1* ]] || [[ $RELEA
 else
   sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
 fi
-# Update python api docs versions.json
+# Update PySpark dropdown box version selection file versions.json
 $PYTHON_EXECUTABLE "dev/create-release/utils-update-docs-versions.py" "python/docs/source/_static/versions.json" $RELEASE_VERSION
 git add "python/docs/source/_static/versions.json"
 
