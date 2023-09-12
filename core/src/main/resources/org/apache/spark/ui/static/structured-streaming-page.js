@@ -111,11 +111,11 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .on('mouseout',  function() {
       hideBootstrapTooltip(d3.select(this).node());
     })
-    .on("mousemove", (event) => {
+    .on("mousemove", (event, d) => {
       var xPosition = d3.pointer(event)[0] - 15;
       var yPosition = d3.pointer(event)[1] - 25;
       tooltip.attr("transform", "translate(" + xPosition + "," + yPosition + ")");
-      tooltip.select("text").text(event.y);
+      tooltip.select("text").text(d.y);
     });
 
   // Draw legend
@@ -137,11 +137,11 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
     .on('mouseout',  function() {
       hideBootstrapTooltip(d3.select(this).node());
     })
-    .on("mousemove", (event) => {
+    .on("mousemove", (event, d) => {
       var xPosition = d3.pointer(event)[0] - 15;
       var yPosition = d3.pointer(event)[1] - 25;
       tooltip.attr("transform", "translate(" + xPosition + "," + yPosition + ")");
-      tooltip.select("text").text(event.y);
+      tooltip.select("text").text(d.y);
     });
 
   // Prep the tooltip bits, initial display is hidden
