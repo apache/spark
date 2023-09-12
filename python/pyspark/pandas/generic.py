@@ -2519,7 +2519,7 @@ class Frame(object, metaclass=ABCMeta):
         warnings.warn(
             f"{self.__class__.__name__}.bool is now deprecated "
             "and will be removed in future version.",
-            FutureWarning
+            FutureWarning,
         )
         if isinstance(self, ps.DataFrame):
             df = self
