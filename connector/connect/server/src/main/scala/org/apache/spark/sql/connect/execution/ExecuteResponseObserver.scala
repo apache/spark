@@ -79,6 +79,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /**
    * Highest response index that was consumed. Keeps track of it to decide which responses needs
    * to be cached, and to assert that all responses are consumed.
+   *
    * Visible for testing.
    */
   private[connect] var highestConsumedIndex: Long = 0

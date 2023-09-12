@@ -32,7 +32,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   // Tests assume that this query will result in at least a couple ExecutePlanResponses on the
   // stream. If this is no longer the case because of changes in how much is returned in a single
   // ExecutePlanResponse, it may need to be adjusted.
-  val MEDIUM_RESULTS_QUERY = "select * from range(100000)"
+  val MEDIUM_RESULTS_QUERY = "select * from range(1000000)"
 
   test("reattach after initial RPC ends") {
     withClient { client =>
@@ -50,7 +50,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       while (iter.hasNext && (reattachableIter.innerIterator eq initialInnerIter)) {
         iter.next()
       }
-      assert(reattachableIter.innerIterator ne initialInnerIter) // reattach changed the inner iter
+      assert(
+        reattachableIter.innerIterator ne initialInnerIter
+      ) // reattach changed the inner iter
     }
   }
 
@@ -207,7 +209,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       withRawBlockingStub { stub =>
         // Reattach after response1 should fail with INVALID_CURSOR.POSITION_NOT_AVAILABLE
         val reattach1 = stub.reattachExecute(
-           buildReattachExecuteRequest(operationId, Some(response1.getResponseId)))
+          buildReattachExecuteRequest(operationId, Some(response1.getResponseId)))
         val e = intercept[StatusRuntimeException] {
           reattach1.hasNext()
         }
@@ -239,60 +241,53 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   }
 
   test("server releases responses automatically when client moves ahead") {
-    // make server buffer 200 kilobytes of responses before throwing them away, so that it's
-    // small enough for MEDIUM_RESULTS_QUERY, but also big enough so that server pushing it into
-    // grpc internal buffers doesn't get too far ahead, and 2nd reattach works.
-    withSparkEnvConfs(
-      (Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE.key, "200k")) {
-      withRawBlockingStub { stub =>
-        val operationId = UUID.randomUUID().toString
-        val iter = stub.executePlan(
-          buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
-        var lastSeenResponse: String = null
+    withRawBlockingStub { stub =>
+      val operationId = UUID.randomUUID().toString
+      val iter = stub.executePlan(
+        buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY), operationId = operationId))
+      var lastSeenResponse: String = null
 
-        iter.hasNext // open iterator
-        val execution = getExecutionHolder
+      iter.hasNext // open iterator
+      val execution = getExecutionHolder
 
-        // after consuming enough from the iterator, server should automatically start releasing
-        var lastSeenIndex = 0
-        while (iter.hasNext && execution.responseObserver.releasedUntilIndex == 0) {
-          val r = iter.next()
-          lastSeenResponse = r.getResponseId()
-          lastSeenIndex += 1
-        }
-        assert(iter.hasNext)
-        assert(execution.responseObserver.releasedUntilIndex > 0)
-
-        // Reattach from the beginning is not available.
-        val reattach = stub.reattachExecute(
-          buildReattachExecuteRequest(operationId, None))
-        val e = intercept[StatusRuntimeException] {
-          reattach.hasNext()
-        }
-        assert(e.getMessage.contains("INVALID_CURSOR.POSITION_NOT_AVAILABLE"))
-
-        // Original iterator got disconnected by the reattach and gets INVALID_CURSOR.DISCONNECTED
-        val e2 = intercept[StatusRuntimeException] {
-          while (iter.hasNext) iter.next()
-        }
-        assert(e2.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
-
-        Eventually.eventually(timeout(eventuallyTimeout)) {
-          // Even though we didn't consume more from the iterator, the server thinks that
-          // it sent more, because GRPC stream onNext() can push into internal GRPC buffer without
-          // client picking it up.
-          assert(execution.responseObserver.highestConsumedIndex > lastSeenIndex)
-        }
-        // but CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE is big enough that the last
-        // response we've seen is still in range
-        assert(execution.responseObserver.releasedUntilIndex < lastSeenIndex)
-
-        // and a new reattach can continue after what there.
-        val reattach2 = stub.reattachExecute(
-          buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
-        assert(reattach2.hasNext)
-        while (reattach2.hasNext) reattach2.next()
+      // after consuming enough from the iterator, server should automatically start releasing
+      var lastSeenIndex = 0
+      while (iter.hasNext && execution.responseObserver.releasedUntilIndex == 0) {
+        val r = iter.next()
+        lastSeenResponse = r.getResponseId()
+        lastSeenIndex += 1
       }
+      assert(iter.hasNext)
+      assert(execution.responseObserver.releasedUntilIndex > 0)
+
+      // Reattach from the beginning is not available.
+      val reattach = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+      val e = intercept[StatusRuntimeException] {
+        reattach.hasNext()
+      }
+      assert(e.getMessage.contains("INVALID_CURSOR.POSITION_NOT_AVAILABLE"))
+
+      // Original iterator got disconnected by the reattach and gets INVALID_CURSOR.DISCONNECTED
+      val e2 = intercept[StatusRuntimeException] {
+        while (iter.hasNext) iter.next()
+      }
+      assert(e2.getMessage.contains("INVALID_CURSOR.DISCONNECTED"))
+
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        // Even though we didn't consume more from the iterator, the server thinks that
+        // it sent more, because GRPC stream onNext() can push into internal GRPC buffer without
+        // client picking it up.
+        assert(execution.responseObserver.highestConsumedIndex > lastSeenIndex)
+      }
+      // but CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE is big enough that the last
+      // response we've seen is still in range
+      assert(execution.responseObserver.releasedUntilIndex < lastSeenIndex)
+
+      // and a new reattach can continue after what there.
+      val reattach2 =
+        stub.reattachExecute(buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
+      assert(reattach2.hasNext)
+      while (reattach2.hasNext) reattach2.next()
     }
   }
 
