@@ -96,7 +96,8 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --primary-r-file     A main R file
       |  --arg ARG            Argument to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
-      |  --properties-file FILE Path to a custom Spark properties file.
+      |  --properties-file    FILE Path to a custom Spark properties file.
+      |  --dist-cache-conf    FILE Path to a custom Spark distributed cache info file.
       """.stripMargin)
     // scalastyle:on println
     System.exit(exitCode)
