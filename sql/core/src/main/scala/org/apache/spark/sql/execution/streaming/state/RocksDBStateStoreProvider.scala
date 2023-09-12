@@ -220,12 +220,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    try {
-      rocksDB.doMaintenance()
-    } catch {
-      case e: Throwable =>
-        throw QueryExecutionErrors.failedToDoMaintenanceError(this.getClass.getSimpleName, e)
-    }
+    rocksDB.doMaintenance()
   }
 
   override def close(): Unit = {

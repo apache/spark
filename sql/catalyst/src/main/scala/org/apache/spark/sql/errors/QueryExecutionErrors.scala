@@ -2256,13 +2256,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
-  def failedToDoMaintenanceError(providerClass: String, f: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "CANNOT_WRITE_STATE_FILE.CANNOT_DO_MAINTENANCE",
-      messageParameters = Map("providerClass" -> providerClass),
-      cause = f)
-  }
-
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2260",

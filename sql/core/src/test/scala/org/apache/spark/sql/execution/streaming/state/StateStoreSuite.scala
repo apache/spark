@@ -215,26 +215,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("maintenance fails with query execution error") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set(
-      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
-      classOf[CreateAtomicTestManager].getName)
-
-    tryWithProviderResource(newStoreProvider(opId = Random.nextInt, partition = 0,
-      hadoopConf = hadoopConf, minDeltasForSnapshot = 5)) { provider =>
-
-      for (i <- 1 to 10)   {
-        val store = provider.getStore(i - 1)
-        put(store, "a", 0, i)
-        store.commit()
-      }
-
-      CreateAtomicTestManager.shouldFailInCreateAtomic = true
-      intercept[SparkException] { quietly { provider.doMaintenance() }}
-    }
-  }
-
   testQuietly("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
     val conf = new Configuration()
     conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
@@ -564,7 +544,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       val store = provider.getStore(0)
       put(store, "a", 0, 0)
-      // [NEIL]
       val e = intercept[SparkException](store.commit())
       assert(e.getErrorClass == "CANNOT_WRITE_STATE_FILE.CANNOT_COMMIT")
 
@@ -720,6 +699,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // [NEIL]
       val e = intercept[SparkException] { quietly { store.commit() } }
       assert(e.getCause.isInstanceOf[IOException])
+      assert(e.getMessage.contains("Cannot perform commit"))
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
       // Abort commit for next version and verify that reloading resets the files

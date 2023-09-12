@@ -261,8 +261,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       doSnapshot()
       cleanup()
     } catch {
-      case e: Throwable =>
-        throw QueryExecutionErrors.failedToDoMaintenanceError(this.getClass.getSimpleName, e)
+      case NonFatal(e) =>
+        logWarning(s"Error performing snapshot and cleaning up $this")
     }
   }
 

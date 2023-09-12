@@ -323,11 +323,6 @@
         "message" : [
           "Cannot perform commit during state checkpoint."
         ]
-      },
-      "CANNOT_DO_MAINTENANCE" : {
-        "message" : [
-          "Cannot do maintenance on state store."
-        ]
       }
     }
   },
