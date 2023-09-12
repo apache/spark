@@ -1203,7 +1203,7 @@ final class ShuffleBlockFetcherIterator(
     // Skip when the address is the local BM Id (this may happen when shuffle migration is enabled)
     if (deferredFetchRequests.nonEmpty) {
       for ((remoteAddress, defReqQueue) <- deferredFetchRequests
-           if remoteAddress != blockManager.blockManagerId) {
+        if remoteAddress != blockManager.blockManagerId) {
         while (isRemoteBlockFetchable(defReqQueue) &&
             !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front)) {
           val request = defReqQueue.dequeue()
@@ -1622,7 +1622,7 @@ object ShuffleBlockFetcherIterator {
     extends FetchResult
 
   /**
-   * Result of a fetch request that should be deferred for some reasons, e.g., Netty OOM
+   * Result of a fetch request that should be deferred for some reasons, e.g., Netty OOM, decommission
    */
   private[storage]
   case class DeferFetchRequestResult(
