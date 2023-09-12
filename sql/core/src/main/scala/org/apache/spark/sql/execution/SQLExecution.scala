@@ -189,6 +189,7 @@ object SQLExecution extends Logging {
       sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
   }
+
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
       name: Option[String] = None)(body: => T): T = {
