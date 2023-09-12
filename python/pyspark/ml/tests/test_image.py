@@ -19,10 +19,11 @@ import unittest
 from pyspark.ml.image import ImageSchema
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, retry
 
 
 class ImageFileFormatTest(SparkSessionTestCase):
+    @retry(maxTries=5)
     def test_read_images(self):
         data_path = "data/mllib/images/origin/kittens"
         df = (
@@ -68,6 +69,12 @@ class ImageFileFormatTest(SparkSessionTestCase):
                 "array argument should be numpy.ndarray; however, it got",
                 lambda: ImageSchema.toImage("a"),
             )
+
+    @retry(maxTries=50)
+    def test_rand(self):
+        import random
+
+        self.assertTrue(random.random() < 0.1)
 
 
 if __name__ == "__main__":

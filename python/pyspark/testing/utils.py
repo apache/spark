@@ -21,6 +21,7 @@ import struct
 import sys
 import unittest
 import difflib
+import functools
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -29,8 +30,7 @@ from typing import (
     Union,
     Dict,
     List,
-    Tuple,
-    Iterator,
+    Callable,
 )
 from itertools import zip_longest
 
@@ -113,6 +113,39 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
             "Test failed due to timeout after %g sec, with last condition returning: %s"
             % (timeout, lastValue)
         )
+
+
+def retry(maxTries=10, interval=1.0):
+    def decorator(f: Callable) -> Callable:
+        @functools.wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            numTries = 0
+            lastValue = None
+            while numTries < maxTries:
+                numTries += 1
+                try:
+                    f(*args, **kwargs)
+                    lastValue = True
+                except Exception as e:
+                    lastValue = e
+
+                if lastValue is True:
+                    return
+
+                print()
+                print(f"The {numTries}-th attempt failed, due to {str(lastValue)}!")
+                print()
+
+                sleep(interval)
+
+            if isinstance(lastValue, Exception):
+                raise lastValue
+            else:
+                raise AssertionError(f"Test failed due to reach to {maxTries} tries")
+
+        return wrapper
+
+    return decorator
 
 
 class QuietTest:
