@@ -139,10 +139,10 @@ if not (ENV['SKIP_API'] == '1')
     cp_r("../python/docs/build/html/.", "api/python")
 
     cd("..")
+    system("pwd")
     release_version = ENV['RELEASE_VERSION'] || 'latest'
     puts "Update PySpark selectable version #{release_version} to api/python/_static/versions.json"
-    system("python3.9 dev/create-release/utils-update-docs-versions.py " \
-      "docs/api/python/_static/versions.json #{release_version}") || raise("Update PySpark selectable version failed")
+    system("python3.9 dev/create-release/utils-update-docs-versions.py docs/api/python/_static/versions.json #{release_version}") || raise("Update PySpark selectable version failed")
   end
 
   if not (ENV['SKIP_RDOC'] == '1')
