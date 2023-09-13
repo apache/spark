@@ -677,7 +677,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Fail commit for next version and verify that reloading resets the files
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
       put(store, "11", 0, 11)
-      // [NEIL]
       val e = intercept[SparkException] { quietly { store.commit() } }
       assert(e.getCause.isInstanceOf[IOException])
       assert(e.getMessage.contains("Cannot perform commit"))
