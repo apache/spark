@@ -83,36 +83,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
     // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this")
-  )
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
 
-  // Default exclude rules
-  lazy val defaultExcludes = Seq(
-    // Spark Internals
-    ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
-    ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.util.collection.unsafe.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
-    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
-    // Avro source implementation is internal.
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
-
-    // SPARK-43169: shaded and generated protobuf code
-    ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
-
-    // SPARK-43265: Move Error framework to a common utils module
+    // [SPARK-43265] Move Error framework to a common utils module
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
@@ -120,15 +93,11 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
 
-    // SPARK-44104: shaded protobuf code and Apis with parameters relocated
-    ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
-    
-    // SPARK-44255: Relocate StorageLevel to common/utils
+    // [SPARK-44255][SQL] Relocate StorageLevel to common/utils
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
 
-    // SPARK-44475: Relocate DataType and Parser to sql/api
+    // [SPARK-44475][SQL][CONNECT] Relocate DataType and Parser to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ArrayType$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.BinaryType"),
@@ -193,7 +162,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.types.ObjectType$"),
 
-    // SPARK-44496: Move Interfaces needed by SCSC to sql/api.
+    // [SPARK-44496][SQL][CONNECT] Move Interfaces needed by SCSC to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoder"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Row$"),
@@ -222,8 +191,39 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.VoidFunction2"),
 
-    // SPARK-43997: UDF* classes needed by SCSC and moved to sql/api
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.api.java.UDF*"),
+    // [SPARK-43997][CONNECT] Add support for Java UDFs
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.api.java.UDF*")
+  )
+
+  // Default exclude rules
+  lazy val defaultExcludes = Seq(
+    // Spark Internals
+    ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
+    ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.util.collection.unsafe.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
+    // Avro source implementation is internal.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
+
+    // SPARK-43169: shaded and generated protobuf code
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+
+    // SPARK-44104: shaded protobuf code and Apis with parameters relocated
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
