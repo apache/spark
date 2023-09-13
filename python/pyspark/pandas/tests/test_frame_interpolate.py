@@ -53,6 +53,11 @@ class FrameInterpolateTestsMixin:
         with self.assertRaisesRegex(ValueError, "invalid limit_area"):
             psdf.id.interpolate(limit_area="jump")
 
+        with self.assertRaisesRegex(
+            TypeError, "Cannot interpolate with all object-dtype columns in the DataFrame."
+        ):
+            ps.DataFrame({"A": ["a", "b", "c"], "B": ["a", "b", "c"]}).interpolate()
+
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
         self.assert_eq(psobj.interpolate(), pobj.interpolate())

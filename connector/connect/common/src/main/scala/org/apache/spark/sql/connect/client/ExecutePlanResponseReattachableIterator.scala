@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.UUID
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import io.grpc.{ManagedChannel, StatusRuntimeException}
@@ -50,7 +51,7 @@ class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy)
-    extends CloseableIterator[proto.ExecutePlanResponse]
+    extends WrappedCloseableIterator[proto.ExecutePlanResponse]
     with Logging {
 
   val operationId = if (request.hasOperationId) {
@@ -86,13 +87,24 @@ class ExecutePlanResponseReattachableIterator(
   // True after ResultComplete message was seen in the stream.
   // Server will always send this message at the end of the stream, if the underlying iterator
   // finishes without producing one, another iterator needs to be reattached.
-  private var resultComplete: Boolean = false
+  // Visible for testing.
+  private[connect] var resultComplete: Boolean = false
 
   // Initial iterator comes from ExecutePlan request.
   // Note: This is not retried, because no error would ever be thrown here, and GRPC will only
   // throw error on first iter.hasNext() or iter.next()
-  private var iter: java.util.Iterator[proto.ExecutePlanResponse] =
-    rawBlockingStub.executePlan(initialRequest)
+  // Visible for testing.
+  private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
+    Some(rawBlockingStub.executePlan(initialRequest))
+
+  override def innerIterator: Iterator[proto.ExecutePlanResponse] = iter match {
+    case Some(it) => it.asScala
+    case None =>
+      // The iterator is only unset for short moments while retry exception is thrown.
+      // It should only happen in the middle of internal processing. Since this iterator is not
+      // thread safe, no-one should be accessing it at this moment.
+      throw new IllegalStateException("innerIterator unset")
+  }
 
   override def next(): proto.ExecutePlanResponse = synchronized {
     // hasNext will trigger reattach in case the stream completed without resultComplete
@@ -102,15 +114,7 @@ class ExecutePlanResponseReattachableIterator(
 
     try {
       // Get next response, possibly triggering reattach in case of stream error.
-      var firstTry = true
       val ret = retry {
-        if (firstTry) {
-          // on first try, we use the existing iter.
-          firstTry = false
-        } else {
-          // on retry, the iter is borked, so we need a new one
-          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
-        }
         callIter(_.next())
       }
 
@@ -134,23 +138,15 @@ class ExecutePlanResponseReattachableIterator(
       // After response complete response
       return false
     }
-    var firstTry = true
     try {
       retry {
-        if (firstTry) {
-          // on first try, we use the existing iter.
-          firstTry = false
-        } else {
-          // on retry, the iter is borked, so we need a new one
-          iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
-        }
         var hasNext = callIter(_.hasNext())
         // Graceful reattach:
         // If iter ended, but there was no ResultComplete, it means that there is more,
         // and we need to reattach.
         if (!hasNext && !resultComplete) {
           do {
-            iter = rawBlockingStub.reattachExecute(createReattachExecuteRequest())
+            iter = None // unset iterator for new ReattachExecute to be called in _call_iter
             assert(!resultComplete) // shouldn't change...
             hasNext = callIter(_.hasNext())
             // It's possible that the new iter will be empty, so we need to loop to get another.
@@ -208,7 +204,10 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
-      iterFun(iter)
+      if (iter.isEmpty) {
+        iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
+      }
+      iterFun(iter.get)
     } catch {
       case ex: StatusRuntimeException
           if Option(StatusProto.fromThrowable(ex))
@@ -219,8 +218,12 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iter = rawBlockingStub.executePlan(initialRequest)
+        iter = Some(rawBlockingStub.executePlan(initialRequest))
         throw new GrpcRetryHandler.RetryException
+      case NonFatal(e) =>
+        // Remove the iterator, so that a new one will be created after retry.
+        iter = None
+        throw e
     }
   }
 

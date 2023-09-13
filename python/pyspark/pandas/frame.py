@@ -6097,6 +6097,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
                 numeric_col_names.append(psser.name)
 
+        if len(numeric_col_names) == 0:
+            raise TypeError(
+                "Cannot interpolate with all object-dtype columns in the DataFrame. "
+                "Try setting at least one column to a numeric dtype."
+            )
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
             lambda psser: psser._interpolate(

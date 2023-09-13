@@ -66,7 +66,7 @@ class OpsOnDiffFramesGroupByTestsMixin:
 
                 self.assert_eq(
                     sort(psdf1.groupby(psdf2.a, as_index=as_index).sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index).sum(numeric_only=True)),
+                    sort(pdf1.groupby(pdf2.a, as_index=as_index).sum()),
                     almost=as_index,
                 )
 
@@ -93,7 +93,7 @@ class OpsOnDiffFramesGroupByTestsMixin:
 
         self.assert_eq(
             psdf1.groupby(psdf2[("x", "a")]).sum().sort_index(),
-            pdf1.groupby(pdf2[("x", "a")]).sum(numeric_only=True).sort_index(),
+            pdf1.groupby(pdf2[("x", "a")]).sum().sort_index(),
         )
 
         self.assert_eq(
@@ -102,7 +102,7 @@ class OpsOnDiffFramesGroupByTestsMixin:
             .sort_values(("y", "c"))
             .reset_index(drop=True),
             pdf1.groupby(pdf2[("x", "a")], as_index=False)
-            .sum(numeric_only=True)
+            .sum()
             .sort_values(("y", "c"))
             .reset_index(drop=True),
         )
