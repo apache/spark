@@ -352,14 +352,14 @@ private[spark] object ClosureCleaner extends Logging {
       capturingClassReader.accept(new ReturnStatementFinder(Option(implMethodName)), 0)
 
       val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
-        lambdaProxy.getCapturedArg(0)
+        // only need to clean when there is an enclosing non-null "this" captured by the closure
+        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return)
       } else {
         return
       }
 
-      // only need to clean when there is an enclosing "this" captured by the closure, and it
-      // should be something cleanable, i.e. a Scala REPL line object or
-      // Ammonite command helper object
+      // clean only if enclosing "this" is something cleanable, i.e. a Scala REPL line object or
+      // Ammonite command helper object.
       // For Ammonite closures, we do not care about actual capturing class name,
       // as closure needs to be cleaned if it captures Ammonite command helper object
       if (isDefinedInAmmonite(outerThis.getClass)) {
@@ -407,9 +407,9 @@ private[spark] object ClosureCleaner extends Logging {
       Map.empty,
       cleanTransitively)
 
-
     logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
     accessedFields.foreach { f => logDebug("     " + f) }
+
     if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
       // clone and clean the enclosing `this` only when there are fields to null out
       logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
