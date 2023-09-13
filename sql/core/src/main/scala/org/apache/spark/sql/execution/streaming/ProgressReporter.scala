@@ -33,7 +33,6 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
-import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.Clock
@@ -265,16 +264,9 @@ trait ProgressReporter extends Logging {
     if (lastExecution == null) return Nil
     // lastExecution could belong to one of the previous triggers if `!hasExecuted`.
     // Walking the plan again should be inexpensive.
-
-    val shufflePartitionValue = sparkSession.conf.getOption(SHUFFLE_PARTITIONS.key).getOrElse("-1")
-    val numShufflePartitions: Long = try {
-      shufflePartitionValue.toLong
-    } catch {
-      case e: NumberFormatException => -1L
-    }
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
-        val progress = p.asInstanceOf[StateStoreWriter].getProgress(numShufflePartitions)
+        val progress = p.asInstanceOf[StateStoreWriter].getProgress()
         if (hasExecuted) {
           progress
         } else {

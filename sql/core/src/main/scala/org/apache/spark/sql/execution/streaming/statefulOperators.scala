@@ -151,7 +151,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    * Get the progress made by this stateful operator after execution. This should be called in
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
-  def getProgress(numShufflePartitions: Long): StateOperatorProgress = {
+  def getProgress(): StateOperatorProgress = {
     val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
@@ -170,7 +170,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
-      numShufflePartitions = numShufflePartitions,
+      numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
@@ -870,8 +870,8 @@ case class SessionWindowStateStoreSaveExec(
    * This method should be called in the driver after this SparkPlan has been executed and metrics
    * have been updated.
    */
-  override def getProgress(numShufflePartitions: Long): StateOperatorProgress = {
-    val stateOpProgress = super.getProgress(numShufflePartitions)
+  override def getProgress(): StateOperatorProgress = {
+    val stateOpProgress = super.getProgress()
 
     // This should be safe, since the method is called in the driver after the plan has been
     // executed and metrics have been updated.
