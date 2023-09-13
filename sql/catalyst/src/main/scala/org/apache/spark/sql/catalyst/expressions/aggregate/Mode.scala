@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -87,7 +87,7 @@ case class Mode(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "deterministicResult",
+          "inputName" -> toSQLId("deterministic"),
           "inputType" -> toSQLType(deterministicExpr.dataType),
           "inputExpr" -> toSQLExpr(deterministicExpr)
         )

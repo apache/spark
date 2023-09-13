@@ -1184,7 +1184,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"b\"",
-    "inputName" : "deterministicResult",
+    "inputName" : "`deterministic`",
     "inputType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"mode(col, b)\""
   },
