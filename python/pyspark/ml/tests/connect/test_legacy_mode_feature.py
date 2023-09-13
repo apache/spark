@@ -19,6 +19,7 @@
 import os
 import pickle
 import numpy as np
+import pandas as pd
 import tempfile
 import unittest
 
@@ -57,10 +58,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
-        input_cols = local_df1.columns.tolist()
+        local_df1_copy = local_df1.copy()
         local_transform_result = local_fit_model.transform(local_df1)
-        assert local_df1.columns.tolist() == input_cols, \
-            "pandas dataframe input columns should be intact."
+        # assert that pandas dataframe input columns should be intact.
+        pd.testing.assert_frame_equal(local_df1, local_df1_copy, check_type=False)
         assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
@@ -113,10 +114,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
-        input_cols = local_df1.columns.tolist()
+        local_df1_copy = local_df1.copy()
         local_transform_result = local_fit_model.transform(local_df1)
-        assert local_df1.columns.tolist() == input_cols, \
-            "pandas dataframe input columns should be intact."
+        # assert that pandas dataframe input columns should be intact.
+        pd.testing.assert_frame_equal(local_df1, local_df1_copy, check_type=False)
         assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 

@@ -19,6 +19,7 @@ import os
 import tempfile
 import unittest
 import numpy as np
+import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -82,10 +83,10 @@ class PipelineTestsMixin:
         result2 = model2.transform(eval_dataset).toPandas()
         self._check_result(result2, expected_predictions, expected_probabilities)
         local_eval_dataset = eval_dataset.toPandas()
-        input_cols = local_eval_dataset.columns.tolist()
+        local_eval_dataset_copy = local_eval_dataset.copy()
         local_transform_result2 = model2.transform(local_eval_dataset)
-        assert local_eval_dataset.columns.tolist() == input_cols, \
-            "pandas dataframe input columns should be intact."
+        # assert that pandas dataframe input columns should be intact.
+        pd.testing.assert_frame_equal(local_eval_dataset, local_eval_dataset_copy, check_type=False)
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
         with tempfile.TemporaryDirectory() as tmp_dir:

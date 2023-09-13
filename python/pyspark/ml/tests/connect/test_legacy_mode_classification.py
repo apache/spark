@@ -19,6 +19,7 @@ import os
 import tempfile
 import unittest
 import numpy as np
+import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -82,10 +83,10 @@ class ClassificationTestsMixin:
         result = model.transform(eval_df1).toPandas()
         self._check_result(result, expected_predictions, expected_probabilities)
         pandas_eval_df1 = eval_df1.toPandas()
-        input_cols = pandas_eval_df1.columns.tolist()
+        pandas_eval_df1_copy = pandas_eval_df1.copy()
         local_transform_result = model.transform(pandas_eval_df1)
-        assert pandas_eval_df1.columns.tolist() == input_cols, \
-            "pandas dataframe input columns should be intact."
+        # assert that pandas dataframe input columns should be intact.
+        pd.testing.assert_frame_equal(pandas_eval_df1, pandas_eval_df1_copy, check_type=False)
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
         model.set(model.probabilityCol, "")
