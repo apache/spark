@@ -19,14 +19,10 @@ package org.apache.spark.examples.sql;
 import org.apache.spark.sql.SparkSession;
 
 /**
+ * Example Usage:
+ * <pre>
  * bin/run-example sql.JavaSparkSQLCli "SELECT 'Spark SQL' col"
- * {{{
- *   +---------+
- *   |col      |
- *   +---------+
- *   |Spark SQL|
- *   +---------+
- * }}}
+ * </pre>
  */
 public class JavaSparkSQLCli {
 
