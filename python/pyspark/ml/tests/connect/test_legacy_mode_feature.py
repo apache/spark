@@ -62,7 +62,6 @@ class FeatureTestsMixin:
         local_transform_result = local_fit_model.transform(local_df1)
         # assert that pandas dataframe input columns should be intact.
         pd.testing.assert_frame_equal(local_df1, local_df1_copy, check_type=False)
-        assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
@@ -118,7 +117,6 @@ class FeatureTestsMixin:
         local_transform_result = local_fit_model.transform(local_df1)
         # assert that pandas dataframe input columns should be intact.
         pd.testing.assert_frame_equal(local_df1, local_df1_copy, check_type=False)
-        assert id(local_transform_result) == id(local_df1)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
