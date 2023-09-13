@@ -132,10 +132,7 @@ def retry(maxTries=10, interval=1.0):
                 if lastValue is True:
                     return
 
-                print()
-                print(f"The {numTries}-th attempt failed, due to {str(lastValue)}!")
-                print()
-
+                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
                 sleep(interval)
 
             if isinstance(lastValue, Exception):
