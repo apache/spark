@@ -249,9 +249,9 @@ function renderDagVizForJob(svgContainer) {
     // existing ones, taking into account the position and width of the last stage's
     // container. We do not need to do this for the first stage of this job.
     if (i > 0) {
-      var existingStages = svgContainer.selectAll("g.cluster.stage");
-      if (!existingStages.empty()) {
-        var lastStage = d3.select(existingStages[0].pop());
+      var existingStages = svgContainer.selectAll("g.cluster.stage").nodes();
+      if (existingStages.length > 0) {
+        var lastStage = d3.select(existingStages.pop());
         var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
         var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
@@ -497,7 +497,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
     ];
   }
 
-  var line = d3.line().interpolate("basis");
+  var line = d3.line().curve(d3.curveBasis);
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
