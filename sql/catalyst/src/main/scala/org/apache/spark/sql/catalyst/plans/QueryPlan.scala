@@ -218,9 +218,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpression(e)
       case Some(value) => Some(recursiveTransform(value))
-      case a: Array[Expression] => a.map(transformExpression)
-      case am: AttributeMap[_] => am
-      case m: Map[_, _] => m.map(kv => recursiveTransform(kv._1) -> recursiveTransform(kv._2))
+      case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case stream: Stream[_] => stream.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
@@ -276,9 +274,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case s: Some[_] => seqToExpressions(s.toSeq)
-      case a: Array[Expression] => seqToExpressions(a.toSeq)
-      case _: AttributeMap[_] => Nil
-      case m: Map[_, _] => seqToExpressions(m.keys ++ m.values)
       case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
