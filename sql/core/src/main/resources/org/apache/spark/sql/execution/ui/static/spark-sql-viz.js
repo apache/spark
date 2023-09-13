@@ -121,7 +121,7 @@ function preprocessGraphLayout(g) {
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {
-  var allClusters = svg.selectAll("g rect")[0];
+  var allClusters = svg.selectAll("g rect").nodes();
   var startX = -PlanVizConstants.svgMarginX +
     toFloat(d3.min(allClusters, function(e) {
       return getAbsolutePosition(d3.select(e)).x;
@@ -169,7 +169,7 @@ function getAbsolutePosition(d3selection) {
   while (!obj.empty()) {
     var transformText = obj.attr("transform");
     if (transformText) {
-      var translate = d3.transform(transformText).translate;
+      var translate = transformText.substring("translate(".length, transformText.length - 1).split(",")
       _x += toFloat(translate[0]);
       _y += toFloat(translate[1]);
     }
