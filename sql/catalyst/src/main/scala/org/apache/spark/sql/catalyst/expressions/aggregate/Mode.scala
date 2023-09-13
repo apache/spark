@@ -33,7 +33,7 @@ import org.apache.spark.util.collection.OpenHashMap
 @ExpressionDescription(
   usage = """
     _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
-      When multiple values have the same greatest frequency then either any of values is returned if 'deterministic' is false or is not defined, or the lowest value is returned if 'deterministic' is true.""",
+      When multiple values have the same greatest frequency then either any of values is returned if `deterministic` is false or is not defined, or the lowest value is returned if `deterministic` is true.""",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
