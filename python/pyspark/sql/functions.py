@@ -12485,7 +12485,7 @@ def inline(col: "ColumnOrName") -> Column:
     |  1|  2|
     |  3|  4|
     +---+---+
-    
+
     Example 2: Using inline with a column name
 
     >>> import pyspark.sql.functions as sf
@@ -12536,15 +12536,9 @@ def inline(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([
-    ...     Row(structlist=[Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)])])
+    ...     Row(structlist=Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)]))
     ... ])
-    >>> df.select(sf.inline("structlist")).show()
-    +---+---+----------------+
-    |  a|  b|          nested|
-    +---+---+----------------+
-    |  1|  2|[{3, 4}, {5, 6}]|
-    +---+---+----------------+
-    >>> df.select(sf.inline("structlist")).select(sf.inline("nested")).show()
+    >>> df.select(sf.inline("structlist.nested")).show()
     +---+---+
     |  c|  d|
     +---+---+
