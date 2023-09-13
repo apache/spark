@@ -1187,55 +1187,54 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           }
         }
       }
-
-      // This represents one test configuration over a data source.
-      case class TestCase(
-          dataSource: String,
-          configs: Seq[Config])
-      // Run the test several times using each configuration.
-      Seq(
-        TestCase(
-          dataSource = "csv",
-          Seq(
-            Config(
-              None),
-            Config(
-              Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
-        TestCase(
-          dataSource = "json",
-          Seq(
-            Config(
-              None),
-            Config(
-              Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
-        TestCase(
-          dataSource = "orc",
-          Seq(
-            Config(
-              None),
-            Config(
-              Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")))),
-        TestCase(
-          dataSource = "parquet",
-          Seq(
-            Config(
-              None),
-            Config(
-              Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
-      ).foreach { testCase: TestCase =>
-        testCase.configs.foreach { config: Config =>
-          // Run the test twice, once using SQL for the INSERT operations and again using
-          // DataFrames.
-          for (useDataFrames <- Seq(false, true)) {
-            config.sqlConf.map { kv: (String, String) =>
-              withSQLConf(kv) {
-                // Run the test with the pair of custom SQLConf values.
-                runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
-              }
-            }.getOrElse {
-              // Run the test with default settings.
+    }
+    // This represents one test configuration over a data source.
+    case class TestCase(
+        dataSource: String,
+        configs: Seq[Config])
+    // Run the test several times using each configuration.
+    Seq(
+      TestCase(
+        dataSource = "csv",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
+      TestCase(
+        dataSource = "json",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
+      TestCase(
+        dataSource = "orc",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")))),
+      TestCase(
+        dataSource = "parquet",
+        Seq(
+          Config(
+            None),
+          Config(
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
+    ).foreach { testCase: TestCase =>
+      testCase.configs.foreach { config: Config =>
+        // Run the test twice, once using SQL for the INSERT operations and again using
+        // DataFrames.
+        for (useDataFrames <- Seq(false, true)) {
+          config.sqlConf.map { kv: (String, String) =>
+            withSQLConf(kv) {
+              // Run the test with the pair of custom SQLConf values.
               runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
             }
+          }.getOrElse {
+            // Run the test with default settings.
+            runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
           }
         }
       }
