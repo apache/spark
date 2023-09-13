@@ -157,8 +157,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
@@ -186,8 +184,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroups]]
    * @since 3.5.0
    */
   def flatMapSortedGroups[U](
@@ -427,8 +423,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
@@ -448,8 +442,6 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    * sorted according to the given sort expressions. That sorting does not add computational
    * complexity.
    *
-   * @see
-   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
    * @since 3.5.0
    */
   def cogroupSorted[U, R](

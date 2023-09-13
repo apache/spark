@@ -450,6 +450,9 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
+  /* Enable unidoc only for the root spark project */
+  enable(ConnectScalaClientUnidoc.settings)(connectClient)
+
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
 
@@ -1368,7 +1371,7 @@ object Volcano {
   )
 }
 
-object Unidoc {
+trait UnidocSettings {
 
   import BuildCommons._
   import sbtunidoc.BaseUnidocPlugin
@@ -1379,7 +1382,7 @@ object Unidoc {
   import sbtunidoc.JavaUnidocPlugin.autoImport._
   import sbtunidoc.ScalaUnidocPlugin.autoImport._
 
-  private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+  protected def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
@@ -1404,7 +1407,6 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
@@ -1422,73 +1424,118 @@ object Unidoc {
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
-  lazy val settings = BaseUnidocPlugin.projectSettings ++
-                      ScalaUnidocPlugin.projectSettings ++
-                      JavaUnidocPlugin.projectSettings ++
-                      Seq (
-    publish := {},
+  lazy val baseSettings = BaseUnidocPlugin.projectSettings ++
+    ScalaUnidocPlugin.projectSettings ++
+    JavaUnidocPlugin.projectSettings ++
+    Seq (
+      publish := {},
 
+      (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
+        ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
+      },
+
+      (JavaUnidoc / unidoc / unidocAllClasspaths) := {
+        ignoreClasspaths((JavaUnidoc / unidoc / unidocAllClasspaths).value)
+      },
+
+      // Skip actual catalyst, but include the subproject.
+      // Catalyst is not public API and contains quasiquotes which break scaladoc.
+      (ScalaUnidoc / unidoc / unidocAllSources) := {
+        ignoreUndocumentedPackages((ScalaUnidoc / unidoc / unidocAllSources).value)
+      },
+
+      // Skip class names containing $ and some internal packages in Javadocs
+      (JavaUnidoc / unidoc / unidocAllSources) := {
+        ignoreUndocumentedPackages((JavaUnidoc / unidoc / unidocAllSources).value)
+          .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
+      },
+
+      (JavaUnidoc / unidoc / javacOptions) := {
+        val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+        var major = versionParts(0).toInt
+        if (major == 1) major = versionParts(1).toInt
+
+        Seq(
+          "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+          "-public",
+          "-noqualifier", "java.lang",
+          "-tag", """example:a:Example\:""",
+          "-tag", """note:a:Note\:""",
+          "-tag", "group:X",
+          "-tag", "tparam:X",
+          "-tag", "constructor:X",
+          "-tag", "todo:X",
+          "-tag", "groupname:X",
+        ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+      },
+
+      // Use GitHub repository for Scaladoc source links
+      unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
+
+      (ScalaUnidoc / unidoc / scalacOptions) ++= Seq(
+        "-groups", // Group similar methods together based on the @group annotation.
+        "-skip-packages", "org.apache.hadoop",
+        "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath
+      ) ++ (
+        // Add links to sources when generating Scaladoc for a non-snapshot release
+        if (!isSnapshot.value) {
+          Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+        } else {
+          Seq()
+        }
+        )
+    )
+}
+
+object Unidoc extends UnidocSettings {
+
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
+
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super
+      .ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+  }
+
+
+  lazy val settings = baseSettings ++ Seq(
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+  )
 
-    (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
-      ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
-    },
+}
 
-    (JavaUnidoc / unidoc / unidocAllClasspaths) := {
-      ignoreClasspaths((JavaUnidoc / unidoc / unidocAllClasspaths).value)
-    },
+object ConnectScalaClientUnidoc extends UnidocSettings {
 
-    // Skip actual catalyst, but include the subproject.
-    // Catalyst is not public API and contains quasiquotes which break scaladoc.
-    (ScalaUnidoc / unidoc / unidocAllSources) := {
-      ignoreUndocumentedPackages((ScalaUnidoc / unidoc / unidocAllSources).value)
-    },
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
 
-    // Skip class names containing $ and some internal packages in Javadocs
-    (JavaUnidoc / unidoc / unidocAllSources) := {
-      ignoreUndocumentedPackages((JavaUnidoc / unidoc / unidocAllSources).value)
-        .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
-    },
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super
+      .ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/application")))
+  }
 
-    (JavaUnidoc / unidoc / javacOptions) := {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-
-      Seq(
-        "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
-        "-public",
-        "-noqualifier", "java.lang",
-        "-tag", """example:a:Example\:""",
-        "-tag", """note:a:Note\:""",
-        "-tag", "group:X",
-        "-tag", "tparam:X",
-        "-tag", "constructor:X",
-        "-tag", "todo:X",
-        "-tag", "groupname:X",
-      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
-    },
-
-    // Use GitHub repository for Scaladoc source links
-    unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
-
-    (ScalaUnidoc / unidoc / scalacOptions) ++= Seq(
-      "-groups", // Group similar methods together based on the @group annotation.
-      "-skip-packages", "org.apache.hadoop",
-      "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath
-    ) ++ (
-      // Add links to sources when generating Scaladoc for a non-snapshot release
-      if (!isSnapshot.value) {
-        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
-      } else {
-        Seq()
-      }
-    )
+  lazy val settings = baseSettings ++ Seq(
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
   )
 }
 

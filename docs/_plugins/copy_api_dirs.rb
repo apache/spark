@@ -34,45 +34,64 @@ if not (ENV['SKIP_API'] == '1')
 
     puts "Removing old docs"
     puts `rm -rf api`
+    puts 'rm -rf connect'
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
     source = "../target/scala-2.12/unidoc"
     dest = "api/scala"
 
-    puts "Making directory " + dest
+    sourceConnect = "../connector/connect/client/jvm/target/scala-2.12/unidoc"
+    destConnect = "connect/api/scala"
+    puts "Making directories: " + dest + ", " + destConnect
     mkdir_p dest
+    mkdir_p destConnect
 
     # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
+
+    puts "cp -r " + sourceConnect + "/. " + destConnect
+    cp_r(sourceConnect + "/.", destConnect)
 
     # Append custom JavaScript
     js = File.readlines("./js/api-docs.js")
     js_file = dest + "/lib/template.js"
     File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
 
+    js_file_connect = destConnect + "/lib/template.js"
+    File.open(js_file_connect, 'a') { |f| f.write("\n" + js.join()) }
+
     # Append custom CSS
     css = File.readlines("./css/api-docs.css")
     css_file = dest + "/lib/template.css"
     File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 
+    css_file_connect = destConnect + "/lib/template.css"
+    File.open(css_file_connect, 'a') { |f| f.write("\n" + css.join()) }
+
     # Copy over the unified JavaDoc for all projects to api/java.
     source = "../target/javaunidoc"
     dest = "api/java"
+    sourceConnect = "../connector/connect/client/jvm/target/javaunidoc"
+    destConnect = "connect/api/java"
 
-    puts "Making directory " + dest
+    puts "Making directories: " + dest + ", " + destConnect
     mkdir_p dest
+    mkdir_p destConnect
 
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
+
+    puts "cp -r " + sourceConnect + "/. " + destConnect
+    cp_r(sourceConnect + "/.", destConnect)
 
     # Begin updating JavaDoc files for badge post-processing
     puts "Updating JavaDoc files for badge post-processing"
     js_script_start = '<script defer="defer" type="text/javascript" src="'
     js_script_end = '.js"></script>'
 
-    javadoc_files = Dir["./" + dest + "/**/*.html"]
+    javadoc_files = Dir["./" + dest + "/**/*.html", "./" + destConnect + "/**/*.html"]
     javadoc_files.each do |javadoc_file|
       # Determine file depths to reference js files
       slash_count = javadoc_file.count "/"
@@ -102,14 +121,27 @@ if not (ENV['SKIP_API'] == '1')
     mkdir_p("./api/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 
+    jquery_src_file = "./connect/api/scala/lib/jquery.min.js"
+    jquery_dest_file = "./connect/api/java/lib/jquery.min.js"
+    mkdir_p("./connect/api/java/lib")
+    cp(jquery_src_file, jquery_dest_file)
+
     puts "Copying api_javadocs.js to Java API for page post-processing of badges"
     api_javadocs_src_file = "./js/api-javadocs.js"
     api_javadocs_dest_file = "./api/java/lib/api-javadocs.js"
     cp(api_javadocs_src_file, api_javadocs_dest_file)
 
+    api_javadocs_src_file = "./js/api-javadocs.js"
+    api_javadocs_dest_file = "./connect/api/java/lib/api-javadocs.js"
+    cp(api_javadocs_src_file, api_javadocs_dest_file)
+
     puts "Appending content of api-javadocs.css to JavaDoc stylesheet.css for badge styles"
     css = File.readlines("./css/api-javadocs.css")
     css_file = dest + "/stylesheet.css"
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
+
+    css = File.readlines("./css/api-javadocs.css")
+    css_file = destConnect + "/stylesheet.css"
     File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 

@@ -478,13 +478,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
    * }}}
    *
    * Note that writing a XML file from `DataFrame` having a field `ArrayType` with its element as
-   * `ArrayType` would have an additional nested field for the element. For example, the
-   * `DataFrame` having a field below,
-   *
-   * {@code fieldA [[data1], [data2]]}
-   *
-   * would produce a XML file below. { @code <fieldA> <item>data1</item> </fieldA> <fieldA>
-   * <item>data2</item> </fieldA>}
+   * `ArrayType` would have an additional nested field for the element.
    *
    * Namely, roundtrip in writing and reading can end up in different schema structure.
    *
