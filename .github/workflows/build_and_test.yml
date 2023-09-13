@@ -749,7 +749,7 @@ jobs:
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
-        bundle exec jekyll build --trace
+        bundle exec jekyll build
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site
