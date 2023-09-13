@@ -169,6 +169,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("python foreachBatch process: process terminates after query is stopped") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+
     val sessionHolder = SessionHolder.forTesting(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
@@ -232,6 +234,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   test("python listener process: process terminates after listener is removed") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    
     val sessionHolder = SessionHolder.forTesting(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
