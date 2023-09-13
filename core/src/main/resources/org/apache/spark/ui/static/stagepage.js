@@ -20,6 +20,11 @@
 /* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
 
 var shouldBlockUI = true;
+var taskThreadDumpEnabled = false;
+
+function setTaskThreadDumpEnabled(enabled){
+  taskThreadDumpEnabled = enabled;
+}
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
@@ -849,7 +854,18 @@ $(document).ready(function () {
             {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
-            {data : "status", name: "Status"},
+            {
+              data : (row, type) => {
+                if (taskThreadDumpEnabled && row.status === "RUNNING") {
+                  var threadUrl =
+                    uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
+                  return '<div><a href=' + threadUrl + '>' + row.status + '</a></div>'
+                } else {
+                  return row.status
+                }
+              },
+              name: "Status"
+            },
             {data : "taskLocality", name: "Locality Level"},
             {data : "executorId", name: "Executor ID"},
             {data : "host", name: "Host"},

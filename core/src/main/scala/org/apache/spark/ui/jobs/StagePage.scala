@@ -223,6 +223,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
+          <script>setTaskThreadDumpEnabled({parent.threadDumpEnabled})</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
