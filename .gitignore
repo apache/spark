@@ -52,7 +52,6 @@ dev/pr-deps/
 dist/
 docs/_site/
 docs/api
-docs/connect
 docs/.local_ruby_bundle
 sql/docs
 sql/site

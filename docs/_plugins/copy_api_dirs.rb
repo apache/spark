@@ -27,14 +27,13 @@ if not (ENV['SKIP_API'] == '1')
     cd("..")
 
     puts "Running 'build/sbt -Pkinesis-asl clean compile unidoc' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt -Pkinesis-asl clean compile unidoc") || raise("Unidoc generation failed")
+    system("build/sbt -Pkinesis-asl compile unidoc") || raise("Unidoc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
 
     puts "Removing old docs"
     puts `rm -rf api`
-    puts 'rm -rf connect'
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
@@ -42,7 +41,7 @@ if not (ENV['SKIP_API'] == '1')
     dest = "api/scala"
 
     sourceConnect = "../connector/connect/client/jvm/target/scala-2.12/unidoc"
-    destConnect = "connect/api/scala"
+    destConnect = "api/connect/scala"
     puts "Making directories: " + dest + ", " + destConnect
     mkdir_p dest
     mkdir_p destConnect
@@ -74,7 +73,7 @@ if not (ENV['SKIP_API'] == '1')
     source = "../target/javaunidoc"
     dest = "api/java"
     sourceConnect = "../connector/connect/client/jvm/target/javaunidoc"
-    destConnect = "connect/api/java"
+    destConnect = "api/connect/java"
 
     puts "Making directories: " + dest + ", " + destConnect
     mkdir_p dest
@@ -121,9 +120,9 @@ if not (ENV['SKIP_API'] == '1')
     mkdir_p("./api/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 
-    jquery_src_file = "./connect/api/scala/lib/jquery.min.js"
-    jquery_dest_file = "./connect/api/java/lib/jquery.min.js"
-    mkdir_p("./connect/api/java/lib")
+    jquery_src_file = "./api/connect/scala/lib/jquery.min.js"
+    jquery_dest_file = "./api/connect/java/lib/jquery.min.js"
+    mkdir_p("./api/connect/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 
     puts "Copying api_javadocs.js to Java API for page post-processing of badges"
@@ -132,7 +131,7 @@ if not (ENV['SKIP_API'] == '1')
     cp(api_javadocs_src_file, api_javadocs_dest_file)
 
     api_javadocs_src_file = "./js/api-javadocs.js"
-    api_javadocs_dest_file = "./connect/api/java/lib/api-javadocs.js"
+    api_javadocs_dest_file = "./api/connect/java/lib/api-javadocs.js"
     cp(api_javadocs_src_file, api_javadocs_dest_file)
 
     puts "Appending content of api-javadocs.css to JavaDoc stylesheet.css for badge styles"
