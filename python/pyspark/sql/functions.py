@@ -782,15 +782,15 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     true.
 
     >>> df2 = spark.createDataFrame([-10, 0, 10],
-    ...     schema=("col""))
-    >>>df.select(mode("col", False), mode("col", True)).show()
+    ...     schema=("col"))
+    >>> df2.select(mode("col", False), mode("col", True)).show()
     +----------------+---------------+
     |mode(col, false)|mode(col, true)|
     +----------------+---------------+
     |               0|            -10|
     +----------------+---------------+
     """
-    return _invoke_function_over_columns("mode", col, lit(deterministic))
+    return _invoke_function("mode", _to_java_column(col), deterministic)
 
 
 @_try_remote_functions
