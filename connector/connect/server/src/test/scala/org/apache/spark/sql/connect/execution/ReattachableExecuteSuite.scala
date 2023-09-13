@@ -25,7 +25,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{ExecuteStatus, SparkConnectService}
 
 class ReattachableExecuteSuite extends SparkConnectServerTest {
 
@@ -294,6 +294,28 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
         stub.reattachExecute(buildReattachExecuteRequest(operationId, Some(lastSeenResponse)))
       assert(reattach2.hasNext)
       while (reattach2.hasNext) reattach2.next()
+    }
+  }
+
+  test("SPARK-45133 query should reach FINISHED state when results are not consumed") {
+    withRawBlockingStub { stub =>
+      val iter = stub.executePlan(buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY)))
+      iter.hasNext
+      val execution = eventuallyGetExecutionHolder
+      Eventually.eventually(timeout(30.seconds)) {
+        execution.eventsManager.status == ExecuteStatus.Finished
+      }
+    }
+  }
+
+  test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
+    withClient { client =>
+      val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
+      iter.hasNext
+      val execution = eventuallyGetExecutionHolder
+      Eventually.eventually(timeout(30.seconds)) {
+        execution.eventsManager.status == ExecuteStatus.Finished
+      }
     }
   }
 
