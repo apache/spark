@@ -380,14 +380,12 @@ function resizeSvg(svg) {
 function interpretLineBreak(svg) {
   svg.selectAll("tspan").each(function() {
     var node = d3.select(this);
-    var original = node[0][0].innerHTML;
-    if (original.indexOf("\\n") != -1) {
+    var original = node.html();
+    if (original.indexOf("\\n") !== -1) {
       var arr = original.split("\\n");
       var newNode = this.cloneNode(this);
-
-      node[0][0].innerHTML = arr[0];
-      newNode.innerHTML = arr[1];
-
+      node.html(arr[0])
+      newNode.html(arr[1]);
       this.parentNode.appendChild(newNode);
     }
   });
