@@ -1631,19 +1631,21 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column for computed results.
+        A column for the computed results.
 
     Examples
     --------
+    Example 1: Compute the ceiling of a column value
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
@@ -1651,6 +1653,8 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     +----------+
     |         0|
     +----------+
+
+    Example 2: Compute the ceiling of a column value with a specified scale
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1), 1)).show()
@@ -1680,19 +1684,21 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column for computed results.
+        A column for the computed results.
 
     Examples
     --------
+    Example 1: Compute the ceiling of a column value
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1))).show()
     +-------------+
@@ -1700,6 +1706,8 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     +-------------+
     |            0|
     +-------------+
+
+    Example 2: Compute the ceiling of a column value with a specified scale
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1), 1)).show()
@@ -1928,9 +1936,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        column to find floor for.
+        The target column or column name to compute the floor on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
@@ -1942,6 +1950,8 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     Examples
     --------
+    Example 1: Compute the floor of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.floor(sf.lit(2.5))).show()
     +----------+
@@ -1949,6 +1959,8 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     +----------+
     |         2|
     +----------+
+
+    Example 2: Compute the floor of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.floor(sf.lit(2.1267), sf.lit(2))).show()
@@ -5293,9 +5305,9 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column to round.
+        The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
                 Support Column type.
@@ -5303,10 +5315,12 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        rounded values.
+        A column for the rounded value.
 
     Examples
     --------
+    Example 1: Compute the rounded of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.5))).show()
     +-------------+
@@ -5314,6 +5328,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     +-------------+
     |          3.0|
     +-------------+
+
+    Example 2: Compute the rounded of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.1267), sf.lit(2))).show()
@@ -5344,9 +5360,9 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column to round.
+        The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
                 Support Column type.
@@ -5354,10 +5370,12 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        rounded values.
+        A column for the rounded value.
 
     Examples
     --------
+    Example 1: Compute the rounded of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.5))).show()
     +--------------+
@@ -5365,6 +5383,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     +--------------+
     |           2.0|
     +--------------+
+
+    Example 2: Compute the rounded of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.1267), sf.lit(2))).show()

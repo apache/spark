@@ -47,6 +47,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   private var interrupted = false
 
+  // Time at which this sender should finish if the response stream is not finished by then.
+  private var deadlineTimeMillis = Long.MaxValue
+
   // Signal to wake up when grpcCallObserver.isReady()
   private val grpcCallObserverReadySignal = new Object
 
@@ -62,6 +65,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    */
   def interrupt(): Unit = executionObserver.synchronized {
     interrupted = true
+    executionObserver.notifyAll()
+  }
+
+  // For testing
+  private[connect] def setDeadline(deadlineMs: Long) = executionObserver.synchronized {
+    deadlineTimeMillis = deadlineMs
     executionObserver.notifyAll()
   }
 
@@ -150,7 +159,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     var finished = false
 
     // Time at which this sender should finish if the response stream is not finished by then.
-    val deadlineTimeMillis = if (!executeHolder.reattachable) {
+    deadlineTimeMillis = if (!executeHolder.reattachable) {
       Long.MaxValue
     } else {
       val confSize =
@@ -232,8 +241,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(finished == false)
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
-          // will exit in the enxt loop iterattion.
-          assert(deadlineLimitReached)
+          // or it was intterupted. Will exit in the next loop iterattion.
+          assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
         // Stream is finished and all responses have been sent
@@ -301,7 +310,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         val sleepStart = System.nanoTime()
         var sleepEnd = 0L
         // Conditions for exiting the inner loop
-        // 1. was detached
+        // 1. was interrupted
         // 2. grpcCallObserver is ready to send more data
         // 3. time deadline is reached
         while (!interrupted &&
