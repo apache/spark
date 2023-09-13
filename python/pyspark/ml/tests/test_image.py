@@ -70,12 +70,6 @@ class ImageFileFormatTest(SparkSessionTestCase):
                 lambda: ImageSchema.toImage("a"),
             )
 
-    @retry(maxTries=50)
-    def test_rand(self):
-        import random
-
-        self.assertTrue(random.random() < 0.1)
-
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_image import *  # noqa: F401
