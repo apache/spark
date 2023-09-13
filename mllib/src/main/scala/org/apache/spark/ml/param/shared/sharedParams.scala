@@ -580,4 +580,19 @@ trait HasMaxBlockSizeInMB extends Params {
   /** @group expertGetParam */
   final def getMaxBlockSizeInMB: Double = $(maxBlockSizeInMB)
 }
+
+trait HasIncludeLowest extends Params {
+
+  /**
+   * Param for define the range of values for the bucket, which by default holds values in the range[v1,v2....)
+   *
+   * @group param
+   */
+  final val includeLowest: BooleanParam = new BooleanParam(this, "includeLowest", "define the range of values for the bucket, which by default holds values in the range[v1,v2....)")
+
+  setDefault(includeLowest, true)
+
+  /** @group getParam */
+  final def getIncludeLowest: Boolean = $(includeLowest)
+}
 // scalastyle:on

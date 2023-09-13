@@ -18,13 +18,12 @@
 package org.apache.spark.ml.feature
 
 import java.{util => ju}
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasIncludeLowest, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -41,9 +40,9 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * columns.
  */
 @Since("1.4.0")
-final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+final class Bucketizer @Since("1.4.0")(@Since("1.4.0") override val uid: String)
   extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
-    with HasInputCols with HasOutputCols with DefaultParamsWritable {
+    with HasInputCols with HasOutputCols with HasIncludeLowest with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -92,18 +91,20 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * to all columns. That said for 'error' it will throw an error if any invalids are found in
    * any column, for 'skip' it will skip rows with any invalids in any columns, etc.
    * Default: "error"
+   *
    * @group param
    */
   @Since("2.1.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "how to handle invalid entries containing NaN values. Values outside the splits will always " +
-    "be treated as errorsOptions are skip (filter out rows with invalid values), " +
-    "error (throw an error), or keep (keep invalid values in a special additional bucket).",
+      "be treated as errorsOptions are skip (filter out rows with invalid values), " +
+      "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 
   /** @group setParam */
   @Since("2.1.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   /**
@@ -138,6 +139,10 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
+  /** @group setParam */
+  @Since("3.4.1")
+  def setIncludeLowest(value: Boolean): this.type = set(includeLowest, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema)
@@ -165,7 +170,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
       udf { (feature: Double) =>
-        Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
+        Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid, getIncludeLowest)
       }.withName(s"bucketizer_$idx")
     }
 
@@ -260,19 +265,22 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   /**
    * Binary searching in several buckets to place each data point.
-   * @param splits array of split points
-   * @param feature data point
-   * @param keepInvalid NaN flag.
-   *                    Set "true" to make an extra bucket for NaN values;
-   *                    Set "false" to report an error for NaN values
+   *
+   * @param splits        array of split points
+   * @param feature       data point
+   * @param keepInvalid   NaN flag.
+   *                      Set "true" to make an extra bucket for NaN values;
+   *                      Set "false" to report an error for NaN values
+   * @param includeLowest whether the feature should be left-inclusive or not
    * @return bucket for each data point
    * @throws SparkException if a feature is < splits.head or > splits.last
    */
 
   private[feature] def binarySearchForBuckets(
-      splits: Array[Double],
-      feature: Double,
-      keepInvalid: Boolean): Double = {
+       splits: Array[Double],
+       feature: Double,
+       keepInvalid: Boolean,
+       includeLowest: Boolean): Double = {
     if (feature.isNaN) {
       if (keepInvalid) {
         splits.length - 1
@@ -285,7 +293,11 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
     } else {
       val idx = ju.Arrays.binarySearch(splits, feature)
       if (idx >= 0) {
-        idx
+        if (!includeLowest) {
+          idx - 1
+        } else {
+          idx
+        }
       } else {
         val insertPos = -idx - 1
         if (insertPos == 0 || insertPos == splits.length) {

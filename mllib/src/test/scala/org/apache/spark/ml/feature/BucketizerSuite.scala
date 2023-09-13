@@ -161,7 +161,7 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
     val splits: Array[Double] = Double.NegativeInfinity +:
       Array.fill(10)(Random.nextDouble()).sorted :+ Double.PositiveInfinity
     val bsResult = Vectors.dense(data.map(x =>
-      Bucketizer.binarySearchForBuckets(splits, x, false)))
+      Bucketizer.binarySearchForBuckets(splits, x, false, true)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
@@ -389,11 +389,11 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       .collect()
 
     resultForSingleCol.zip(resultForMultiCols).foreach {
-        case (rowForSingle, rowForMultiCols) =>
-          assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
-            rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
-            rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2) &&
-            rowForSingle.getDouble(3) == rowForMultiCols.getDouble(3))
+      case (rowForSingle, rowForMultiCols) =>
+        assert(rowForSingle.getDouble(0) == rowForMultiCols.getDouble(0) &&
+          rowForSingle.getDouble(1) == rowForMultiCols.getDouble(1) &&
+          rowForSingle.getDouble(2) == rowForMultiCols.getDouble(2) &&
+          rowForSingle.getDouble(3) == rowForMultiCols.getDouble(3))
     }
   }
 
@@ -419,6 +419,48 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       ("inputCols", Array("feature1", "feature2")),
       ("outputCols", Array("result1", "result2")))
   }
+
+  test("Bucket continuous features, with includeLowest=false") {
+
+    val df = Seq(
+      (0.1, -0.1),
+      (1.1, 0.0),
+      (2.2, 5.5),
+      (1.0, 5.6),
+      (2.0, 22.2)
+    )
+      .toDF("c1", "c2")
+
+    val splits = Array(
+      Array(Double.NegativeInfinity, 1.0, 2.0, Double.PositiveInfinity),
+      Array(Double.NegativeInfinity, 5.5, Double.PositiveInfinity))
+
+    val expectedBuckets = Array(
+      Array(0D, 0D),
+      Array(1D, 0D),
+      Array(2D, 0D),
+      Array(0D, 1D),
+      Array(1D, 1D),
+    )
+
+    val inputCols = Array("c1", "c2")
+    val outputCols = Array("o1", "o2")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCols(inputCols)
+      .setOutputCols(outputCols)
+      .setSplitsArray(splits)
+      .setIncludeLowest(false)
+
+    val result = bucketizer.transform(df).select("o1", "o2").collect()
+    result.zip(expectedBuckets).foreach {
+      case (row, expectedBucket) =>
+        row.toSeq.toArray.map(_.asInstanceOf[Double]).zip(expectedBucket).foreach {
+          case (v, e) =>
+            assert(v == e)
+        }
+    }
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {
@@ -438,10 +480,11 @@ private object BucketizerSuite extends SparkFunSuite {
   /** Check all values in splits, plus values between all splits. */
   def checkBinarySearch(splits: Array[Double]): Unit = {
     def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, feature, false) === expectedBucket,
+      assert(Bucketizer.binarySearchForBuckets(splits, feature, false, true) === expectedBucket,
         s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
           s" ${splits.mkString(", ")}")
     }
+
     var i = 0
     val n = splits.length - 1
     while (i < n) {
@@ -455,9 +498,9 @@ private object BucketizerSuite extends SparkFunSuite {
 
   /** Checks if bucketized results match expected ones. */
   def checkBucketResults(
-      bucketResult: DataFrame,
-      resultColumns: Seq[String],
-      expectedColumns: Seq[String]): Unit = {
+                          bucketResult: DataFrame,
+                          resultColumns: Seq[String],
+                          expectedColumns: Seq[String]): Unit = {
     assert(resultColumns.length == expectedColumns.length,
       s"Given ${resultColumns.length} result columns doesn't match " +
         s"${expectedColumns.length} expected columns.")
