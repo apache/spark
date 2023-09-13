@@ -59,7 +59,7 @@ private[sql] object ArrowUtils {
     case NullType => ArrowType.Null.INSTANCE
     case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
     case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
-    case _: CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
+    case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
     case _ =>
       throw ExecutionErrors.unsupportedDataTypeError(dt)
   }

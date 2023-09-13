@@ -622,7 +622,7 @@ public class ArrowColumnVector extends ColumnVector {
     private final IntervalMonthDayNanoVector accessor;
 
     private final NullableIntervalMonthDayNanoHolder result =
-            new NullableIntervalMonthDayNanoHolder();
+      new NullableIntervalMonthDayNanoHolder();
 
     IntervalMonthDayNanoAccessor(IntervalMonthDayNanoVector vector) {
       super(vector);

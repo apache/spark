@@ -82,7 +82,7 @@ object ArrowWriter {
       case (NullType, vector: NullVector) => new NullWriter(vector)
       case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
-      case (_: CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
+      case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
         new IntervalMonthDayNanoWriter(vector)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
@@ -475,6 +475,6 @@ private[arrow] class IntervalMonthDayNanoWriter(val valueVector: IntervalMonthDa
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val ci = input.getInterval(ordinal)
-    valueVector.setSafe(count, ci.months, ci.days, ci.microseconds * 1000)
+    valueVector.setSafe(count, ci.months, ci.days, Math.multiplyExact(ci.microseconds, 1000L))
   }
 }
