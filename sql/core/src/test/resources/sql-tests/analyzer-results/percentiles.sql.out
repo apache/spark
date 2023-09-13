@@ -879,7 +879,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"b\"",
-    "inputName" : "percentage",
+    "inputName" : "`percentage`",
     "inputType" : "\"DOUBLE\"",
     "sqlExpr" : "\"percentile_cont(a, b)\""
   },
