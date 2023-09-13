@@ -155,11 +155,6 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   private def dummyPythonFunction(sessionHolder: SessionHolder)(
       fcn: String => Array[Byte]): SimplePythonFunction = {
-    // Needed because pythonPath in PythonWorkerFactory doesn't include test spark home
-//    val sparkPythonPath = PythonUtils.mergePythonPaths(
-//      Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator),
-//      Seq(sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).mkString(File.separator))
-
     val sparkPythonPath =
       s"${IntegratedUDFTestUtils.pysparkPythonPath}:${IntegratedUDFTestUtils.pythonPath}"
 
