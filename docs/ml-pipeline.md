@@ -238,9 +238,9 @@ notes, then it should be treated as a bug to be fixed.
 
 This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
-([Scala](api/scala/org/apache/spark/ml/package.html),
-[Java](api/java/org/apache/spark/ml/package-summary.html),
-and [Python](api/python/reference/pyspark.ml.html)).
+([Python](api/python/reference/pyspark.ml.html),
+[Scala](api/scala/org/apache/spark/ml/package.html),
+and [Java](api/java/org/apache/spark/ml/package-summary.html)).
 
 ## Example: Estimator, Transformer, and Param
 

@@ -51,7 +51,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     |appender.console.name = console
     |appender.console.target = SYSTEM_ERR
     |appender.console.layout.type = PatternLayout
-    |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
+    |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
     |logger.jetty.name = org.sparkproject.jetty
     |logger.jetty.level = warn
     |logger.eclipse.name = org.eclipse.jetty

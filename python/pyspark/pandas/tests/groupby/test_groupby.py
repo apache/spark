@@ -59,9 +59,6 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[["a", "b", "c", "e"]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -180,9 +177,6 @@ class GroupByTestsMixin:
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
         psdf = ps.from_pandas(pdf)
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[[10, 20, 30]]
 
         for as_index in [True, False]:
             if as_index:
@@ -769,10 +763,6 @@ class GroupByTestsMixin:
                 for act, exp in zip(actual, expect):
                     self.assertTrue(sorted(act) == sorted(exp))
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43444): Enable GroupBySlowTests.test_value_counts for pandas 2.0.0.",
-    )
     def test_value_counts(self):
         pdf = pd.DataFrame(
             {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
@@ -785,6 +775,7 @@ class GroupByTestsMixin:
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
@@ -804,6 +795,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=False, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby("A")["B"]
@@ -812,6 +804,7 @@ class GroupByTestsMixin:
             pdf.groupby("A")["B"]
             .value_counts(sort=True, ascending=True, dropna=False)
             .sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.B.rename().groupby(psdf.A).value_counts().sort_index(),

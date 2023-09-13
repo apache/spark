@@ -579,6 +579,11 @@
           "<errors>"
         ]
       },
+      "INVALID_XML_MAP_KEY_TYPE" : {
+        "message" : [
+          "Input schema <schema> can only contain STRING as a key type for a MAP."
+        ]
+      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -916,6 +921,11 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ]
   },
+  "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
+    "message" : [
+      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
+    ]
+  },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."
@@ -1023,6 +1033,11 @@
       "CANNOT_SAFELY_CAST" : {
         "message" : [
           "Cannot safely cast <colName> <srcType> to <targetType>."
+        ]
+      },
+      "EXTRA_COLUMNS" : {
+        "message" : [
+          "Cannot write extra columns <extraColumns>."
         ]
       },
       "EXTRA_STRUCT_FIELDS" : {
@@ -1783,9 +1798,19 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "BINARY_FORMAT" : {
+        "message" : [
+          "expects one of binary formats 'base64', 'hex', 'utf-8', but got <invalidFormat>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "expects a non-NULL value."
         ]
       },
       "PATTERN" : {
@@ -2208,6 +2233,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NON_FOLDABLE_ARGUMENT" : {
+    "message" : [
+      "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
+    ],
+    "sqlState" : "22024"
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
@@ -2680,6 +2711,18 @@
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
     ]
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata <requestedMetadata>, but the function call <invalidFunctionCallProperty>."
+    ],
+    "sqlState" : "22023"
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata was invalid; <reason>."
+    ],
+    "sqlState" : "22023"
   },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
@@ -4035,11 +4078,6 @@
       "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1100" : {
-    "message" : [
-      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1103" : {
     "message" : [
       "Unsupported component type <clz> in arrays."
@@ -4927,11 +4965,6 @@
       "Negative values found in <frequencyExpression>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2015" : {
-    "message" : [
-      "Cannot generate <codeType> code for incomparable type: <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2016" : {
     "message" : [
       "Can not interpolate <arg> into code block."
@@ -5658,11 +5691,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2189" : {
-    "message" : [
-      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
     ]
   },
   "_LEGACY_ERROR_TEMP_2190" : {

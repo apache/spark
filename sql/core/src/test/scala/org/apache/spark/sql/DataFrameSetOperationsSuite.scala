@@ -23,6 +23,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +31,8 @@ import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSess
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
+class DataFrameSetOperationsSuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {
@@ -1401,7 +1403,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         plan: SparkPlan,
         targetPlan: (SparkPlan) => Boolean,
         isColumnar: Boolean): Unit = {
-      val target = plan.collect {
+      val target = collect(plan) {
         case p if targetPlan(p) => p
       }
       assert(target.nonEmpty)
@@ -1414,6 +1416,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         val df2 = Seq(4, 5, 6).toDF("j").cache()
 
         val union = df1.union(df2)
+        union.collect()
         checkIfColumnar(union.queryExecution.executedPlan,
           _.isInstanceOf[InMemoryTableScanExec], supported)
         checkIfColumnar(union.queryExecution.executedPlan,

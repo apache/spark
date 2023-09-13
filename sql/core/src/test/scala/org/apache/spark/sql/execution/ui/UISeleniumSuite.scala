@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution.ui
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration.DurationInt
 
+import org.apache.commons.text.StringEscapeUtils.escapeJava
+import org.apache.commons.text.translate.EntityArrays._
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.{interval, timeout}
 import org.scalatestplus.selenium.WebBrowser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.ui.SparkUICssErrorHandler
 
@@ -32,8 +35,36 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
 
   private var spark: SparkSession = _
 
+  private def creatSparkSessionWithUI: SparkSession = SparkSession.builder()
+    .master("local[1,1]")
+    .appName("sql ui test")
+    .config("spark.ui.enabled", "true")
+    .config("spark.ui.port", "0")
+    .getOrCreate()
+
   implicit val webDriver: HtmlUnitDriver = new HtmlUnitDriver {
     getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
+  }
+
+  private def findErrorMessageOnSQLUI(): List[String] = {
+    val webUrl = spark.sparkContext.uiWebUrl
+    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
+    go to s"${webUrl.get}/SQL"
+    findAll(cssSelector("""#failed-table td .stacktrace-details""")).map(_.text).toList
+  }
+
+  private def findErrorSummaryOnSQLUI(): String = {
+    val webUrl = spark.sparkContext.uiWebUrl
+    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
+    go to s"${webUrl.get}/SQL"
+    findAll(cssSelector("""#failed-table td""")).map(_.text).toList.last
+  }
+
+  private def findExecutionIDOnSQLUI(): Int = {
+    val webUrl = spark.sparkContext.uiWebUrl
+    assert(webUrl.isDefined, "please turn on spark.ui.enabled")
+    go to s"${webUrl.get}/SQL"
+    findAll(cssSelector("""#failed-table td""")).map(_.text).toList.head.toInt
   }
 
   override def afterAll(): Unit = {
@@ -54,21 +85,47 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
   }
 
   test("SPARK-44737: Should not display json format errors on SQL page for non-SparkThrowables") {
-    spark = SparkSession.builder()
-      .master("local[1,1]")
-      .appName("sql ui test")
-      .config("spark.ui.enabled", "true")
-      .config("spark.ui.port", "0")
-      .getOrCreate()
+    spark = creatSparkSessionWithUI
 
     intercept[Exception](spark.sql("SET mapreduce.job.reduces = 0").isEmpty)
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
-      val webUrl = spark.sparkContext.uiWebUrl
-      assert(webUrl.isDefined, "please turn on spark.ui.enabled")
-      go to s"${webUrl.get}/SQL"
-      val sd = findAll(cssSelector("""#failed-table td .stacktrace-details""")).map(_.text).toList
+      val sd = findErrorMessageOnSQLUI()
       assert(sd.size === 1, "SET mapreduce.job.reduces = 0 shall fail")
       assert(sd.head.startsWith("java.lang.IllegalArgumentException:"))
+    }
+  }
+
+  test("SPARK-44801: Analyzer failure shall show the query in failed table") {
+    spark = creatSparkSessionWithUI
+
+    intercept[Exception](spark.sql("SELECT * FROM I_AM_A_INVISIBLE_TABLE").isEmpty)
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      val sd = findErrorMessageOnSQLUI()
+      assert(sd.size === 1, "Analyze fail shall show the query in failed table")
+      assert(sd.head.startsWith("[TABLE_OR_VIEW_NOT_FOUND]"))
+
+      val id = findExecutionIDOnSQLUI()
+      // check query detail page
+      go to s"${spark.sparkContext.uiWebUrl.get}/SQL/execution/?id=$id"
+      val planDot = findAll(cssSelector(""".dot-file""")).map(_.text).toList
+      assert(planDot.head.startsWith("digraph G {"))
+      val planDetails = findAll(cssSelector("""#physical-plan-details""")).map(_.text).toList
+      assert(planDetails.head.contains("TABLE_OR_VIEW_NOT_FOUND"))
+    }
+  }
+
+  test("SPARK-44960: Escape html is not necessary for Spark UI") {
+    spark = creatSparkSessionWithUI
+    val escape = (BASIC_ESCAPE.keySet().asScala.toSeq ++ ISO8859_1_ESCAPE.keySet().asScala ++
+      HTML40_EXTENDED_ESCAPE.keySet().asScala).mkString
+    val errorMsg = escapeJava(escape.mkString)
+    val e1 = intercept[SparkException](spark.sql(s"SELECT raise_error('$errorMsg')").collect())
+    val e2 = e1.getCause
+    assert(e2.isInstanceOf[RuntimeException])
+    assert(e2.getMessage === escape)
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      val summary = findErrorSummaryOnSQLUI()
+      assert(!summary.contains("&amp;"))
     }
   }
 }

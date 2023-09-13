@@ -42,7 +42,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
 
   // the executionObserver object is used as a synchronization lock between the
   // ExecuteGrpcResponseSender consumer and ExecuteResponseObserver producer.
-  private var executionObserver = executeHolder.responseObserver
+  private val executionObserver = executeHolder.responseObserver
     .asInstanceOf[ExecuteResponseObserver[T]]
 
   private var interrupted = false

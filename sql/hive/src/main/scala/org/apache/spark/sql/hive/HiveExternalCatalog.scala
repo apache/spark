@@ -595,7 +595,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     if (tableDefinition.tableType == VIEW) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
-      client.alterTable(tableDefinition.copy(properties = newTableProps))
+      val newTable = tableDefinition.copy(properties = newTableProps)
+      try {
+        client.alterTable(newTable)
+      } catch {
+        case NonFatal(e) =>
+          // If for some reason we fail to store the schema we store it as empty there
+          // since we already store the real schema in the table properties. This try-catch
+          // should only be necessary for Spark views which are incompatible with Hive
+          client.alterTable(newTable.copy(schema = EMPTY_DATA_SCHEMA))
+      }
     } else {
       val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
 
@@ -1266,13 +1275,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
-    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
+    val catalogTable = getTable(db, table)
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
     val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
     val res = client.getPartitions(db, table, metaStoreSpec)
       .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
 
-    metaStoreSpec match {
+    val parts = metaStoreSpec match {
       // This might be a bug of Hive: When the partition value inside the partial partition spec
       // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
       // treats dot as matching any single character and may return more partitions than we
@@ -1281,6 +1291,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         res.filter(p => isPartialPartitionSpec(spec, toMetaStorePartitionSpec(p.spec)))
       case _ => res
     }
+    parts.map(restorePartitionMetadata(_, catalogTable))
   }
 
   override def listPartitionsByFilter(
@@ -1294,6 +1305,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val clientPrunedPartitions =
       client.getPartitionsByFilter(rawHiveTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+        restorePartitionMetadata(part, catalogTable)
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
