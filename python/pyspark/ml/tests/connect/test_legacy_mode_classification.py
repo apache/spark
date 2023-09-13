@@ -85,8 +85,8 @@ class ClassificationTestsMixin:
         pandas_eval_df1 = eval_df1.toPandas()
         pandas_eval_df1_copy = pandas_eval_df1.copy()
         local_transform_result = model.transform(pandas_eval_df1)
-        # assert that pandas dataframe input columns should be intact.
-        pd.testing.assert_frame_equal(pandas_eval_df1, pandas_eval_df1_copy, check_type=False)
+        # assert that `transform` doesn't mutate the input dataframe.
+        pd.testing.assert_frame_equal(pandas_eval_df1, pandas_eval_df1_copy)
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
         model.set(model.probabilityCol, "")
