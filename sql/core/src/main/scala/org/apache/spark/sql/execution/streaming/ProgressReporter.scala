@@ -236,8 +236,6 @@ trait ProgressReporter extends Logging {
 
     val observedMetrics = extractObservedMetrics(hasNewData, lastExecution)
 
-
-
     val newProgress = new StreamingQueryProgress(
       id = id,
       runId = runId,
