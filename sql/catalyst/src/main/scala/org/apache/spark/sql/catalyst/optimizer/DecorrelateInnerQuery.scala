@@ -679,7 +679,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val rowNumber = WindowExpression(RowNumber(),
               WindowSpecDefinition(partitionFields, orderByFields,
                 SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-            val rowNumberAlias = Alias(rowNumber, "rn_" + NamedExpression.newExprId.id)()
+            val rowNumberAlias = Alias(rowNumber, "rn")()
             // Window function computes row_number() when partitioning by correlated references,
             // and projects all the other fields from the input.
             val window = Window(Seq(rowNumberAlias),
