@@ -32,8 +32,8 @@ import org.apache.spark.util.collection.OpenHashMap
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col[, deterministicResult]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
-      When multiple values have the same greatest frequency then either any of values is returned if 'deterministicResult' is false or is not defined, or the lowest value is returned if 'deterministicResult' is true.""",
+    _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency then either any of values is returned if 'deterministic' is false or is not defined, or the lowest value is returned if 'deterministic' is true.""",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -54,19 +54,22 @@ case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    deterministicResult: Expression = Literal.FalseLiteral)
+    deterministicExpr: Expression = Literal.FalseLiteral)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with BinaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
-  def this(child: Expression, deterministicResult: Expression) = {
-    this(child, 0, 0, deterministicResult)
+  def this(child: Expression, deterministicExpr: Expression) = {
+    this(child, 0, 0, deterministicExpr)
   }
+
+  @transient
+  protected lazy val deterministicResult = deterministicExpr.eval().asInstanceOf[Boolean]
 
   override def left: Expression = child
 
-  override def right: Expression = deterministicResult
+  override def right: Expression = deterministicExpr
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -80,13 +83,13 @@ case class Mode(
     if (defaultCheck.isFailure) {
       return defaultCheck
     }
-    if (!deterministicResult.foldable) {
+    if (!deterministicExpr.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "deterministicResult",
-          "inputType" -> toSQLType(deterministicResult.dataType),
-          "inputExpr" -> toSQLExpr(deterministicResult)
+          "inputType" -> toSQLType(deterministicExpr.dataType),
+          "inputExpr" -> toSQLExpr(deterministicExpr)
         )
       )
     } else {
@@ -121,7 +124,7 @@ case class Mode(
       return null
     }
 
-    (if (right.eval().asInstanceOf[Boolean]) {
+    (if (deterministicResult) {
       // When deterministic result is rquired but multiple keys have the same greatest frequency
       // then let's select the lowest.
       val defaultKeyOrdering =
@@ -140,7 +143,7 @@ case class Mode(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(child = newLeft, deterministicResult = newRight)
+    copy(child = newLeft, deterministicExpr = newRight)
 }
 
 /**

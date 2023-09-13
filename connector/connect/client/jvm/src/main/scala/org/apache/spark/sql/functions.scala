@@ -827,7 +827,19 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def mode(e: Column): Column = Column.fn("mode", e)
+  def mode(e: Column): Column = mode(e, deterministic = false)
+
+  /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * When multiple values have the same greatest frequency then either any of values is returned
+   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
+   * is true.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
