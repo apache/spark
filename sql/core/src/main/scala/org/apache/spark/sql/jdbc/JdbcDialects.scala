@@ -702,6 +702,8 @@ object JdbcDialects {
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
   registerDialect(H2Dialect)
+  registerDialect(SnowflakeDialect)
+  registerDialect(DatabricksDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

@@ -2882,6 +2882,17 @@ object functions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = withExpr {
+    Round(e.expr, scale.expr)
+  }
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2897,6 +2908,17 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = withExpr {
+    BRound(e.expr, scale.expr)
+  }
 
   /**
    * @param e angle in radians
@@ -4400,6 +4422,7 @@ object functions {
     new ToBinary(e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -4421,11 +4444,20 @@ object functions {
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
    *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = call_function("to_char", e, format)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -4447,9 +4479,17 @@ object functions {
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
    *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_varchar(e: Column, format: Column): Column = call_function("to_varchar", e, format)
 
   /**
@@ -6227,8 +6267,8 @@ object functions {
    * }}}
    *
    * @param column the input array column
-   * @param f (col, index) => transformed_col, the lambda function to filter the input column
-   *           given the index. Indices start at 0.
+   * @param f (col, index) => transformed_col, the lambda function to transform the input
+   *           column given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0

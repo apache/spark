@@ -525,6 +525,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def supportedCustomMetrics(): Array[CustomMetric] = {
       Array(new OffsetOutOfRangeMetric, new DataLossMetric)
     }
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
   }
 }
 

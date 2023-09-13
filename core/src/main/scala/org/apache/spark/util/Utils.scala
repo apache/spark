@@ -2108,10 +2108,8 @@ private[spark] object Utils
   private implicit class Lock(lock: LockInfo) {
     def lockString: String = {
       lock match {
-        case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${monitor.getIdentityHashCode})"
-        case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode})"
+        case monitor: MonitorInfo => s"Monitor(${monitor.toString})"
+        case _ => s"Lock(${lock.toString})"
       }
     }
   }

@@ -183,6 +183,16 @@ private[connect] class ExecuteHolder(
     }
   }
 
+  // For testing.
+  private[connect] def setGrpcResponseSendersDeadline(deadlineMs: Long) = synchronized {
+    grpcResponseSenders.foreach(_.setDeadline(deadlineMs))
+  }
+
+  // For testing
+  private[connect] def interruptGrpcResponseSenders() = synchronized {
+    grpcResponseSenders.foreach(_.interrupt())
+  }
+
   /**
    * For a short period in ExecutePlan after creation and until runGrpcResponseSender is called,
    * there is no attached response sender, but yet we start with lastAttachedRpcTime = None, so we

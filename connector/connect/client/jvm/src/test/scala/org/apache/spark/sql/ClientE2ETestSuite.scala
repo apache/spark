@@ -109,6 +109,18 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df.collect().length == 501)
   }
 
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
+  }
+
   test("many tables") {
     withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
       val numTables = 20
