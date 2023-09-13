@@ -121,7 +121,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"stack(n, a, b, c)\"",
-        "inputName" -> "n",
+        "inputName" -> "`n`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"n\""),
       context = ExpectedContext(
