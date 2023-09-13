@@ -394,7 +394,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
-  <td>(none)</td>
+  <td>client</td>
   <td>
     The deploy mode of Spark driver program, either "client" or "cluster",
     Which means to launch driver program locally ("client")
