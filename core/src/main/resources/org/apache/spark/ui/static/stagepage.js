@@ -22,9 +22,11 @@
 var shouldBlockUI = true;
 var taskThreadDumpEnabled = false;
 
+/* eslint-disable no-unused-vars */
 function setTaskThreadDumpEnabled(enabled){
   taskThreadDumpEnabled = enabled;
 }
+/* eslint-enable no-unused-vars */
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
@@ -855,7 +857,7 @@ $(document).ready(function () {
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
             {
-              data : (row, type) => {
+              data : (row, _ignored_type) => {
                 if (taskThreadDumpEnabled && row.status === "RUNNING") {
                   var threadUrl =
                     uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
