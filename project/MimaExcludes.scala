@@ -16,7 +16,6 @@
  */
 
 import com.typesafe.tools.mima.core._
-import com.typesafe.tools.mima.core.ProblemFilters._
 
 /**
  * Additional excludes for checking of Spark's binary compatibility.
@@ -78,7 +77,7 @@ object MimaExcludes {
     }
   )
 
-  def excludes(version: String) = version match {
+  def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("4.0") => v40excludes
     case _ => Seq()
   }
