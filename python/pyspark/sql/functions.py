@@ -12520,7 +12520,7 @@ def inline(col: "ColumnOrName") -> Column:
     ...     Row(structlist1=[Row(a=1, b=2), Row(a=3, b=4)],
     ...         structlist2=[Row(c=5, d=6), Row(c=7, d=8)])
     ... ])
-    >>> df.select(sf.inline("structlist1"), "structlist2") \
+    >>> df.select(sf.inline("structlist1"), "structlist2") \\
     ...     .select("a", "b", sf.inline("structlist2")).show()
     +---+---+---+---+
     |  a|  b|  c|  d|
