@@ -3455,7 +3455,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            jc = self._jdf.apply(self.columns[item])
+            n = len(self.columns)
+            # 1, convert bool; 2, covert negative index; 3, validate index
+            item = range(0, n)[int(item)]
+            jc = self._jdf.apply(item)
             return Column(jc)
         else:
             raise PySparkTypeError(
