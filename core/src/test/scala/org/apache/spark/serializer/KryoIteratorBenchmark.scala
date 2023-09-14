@@ -88,7 +88,7 @@ object KryoIteratorBenchmark extends BenchmarkBase {
       val elements = Array.fill[T](elementCount)(createElement)
 
       benchmark.addCase(
-        s"Colletion of $name with $elementCount elements, useIterator: $useIterator") { _ =>
+        s"Collection of $name with $elementCount elements, useIterator: $useIterator") { _ =>
         var sum = 0L
         var i = 0
         while (i < N) {
