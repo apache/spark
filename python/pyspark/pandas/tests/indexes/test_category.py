@@ -104,7 +104,6 @@ class CategoricalIndexTestsMixin:
         self.assert_eq(pidx.add_categories([4, 5]), psidx.add_categories([4, 5]))
         self.assert_eq(pidx.add_categories([]), psidx.add_categories([]))
 
-        self.assertRaises(ValueError, lambda: psidx.add_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.add_categories(3))
         self.assertRaises(ValueError, lambda: psidx.add_categories([4, 4]))
 
@@ -120,7 +119,6 @@ class CategoricalIndexTestsMixin:
         self.assert_eq(pidx.remove_categories(None), psidx.remove_categories(None))
         self.assert_eq(pidx.remove_categories([None]), psidx.remove_categories([None]))
 
-        self.assertRaises(ValueError, lambda: psidx.remove_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
@@ -129,8 +127,6 @@ class CategoricalIndexTestsMixin:
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(pidx.remove_unused_categories(), psidx.remove_unused_categories())
-
-        self.assertRaises(ValueError, lambda: psidx.remove_unused_categories(inplace=True))
 
     def test_reorder_categories(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
@@ -147,7 +143,6 @@ class CategoricalIndexTestsMixin:
             psidx.reorder_categories([3, 2, 1], ordered=True),
         )
 
-        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 3], inplace=True))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
@@ -159,9 +154,6 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(pidx.as_ordered(), psidx.as_ordered())
         self.assert_eq(pidx.as_unordered(), psidx.as_unordered())
-
-        self.assertRaises(ValueError, lambda: psidx.as_ordered(inplace=True))
-        self.assertRaises(ValueError, lambda: psidx.as_unordered(inplace=True))
 
     def test_astype(self):
         pidx = pd.Index(["a", "b", "c"])
@@ -322,10 +314,6 @@ class CategoricalIndexTestsMixin:
             TypeError,
             lambda: psidx.rename_categories("x"),
         )
-        self.assertRaises(
-            ValueError,
-            lambda: psidx.rename_categories({"b": "B", "c": "C"}, inplace=True),
-        )
 
     def test_set_categories(self):
         pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
@@ -368,12 +356,6 @@ class CategoricalIndexTestsMixin:
         self.assert_eq(
             pidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
             psidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
-        )
-
-        self.assertRaisesRegex(
-            ValueError,
-            "cannot use inplace with CategoricalIndex",
-            lambda: psidx.set_categories(["a", "c", "b", "o"], inplace=True),
         )
 
     def test_map(self):
