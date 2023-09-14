@@ -114,16 +114,18 @@ class SeriesComputeMixin:
         self.assert_eq(str_psser.clip(1, 3), str_psser)
 
     def test_compare(self):
-        psser = ps.Series([1, 2])
+        pser = pd.Series([1, 2])
+        psser = ps.from_pandas(pser)
+
         res_psdf = psser.compare(psser)
         self.assertTrue(res_psdf.empty)
         self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
-        expected = ps.DataFrame([[1, 2], [2, 3]], columns=["self", "other"])
-        self.assert_eq(expected, psser.compare(psser + 1).sort_index())
 
-        psser = ps.Series([1, 2], index=["x", "y"])
-        expected = ps.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
-        self.assert_eq(expected, psser.compare(psser + 1).sort_index())
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
+
+        pser = pd.Series([1, 2], index=["x", "y"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
 
     def test_concat(self):
         pser1 = pd.Series([1, 2, 3], name="0")

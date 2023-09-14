@@ -162,6 +162,8 @@ class NumOpsTestsMixin:
             ValueError, "Cannot convert"
         ):
             psser.astype(int)
+        with ps.option_context("compute.eager_check", False):
+            psser.astype(int)
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
@@ -259,7 +261,9 @@ class IntegralExtensionOpsTest(OpsTestBase):
     def test_astype(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
-                if dtype not in self.string_extension_dtype:
+                if dtype in self.string_extension_dtype:
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                else:
                     self.check_extension(pser.astype(dtype), psser.astype(dtype))
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))

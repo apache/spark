@@ -236,7 +236,6 @@ class FrameReshapingMixin:
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        # see also: https://github.com/pandas-dev/pandas/issues/46589
         self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
