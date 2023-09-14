@@ -111,7 +111,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         self._last_returned_response_id = ret.response_id
         if ret.HasField("result_complete"):
-            self._result_complete = True
             self._release_all()
         else:
             self._release_until(self._last_returned_response_id)
@@ -200,6 +199,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
         This will send an asynchronous RPC which will not block this. The client continues
         executing, and if the release fails, server is equipped to deal with abandoned executions.
         """
+        if self._result_complete:
+            return
+
         from pyspark.sql.connect.client.core import SparkConnectClient
         from pyspark.sql.connect.client.core import Retrying
 
