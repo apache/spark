@@ -981,7 +981,6 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.computation.test_parity_describe",
         "pyspark.pandas.tests.connect.computation.test_parity_eval",
         "pyspark.pandas.tests.connect.computation.test_parity_melt",
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot",
         "pyspark.pandas.tests.connect.test_parity_stats",
         "pyspark.pandas.tests.connect.groupby.test_parity_stat",
         "pyspark.pandas.tests.connect.frame.test_parity_attrs",
@@ -1058,6 +1057,7 @@ pyspark_pandas_connect_part2 = Module(
     ],
     python_test_goals=[
         # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot",
         "pyspark.pandas.tests.connect.indexes.test_parity_base_slow",
         "pyspark.pandas.tests.connect.indexes.test_parity_datetime_property",
         "pyspark.pandas.tests.connect.test_parity_frame_interpolate",
