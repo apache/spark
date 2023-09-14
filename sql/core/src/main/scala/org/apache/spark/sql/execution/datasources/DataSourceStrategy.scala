@@ -142,8 +142,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
           tableDesc.schema, "CREATE TABLE")
 
       if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "generated columns")
+        throw QueryCompilationErrors.createOrReplaceWithGeneratedColumnError()
       }
 
       val newTableDesc = tableDesc.copy(schema = newSchema)

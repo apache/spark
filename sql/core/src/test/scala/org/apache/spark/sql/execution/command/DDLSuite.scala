@@ -208,10 +208,9 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        sqlState = "0A000",
+        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
+          "operation" -> "ALTER COLUMN ... FIRST | AFTER"))
     }
   }
 
@@ -2400,9 +2399,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql(s"create table t(a int, b int generated always as (a + 1)) using parquet")
       },
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-        "operation" -> "generated columns")
+      errorClass = "UNSUPPORTED_FEATURE.CREATE_OR_REPLACE_TABLE_WITH_GENERATED_COLUMN",
+      parameters = Map.empty
     )
   }
 }

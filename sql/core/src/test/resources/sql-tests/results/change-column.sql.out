@@ -55,8 +55,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "RENAME COLUMN",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
@@ -109,10 +108,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
@@ -125,10 +123,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }

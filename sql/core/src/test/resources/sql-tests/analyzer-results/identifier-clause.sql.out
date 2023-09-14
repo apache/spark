@@ -93,8 +93,7 @@ DELETE FROM IDENTIFIER('ta' || 'b') WHERE 1=0
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "DELETE",
     "tableName" : "`spark_catalog`.`s`.`tab`"
@@ -251,8 +250,7 @@ REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "REPLACE TABLE",
     "tableName" : "`spark_catalog`.`identifier_clauses`.`tab`"

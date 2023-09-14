@@ -100,8 +100,7 @@ object ResolveDefaultColumns extends QueryErrorsBase with ResolveDefaultColumnsU
     if (SQLConf.get.enableDefaultColumns &&
       schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) &&
       !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "column default value")
+      throw QueryCompilationErrors.createOrReplaceWithDefaultValueError()
     }
   }
 

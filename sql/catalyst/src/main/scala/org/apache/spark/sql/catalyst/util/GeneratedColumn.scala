@@ -188,8 +188,7 @@ object GeneratedColumn {
     if (hasGeneratedColumns(schema)) {
       if (!catalog.capabilities().contains(
         TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "generated columns")
+        throw QueryCompilationErrors.createOrReplaceWithGeneratedColumnError()
       }
       GeneratedColumn.verifyGeneratedColumns(schema, statementType)
     }

@@ -1486,11 +1486,8 @@ class DataSourceV2SQLSuiteV1Filter
             sql("USE dummy")
             sql(s"$statement dummy.$tableDefinition")
           },
-          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-          parameters = Map(
-            "tableName" -> "`dummy`.`my_tab`",
-            "operation" -> "column default value"
-          )
+          errorClass = "UNSUPPORTED_FEATURE.CREATE_OR_REPLACE_TABLE_WITH_DEFAULT_VALUE",
+          parameters = Map.empty
         )
       }
     }
@@ -1518,11 +1515,8 @@ class DataSourceV2SQLSuiteV1Filter
             sql("USE dummy")
             sql(s"$statement dummy.$tableDefinition USING foo")
           },
-          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-          parameters = Map(
-            "tableName" -> "`dummy`.`my_tab`",
-            "operation" -> "generated columns"
-          )
+          errorClass = "UNSUPPORTED_FEATURE.CREATE_OR_REPLACE_TABLE_WITH_GENERATED_COLUMN",
+          parameters = Map.empty
         )
       }
     }
@@ -2062,8 +2056,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      sqlState = "0A000",
+      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
       parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
         "operation" -> "REPLACE TABLE"))
   }

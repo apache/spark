@@ -102,8 +102,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "DELETE",
     "tableName" : "`spark_catalog`.`s`.`tab`"
@@ -283,8 +282,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "REPLACE TABLE",
     "tableName" : "`spark_catalog`.`identifier_clauses`.`tab`"
