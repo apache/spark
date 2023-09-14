@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -154,8 +154,23 @@ abstract class UnevaluableGenerator extends Generator {
 }
 
 /**
- * A serialized version of a Python table-valued function. This is a special expression,
+ * A serialized version of a Python table-valued function call. This is a special expression,
  * which needs a dedicated physical operator to execute it.
+ * @param name name of the Python UDTF being called
+ * @param func string contents of the Python code in the UDTF, along with other environment state
+ * @param elementSchema result schema of the function call
+ * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
+ *                 themeselves, and for TABLE arguments, these are instances of
+ *                 [[FunctionTableSubqueryArgumentExpression]]
+ * @param evalType identifies whether this is a scalar or aggregate or table function, using an
+ *                 instance of the [[PythonEvalType]] enumeration
+ * @param udfDeterministic true if this function is deterministic wherein it returns the same result
+ *                         rows for every call with the same input arguments
+ * @param resultId unique expression ID for this function invocation
+ * @param pythonUDTFPartitionColumnIndexes holds the indexes of the TABLE argument to the Python
+ *                                         UDTF call, if applicable
+ * @param analyzeResult holds the result of the polymorphic Python UDTF 'analze' method, if the UDTF
+ *                      defined one
  */
 case class PythonUDTF(
     name: String,
@@ -165,7 +180,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    analyzeResult: Option[PythonUDTFAnalyzeResult] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -193,7 +209,7 @@ case class UnresolvedPolymorphicPythonUDTF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resolveElementSchema: (PythonFunction, Seq[Expression]) => StructType,
+    resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
@@ -205,6 +221,82 @@ case class UnresolvedPolymorphicPythonUDTF(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnresolvedPolymorphicPythonUDTF =
     copy(children = newChildren)
+}
+
+/**
+ * Represents the result of invoking the polymorphic 'analyze' method on a Python user-defined table
+ * function. This returns the table function's output schema in addition to other optional metadata.
+ * @param schema result schema of this particular function call in response to the particular
+ *               arguments provided, including the types of any provided scalar arguments (and
+ *               their values, in the case of literals) as well as the names and types of columns of
+ *               the provided TABLE argument (if any)
+ * @param withSinglePartition true if the 'analyze' method explicitly indicated that the UDTF call
+ *                            should consume all rows of the input TABLE argument in a single
+ *                            instance of the UDTF class, in which case Catalyst will invoke a
+ *                            repartitioning to a separate stage with a single worker for this
+ *                            purpose
+ * @param partitionByExpressions if non-empty, this contains the list of column names that the
+ *                               'analyze' method explicitly indicated that the UDTF call should
+ *                               partition the input table by, wherein all rows corresponding to
+ *                               each unique combination of values of the partitioning columns are
+ *                               consumed by exactly one unique instance of the UDTF class
+ * @param orderByExpressions if non-empty, this contains the list of ordering items that the
+ *                           'analyze' method explicitly indicated that the UDTF call should consume
+ *                           the input table rows by
+ */
+case class PythonUDTFAnalyzeResult(
+    schema: StructType,
+    withSinglePartition: Boolean,
+    partitionByExpressions: Seq[Expression],
+    orderByExpressions: Seq[SortOrder]) {
+  /**
+   * Applies the requested properties from this analysis result to the target TABLE argument
+   * expression of a UDTF call, throwing an error if any properties of the UDTF call are
+   * incompatible.
+   */
+  def applyToTableArgument(
+      pythonUDTFName: String,
+      t: FunctionTableSubqueryArgumentExpression): FunctionTableSubqueryArgumentExpression = {
+    if (withSinglePartition && partitionByExpressions.nonEmpty) {
+      throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
+        functionName = pythonUDTFName,
+        reason = "the 'with_single_partition' field cannot be assigned to true " +
+          "if the 'partition_by' list is non-empty")
+    }
+    if (orderByExpressions.nonEmpty && !withSinglePartition && partitionByExpressions.isEmpty) {
+      throw QueryCompilationErrors.tableValuedFunctionRequiredMetadataInvalid(
+        functionName = pythonUDTFName,
+        reason = "the 'order_by' field cannot be non-empty unless the " +
+          "'with_single_partition' field is set to true or the 'partition_by' list " +
+          "is non-empty")
+    }
+    if ((withSinglePartition || partitionByExpressions.nonEmpty) && t.hasRepartitioning) {
+      throw QueryCompilationErrors
+        .tableValuedFunctionRequiredMetadataIncompatibleWithCall(
+          functionName = pythonUDTFName,
+          requestedMetadata =
+            "specified its own required partitioning of the input table",
+          invalidFunctionCallProperty =
+            "specified the WITH SINGLE PARTITION or PARTITION BY clause; " +
+              "please remove these clauses and retry the query again.")
+    }
+    var newWithSinglePartition = t.withSinglePartition
+    var newPartitionByExpressions = t.partitionByExpressions
+    var newOrderByExpressions = t.orderByExpressions
+    if (withSinglePartition) {
+      newWithSinglePartition = true
+    }
+    if (partitionByExpressions.nonEmpty) {
+      newPartitionByExpressions = partitionByExpressions
+    }
+    if (orderByExpressions.nonEmpty) {
+      newOrderByExpressions = orderByExpressions
+    }
+    t.copy(
+      withSinglePartition = newWithSinglePartition,
+      partitionByExpressions = newPartitionByExpressions,
+      orderByExpressions = newOrderByExpressions)
+  }
 }
 
 /**

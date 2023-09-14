@@ -57,7 +57,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     new ConcurrentHashMap()
 
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
-  private[connect] lazy val streamingRunnerCleanerCache =
+  private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
 
   /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
@@ -160,7 +160,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     eventManager.postClosed()
     // Clean up running queries
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
-    streamingRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+    streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+    removeAllListeners() // removes all listener and stop python listener processes if necessary.
   }
 
   /**
@@ -237,11 +238,21 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * Spark Connect PythonStreamingQueryListener.
    */
   private[connect] def removeCachedListener(id: String): Unit = {
-    listenerCache.get(id) match {
-      case pyListener: PythonStreamingQueryListener => pyListener.stopListenerProcess()
+    Option(listenerCache.remove(id)) match {
+      case Some(pyListener: PythonStreamingQueryListener) => pyListener.stopListenerProcess()
       case _ => // do nothing
     }
-    listenerCache.remove(id)
+  }
+
+  /**
+   * Stop all streaming listener threads, and removes all python process if applicable. Only
+   * called when session is expired.
+   */
+  private def removeAllListeners(): Unit = {
+    listenerCache.forEach((id, listener) => {
+      session.streams.removeListener(listener)
+      removeCachedListener(id)
+    })
   }
 
   /**

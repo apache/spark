@@ -24,6 +24,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkSerDeUtils
 
 case class ClickEvent(id: String, timestamp: Timestamp)
 
@@ -629,6 +630,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       1,
       30,
       3)
+  }
+
+  test("serialize as null") {
+    val kvgds = session.range(10).groupByKey(_ % 2)
+    val bytes = SparkSerDeUtils.serialize(kvgds)
+    assert(SparkSerDeUtils.deserialize[KeyValueGroupedDataset[Long, Long]](bytes) == null)
   }
 }
 

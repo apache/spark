@@ -328,4 +328,19 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       IntegerType)
     checkDataset(session.range(2).select(fn($"id", $"id" + 2)).as[Int], 3, 5)
   }
+
+  test("nullified SparkSession/Dataset/KeyValueGroupedDataset in UDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = session.range(0, 10, 1, 1)
+    val kvgds = df.groupByKey(_ / 2)
+    val f = udf { (i: Long) =>
+      assert(session == null)
+      assert(df == null)
+      assert(kvgds == null)
+      i + 1
+    }
+    val result = df.select(f($"id")).as[Long].head
+    assert(result == 1L)
+  }
 }

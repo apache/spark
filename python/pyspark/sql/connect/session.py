@@ -180,10 +180,16 @@ class SparkSession:
         def _apply_options(self, session: "SparkSession") -> None:
             with self._lock:
                 for k, v in self._options.items():
-                    try:
-                        session.conf.set(k, v)
-                    except Exception as e:
-                        warnings.warn(str(e))
+                    # the options are applied after session creation,
+                    # so following options always take no effect
+                    if k not in [
+                        "spark.remote",
+                        "spark.master",
+                    ]:
+                        try:
+                            session.conf.set(k, v)
+                        except Exception as e:
+                            warnings.warn(str(e))
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
@@ -884,6 +890,15 @@ class SparkSession:
                 PySparkSession(
                     SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
                 )
+
+                # Lastly only keep runtime configurations because other configurations are
+                # disallowed to set in the regular Spark Connect session.
+                utl = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
+                runtime_conf_keys = [c._1() for c in utl.listRuntimeSQLConfigs()]
+                new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
+                opts.clear()
+                opts.update(new_opts)
+
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote

@@ -854,28 +854,67 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("to_char") {
-    val df = Seq(78.12).toDF("a")
-    checkAnswer(
-      df.selectExpr("to_char(a, '$99.99')"),
-      Seq(Row("$78.12"))
-    )
-    checkAnswer(
-      df.select(to_char(col("a"), lit("$99.99"))),
-      Seq(Row("$78.12"))
-    )
-  }
+  test("to_char/to_varchar") {
+    Seq(
+      "to_char" -> ((e: Column, fmt: Column) => to_char(e, fmt)),
+      "to_varchar" -> ((e: Column, fmt: Column) => to_varchar(e, fmt))
+    ).foreach { case (funcName, func) =>
+      val df = Seq(78.12).toDF("a")
+      checkAnswer(df.selectExpr(s"$funcName(a, '$$99.99')"), Seq(Row("$78.12")))
+      checkAnswer(df.select(func(col("a"), lit("$99.99"))), Seq(Row("$78.12")))
 
-  test("to_varchar") {
-    val df = Seq(78.12).toDF("a")
-    checkAnswer(
-      df.selectExpr("to_varchar(a, '$99.99')"),
-      Seq(Row("$78.12"))
-    )
-    checkAnswer(
-      df.select(to_varchar(col("a"), lit("$99.99"))),
-      Seq(Row("$78.12"))
-    )
+      val df2 = Seq((Array(100.toByte), "base64")).toDF("input", "format")
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'hex')"), Seq(Row("64")))
+      checkAnswer(df2.select(func(col("input"), lit("hex"))), Seq(Row("64")))
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'base64')"), Seq(Row("ZA==")))
+      checkAnswer(df2.select(func(col("input"), lit("base64"))), Seq(Row("ZA==")))
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'utf-8')"), Seq(Row("d")))
+      checkAnswer(df2.select(func(col("input"), lit("utf-8"))), Seq(Row("d")))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df2.select(func(col("input"), col("format"))).collect()
+        },
+        errorClass = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$funcName`",
+          "paramName" -> "`format`",
+          "paramType" -> "\"STRING\""))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df2.select(func(col("input"), lit("invalid_format"))).collect()
+        },
+        errorClass = "INVALID_PARAMETER_VALUE.BINARY_FORMAT",
+        parameters = Map(
+          "parameter" -> "`format`",
+          "functionName" -> s"`$funcName`",
+          "invalidFormat" -> "'invalid_format'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select $funcName('a', 'b', 'c')")
+        },
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "functionName" -> s"`$funcName`",
+          "expectedNum" -> "2",
+          "actualNum" -> "3",
+          "docroot" -> SPARK_DOC_ROOT),
+        context = ExpectedContext("", "", 7, 21 + funcName.length, s"$funcName('a', 'b', 'c')"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select $funcName(x'537061726b2053514c', CAST(NULL AS STRING))")
+        },
+        errorClass = "INVALID_PARAMETER_VALUE.NULL",
+        parameters = Map(
+          "functionName" -> s"`$funcName`",
+          "parameter" -> "`format`"),
+        context = ExpectedContext(
+          "",
+          "",
+          7,
+          51 + funcName.length,
+          s"$funcName(x'537061726b2053514c', CAST(NULL AS STRING))"))
+    }
   }
 
   test("to_number") {

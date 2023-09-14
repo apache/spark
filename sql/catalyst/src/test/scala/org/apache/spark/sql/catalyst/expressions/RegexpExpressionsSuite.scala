@@ -643,7 +643,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "position",
+          "inputName" -> toSQLId("position"),
           "inputType" -> toSQLType(posExpr.dataType),
           "inputExpr" -> toSQLExpr(posExpr)
         )

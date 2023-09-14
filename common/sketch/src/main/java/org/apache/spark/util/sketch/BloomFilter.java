@@ -179,6 +179,13 @@ public abstract class BloomFilter {
   }
 
   /**
+   * Reads in a {@link BloomFilter} from a byte array.
+   */
+  public static BloomFilter readFrom(byte[] bytes) throws IOException {
+    return BloomFilterImpl.readFrom(bytes);
+  }
+
+  /**
    * Computes the optimal k (number of hashes per item inserted in Bloom filter), given the
    * expected insertions and total number of bits in the Bloom filter.
    *

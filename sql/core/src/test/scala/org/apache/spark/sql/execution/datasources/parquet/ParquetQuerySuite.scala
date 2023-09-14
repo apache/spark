@@ -1108,6 +1108,16 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       checkAnswer(sql("select * from tbl"), expected)
     }
   }
+
+  test("SPARK-44805: cast of struct with two arrays") {
+    withTable("tbl") {
+      sql("create table tbl (value struct<f1:array<int>,f2:array<int>>) using parquet")
+      sql("insert into tbl values (named_struct('f1', array(1, 2, 3), 'f2', array(1, 1, 2)))")
+      val df = sql("select cast(value as struct<f1:array<double>,f2:array<int>>) AS value from tbl")
+      val expected = Row(Row(Array(1.0d, 2.0d, 3.0d), Array(1, 1, 2))) :: Nil
+      checkAnswer(df, expected)
+    }
+  }
 }
 
 class ParquetV1QuerySuite extends ParquetQuerySuite {

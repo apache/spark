@@ -206,10 +206,10 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+  "errorClass" : "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
-    "tempViewName" : "`temp_view`"
+    "viewName" : "`temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -234,10 +234,10 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+  "errorClass" : "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
-    "tempViewName" : "`global_temp`.`global_temp_view`"
+    "viewName" : "`global_temp`.`global_temp_view`"
   },
   "queryContext" : [ {
     "objectType" : "",

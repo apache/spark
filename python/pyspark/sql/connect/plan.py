@@ -398,9 +398,6 @@ class CachedLocalRelation(LogicalPlan):
         plan = self._create_proto_relation()
         clr = plan.cached_local_relation
 
-        if session._user_id:
-            clr.userId = session._user_id
-        clr.sessionId = session._session_id
         clr.hash = self._hash
 
         return plan
@@ -464,7 +461,6 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._columns = list(columns)
-        self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:

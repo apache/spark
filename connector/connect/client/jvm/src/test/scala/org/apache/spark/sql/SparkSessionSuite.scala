@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
 
 import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * Tests for non-dataframe related SparkSession operations.
@@ -260,5 +261,11 @@ class SparkSessionSuite extends ConnectFunSuite {
       .enableHiveSupport()
       .create()
       .close()
+  }
+
+  test("serialize as null") {
+    val session = SparkSession.builder().create()
+    val bytes = SparkSerDeUtils.serialize(session)
+    assert(SparkSerDeUtils.deserialize[SparkSession](bytes) == null)
   }
 }

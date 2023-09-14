@@ -59,9 +59,6 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[["a", "b", "c", "e"]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -180,9 +177,6 @@ class GroupByTestsMixin:
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
         psdf = ps.from_pandas(pdf)
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
-            pdf = pdf[[10, 20, 30]]
 
         for as_index in [True, False]:
             if as_index:

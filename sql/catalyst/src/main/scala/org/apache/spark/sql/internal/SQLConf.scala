@@ -487,6 +487,26 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val VECTORIZED_HUGE_VECTOR_RESERVE_RATIO =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio")
+      .doc("When spark.sql.inMemoryColumnarStorage.hugeVectorThreshold <= 0 or the required " +
+        "memory is smaller than spark.sql.inMemoryColumnarStorage.hugeVectorThreshold, spark " +
+        "reserves required memory * 2 memory; otherwise, spark reserves " +
+        "required memory * this ratio memory, and will release this column vector memory before " +
+        "reading the next batch rows.")
+      .version("4.0.0")
+      .doubleConf
+      .createWithDefault(1.2)
+
+  val VECTORIZED_HUGE_VECTOR_THRESHOLD =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorThreshold")
+      .doc("When the required memory is larger than this, spark reserves required memory * " +
+        s"${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and release this column " +
+        s"vector memory before reading the next batch rows. -1 means disabling the optimization.")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(-1)
+
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
@@ -1506,6 +1526,18 @@ object SQLConf {
         "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
         s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
+    buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
+      .doc("Whether to allow storage-partition join in the case where join keys are" +
+        "a subset of the partition keys of the source tables. At planning time, " +
+        "Spark will group the partitions by only those keys that are in the join keys." +
+        s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
+        "is false."
+      )
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -4662,6 +4694,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
+  def vectorizedHugeVectorThreshold: Int = getConf(VECTORIZED_HUGE_VECTOR_THRESHOLD).toInt
+
+  def vectorizedHugeVectorReserveRatio: Double = getConf(VECTORIZED_HUGE_VECTOR_RESERVE_RATIO)
+
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
@@ -4911,6 +4947,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
+
+  def v2BucketingAllowJoinKeysSubsetOfPartitionKeys: Boolean =
+    getConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

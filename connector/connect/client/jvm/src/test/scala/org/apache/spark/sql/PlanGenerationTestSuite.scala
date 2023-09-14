@@ -1564,6 +1564,10 @@ class PlanGenerationTestSuite
     fn.user()
   }
 
+  functionTest("session_user") {
+    fn.session_user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -2860,6 +2864,10 @@ class PlanGenerationTestSuite
     fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
   }
 
+  functionTest("try_reflect") {
+    fn.try_reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
   functionTest("typeof") {
     fn.typeof(fn.col("g"))
   }
@@ -3231,11 +3239,15 @@ class PlanGenerationTestSuite
   private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
     "connect/common/src/test/resources/protobuf-tests/common.desc"
 
-  test("from_protobuf messageClassName") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName") {
     binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
   }
 
-  test("from_protobuf messageClassName options") {
+  // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
+  //  are no other negative impacts. For the problem description, please refer to SPARK-45029
+  ignore("from_protobuf messageClassName options") {
     binary.select(
       pbFn.from_protobuf(
         fn.col("bytes"),

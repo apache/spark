@@ -1237,7 +1237,8 @@ class Column:
         upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
     ) -> "Column":
         """
-        True if the current column is between the lower bound and upper bound, inclusive.
+        Check if the current column's values are between the specified lower and upper
+        bounds, inclusive.
 
         .. versionadded:: 1.3.0
 
@@ -1247,20 +1248,21 @@ class Column:
         Parameters
         ----------
         lowerBound : :class:`Column`, int, float, string, bool, datetime, date or Decimal
-            a boolean expression that boundary start, inclusive.
+            The lower boundary value, inclusive.
         upperBound : :class:`Column`, int, float, string, bool, datetime, date or Decimal
-            a boolean expression that boundary end, inclusive.
+            The upper boundary value, inclusive.
 
         Returns
         -------
         :class:`Column`
-            Column of booleans showing whether each element of Column
-            is between left and right (inclusive).
+            A new column of boolean values indicating whether each element in the original
+            column is within the specified range (inclusive).
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
+        Using between with integer values.
+
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -1268,6 +1270,73 @@ class Column:
         |Alice|                       true|
         |  Bob|                      false|
         +-----+---------------------------+
+
+        Using between with string values.
+
+        >>> df = spark.createDataFrame([("Alice", "A"), ("Bob", "B")], ["name", "initial"])
+        >>> df.select(df.name, df.initial.between("A", "B")).show()
+        +-----+-----------------------------------+
+        | name|((initial >= A) AND (initial <= B))|
+        +-----+-----------------------------------+
+        |Alice|                               true|
+        |  Bob|                               true|
+        +-----+-----------------------------------+
+
+        Using between with float values.
+
+        >>> df = spark.createDataFrame(
+        ...     [(2.5, "Alice"), (5.5, "Bob")], ["height", "name"])
+        >>> df.select(df.name, df.height.between(2.0, 5.0)).show()
+        +-----+-------------------------------------+
+        | name|((height >= 2.0) AND (height <= 5.0))|
+        +-----+-------------------------------------+
+        |Alice|                                 true|
+        |  Bob|                                false|
+        +-----+-------------------------------------+
+
+        Using between with date values.
+
+        >>> import pyspark.sql.functions as sf
+        >>> df = spark.createDataFrame(
+        ...     [("Alice", "2023-01-01"), ("Bob", "2023-02-01")], ["name", "date"])
+        >>> df = df.withColumn("date", sf.to_date(df.date))
+        >>> df.select(df.name, df.date.between("2023-01-01", "2023-01-15")).show()
+        +-----+-----------------------------------------------+
+        | name|((date >= 2023-01-01) AND (date <= 2023-01-15))|
+        +-----+-----------------------------------------------+
+        |Alice|                                           true|
+        |  Bob|                                          false|
+        +-----+-----------------------------------------------+
+        >>> from datetime import date
+        >>> df.select(df.name, df.date.between(date(2023, 1, 1), date(2023, 1, 15))).show()
+        +-----+-------------------------------------------------------------+
+        | name|((date >= DATE '2023-01-01') AND (date <= DATE '2023-01-15'))|
+        +-----+-------------------------------------------------------------+
+        |Alice|                                                         true|
+        |  Bob|                                                        false|
+        +-----+-------------------------------------------------------------+
+
+        Using between with timestamp values.
+
+        >>> import pyspark.sql.functions as sf
+        >>> df = spark.createDataFrame(
+        ...     [("Alice", "2023-01-01 10:00:00"), ("Bob", "2023-02-01 10:00:00")],
+        ...     schema=["name", "timestamp"])
+        >>> df = df.withColumn("timestamp", sf.to_timestamp(df.timestamp))
+        >>> df.select(df.name, df.timestamp.between("2023-01-01", "2023-02-01")).show()
+        +-----+---------------------------------------------------------+
+        | name|((timestamp >= 2023-01-01) AND (timestamp <= 2023-02-01))|
+        +-----+---------------------------------------------------------+
+        |Alice|                                                     true|
+        |  Bob|                                                    false|
+        +-----+---------------------------------------------------------+
+        >>> df.select(df.name, df.timestamp.between("2023-01-01", "2023-02-01 12:00:00")).show()
+        +-----+------------------------------------------------------------------+
+        | name|((timestamp >= 2023-01-01) AND (timestamp <= 2023-02-01 12:00:00))|
+        +-----+------------------------------------------------------------------+
+        |Alice|                                                              true|
+        |  Bob|                                                              true|
+        +-----+------------------------------------------------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 
