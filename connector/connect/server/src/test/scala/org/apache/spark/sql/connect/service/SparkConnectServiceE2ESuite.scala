@@ -45,5 +45,4 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       }
     }
   }
-
 }
