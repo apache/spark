@@ -331,4 +331,3 @@ case class GenerateExec(
   override protected def withNewChildInternal(newChild: SparkPlan): GenerateExec =
     copy(child = newChild)
 }
-
