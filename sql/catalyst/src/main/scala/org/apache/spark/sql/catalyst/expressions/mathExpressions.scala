@@ -1509,7 +1509,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "scala",
+              "inputName" -> toSQLId("scala"),
               "inputType" -> toSQLType(scale.dataType),
               "inputExpr" -> toSQLExpr(scale)))
         }
