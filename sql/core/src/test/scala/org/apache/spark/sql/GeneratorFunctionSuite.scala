@@ -537,7 +537,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
   }
 
-  test("Handle evaluated nondeterministic expression") {
+  test("SPARK-45171: Handle evaluated nondeterministic expression") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val df = sql("select explode(array(rand(0)))")
       checkAnswer(df, Row(0.7604953758285915d))
