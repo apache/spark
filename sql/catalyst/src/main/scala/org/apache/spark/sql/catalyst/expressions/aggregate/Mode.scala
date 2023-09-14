@@ -92,6 +92,10 @@ case class Mode(
           "inputExpr" -> toSQLExpr(deterministicExpr)
         )
       )
+    } else if (deterministicExpr.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> toSQLId("deterministic")))
     } else {
       TypeCheckSuccess
     }

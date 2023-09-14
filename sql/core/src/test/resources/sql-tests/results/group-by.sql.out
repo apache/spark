@@ -1174,6 +1174,29 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "`deterministic`",
+    "sqlExpr" : "\"mode(col, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "mode(col, null)"
+  } ]
+}
+
+
+-- !query
 SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b)
 -- !query schema
 struct<>

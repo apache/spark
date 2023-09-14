@@ -270,6 +270,7 @@ SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col);
 SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
 SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col);
 SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b);
 SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col);
 SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col);
