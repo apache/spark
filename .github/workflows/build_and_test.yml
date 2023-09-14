@@ -663,9 +663,7 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       if: inputs.branch != 'branch-3.3'
-      run: |
-        rm -rf /root/.m2
-        ./dev/connect-jvm-client-mima-check
+      run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies for branch-3.3
       if: inputs.branch == 'branch-3.3'
       run: |
@@ -858,8 +856,6 @@ jobs:
         key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           scala-213-coursier-
-    - name: Clear Maven repository
-      run: rm -rf /home/runner/.m2
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:

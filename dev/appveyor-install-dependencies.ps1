@@ -97,7 +97,7 @@ if (!(Test-Path $tools)) {
 # ========================== SBT
 Push-Location $tools
 
-$sbtVer = "1.9.4"
+$sbtVer = "1.9.5"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
 # extract
