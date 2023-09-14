@@ -346,7 +346,7 @@ function preprocessGraphLayout(g, forJob) {
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {
-  var allClusters = svg.selectAll("g.cluster rect")[0];
+  var allClusters = svg.selectAll("g.cluster rect").nodes();
   var startX = -VizConstants.svgMarginX +
     toFloat(d3.min(allClusters, function(e) {
       return getAbsolutePosition(d3.select(e)).x;
@@ -433,7 +433,7 @@ function getAbsolutePosition(d3selection) {
   while (!obj.empty()) {
     var transformText = obj.attr("transform");
     if (transformText) {
-      var translate = d3.transform(transformText).translate;
+      var translate = transformText.substring("translate(".length, transformText.length - 1).split(",")
       _x += toFloat(translate[0]);
       _y += toFloat(translate[1]);
     }
@@ -497,7 +497,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
     ];
   }
 
-  var line = d3.svg.line().interpolate("basis");
+  var line = d3.line().interpolate("basis");
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 
