@@ -694,13 +694,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.strategy</code></td>
-  <td>""</td>
+  <td>""(disabled)</td>
   <td>
     Set the strategy of rolling of executor logs. By default it is disabled. It can
-    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    be set to "time" (time-based rolling) or "size" (size-based rolling) or ""(empty string). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
     For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
-    the maximum file size for rolling.
+    the maximum file size for rolling. For "", it is disabled without warning.
   </td>
   <td>1.1.0</td>
 </tr>
