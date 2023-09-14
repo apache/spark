@@ -268,6 +268,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
     require_minimum_pandas_version()
 
     import pandas as pd
+
     tz = timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if isinstance(s.dtype, pd.DatetimeTZDtype):
