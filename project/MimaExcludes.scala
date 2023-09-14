@@ -38,7 +38,11 @@ object MimaExcludes {
   lazy val v40excludes = v35excludes ++ Seq(
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$"),
+    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$")
   )
 
   // Exclude rules for 3.5.x from 3.4.0
@@ -73,8 +77,6 @@ object MimaExcludes {
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
-    // [SPARK-44198][CORE] Support propagation of the log level to the executors
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
     // [SPARK-44692][CONNECT][SQL] Move Trigger(s) to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.Trigger"),
     // [SPARK-44713][CONNECT][SQL] Move shared classes to sql/api
@@ -82,8 +84,6 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.MapGroupsWithStateFunction"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SaveMode"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupState"),
-    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
 
     // [SPARK-43265] Move Error framework to a common utils module
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
