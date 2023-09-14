@@ -263,10 +263,16 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap
+    val arguments = sql.getArgumentsMap
     val posArgs = sql.getPosArgsList
+    val posArguments = sql.getPosArgumentsList
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!args.isEmpty) {
+    if (!arguments.isEmpty) {
+      NameParameterizedQuery(parsedPlan, arguments.asScala.mapValues(transformExpression).toMap)
+    } else if (!posArguments.isEmpty) {
+      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+    } else if (!args.isEmpty) {
       NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else if (!posArgs.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
