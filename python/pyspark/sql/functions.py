@@ -12660,7 +12660,7 @@ def explode(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(a=1, list1=[1, 2], list2=[3, 4])])
-    >>> df.select(sf.explode(df.list1).alias("list1"), "list2") \
+    >>> df.select(sf.explode(df.list1).alias("list1"), "list2") \\
     ...     .select("list1", sf.explode(df.list2).alias("list2")).show()
     +-----+-----+
     |list1|list2|
