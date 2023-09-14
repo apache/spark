@@ -137,9 +137,10 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   protected def buildLocalRelation[A <: Product: TypeTag](data: Seq[A]) = {
     val encoder = ScalaReflection.encoderFor[A]
-    val arrowData = ArrowSerializer.serialize(
-      data.iterator, encoder, allocator, TimeZone.getDefault.getID)
-    val localRelation = proto.LocalRelation.newBuilder()
+    val arrowData =
+      ArrowSerializer.serialize(data.iterator, encoder, allocator, TimeZone.getDefault.getID)
+    val localRelation = proto.LocalRelation
+      .newBuilder()
       .setData(arrowData)
       .setSchema(encoder.schema.json)
       .build()
