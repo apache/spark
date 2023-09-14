@@ -68,13 +68,24 @@ abstract class ParameterizedQuery(child: LogicalPlan) extends UnresolvedUnaryNod
  * The logical plan representing a parameterized query with named parameters.
  *
  * @param child The parameterized logical plan.
- * @param args The map of parameter names to its literal values.
+ * @param argNames Argument names.
+ * @param argValues A sequence of argument values matched to argument names `argNames`.
  */
-case class NameParameterizedQuery(child: LogicalPlan, args: Map[String, Expression])
+case class NameParameterizedQuery(
+    child: LogicalPlan,
+    argNames: Seq[String],
+    argValues: Seq[Expression])
   extends ParameterizedQuery(child) {
-  assert(args.nonEmpty)
+  assert(argNames.nonEmpty && argValues.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
+}
+
+object NameParameterizedQuery {
+  def apply(child: LogicalPlan, args: Map[String, Expression]): NameParameterizedQuery = {
+    val argsSeq = args.toSeq
+    new NameParameterizedQuery(child, argsSeq.map(_._1), argsSeq.map(_._2))
+  }
 }
 
 /**
@@ -83,7 +94,7 @@ case class NameParameterizedQuery(child: LogicalPlan, args: Map[String, Expressi
  * @param child The parameterized logical plan.
  * @param args The literal values of positional parameters.
  */
-case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
+case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
@@ -124,8 +135,13 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
-      case NameParameterizedQuery(child, args)
-        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_._2.resolved) =>
+      case NameParameterizedQuery(child, argNames, argValues)
+        if !child.containsPattern(UNRESOLVED_WITH) && argValues.forall(_.resolved) =>
+        if (argNames.length != argValues.length) {
+          throw SparkException.internalError(s"The number of argument names ${argNames.length} " +
+            s"must be equal to the number of argument values ${argValues.length}.")
+        }
+        val args = argNames.zip(argValues).toMap
         checkArgs(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 

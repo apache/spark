@@ -21,7 +21,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.functions.{array, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
+import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -535,17 +535,29 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     def fromArr(keys: Array[_], values: Array[_]): Column = {
       map_from_arrays(Column(Literal(keys)), Column(Literal(values)))
     }
+    def callFromArr(keys: Array[_], values: Array[_]): Column = {
+      call_function("map_from_arrays", Column(Literal(keys)), Column(Literal(values)))
+    }
     def createMap(keys: Array[_], values: Array[_]): Column = {
       val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
       map(zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
+    }
+    def callMap(keys: Array[_], values: Array[_]): Column = {
+      val zipped = keys.map(k => Column(Literal(k))).zip(values.map(v => Column(Literal(v))))
+      call_function("map", zipped.map { case (k, v) => Seq(k, v) }.flatten: _*)
     }
     def fromEntries(keys: Array[_], values: Array[_]): Column = {
       val structures = keys.zip(values)
         .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
       map_from_entries(array(structures: _*))
     }
+    def callFromEntries(keys: Array[_], values: Array[_]): Column = {
+      val structures = keys.zip(values)
+        .map { case (k, v) => struct(Column(Literal(k)), Column(Literal(v)))}
+      call_function("map_from_entries", call_function("array", structures: _*))
+    }
 
-    Seq(fromArr(_, _), createMap(_, _)).foreach { f =>
+    Seq(fromArr(_, _), createMap(_, _), callFromArr(_, _), callMap(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT map_contains_key(:mapParam, 0)",
           Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
@@ -555,7 +567,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           Array(f(Array.empty[String], Array.empty[Double]))),
         Row(false))
     }
-    Seq(fromArr(_, _), createMap(_, _), fromEntries(_, _)).foreach { f =>
+    Seq(fromArr(_, _), createMap(_, _), fromEntries(_, _),
+      callFromArr(_, _), callMap(_, _), callFromEntries(_, _)).foreach { f =>
       checkAnswer(
         spark.sql("SELECT element_at(:mapParam, 'a')",
           Map("mapParam" -> f(Array("a"), Array(0)))),
