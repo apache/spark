@@ -21,6 +21,7 @@ import struct
 import sys
 import unittest
 import difflib
+import functools
 from decimal import Decimal
 from time import time, sleep
 from typing import (
@@ -29,8 +30,7 @@ from typing import (
     Union,
     Dict,
     List,
-    Tuple,
-    Iterator,
+    Callable,
 )
 from itertools import zip_longest
 
@@ -71,7 +71,10 @@ def write_int(i):
     return struct.pack("!i", i)
 
 
-def eventually(condition, timeout=30.0, catch_assertions=False):
+def eventually(
+    timeout=30.0,
+    catch_assertions=False,
+):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
     This is a helper utility for PySpark tests.
@@ -80,7 +83,7 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
     ----------
     condition : function
         Function that checks for termination conditions. condition() can return:
-            - True: Conditions met. Return without error.
+            - True or None: Conditions met. Return without error.
             - other value: Conditions not met yet. Continue. Upon timeout,
               include last such value in error message.
               Note that this method may be called at any time during
@@ -93,26 +96,45 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
         If True, catch AssertionErrors; continue, but save
         error to throw upon timeout.
     """
-    start_time = time()
-    lastValue = None
-    while time() - start_time < timeout:
-        if catch_assertions:
-            try:
-                lastValue = condition()
-            except AssertionError as e:
-                lastValue = e
-        else:
-            lastValue = condition()
-        if lastValue is True:
-            return
-        sleep(0.01)
-    if isinstance(lastValue, AssertionError):
-        raise lastValue
-    else:
-        raise AssertionError(
-            "Test failed due to timeout after %g sec, with last condition returning: %s"
-            % (timeout, lastValue)
-        )
+    assert timeout > 0
+    assert isinstance(catch_assertions, bool)
+
+    def decorator(condition: Callable) -> Callable:
+        assert isinstance(condition, Callable)
+
+        @functools.wraps(condition)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            start_time = time()
+            lastValue = None
+            numTries = 0
+            while time() - start_time < timeout:
+                numTries += 1
+
+                if catch_assertions:
+                    try:
+                        lastValue = condition(*args, **kwargs)
+                    except AssertionError as e:
+                        lastValue = e
+                else:
+                    lastValue = condition(*args, **kwargs)
+
+                if lastValue is True or lastValue is None:
+                    return
+
+                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
+                sleep(0.01)
+
+            if isinstance(lastValue, AssertionError):
+                raise lastValue
+            else:
+                raise AssertionError(
+                    "Test failed due to timeout after %g sec, with last condition returning: %s"
+                    % (timeout, lastValue)
+                )
+
+        return wrapper
+
+    return decorator
 
 
 class QuietTest:

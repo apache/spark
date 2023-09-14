@@ -287,6 +287,13 @@ WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d = t1.t1d) as tmp);
 
+-- Same as above but with LIMIT/ORDER BY instead of MAX
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d = t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
 
 -- SPARK-44549: window function in the correlated subquery with non-equi predicate.
 SELECT 1
@@ -294,6 +301,14 @@ FROM t1
 WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d <= t1.t1d) as tmp);
+
+-- Same as above but with LIMIT/ORDER BY
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d <= t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
 
 -- SPARK-44549: window function in the correlated subquery over joins.
 SELECT t1b
@@ -317,6 +332,23 @@ FROM t1
 WHERE t1b = (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s
                FROM t2) as tmp);
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2b < t1b
+              ORDER BY t2d LIMIT 1);
+
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, non-equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2c = t1c
+              ORDER BY t2c LIMIT 1);
 
 -- Set operations in correlation path
 
