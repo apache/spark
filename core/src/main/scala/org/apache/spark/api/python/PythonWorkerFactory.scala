@@ -413,6 +413,11 @@ private[spark] class PythonWorkerFactory(
       }
     }
   }
+
+  def isWorkerStopped(worker: PythonWorker): Boolean = {
+    assert(!useDaemon, "isWorkerStopped() is not supported for daemon mode")
+    simpleWorkers.get(worker).exists(!_.isAlive)
+  }
 }
 
 private[spark] object PythonWorkerFactory {

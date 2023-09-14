@@ -602,7 +602,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       return DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "position",
+          "inputName" -> toSQLId("position"),
           "inputType" -> toSQLType(pos.dataType),
           "inputExpr" -> toSQLExpr(pos)
         )

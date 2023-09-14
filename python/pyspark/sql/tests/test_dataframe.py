@@ -26,7 +26,6 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
-from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
@@ -63,6 +62,51 @@ from pyspark.testing.utils import QuietTest
 
 
 class DataFrameTestsMixin:
+    def test_getitem_invalid_indices(self):
+        df = self.spark.sql(
+            "SELECT * FROM VALUES "
+            "(1, 1.1, 'a'), "
+            "(2, 2.2, 'b'), "
+            "(4, 4.4, 'c') "
+            "AS TAB(a, b, c)"
+        )
+
+        # accepted type and values
+        for index in [False, True, 0, 1, 2, -1, -2, -3]:
+            df[index]
+
+        # negative cases: ordinal out of range
+        for index in [-10, -4, 3, 10, 100]:
+            with self.assertRaises(IndexError):
+                df[index]
+
+        # negative cases: unsupported types
+        for index in [None, 1.0, Decimal(1)]:
+            with self.assertRaises(PySparkTypeError):
+                df[index]
+
+    def test_getitem_duplicated_column(self):
+        df = self.spark.sql(
+            "SELECT * FROM VALUES "
+            "(1, 1.1, 'a'), "
+            "(2, 2.2, 'b'), "
+            "(4, 4.4, 'c') "
+            "AS TAB(a, a, a)"
+        )
+
+        self.assertEqual(
+            df.select(df[0]).schema.simpleString(),
+            "struct<a:int>",
+        )
+        self.assertEqual(
+            df.select(df[1]).schema.simpleString(),
+            "struct<a:decimal(2,1)>",
+        )
+        self.assertEqual(
+            df.select(df[2]).schema.simpleString(),
+            "struct<a:string>",
+        )
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -77,7 +121,6 @@ class DataFrameTestsMixin:
         self.assertEqual(2, row[1])
         self.assertEqual("Row(c=1, c=2)", str(row))
         # Cannot access columns
-        self.assertRaises(AnalysisException, lambda: df.select(df[0]).first())
         self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
         self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
 
