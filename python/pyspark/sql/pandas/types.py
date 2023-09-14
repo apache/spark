@@ -22,7 +22,6 @@ pandas instances during the type conversion.
 import datetime
 import itertools
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
-import pandas as pd
 
 from pyspark.sql.types import (
     cast,
@@ -54,6 +53,7 @@ from pyspark.sql.types import (
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 
 if TYPE_CHECKING:
+    import pandas as pd
     import pyarrow as pa
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
@@ -267,6 +267,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
 
     require_minimum_pandas_version()
 
+    import pandas as pd
     tz = timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if isinstance(s.dtype, pd.DatetimeTZDtype):
@@ -297,6 +298,7 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
+    import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
         is_datetime64_dtype,
     )
@@ -364,6 +366,7 @@ def _check_series_convert_timestamps_localize(
 
     require_minimum_pandas_version()
 
+    import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
         is_datetime64_dtype,
     )
@@ -524,6 +527,7 @@ def _create_converter_to_pandas(
     The converter of `pandas.Series`
     """
     import numpy as np
+    import pandas as pd
 
     pandas_type = _to_corrected_pandas_type(data_type)
 
@@ -773,6 +777,7 @@ def _create_converter_from_pandas(
     -------
     The converter of `pandas.Series`
     """
+    import pandas as pd
     if isinstance(data_type, TimestampType):
         assert timezone is not None
 
