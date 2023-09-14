@@ -31,7 +31,6 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_streaming_foreach_batch_graceful_stop(self):
         super().test_streaming_foreach_batch_graceful_stop()
 
-    # class StreamingForeachBatchParityTests(ReusedConnectTestCase):
     def test_accessing_spark_session(self):
         spark = self.spark
 
