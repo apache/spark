@@ -269,7 +269,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     if (!args.isEmpty) {
       NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toArray)
+      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
     } else {
       parsedPlan
     }
