@@ -200,9 +200,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
         This will send an asynchronous RPC which will not block this. The client continues
         executing, and if the release fails, server is equipped to deal with abandoned executions.
         """
-        if self._result_complete:
-            return
-
         from pyspark.sql.connect.client.core import SparkConnectClient
         from pyspark.sql.connect.client.core import Retrying
 
