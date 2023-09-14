@@ -186,16 +186,13 @@ class WorkerTests(ReusedPySparkTestCase):
 
 
 class WorkerReuseTest(PySparkTestCase):
+    @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
-        def check_reuse_worker_of_parallelize_range():
-            rdd = self.sc.parallelize(range(20), 8)
-            previous_pids = rdd.map(lambda x: os.getpid()).collect()
-            current_pids = rdd.map(lambda x: os.getpid()).collect()
-            for pid in current_pids:
-                self.assertTrue(pid in previous_pids)
-            return True
-
-        eventually(check_reuse_worker_of_parallelize_range, catch_assertions=True)
+        rdd = self.sc.parallelize(range(20), 8)
+        previous_pids = rdd.map(lambda x: os.getpid()).collect()
+        current_pids = rdd.map(lambda x: os.getpid()).collect()
+        for pid in current_pids:
+            self.assertTrue(pid in previous_pids)
 
 
 @unittest.skipIf(
