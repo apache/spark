@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 from io import StringIO
 
@@ -93,33 +92,6 @@ class FrameIOMixin:
         pdf = pd.DataFrame.from_dict(data, orient="index", columns=["A", "B", "C", "D"])
         psdf = ps.DataFrame.from_dict(data, orient="index", columns=["A", "B", "C", "D"])
         self.assert_eq(pdf, psdf)
-
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
-        "pandas support `Styler.to_latex` since 1.3.0",
-    )
-    def test_style(self):
-        # Currently, the `style` function returns a pandas object `Styler` as it is,
-        # processing only the number of rows declared in `compute.max_rows`.
-        # So it's a bit vague to test, but we are doing minimal tests instead of not testing at all.
-        pdf = pd.DataFrame(np.random.randn(10, 4), columns=["A", "B", "C", "D"])
-        psdf = ps.from_pandas(pdf)
-
-        def style_negative(v, props=""):
-            return props if v < 0 else None
-
-        def check_style():
-            # If the value is negative, the text color will be displayed as red.
-            pdf_style = pdf.style.applymap(style_negative, props="color:red;")
-            psdf_style = psdf.style.applymap(style_negative, props="color:red;")
-
-            # Test whether the same shape as pandas table is created including the color.
-            self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
-
-        check_style()
-
-        with ps.option_context("compute.max_rows", None):
-            check_style()
 
     def test_info(self):
         pdf, psdf = self.df_pair

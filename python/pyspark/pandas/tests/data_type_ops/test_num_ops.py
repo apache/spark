@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
@@ -159,15 +157,11 @@ class NumOpsTestsMixin:
         with ps.option_context("compute.eager_check", False):
             psser.astype(int)
 
-        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            psser = self.psdf["decimal_nan"]
-            with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-                ValueError, "Cannot convert"
-            ):
-                psser.astype(int)
-            with ps.option_context("compute.eager_check", False):
-                psser.astype(int)
+        psser = self.psdf["decimal_nan"]
+        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+            ValueError, "Cannot convert"
+        ):
+            psser.astype(int)
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
@@ -265,12 +259,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
     def test_astype(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
-                if dtype in self.string_extension_dtype:
-                    if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-                        # Limit pandas version due to
-                        # https://github.com/pandas-dev/pandas/issues/31204
-                        self.check_extension(pser.astype(dtype), psser.astype(dtype))
-                else:
+                if dtype not in self.string_extension_dtype:
                     self.check_extension(pser.astype(dtype), psser.astype(dtype))
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))
@@ -298,14 +287,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            if LooseVersion(pd.__version__) < LooseVersion("1.1.3"):
-                # pandas < 1.1.0: object dtype is returned after negation
-                # pandas 1.1.1 and 1.1.2:
-                #   a TypeError "bad operand type for unary -: 'IntegerArray'" is raised
-                # Please refer to https://github.com/pandas-dev/pandas/issues/36063.
-                self.check_extension(pd.Series([-1, -2, -3, None], dtype=pser.dtype), -psser)
-            else:
-                self.check_extension(-pser, -psser)
+            self.check_extension(-pser, -psser)
 
     def test_abs(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:

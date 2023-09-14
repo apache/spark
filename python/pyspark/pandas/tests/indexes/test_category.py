@@ -178,17 +178,10 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(pscidx.astype("category"), pcidx.astype("category"))
 
-        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                pscidx.astype(CategoricalDtype(["b", "c", "a"])),
-                pcidx.astype(CategoricalDtype(["b", "c", "a"])),
-            )
-        else:
-            self.assert_eq(
-                pscidx.astype(CategoricalDtype(["b", "c", "a"])),
-                pcidx,
-            )
+        self.assert_eq(
+            pscidx.astype(CategoricalDtype(["b", "c", "a"])),
+            pcidx.astype(CategoricalDtype(["b", "c", "a"])),
+        )
 
         self.assert_eq(pscidx.astype(str), pcidx.astype(str))
 
@@ -265,25 +258,13 @@ class CategoricalIndexTestsMixin:
         psidx2 = ps.from_pandas(pidx2)
         psidx3 = ps.from_pandas(pidx3)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(
-                psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
-            )
-            self.assert_eq(
-                psidx1.intersection(psidx3.astype("category")).sort_values(),
-                pidx1.intersection(pidx3.astype("category")).sort_values(),
-            )
-        else:
-            self.assert_eq(
-                psidx1.intersection(psidx2).sort_values(),
-                pidx1.intersection(pidx2).set_categories(pidx1.categories).sort_values(),
-            )
-            self.assert_eq(
-                psidx1.intersection(psidx3.astype("category")).sort_values(),
-                pidx1.intersection(pidx3.astype("category"))
-                .set_categories(pidx1.categories)
-                .sort_values(),
-            )
+        self.assert_eq(
+            psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
+        )
+        self.assert_eq(
+            psidx1.intersection(psidx3.astype("category")).sort_values(),
+            pidx1.intersection(pidx3.astype("category")).sort_values(),
+        )
 
         # TODO: intersection non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.intersection(psidx3))

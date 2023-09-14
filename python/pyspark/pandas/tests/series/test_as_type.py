@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -61,11 +60,7 @@ class SeriesAsTypeMixin:
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(bool), pser.astype(bool))
-        if LooseVersion("1.1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.1.4"):
-            # a pandas bug: https://github.com/databricks/koalas/pull/1818#issuecomment-703961980
-            self.assert_eq(psser.astype(str).tolist(), ["hi", "hi ", " ", " \t", "", "None"])
-        else:
-            self.assert_eq(psser.astype(str), pser.astype(str))
+        self.assert_eq(psser.astype(str), pser.astype(str))
         self.assert_eq(psser.str.strip().astype(bool), pser.str.strip().astype(bool))
 
         if extension_object_dtypes_available:
@@ -85,19 +80,8 @@ class SeriesAsTypeMixin:
 
             self._check_extension(psser.astype("boolean"), pser.astype("boolean"))
             self._check_extension(psser.astype(BooleanDtype()), pser.astype(BooleanDtype()))
-
-            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                self._check_extension(psser.astype("string"), pser.astype("string"))
-                self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
-            else:
-                self._check_extension(
-                    psser.astype("string"),
-                    pd.Series(["True", "False", None], name="x", dtype="string"),
-                )
-                self._check_extension(
-                    psser.astype(StringDtype()),
-                    pd.Series(["True", "False", None], name="x", dtype=StringDtype()),
-                )
+            self._check_extension(psser.astype("string"), pser.astype("string"))
+            self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
         pser = pd.Series(["2020-10-27 00:00:01", None], name="x")
         psser = ps.Series(pser)
@@ -170,18 +154,8 @@ class SeriesAsTypeMixin:
         if extension_object_dtypes_available:
             from pandas import StringDtype
 
-            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                self._check_extension(psser.astype("string"), pser.astype("string"))
-                self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
-            else:
-                self._check_extension(
-                    psser.astype("string"),
-                    pd.Series(["10", "20", "15", "30", "45"], name="x", dtype="string"),
-                )
-                self._check_extension(
-                    psser.astype(StringDtype()),
-                    pd.Series(["10", "20", "15", "30", "45"], name="x", dtype=StringDtype()),
-                )
+            self._check_extension(psser.astype("string"), pser.astype("string"))
+            self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
         if extension_float_dtypes_available:
             from pandas import Float32Dtype, Float64Dtype
@@ -192,11 +166,7 @@ class SeriesAsTypeMixin:
             self._check_extension(psser.astype(Float64Dtype()), pser.astype(Float64Dtype()))
 
     def _check_extension(self, psser, pser):
-        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(psser, pser, check_exact=False)
-            self.assertTrue(isinstance(psser.dtype, extension_dtypes))
-        else:
-            self.assert_eq(psser, pser)
+        self.assert_eq(psser, pser)
 
 
 class SeriesAsTypeTests(SeriesAsTypeMixin, ComparisonTestBase, SQLTestUtils):
