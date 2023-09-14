@@ -778,6 +778,7 @@ def _create_converter_from_pandas(
     The converter of `pandas.Series`
     """
     import pandas as pd
+
     if isinstance(data_type, TimestampType):
         assert timezone is not None
 
