@@ -895,13 +895,10 @@ private[spark] object IndylambdaScalaClosures extends Logging {
           if (owner == currentClassInternalName) {
             logTrace(s"    found intra class call to $ownerExternalName.$name$desc")
             // could be invoking a helper method or a field accessor method, just follow it.
-            println(s" pushMethod1 ${currentClass} $name $desc")
             pushIfNotVisited(MethodIdentifier(currentClass, name, desc))
           } else if (owner.startsWith("ammonite/$sess/cmd")) {
             // we're inside Ammonite command / command helper object, track all calls from here
             val classInfo = getOrUpdateClassInfo(owner)
-            println(s" $owner")
-            println(s" pushMethod2 ${classInfo._1} $name $desc")
             pushIfNotVisited(MethodIdentifier(classInfo._1, name, desc))
           } else if (isInnerClassCtorCapturingOuter(
               op, owner, name, desc, currentClassInternalName)) {
@@ -921,7 +918,6 @@ private[spark] object IndylambdaScalaClosures extends Logging {
           } else if (findTransitively && trackedClassInternalNames.contains(owner)) {
             logTrace(s"    found call to outer $ownerExternalName.$name$desc")
             val (calleeClass, _) = getOrUpdateClassInfo(owner) // make sure MethodNodes are cached
-            println(s" pushMethod3 ${calleeClass} $name $desc")
             pushIfNotVisited(MethodIdentifier(calleeClass, name, desc))
           } else {
             // keep the same behavior as the original ClosureCleaner
