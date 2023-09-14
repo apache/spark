@@ -37,7 +37,11 @@ object MimaExcludes {
   lazy val v40excludes = defaultExcludes ++ Seq(
     // [SPARK-44863][UI] Add a button to download thread dump as a txt in Spark UI
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ThreadStackTrace.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ThreadStackTrace$"),
+    // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
+    // [SPARK-44198][CORE] Support propagation of the log level to the executors
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$")
   )
 
   // Default exclude rules
