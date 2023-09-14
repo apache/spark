@@ -1142,7 +1142,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
           case t: ResolvedTable =>
             val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.expectViewNotTableError(
+            throw QueryCompilationErrors.unsupportedTableOperationError(
               nameParts, cmd, suggestAlternative, u)
           case other => other
         }.getOrElse(u)

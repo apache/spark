@@ -498,13 +498,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def expectViewNotTableError(
+  def unsupportedTableOperationError(
       nameParts: Seq[String],
       cmd: String,
-      hint: Boolean,
+      suggestAlternative: Boolean,
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = if (hint) {
+      errorClass = if (suggestAlternative) {
         "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION"
       } else {
         "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION"
