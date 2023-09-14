@@ -160,7 +160,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             try:
                 callable()
                 break
-            except Exception as e:
+            except Exception:
                 time.sleep(0.1)
         callable()
 
