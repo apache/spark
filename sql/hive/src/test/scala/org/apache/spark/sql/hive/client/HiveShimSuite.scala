@@ -47,7 +47,6 @@ class HiveShimSuite(version: String) extends HiveVersionSuite(version) {
     val hiveConf = new HiveConf(classOf[SessionState])
     lazy val warehousePath = Utils.createTempDir()
 
-    hiveConf.set("datanucleus.schema.autoCreateAll", "true")
     hiveConf.set("hive.metastore.schema.verification", "false")
     hiveConf.set("hive.metastore.warehouse.dir", warehousePath.toString)
 
@@ -55,25 +54,34 @@ class HiveShimSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("createTables") {
-    shim.createTable(hive, new Table("default", "table1"), ifNotExists = true)
+    shim.createTable(hive, new Table("default", "table_man"), ifNotExists = true)
+
+    val external = new Table("default", "table_ext")
+    external.setTableType(TableType.EXTERNAL_TABLE)
+    external.setProperty("EXTERNAL", "TRUE")
+    shim.createTable(hive, external, ifNotExists = true)
   }
 
   test("getTablesByType") {
     if (version >= "2.3") {
-      val managed = shim.getTablesByType(hive, "default", "table1", TableType.MANAGED_TABLE)
-      val external = shim.getTablesByType(hive, "default", "table1", TableType.EXTERNAL_TABLE)
+      val managed = shim.getTablesByType(hive, "default", "table*", TableType.MANAGED_TABLE)
+      val external = shim.getTablesByType(hive, "default", "table*", TableType.EXTERNAL_TABLE)
 
-      assert(managed === Seq("table1"))
-      assert(external === Seq.empty)
+      assert(managed === Seq("table_man"))
+      assert(external === Seq("table_ext"))
     } else {
-      val e = intercept[SparkUnsupportedOperationException] {
-        shim.getTablesByType(hive, "default", "table1", TableType.MANAGED_TABLE)
-      }
-      checkError(e, errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
+      checkError(exception = intercept[SparkUnsupportedOperationException](
+        shim.getTablesByType(hive, "default", "table*", TableType.MANAGED_TABLE)),
+        errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
+
+      checkError(intercept[SparkUnsupportedOperationException]
+        (shim.getTablesByType(hive, "default", "table*", TableType.EXTERNAL_TABLE)),
+        errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
     }
   }
 
   test("dropTable") {
-    shim.dropTable(hive, "default", "table1")
+    shim.dropTable(hive, "default", "table_man")
+    shim.dropTable(hive, "default", "table_ext")
   }
 }
