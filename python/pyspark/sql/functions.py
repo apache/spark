@@ -781,8 +781,7 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     deterministic is false or is not defined, or the lowest value is returned if deterministic is
     true.
 
-    >>> df2 = spark.createDataFrame([-10, 0, 10],
-    ...     schema=("col"))
+    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
     >>> df2.select(mode("col", False), mode("col", True)).show()
     +----------------+---------------+
     |mode(col, false)|mode(col, true)|
