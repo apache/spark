@@ -673,7 +673,7 @@ case class HashAggregateExec(
          |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
          |  }
          |  $resetCounter
-         |  // the hash map had be spilled, it should have enough memory now,
+         |  // the hash map has been spilled, it should have enough memory now,
          |  // try to allocate buffer again.
          |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
