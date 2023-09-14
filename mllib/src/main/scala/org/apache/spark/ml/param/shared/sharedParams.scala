@@ -584,11 +584,11 @@ trait HasMaxBlockSizeInMB extends Params {
 trait HasIncludeLowest extends Params {
 
   /**
-   * Param for define the range of values for the bucket, which by default holds values in the range[v1,v2....)
+   * Param for define the range of values for the buckets, which by default holds values in the range[v1,v2....).
    *
    * @group param
    */
-  final val includeLowest: BooleanParam = new BooleanParam(this, "includeLowest", "define the range of values for the bucket, which by default holds values in the range[v1,v2....)")
+  final val includeLowest: BooleanParam = new BooleanParam(this, "includeLowest", "define the range of values for the buckets, which by default holds values in the range[v1,v2....).")
 
   setDefault(includeLowest, true)
 
