@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 8
       branch:
         description: Branch to run the build against
         required: false
@@ -207,7 +207,6 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_PACKAGING: true
-      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
