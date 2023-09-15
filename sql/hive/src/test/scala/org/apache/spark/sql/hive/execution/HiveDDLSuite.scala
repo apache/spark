@@ -3367,7 +3367,7 @@ class HiveDDLSuite
         sql(s"DELETE FROM $tbl WHERE c1 = 1")
       }
       checkError(e,
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`",
           "operation" -> "DELETE")

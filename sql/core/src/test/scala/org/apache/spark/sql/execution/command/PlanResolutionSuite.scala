@@ -1354,7 +1354,8 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           checkError(
             exception = e2,
-            errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))
         } else {

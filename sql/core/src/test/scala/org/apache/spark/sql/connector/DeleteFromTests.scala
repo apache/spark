@@ -112,7 +112,8 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
 
       checkError(
         exception = exc,
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
           "operation" -> "DELETE"))
     }

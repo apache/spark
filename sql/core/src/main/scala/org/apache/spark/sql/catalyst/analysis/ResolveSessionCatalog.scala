@@ -76,7 +76,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       if (a.position.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "ALTER COLUMN ... FIRST | AFTER")
+          catalog, ident, "ALTER COLUMN ... FIRST | ALTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata

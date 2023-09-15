@@ -515,87 +515,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def unsupportedTableOperationError(
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(catalog.name +: ident.namespace :+ ident.name),
-        "operation" -> operation))
-  }
-
-  def unsupportedTableOperationError(
-      ident: TableIdentifier,
-      operation: String): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(Seq(ident.catalog.get, ident.database.get, ident.table)),
-        "operation" -> operation))
-  }
-
-  def unsupportedBatchReadError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "batch scan"))
-  }
-
-  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "either micro-batch or continuous scan"))
-  }
-
-  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "append in batch mode"))
-  }
-
-  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "dynamic overwrite in batch mode"))
-  }
-
-  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "truncate in batch mode"))
-  }
-
-  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(table.name()),
-        "operation" -> "overwrite by filter in batch mode"))
-  }
-
-  def createOrReplaceWithDefaultValueError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.CREATE_OR_REPLACE_TABLE_WITH_DEFAULT_VALUE",
-      messageParameters = Map.empty)
-  }
-
-  def createOrReplaceWithGeneratedColumnError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.CREATE_OR_REPLACE_TABLE_WITH_GENERATED_COLUMN",
-      messageParameters = Map.empty)
-  }
-
   def expectPersistentFuncError(
       name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
@@ -910,6 +829,31 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1052",
       messageParameters = Map.empty)
+  }
+
+  def unsupportedTableOperationError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      catalog.name +: ident.namespace :+ ident.name, operation)
+  }
+
+  def unsupportedTableOperationError(
+      ident: TableIdentifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      Seq(ident.catalog.get, ident.database.get, ident.table), operation)
+  }
+
+  private def unsupportedTableOperationError(
+      qualifiedTableName: Seq[String],
+      operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(qualifiedTableName),
+        "operation" -> operation))
   }
 
   def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {
@@ -1334,6 +1278,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotReplaceMissingTableError(
       tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
     new CannotReplaceMissingTableException(tableIdentifier, cause)
+  }
+
+  private def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1113",
+      messageParameters = Map(
+        "table" -> table.name,
+        "cmd" -> cmd))
+  }
+
+  def unsupportedBatchReadError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "batch scan")
+  }
+
+  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "either micro-batch or continuous scan")
+  }
+
+  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "append in batch mode")
+  }
+
+  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "dynamic overwrite in batch mode")
+  }
+
+  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "truncate in batch mode")
+  }
+
+  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "overwrite by filter in batch mode")
   }
 
   def streamingSourcesDoNotSupportCommonExecutionModeError(

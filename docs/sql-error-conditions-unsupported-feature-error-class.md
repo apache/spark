@@ -61,14 +61,6 @@ Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY.
 
 Attach a comment to the namespace `<namespace>`.
 
-## CREATE_OR_REPLACE_TABLE_WITH_DEFAULT_VALUE
-
-CREATE or REPLACE TABLE ... DEFAULT ...
-
-## CREATE_OR_REPLACE_TABLE_WITH_GENERATED_COLUMN
-
-CREATE or REPLACE TABLE ... GENERATED ALWAYS AS ...
-
 ## DESC_TABLE_COLUMN_PARTITION
 
 DESC TABLE COLUMN for a specific partition.
@@ -188,6 +180,10 @@ set PROPERTIES and DBPROPERTIES at the same time.
 ## SET_VARIABLE_USING_SET
 
 `<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
+
+## TABLE_OPERATION
+
+Table `<tableName>` does not support `<operation>`. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by "spark.sql.catalog".
 
 ## TIME_TRAVEL
 
