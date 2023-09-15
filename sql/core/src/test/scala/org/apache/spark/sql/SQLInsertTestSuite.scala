@@ -1456,13 +1456,20 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           } else {
             sql("insert into t select false")
           }
-          checkError(
+          checkV1AndV2Error(
             exception = intercept[AnalysisException] {
               sql("alter table t add column s array<int> default array('abc', 'def')")
             },
-            errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
-            parameters = Map(
+            v1ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v2ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v1Parameters = Map(
               "statement" -> "ALTER TABLE ADD COLUMNS",
+              "colName" -> "`s`",
+              "expectedType" -> "\"ARRAY<INT>\"",
+              "defaultValue" -> "array('abc', 'def')",
+              "actualType" -> "\"ARRAY<STRING>\""),
+            v2Parameters = Map(
+              "statement" -> "ALTER TABLE",
               "colName" -> "`s`",
               "expectedType" -> "\"ARRAY<INT>\"",
               "defaultValue" -> "array('abc', 'def')",
@@ -1489,14 +1496,16 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         "orc",
         useDataFrames = true)).foreach { config =>
       withTable("t") {
-        sql(s"create table t(i boolean) using ${config.dataSource}")
-        if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
-        } else {
-          sql("insert into t select false")
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"${config.dataSource}, ") {
+          sql(s"create table t(i boolean) using ${config.dataSource}")
+          if (config.useDataFrames) {
+            Seq((false)).toDF.write.insertInto("t")
+          } else {
+            sql("insert into t select false")
+          }
+          sql("alter table t add column s struct<x boolean, y string> default struct(true, 'abc')")
+          checkAnswer(spark.table("t"), Row(false, Row(true, "abc")))
         }
-        sql("alter table t add column s struct<x boolean, y string> default struct(true, 'abc')")
-        checkAnswer(spark.table("t"), Row(false, Row(true, "abc")))
       }
     }
 
@@ -1509,23 +1518,32 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         "parquet",
         true)).foreach { config =>
       withTable("t") {
-        sql(s"create table t(i boolean) using ${config.dataSource}")
-        if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
-        } else {
-          sql("insert into t select false")
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"${config.dataSource}, ") {
+          sql(s"create table t(i boolean) using ${config.dataSource}")
+          if (config.useDataFrames) {
+            Seq((false)).toDF.write.insertInto("t")
+          } else {
+            sql("insert into t select false")
+          }
+          checkV1AndV2Error(
+            exception = intercept[AnalysisException] {
+              sql("alter table t add column s struct<x boolean, y string> default struct(42, 56)")
+            },
+            v1ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v2ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v1Parameters = Map(
+              "statement" -> "ALTER TABLE ADD COLUMNS",
+              "colName" -> "`s`",
+              "expectedType" -> "\"STRUCT<x: BOOLEAN, y: STRING>\"",
+              "defaultValue" -> "struct(42, 56)",
+              "actualType" -> "\"STRUCT<col1: INT, col2: INT>\""),
+            v2Parameters = Map(
+              "statement" -> "ALTER TABLE",
+              "colName" -> "`s`",
+              "expectedType" -> "\"STRUCT<x: BOOLEAN, y: STRING>\"",
+              "defaultValue" -> "struct(42, 56)",
+              "actualType" -> "\"STRUCT<col1: INT, col2: INT>\""))
         }
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("alter table t add column s struct<x boolean, y string> default struct(42, 56)")
-          },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
-          parameters = Map(
-            "statement" -> "ALTER TABLE ADD COLUMNS",
-            "colName" -> "`s`",
-            "expectedType" -> "\"STRUCT<x: BOOLEAN, y: STRING>\"",
-            "defaultValue" -> "struct(42, 56)",
-            "actualType" -> "\"STRUCT<col1: INT, col2: INT>\""))
       }
     }
   }
@@ -1546,19 +1564,20 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       Config(
         "orc",
         useDataFrames = true)).foreach { config =>
-      withTable("t") {
-        sql(s"create table t(i boolean) using ${config.dataSource}")
-        if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
-        } else {
-          sql("insert into t select false")
+      withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"${config.dataSource}, ") {
+        withTable("t") {
+          sql(s"create table t(i boolean) using ${config.dataSource}")
+          if (config.useDataFrames) {
+            Seq((false)).toDF.write.insertInto("t")
+          } else {
+            sql("insert into t select false")
+          }
+          sql("alter table t add column s map<boolean, string> default map(true, 'abc')")
+          checkAnswer(spark.table("t"), Row(false, Map(true -> "abc")))
         }
-        sql("alter table t add column s map<boolean, string> default map(true, 'abc')")
-        checkAnswer(spark.table("t"), Row(false, Map(true -> "abc")))
-      }
-      withTable("t") {
-        sql(
-          s"""
+        withTable("t") {
+          sql(
+            s"""
             create table t(
               i int,
               s struct<
@@ -1572,44 +1591,45 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
                 array(
                   map(false, 'def', true, 'jkl'))))
               using ${config.dataSource}""")
-        sql("insert into t select 1, default")
-        sql("alter table t alter column s drop default")
-        if (config.useDataFrames) {
-          Seq((2, null)).toDF.write.insertInto("t")
-        } else {
-          sql("insert into t select 2, default")
-        }
-        sql(
-          """
+          sql("insert into t select 1, default")
+          sql("alter table t alter column s drop default")
+          if (config.useDataFrames) {
+            Seq((2, null)).toDF.write.insertInto("t")
+          } else {
+            sql("insert into t select 2, default")
+          }
+          sql(
+            """
             alter table t alter column s
             set default struct(
               array(
                 struct(3, 4)),
               array(
                 map(false, 'mno', true, 'pqr')))""")
-        sql("insert into t select 3, default")
-        sql(
-          """
+          sql("insert into t select 3, default")
+          sql(
+            """
             alter table t
             add column t array<
               map<boolean, string>>
             default array(
               map(true, 'xyz'))""")
-        sql("insert into t(i, s) select 4, default")
-        checkAnswer(spark.table("t"),
-          Seq(
-            Row(1,
-              Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
-              Seq(Map(true -> "xyz"))),
-            Row(2,
-              null,
-              Seq(Map(true -> "xyz"))),
-            Row(3,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz"))),
-            Row(4,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz")))))
+          sql("insert into t(i, s) select 4, default")
+          checkAnswer(spark.table("t"),
+            Seq(
+              Row(1,
+                Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
+                Seq(Map(true -> "xyz"))),
+              Row(2,
+                null,
+                Seq(Map(true -> "xyz"))),
+              Row(3,
+                Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
+                Seq(Map(true -> "xyz"))),
+              Row(4,
+                Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
+                Seq(Map(true -> "xyz")))))
+        }
       }
     }
     // Negative tests: provided map element types must match their corresponding DEFAULT
@@ -1621,23 +1641,32 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         "parquet",
         true)).foreach { config =>
       withTable("t") {
-        sql(s"create table t(i boolean) using ${config.dataSource}")
-        if (config.useDataFrames) {
-          Seq((false)).toDF.write.insertInto("t")
-        } else {
-          sql("insert into t select false")
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"${config.dataSource}, ") {
+          sql(s"create table t(i boolean) using ${config.dataSource}")
+          if (config.useDataFrames) {
+            Seq((false)).toDF.write.insertInto("t")
+          } else {
+            sql("insert into t select false")
+          }
+          checkV1AndV2Error(
+            exception = intercept[AnalysisException] {
+              sql("alter table t add column s map<boolean, string> default map(42, 56)")
+            },
+            v1ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v2ErrorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+            v1Parameters = Map(
+              "statement" -> "ALTER TABLE ADD COLUMNS",
+              "colName" -> "`s`",
+              "expectedType" -> "\"MAP<BOOLEAN, STRING>\"",
+              "defaultValue" -> "map(42, 56)",
+              "actualType" -> "\"MAP<INT, INT>\""),
+            v2Parameters = Map(
+              "statement" -> "ALTER TABLE",
+              "colName" -> "`s`",
+              "expectedType" -> "\"MAP<BOOLEAN, STRING>\"",
+              "defaultValue" -> "map(42, 56)",
+              "actualType" -> "\"MAP<INT, INT>\""))
         }
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("alter table t add column s map<boolean, string> default map(42, 56)")
-          },
-          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
-          parameters = Map(
-            "statement" -> "ALTER TABLE ADD COLUMNS",
-            "colName" -> "`s`",
-            "expectedType" -> "\"MAP<BOOLEAN, STRING>\"",
-            "defaultValue" -> "map(42, 56)",
-            "actualType" -> "\"MAP<INT, INT>\""))
       }
     }
   }

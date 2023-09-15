@@ -22,7 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, NonEmptyNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
@@ -139,8 +141,32 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    def createNewData(
+        data: Array[BufferedRows],
+        newValues: Seq[Any] => Seq[Any]): Array[BufferedRows] = {
+      data.map { bufferedRow =>
+        val newRow = bufferedRow.rows.map { row =>
+          InternalRow.fromSeq(newValues(row.toSeq(table.schema)))
+        }
+        val newBufferedRow = new BufferedRows(bufferedRow.key)
+        newBufferedRow.rows ++= newRow
+        newBufferedRow
+      }
+    }
+    val newData = changes.foldLeft(table.data) { (data, change) =>
+      change match {
+        case addColumn: AddColumn =>
+          val defaultValue = Option(addColumn.defaultValue()).map(_.getValue.value()).orNull
+          createNewData(data, values => values :+ defaultValue)
+        case deleteColumn: DeleteColumn =>
+          val index = table.schema.map(_.name).indexOf(deleteColumn.fieldNames().last)
+          createNewData(data, values => values.take(index) ++ values.drop(index + 1))
+        case _ =>
+          data
+      }
+    }
     val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
-      .withData(table.data)
+      .withData(newData)
 
     tables.put(ident, newTable)
 
