@@ -7313,14 +7313,14 @@ object functions {
    * schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e
-   * a string column containing XML data.
+   *   a string column containing XML data.
    * @param schema
-   * the schema to use when parsing the XML string
+   *   the schema to use when parsing the XML string
    * @param options
-   * options to control how the XML is parsed. accepts the same options and the XML data source.
-   * See <a href=
-   * "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
-   * Source Option</a> in the version you use.
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    * @since 4.0.0
    */
@@ -7331,18 +7331,18 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * (Java-specific) Parses a column containing a XML string into a `StructType`
-   * with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema as a DDL-formatted string.
-   * @param options options to control how the XML is parsed. accepts the same options and the
-   *                xml data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema as a DDL-formatted string.
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the xml data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    * @since 4.0.0
    */
@@ -7354,27 +7354,25 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * (Scala-specific) Parses a column containing a XML string into a `StructType`
-   * with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema as a DDL-formatted string.
-   * @param options options to control how the XML is parsed. accepts the same options and the
-   *                Xml data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema as a DDL-formatted string.
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the Xml data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
    * @group collection_funcs
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: Map[String, String]): Column = {
-    val dataType = parseTypeWithFallback(
-      schema,
-      DataType.fromJson,
-      fallbackParser = DataType.fromDDL)
+    val dataType =
+      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
     val structType = dataType match {
       case t: StructType => t
       case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
@@ -7384,11 +7382,13 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * (Java-specific) Parses a column containing a XML string into a `StructType`
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e      a string column containing XML data.
-   * @param schema the schema to use when parsing the XML string
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
    * @group collection_funcs
    * @since 4.0.0
    */
