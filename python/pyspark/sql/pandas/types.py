@@ -60,7 +60,6 @@ if TYPE_CHECKING:
 
 def to_arrow_type(dt: DataType) -> "pa.DataType":
     """Convert Spark data type to pyarrow type"""
-    from distutils.version import LooseVersion
     import pyarrow as pa
 
     if type(dt) == BooleanType:
