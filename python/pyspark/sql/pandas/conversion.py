@@ -26,7 +26,6 @@ from typing import (
     TYPE_CHECKING,
 )
 from warnings import warn
-import pandas as pd
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
@@ -374,7 +373,6 @@ class SparkConversionMixin:
         list
             list of records
         """
-        import pandas as pd
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
@@ -384,6 +382,7 @@ class SparkConversionMixin:
                 _check_series_convert_timestamps_tz_local,
                 _get_local_timezone,
             )
+            import pandas as pd
             from pandas.core.dtypes.common import is_timedelta64_dtype
 
             copied = False
@@ -584,6 +583,7 @@ class SparkConversionMixin:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
+        import pandas as pd
         from pandas.api.types import (  # type: ignore[attr-defined]
             is_datetime64_dtype,
         )
