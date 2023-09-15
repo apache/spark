@@ -422,26 +422,15 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Bucket continuous features, with includeLowest=false") {
 
-    val df = Seq(
-      (0.1, -0.1),
-      (1.1, 0.0),
-      (2.2, 5.5),
-      (1.0, 5.6),
-      (2.0, 22.2)
-    )
+    val df = Seq((0.1, -0.1), (1.1, 0.0), (2.2, 5.5), (1.0, 5.6), (2.0, 22.2))
       .toDF("c1", "c2")
 
     val splits = Array(
       Array(Double.NegativeInfinity, 1.0, 2.0, Double.PositiveInfinity),
       Array(Double.NegativeInfinity, 5.5, Double.PositiveInfinity))
 
-    val expectedBuckets = Array(
-      Array(0D, 0D),
-      Array(1D, 0D),
-      Array(2D, 0D),
-      Array(0D, 1D),
-      Array(1D, 1D),
-    )
+    val expectedBuckets = Array(Array(0D, 0D), Array(1D, 0D),
+      Array(2D, 0D), Array(0D, 1D), Array(1D, 1D))
 
     val inputCols = Array("c1", "c2")
     val outputCols = Array("o1", "o2")
@@ -480,7 +469,8 @@ private object BucketizerSuite extends SparkFunSuite {
   /** Check all values in splits, plus values between all splits. */
   def checkBinarySearch(splits: Array[Double]): Unit = {
     def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, feature, false, true) === expectedBucket,
+      assert(Bucketizer.binarySearchForBuckets(splits, feature, false,
+        true) === expectedBucket,
         s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
           s" ${splits.mkString(", ")}")
     }
