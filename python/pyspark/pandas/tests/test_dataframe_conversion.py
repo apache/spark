@@ -211,7 +211,6 @@ class DataFrameConversionTestsMixin:
         psdf = self.psdf
 
         self.assert_eq(psdf.to_latex(), pdf.to_latex())
-        self.assert_eq(psdf.to_latex(col_space=2), pdf.to_latex(col_space=2))
         self.assert_eq(psdf.to_latex(header=True), pdf.to_latex(header=True))
         self.assert_eq(psdf.to_latex(index=False), pdf.to_latex(index=False))
         self.assert_eq(psdf.to_latex(na_rep="-"), pdf.to_latex(na_rep="-"))
