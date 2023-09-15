@@ -302,7 +302,6 @@ class MockSparkConnectStub:
         return self._attach_ops
 
     def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
-        print(req)
         if req.HasField("release_all"):
             self.release_calls += 1
         elif req.HasField("release_until"):
