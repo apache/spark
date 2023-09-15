@@ -52,19 +52,6 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("executors")
   def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
 
-  private def checkExecutorId(execId: String): Unit = {
-    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
-      throw new BadParameterException(
-        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-    }
-  }
-
-  private def checkAndGetSparkContext(): SparkContext = withUI { ui =>
-    ui.sc.getOrElse {
-      throw new ServiceUnavailable("Thread dumps not available through the history server.")
-    }
-  }
-
   @GET
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
@@ -193,6 +180,18 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     classOf[OneApplicationAttemptResource]
   }
 
+  private def checkExecutorId(execId: String): Unit = {
+    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
+      throw new BadParameterException(
+        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+    }
+  }
+
+  private def checkAndGetSparkContext(): SparkContext = withUI { ui =>
+    ui.sc.getOrElse {
+      throw new ServiceUnavailable("Thread dumps not available through the history server.")
+    }
+  }
 }
 
 private[v1] class OneApplicationResource extends AbstractApplicationResource {
