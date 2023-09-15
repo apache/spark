@@ -415,8 +415,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      commonUtils, sqlApi
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient
     ).contains(x)
   }
 
@@ -996,8 +995,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
   )
 }
 

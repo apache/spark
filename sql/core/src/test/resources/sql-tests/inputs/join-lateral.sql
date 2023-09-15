@@ -504,6 +504,33 @@ SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) 
 -- expect error
 SELECT t.* FROM t1, LATERAL stack(c1, c2);
 
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery
+select * from t1 join lateral (select * from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2 limit 1);
+
+select * from t1 join lateral (select * from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 10);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2
+                               group by t2.c1
+                               order by m);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t4 where t1.c1 = t4.c1
+                               group by t4.c1
+                               limit 1);
+
+select * from t1 join lateral
+  ((select t4.c2 from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 1)
+   union all
+   (select t4.c1 from t4 where t1.c1 = t4.c1 order by t4.c1 limit 3));
+
+select * from t1 join lateral
+  (select * from
+   ((select t4.c2 as t from t4 where t1.c1 <= t4.c1)
+   union all
+   (select t4.c1 as t from t4 where t1.c1 = t4.c1)) as foo
+   order by foo.t limit 5);
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

@@ -18,7 +18,6 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
-import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 
@@ -599,39 +598,17 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   /**
    * Run the Spark SQL CLI main class with the "--help" option and catch its output. Then filter
    * the results to remove unwanted lines.
-   *
-   * Since the CLI will call `System.exit()`, we install a security manager to prevent that call
-   * from working, and restore the original one afterwards.
    */
   private def getSqlShellOptions(): String = {
     val currentOut = System.out
     val currentErr = System.err
-    val currentSm = System.getSecurityManager()
     try {
       val out = new ByteArrayOutputStream()
       val stream = new PrintStream(out)
       System.setOut(stream)
       System.setErr(stream)
 
-      val sm = new SecurityManager() {
-        override def checkExit(status: Int): Unit = {
-          throw new SecurityException()
-        }
-
-        override def checkPermission(perm: java.security.Permission): Unit = {}
-      }
-      System.setSecurityManager(sm)
-
-      try {
-        Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
-      } catch {
-        case e: InvocationTargetException =>
-          // Ignore SecurityException, since we throw it above.
-          if (!e.getCause().isInstanceOf[SecurityException]) {
-            throw e
-          }
-      }
-
+      Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
@@ -641,7 +618,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         }
         .mkString("\n")
     } finally {
-      System.setSecurityManager(currentSm)
       System.setOut(currentOut)
       System.setErr(currentErr)
     }

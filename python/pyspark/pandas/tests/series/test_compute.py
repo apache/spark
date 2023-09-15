@@ -114,34 +114,18 @@ class SeriesComputeMixin:
         self.assert_eq(str_psser.clip(1, 3), str_psser)
 
     def test_compare(self):
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            pser = pd.Series([1, 2])
-            psser = ps.from_pandas(pser)
+        pser = pd.Series([1, 2])
+        psser = ps.from_pandas(pser)
 
-            res_psdf = psser.compare(psser)
-            self.assertTrue(res_psdf.empty)
-            self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
+        res_psdf = psser.compare(psser)
+        self.assertTrue(res_psdf.empty)
+        self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
 
-            self.assert_eq(
-                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
-            )
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
 
-            pser = pd.Series([1, 2], index=["x", "y"])
-            psser = ps.from_pandas(pser)
-            self.assert_eq(
-                pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index()
-            )
-        else:
-            psser = ps.Series([1, 2])
-            res_psdf = psser.compare(psser)
-            self.assertTrue(res_psdf.empty)
-            self.assert_eq(res_psdf.columns, pd.Index(["self", "other"]))
-            expected = ps.DataFrame([[1, 2], [2, 3]], columns=["self", "other"])
-            self.assert_eq(expected, psser.compare(psser + 1).sort_index())
-
-            psser = ps.Series([1, 2], index=["x", "y"])
-            expected = ps.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
-            self.assert_eq(expected, psser.compare(psser + 1).sort_index())
+        pser = pd.Series([1, 2], index=["x", "y"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.compare(pser + 1).sort_index(), psser.compare(psser + 1).sort_index())
 
     def test_concat(self):
         pser1 = pd.Series([1, 2, 3], name="0")
@@ -292,27 +276,11 @@ class SeriesComputeMixin:
         pser = pd.Series(["a", "b", "c", "a"], dtype="category")
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-            self.assert_eq(psser.pop(0), pser.pop(0))
-            self.assert_eq(psser, pser)
+        self.assert_eq(psser.pop(0), pser.pop(0))
+        self.assert_eq(psser, pser)
 
-            self.assert_eq(psser.pop(3), pser.pop(3))
-            self.assert_eq(psser, pser)
-        else:
-            # Before pandas 1.3.0, `pop` modifies the dtype of categorical series wrongly.
-            self.assert_eq(psser.pop(0), "a")
-            self.assert_eq(
-                psser,
-                pd.Series(
-                    pd.Categorical(["b", "c", "a"], categories=["a", "b", "c"]), index=[1, 2, 3]
-                ),
-            )
-
-            self.assert_eq(psser.pop(3), "a")
-            self.assert_eq(
-                psser,
-                pd.Series(pd.Categorical(["b", "c"], categories=["a", "b", "c"]), index=[1, 2]),
-            )
+        self.assert_eq(psser.pop(3), pser.pop(3))
+        self.assert_eq(psser, pser)
 
     def test_duplicates(self):
         psers = {
@@ -343,14 +311,8 @@ class SeriesComputeMixin:
         self.assert_eq(psser1.truncate(after=5), pser1.truncate(after=5))
         self.assert_eq(psser1.truncate(copy=False), pser1.truncate(copy=False))
         self.assert_eq(psser1.truncate(2, 5, copy=False), pser1.truncate(2, 5, copy=False))
-        # The bug for these tests has been fixed in pandas 1.1.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            self.assert_eq(psser2.truncate(4, 6), pser2.truncate(4, 6))
-            self.assert_eq(psser2.truncate(4, 6, copy=False), pser2.truncate(4, 6, copy=False))
-        else:
-            expected_psser = ps.Series([20, 30, 40], index=[6, 5, 4])
-            self.assert_eq(psser2.truncate(4, 6), expected_psser)
-            self.assert_eq(psser2.truncate(4, 6, copy=False), expected_psser)
+        self.assert_eq(psser2.truncate(4, 6), pser2.truncate(4, 6))
+        self.assert_eq(psser2.truncate(4, 6, copy=False), pser2.truncate(4, 6, copy=False))
 
         psser = ps.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 3, 2, 1])
         msg = "truncate requires a sorted index"
@@ -482,9 +444,6 @@ class SeriesComputeMixin:
         #
         # Deals with na_sentinel
         #
-        # pandas >= 1.1.2 support na_sentinel=None
-        #
-        pd_below_1_1_2 = LooseVersion(pd.__version__) < LooseVersion("1.1.2")
 
         pser = pd.Series(["a", "b", "a", np.nan, None])
         psser = ps.from_pandas(pser)
@@ -499,19 +458,18 @@ class SeriesComputeMixin:
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
-        if not pd_below_1_1_2:
-            pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=None)
-            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
-            self.assert_eq(pcodes.tolist(), kcodes.to_list())
-            # puniques is Index(['a', 'b', nan], dtype='object')
-            self.assert_eq(ps.Index(["a", "b", None]), kuniques)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=None)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
+        # puniques is Index(['a', 'b', nan], dtype='object')
+        self.assert_eq(ps.Index(["a", "b", None]), kuniques)
 
-            psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
-            psser.loc[3] = np.nan  # Spark takes np.nan as NaN
-            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
-            pcodes, puniques = psser._to_pandas().factorize(sort=True, use_na_sentinel=None)
-            self.assert_eq(pcodes.tolist(), kcodes.to_list())
-            self.assert_eq(puniques, kuniques)
+        psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
+        psser.loc[3] = np.nan  # Spark takes np.nan as NaN
+        kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+        pcodes, puniques = psser._to_pandas().factorize(sort=True, use_na_sentinel=None)
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
+        self.assert_eq(puniques, kuniques)
 
     def test_explode(self):
         pser = pd.Series([[1, 2, 3], [], None, [3, 4]])

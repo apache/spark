@@ -16,7 +16,6 @@
 #
 
 import datetime
-import unittest
 
 from distutils.version import LooseVersion
 
@@ -96,9 +95,8 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(psidx.is_year_end, pd.Index(pidx.is_year_end))
             self.assert_eq(psidx.is_leap_year, pd.Index(pidx.is_leap_year))
 
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-                self.assert_eq(psidx.day_of_year, pidx.day_of_year)
-                self.assert_eq(psidx.day_of_week, pidx.day_of_week)
+            self.assert_eq(psidx.day_of_year, pidx.day_of_year)
+            self.assert_eq(psidx.day_of_week, pidx.day_of_week)
 
         if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
             # TODO(SPARK-42617): Support isocalendar.week and replace it.

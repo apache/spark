@@ -68,7 +68,10 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.expressions import (
+    UnresolvedRegex,
+    GetColumnByOrdinal,
+)
 from pyspark.sql.connect.functions import (
     _to_col_with_plan_id,
     _to_col,
@@ -512,6 +515,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -529,6 +538,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -1642,10 +1657,10 @@ class DataFrame:
         ...
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
-        if isinstance(item, str):
-            if self._plan is None:
-                raise SparkConnectException("Cannot analyze on empty plan.")
+        if self._plan is None:
+            raise SparkConnectException("Cannot analyze on empty plan.")
 
+        if isinstance(item, str):
             # validate the column name
             if not hasattr(self._session, "is_mock_session"):
                 self.select(item).isLocal()
@@ -1659,7 +1674,15 @@ class DataFrame:
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            return col(self.columns[item])
+            n = len(self.columns)
+            # 1, convert bool; 2, covert negative index; 3, validate index
+            item = range(0, n)[int(item)]
+            return Column(
+                GetColumnByOrdinal(
+                    ordinal=item,
+                    plan_id=self._plan._plan_id,
+                )
+            )
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",

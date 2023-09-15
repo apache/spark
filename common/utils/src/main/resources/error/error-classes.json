@@ -1587,7 +1587,7 @@
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
     ]
   },
   "INVALID_IDENTIFIER" : {
@@ -3444,23 +3444,6 @@
       }
     }
   },
-  "UNSUPPORTED_TEMP_VIEW_OPERATION" : {
-    "message" : [
-      "The temp view <tempViewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
-  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -4942,16 +4925,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2015" : {
-    "message" : [
-      "Cannot generate <codeType> code for incomparable type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2016" : {
-    "message" : [
-      "Can not interpolate <arg> into code block."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {

@@ -23,11 +23,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -46,7 +45,8 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame)
+  extends Expression with WindowSpec with Unevaluable with DataTypeErrorsBase {
 
   override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
@@ -197,7 +197,7 @@ case class SpecifiedWindowFrame(
     frameType: FrameType,
     lower: Expression,
     upper: Expression)
-  extends WindowFrame with BinaryLike[Expression] {
+  extends WindowFrame with BinaryLike[Expression] with QueryErrorsBase {
 
   override def left: Expression = lower
   override def right: Expression = upper
@@ -439,7 +439,10 @@ trait OffsetWindowFunction extends WindowFunction {
  * will get the value of x 2 rows back from the current row in the partition.
  */
 sealed abstract class FrameLessOffsetWindowFunction
-  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
+  extends OffsetWindowFunction
+  with Unevaluable
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -464,7 +467,7 @@ sealed abstract class FrameLessOffsetWindowFunction
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "offset",
+          "inputName" -> toSQLId("offset"),
           "inputType" -> toSQLType(offset.dataType),
           "inputExpr" -> toSQLExpr(offset)
         )
@@ -744,7 +747,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "offset",
+          "inputName" -> toSQLId("offset"),
           "inputType" -> toSQLType(offset.dataType),
           "inputExpr" -> toSQLExpr(offset)
         )
@@ -853,7 +856,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "buckets",
+          "inputName" -> toSQLId("buckets"),
           "inputType" -> toSQLType(buckets.dataType),
           "inputExpr" -> toSQLExpr(buckets)
         )

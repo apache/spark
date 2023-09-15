@@ -22,7 +22,7 @@ import io.grpc.ManagedChannel
 
 import org.apache.spark.connect.proto._
 
-private[client] class CustomSparkConnectBlockingStub(
+private[connect] class CustomSparkConnectBlockingStub(
     channel: ManagedChannel,
     retryPolicy: GrpcRetryHandler.RetryPolicy) {
 
