@@ -46,7 +46,7 @@ private[spark] class TaskThreadDumpPage(
       val decoded = UIUtils.decodeURLParameter(taskId)
       decoded.toLong
     }.getOrElse {
-      throw new IllegalArgumentException(s"Missing executorId parameter")
+      throw new IllegalArgumentException(s"Missing taskId parameter")
     }
 
     val time = System.currentTimeMillis()
