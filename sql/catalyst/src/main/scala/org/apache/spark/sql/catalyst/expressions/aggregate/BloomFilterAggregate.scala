@@ -83,7 +83,7 @@ case class BloomFilterAggregate(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "estimatedNumItems",
+              "inputName" -> toSQLId("estimatedNumItems"),
               "inputType" -> toSQLType(estimatedNumItemsExpression.dataType),
               "inputExpr" -> toSQLExpr(estimatedNumItemsExpression)
             )
@@ -101,7 +101,7 @@ case class BloomFilterAggregate(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "numBitsExpression",
+              "inputName" -> toSQLId("numBitsExpression"),
               "inputType" -> toSQLType(numBitsExpression.dataType),
               "inputExpr" -> toSQLExpr(numBitsExpression)
             )

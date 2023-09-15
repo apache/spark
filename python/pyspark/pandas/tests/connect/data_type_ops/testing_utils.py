@@ -17,13 +17,11 @@
 
 import datetime
 import decimal
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.typedef import extension_dtypes
 
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -50,20 +48,13 @@ class OpsTestBase:
         sers = [pd.Series([1, 2, 3], dtype=dtype) for dtype in dtypes]
         sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]))
         sers.append(pd.Series([1, 2, np.nan], dtype=float))
-        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-            sers.append(
-                pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)])
-            )
+        sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)]))
         pdf = pd.concat(sers, axis=1)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-            pdf.columns = [dtype.__name__ for dtype in dtypes] + [
-                "decimal",
-                "float_nan",
-                "decimal_nan",
-            ]
-        else:
-            pdf.columns = [dtype.__name__ for dtype in dtypes] + ["decimal", "float_nan"]
+        pdf.columns = [dtype.__name__ for dtype in dtypes] + [
+            "decimal",
+            "float_nan",
+            "decimal_nan",
+        ]
         return pdf
 
     @property
@@ -218,9 +209,4 @@ class OpsTestBase:
         This utility is to adjust an issue for comparing numeric ExtensionDtypes in specific
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
-        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(left, right, check_exact=False)
-            self.assertTrue(isinstance(left.dtype, extension_dtypes))
-            self.assertTrue(isinstance(right.dtype, extension_dtypes))
-        else:
-            self.assert_eq(left, right)
+        self.assert_eq(left, right)

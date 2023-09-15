@@ -293,7 +293,9 @@ def spark_type_to_pandas_dtype(
         ),
     ):
         return np.dtype("object")
-    elif isinstance(spark_type, types.TimestampType):
+    elif isinstance(spark_type, types.DayTimeIntervalType):
+        return np.dtype("timedelta64[ns]")
+    elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
         return np.dtype("datetime64[ns]")
     else:
         return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())

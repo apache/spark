@@ -181,7 +181,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "n",
+          "inputName" -> toSQLId("n"),
           "inputType" -> toSQLType(IntegerType),
           "inputExpr" -> toSQLExpr(children.head)
         )
