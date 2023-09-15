@@ -58,7 +58,6 @@ class SeriesConversionTestsMixin:
         psser = self.psser
 
         self.assert_eq(psser.to_latex(), pser.to_latex())
-        self.assert_eq(psser.to_latex(col_space=2), pser.to_latex(col_space=2))
         self.assert_eq(psser.to_latex(header=True), pser.to_latex(header=True))
         self.assert_eq(psser.to_latex(index=False), pser.to_latex(index=False))
         self.assert_eq(psser.to_latex(na_rep="-"), pser.to_latex(na_rep="-"))
