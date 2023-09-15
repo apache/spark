@@ -40,10 +40,6 @@ class GroupbyIndexMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43555): Enable GroupByTests.test_groupby_multiindex_columns for pandas 2.0.0.",
-    )
     def test_groupby_multiindex_columns(self):
         pdf = pd.DataFrame(
             {
