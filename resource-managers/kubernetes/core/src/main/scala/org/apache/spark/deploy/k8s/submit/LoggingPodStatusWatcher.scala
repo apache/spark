@@ -16,11 +16,15 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants.DEFAULT_DRIVER_CONTAINER_NAME
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
@@ -28,6 +32,14 @@ import org.apache.spark.internal.Logging
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
+
+  /**
+   * Get spark driver container exit code.
+   * Will return [[SparkException]], when call getDriverExitCode if app is not completed.
+   * Will return [[SparkException]], when can't find specify spark driver container.
+   * @return exit code from driver container
+   */
+  def getDriverExitCode(): Option[Int]
 }
 
 /**
@@ -93,6 +105,27 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   private def closeWatch(): Unit = synchronized {
     podCompleted = true
     this.notifyAll()
+  }
+
+  override def getDriverExitCode(): Option[Int] = synchronized {
+    if (hasCompleted()) {
+      val driverContainerName = conf.get(KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME)
+        .getOrElse(DEFAULT_DRIVER_CONTAINER_NAME)
+      pod.foreach { p =>
+        try {
+          return Some(p.getStatus.getContainerStatuses.asScala
+            .filter(driverContainerName == _.getName)
+            .head.getState.getTerminated.getExitCode)
+        } catch {
+          case _: NullPointerException =>
+            logError("Fail to find completed driver container exit code")
+            return None
+        }
+      }
+      throw new SparkException(s"Fail to find driver container named: $driverContainerName")
+    } else {
+      throw new SparkException("Call getDriverExitCode() when the application has not completed")
+    }
   }
 
   override def watchOrStop(sId: String): Boolean = {
