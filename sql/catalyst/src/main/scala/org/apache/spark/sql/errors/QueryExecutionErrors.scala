@@ -2251,7 +2251,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def failedToCommitStateFileError(providerClass: String, f: Throwable): Throwable = {
     new SparkException(
-      errorClass = "CANNOT_WRITE_STATE_FILE.CANNOT_COMMIT",
+      errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",
       messageParameters = Map("providerClass" -> providerClass),
       cause = f)
   }

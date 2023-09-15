@@ -98,7 +98,7 @@ private[sql] class RocksDBStateStoreProvider
         newVersion
       } catch {
         case e: Throwable =>
-          throw QueryExecutionErrors.failedToCommitStateFileError("RocksDB", e)
+          throw QueryExecutionErrors.failedToCommitStateFileError(this.toString(), e)
       }
     }
 

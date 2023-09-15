@@ -314,7 +314,7 @@
       "<details>"
     ]
   },
-  "CANNOT_WRITE_STATE_FILE" : {
+  "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
     ],

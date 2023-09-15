@@ -143,7 +143,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         newVersion
       } catch {
         case e: Throwable =>
-          throw QueryExecutionErrors.failedToCommitStateFileError("HDFS", e)
+          throw QueryExecutionErrors.failedToCommitStateFileError(this.toString(), e)
       }
     }
 
