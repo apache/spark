@@ -2449,9 +2449,21 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       executeHolder: ExecuteHolder): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
+    val arguments = getSqlCommand.getArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
+    val posArguments = getSqlCommand.getPosArgumentsList
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
-    val df = if (!args.isEmpty) {
+    val df = if (!arguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        arguments.asScala.mapValues(transformExpression).toMap,
+        tracker)
+    } else if (!posArguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        posArguments.asScala.map(transformExpression).toArray,
+        tracker)
+    } else if (!args.isEmpty) {
       session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
