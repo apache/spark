@@ -125,7 +125,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endConfigMap()
           .build()
       } else {
-        val krb5Conf = new File(krb5File.get)
+        val krb5Conf = KubernetesUtils.loadFileToLocal(krb5File.get, kubernetesConf.sparkConf)
         new VolumeBuilder()
           .withName(KRB_FILE_VOLUME)
           .withNewConfigMap()
@@ -222,7 +222,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     Seq[HasMetadata]() ++ {
       krb5File.map { path =>
-        val file = new File(path)
+        val file = KubernetesUtils.loadFileToLocal(path, kubernetesConf.sparkConf)
         new ConfigMapBuilder()
           .withNewMetadata()
             .withName(newConfigMapName)

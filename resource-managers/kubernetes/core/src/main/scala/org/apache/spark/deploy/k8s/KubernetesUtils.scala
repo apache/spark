@@ -98,10 +98,8 @@ object KubernetesUtils extends Logging {
       templateFileName: String,
       containerName: Option[String],
       conf: SparkConf): SparkPod = {
+    val templateFile = loadFileToLocal(templateFileName, conf)
     try {
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
-      val templateFile = new File(new java.net.URI(localFile).getPath)
       val pod = kubernetesClient.pods().load(templateFile).item()
       selectSparkContainer(pod, containerName)
     } catch {
@@ -109,6 +107,22 @@ object KubernetesUtils extends Logging {
         logError(
           s"Encountered exception while attempting to load initial pod spec from file", e)
         throw new SparkException("Could not load pod from template file.", e)
+    }
+  }
+
+  @Since("4.0.0")
+  def loadFileToLocal(
+      filePath: String,
+      conf: SparkConf): File = {
+    try {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val localFile = downloadFile(filePath, Utils.createTempDir(), conf, hadoopConf)
+      new File(new java.net.URI(localFile).getPath)
+    } catch {
+      case e: Exception =>
+        logError(
+          s"Encountered exception while attempting to load $filePath to local directory", e)
+          throw new SparkException(s"Could not load $filePath to local directory.", e)
     }
   }
 

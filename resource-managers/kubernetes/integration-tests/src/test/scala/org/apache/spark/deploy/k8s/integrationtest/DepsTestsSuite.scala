@@ -31,6 +31,7 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
+import org.apache.spark.deploy.k8s.Constants.KRB_FILE_VOLUME
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
@@ -201,6 +202,42 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         // downloaded both the local and the remote file
         expectedExecutorLogOnCompletion = Seq(localFileName, remoteFileName),
         driverPodChecker = doBasicDriverPodCheck,
+        executorPodChecker = doBasicExecutorPodCheck,
+        isJVM = true
+      )
+    })
+  }
+
+  test(
+    "SPARK-45175: download krb5.conf from remote storage in spark-submit on k8s",
+    k8sTestTag,
+    MinikubeTag) {
+    tryDepsTest({
+      // Create a remote file on S3
+      val remoteFileName = "krb5.conf"
+      val remoteFileKey = s"some-path/$remoteFileName"
+      createS3Object(remoteFileKey, "Some Content")
+      val remoteFileFullPath = s"s3a://$BUCKET/$remoteFileKey"
+
+      def checkDriverPodKerberos(driverPod: Pod): Unit = {
+        val volume =
+          driverPod.getSpec.getVolumes.stream().filter(_.getName === KRB_FILE_VOLUME).findFirst()
+        assert(volume.isPresent)
+        assert(volume.get().getConfigMap.getItems.size() === 1)
+        assert(volume.get().getConfigMap.getItems.get(0).getPath.contains(remoteFileName))
+        assert(volume.get().getConfigMap.getItems.get(0).getKey.contains(remoteFileName))
+      }
+
+      // Put remote file in spark.kubernetes.kerberos.krb5.path
+      sparkAppConf.set("spark.kubernetes.kerberos.krb5.path", remoteFileFullPath)
+      // Run SparkPi and make sure that krb5.conf have been properly downloaded and set
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkApplicationAndVerifyCompletion(
+        appResource = examplesJar,
+        mainClass = SPARK_PI_MAIN_CLASS,
+        appArgs = Array(),
+        expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
+        driverPodChecker = checkDriverPodKerberos,
         executorPodChecker = doBasicExecutorPodCheck,
         isJVM = true
       )
