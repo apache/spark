@@ -2854,7 +2854,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
-  def tableIsNotViewError(name: TableIdentifier, replace: Boolean): Throwable = {
+  def unsupportedCreateOrReplaceViewOnTableError(
+      name: TableIdentifier, replace: Boolean): Throwable = {
     val operation = if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
