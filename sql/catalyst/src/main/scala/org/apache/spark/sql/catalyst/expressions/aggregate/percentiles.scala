@@ -90,7 +90,7 @@ abstract class PercentileBase
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage",
+          "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(percentageExpression.dataType),
           "inputExpr" -> toSQLExpr(percentageExpression))
       )

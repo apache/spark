@@ -31,6 +31,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``Series.mad`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``na_sentinel`` parameter from ``Index.factorize`` and ``Series.factorize`` has been removed from pandas API on Spark, use ``use_na_sentinel`` instead.
 * In Spark 4.0, ``inplace`` parameter from ``Categorical.add_categories``, ``Categorical.remove_categories``, ``Categorical.set_categories``, ``Categorical.rename_categories``, ``Categorical.reorder_categories``, ``Categorical.as_ordered``, ``Categorical.as_unordered`` have been removed from pandas API on Spark.
+* In Spark 4.0, ``inplace`` parameter from ``CategoricalIndex.add_categories``, ``CategoricalIndex.remove_categories``, ``CategoricalIndex.remove_unused_categories``, ``CategoricalIndex.set_categories``, ``CategoricalIndex.rename_categories``, ``CategoricalIndex.reorder_categories``, ``CategoricalIndex.as_ordered``, ``CategoricalIndex.as_unordered`` have been removed from pandas API on Spark.
 * In Spark 4.0, ``closed`` parameter from ``ps.date_range`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``DataFrame.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
 * In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``Series.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
@@ -41,6 +42,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``squeeze`` parameter from ``ps.read_csv`` and ``ps.read_excel`` has been removed from pandas API on Spark.
 * In Spark 4.0, ``null_counts`` parameter from ``DataFrame.info`` has been removed from pandas API on Spark, use ``show_counts`` instead.
 * In Spark 4.0, the result of ``MultiIndex.append`` does not keep the index names from pandas API on Spark.
+* In Spark 4.0, ``col_space`` parameter from ``DataFrame.to_latex`` and ``Series.to_latex`` has been removed from pandas API on Spark.
 
 
 Upgrading from PySpark 3.3 to 3.4

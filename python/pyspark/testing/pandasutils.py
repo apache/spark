@@ -20,9 +20,8 @@ import shutil
 import tempfile
 import warnings
 from contextlib import contextmanager
-from distutils.version import LooseVersion
 import decimal
-from typing import Any, Union, TYPE_CHECKING
+from typing import Any, Union
 
 import pyspark.pandas as ps
 from pyspark.pandas.frame import DataFrame
@@ -77,18 +76,7 @@ def _assert_pandas_equal(
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
         try:
-            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                kwargs = dict(check_freq=False)
-            else:
-                kwargs = dict()
-
-            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                # Due to https://github.com/pandas-dev/pandas/issues/35446
-                checkExact = (
-                    checkExact
-                    and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
-                    and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
-                )
+            kwargs = dict(check_freq=False)
 
             assert_frame_equal(
                 left,
@@ -110,15 +98,7 @@ def _assert_pandas_equal(
             )
     elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
         try:
-            if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-                kwargs = dict(check_freq=False)
-            else:
-                kwargs = dict()
-            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                # Due to https://github.com/pandas-dev/pandas/issues/35446
-                checkExact = (
-                    checkExact and is_numeric_dtype(left.dtype) and is_numeric_dtype(right.dtype)
-                )
+            kwargs = dict(check_freq=False)
             assert_series_equal(
                 left,
                 right,
@@ -138,11 +118,6 @@ def _assert_pandas_equal(
             )
     elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
         try:
-            if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
-                # Due to https://github.com/pandas-dev/pandas/issues/35446
-                checkExact = (
-                    checkExact and is_numeric_dtype(left.dtype) and is_numeric_dtype(right.dtype)
-                )
             assert_index_equal(left, right, check_exact=checkExact)
         except AssertionError:
             raise PySparkAssertionError(
