@@ -80,7 +80,7 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "class",
+              "inputName" -> toSQLId("class"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(children.head)
             )
@@ -93,7 +93,7 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "method",
+              "inputName" -> toSQLId("method"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(children(1))
             )

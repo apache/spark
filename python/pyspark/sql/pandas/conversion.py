@@ -26,6 +26,7 @@ from typing import (
     TYPE_CHECKING,
 )
 from warnings import warn
+from distutils.version import LooseVersion
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
@@ -125,12 +126,12 @@ class PandasConversionMixin:
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    import pyarrow
+                    import pyarrow as pa
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
                     if len(batches) > 0:
-                        table = pyarrow.Table.from_batches(batches)
+                        table = pa.Table.from_batches(batches)
                         # Ensure only the table has a reference to the batches, so that
                         # self_destruct (if enabled) is effective
                         del batches
@@ -138,6 +139,17 @@ class PandasConversionMixin:
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pandas_options = {"date_as_object": True}
+
+                        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+                            # A legacy option to coerce date32, date64, duration, and timestamp
+                            # time units to nanoseconds when converting to pandas.
+                            # This option can only be added since 13.0.0.
+                            pandas_options.update(
+                                {
+                                    "coerce_temporal_nanoseconds": True,
+                                }
+                            )
+
                         if self_destruct:
                             # Configure PyArrow to use as little memory as possible:
                             # self_destruct - free columns as they are converted
