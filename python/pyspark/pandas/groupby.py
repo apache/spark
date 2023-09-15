@@ -21,7 +21,6 @@ A wrapper for GroupedData to behave like pandas GroupBy.
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
-from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
 from typing import (
@@ -46,12 +45,7 @@ import warnings
 import pandas as pd
 from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
 
-if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
-else:
-    from pandas.core.base import SelectionMixin
-
-    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
+from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
@@ -2700,7 +2694,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             else window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
         )
 
-        if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+        if n >= 0:
             tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
             sdf = (
                 sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
