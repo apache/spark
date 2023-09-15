@@ -588,6 +588,28 @@ object SQLConf {
       .checkValue(_ > 0, "advisoryPartitionSizeInBytes must be positive")
       .createWithDefaultString("64MB")
 
+  val SPLIT_SOURCE_PARTITION_ENABLED =
+    buildConf("spark.sql.splitSourcePartition.enabled")
+      .doc("When true, split source partition.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SPLIT_SOURCE_PARTITION_THRESHOLD =
+    buildConf("spark.sql.splitSourcePartition.thresholdInBytes")
+      .doc("A partition is considered to be split.")
+      .version("3.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1MB")
+
+  val SPLIT_SOURCE_PARTITION_MAXEXPANDNUM =
+    buildConf("spark.sql.splitSourcePartition.maxExpandNum")
+      .doc("The max partition num to split to.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(v => v > 0, "The partition number must be a positive integer.")
+      .createWithDefault(10)
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution, which re-optimizes the query plan in the " +
       "middle of query execution, based on accurate runtime statistics.")
@@ -4161,6 +4183,12 @@ class SQLConf extends Serializable with Logging {
   }
 
   def maxCollectSize: Option[Long] = getConf(SQLConf.MAX_COLLECT_SIZE)
+
+  def splitSourcePartitionEnabled: Boolean = getConf(SPLIT_SOURCE_PARTITION_ENABLED)
+
+  def splitSourcePartitionThreshold: Long = getConf(SPLIT_SOURCE_PARTITION_THRESHOLD)
+
+  def splitSourcePartitionMaxExpandNum: Int = getConf(SPLIT_SOURCE_PARTITION_MAXEXPANDNUM)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

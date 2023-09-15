@@ -652,6 +652,32 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
   }
 
+  def transformOnceWithPruning(breaker: BaseType => Boolean, ruleId: RuleId = UnknownRuleId)(
+    rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    if (breaker.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
+
+    val afterRule = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, identity[BaseType])
+    }
+    // Check if unchanged and then possibly return old copy to avoid gc churn.
+    if (this fastEquals afterRule) {
+      val rewritten_plan =
+        mapChildren(_.transformOnceWithPruning(breaker, ruleId)(rule))
+      if (this eq rewritten_plan) {
+        markRuleAsIneffective(ruleId)
+        this
+      } else {
+        rewritten_plan
+      }
+    } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      afterRule.copyTagsFrom(this)
+      afterRule
+    }
+  }
+
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
