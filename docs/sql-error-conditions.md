@@ -289,6 +289,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 
+### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+
+SQLSTATE: none assigned
+
+class ``<cls>`` is not supported by `MapObjects` as resulting collection.
+
 ### CODEC_NOT_AVAILABLE
 
 SQLSTATE: none assigned
