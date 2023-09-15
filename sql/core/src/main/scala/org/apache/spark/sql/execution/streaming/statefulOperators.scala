@@ -143,7 +143,6 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
-    "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
     "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
       "number of state store instances")
   ) ++ stateStoreCustomMetrics ++ pythonMetrics
@@ -159,6 +158,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
       new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
 
+    // We now don't report number of shuffle partitions inside the state operator. Instead,
+    // it will be filled when the stream query progress is reported
     new StateOperatorProgress(
       operatorName = shortName,
       numRowsTotal = longMetric("numTotalStateRows").value,
@@ -169,7 +170,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
-      numShufflePartitions = longMetric("numShufflePartitions").value,
+      numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
@@ -183,7 +184,6 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
     assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
     // Shuffle partitions capture the number of tasks that have this stateful operator instance.
     // For each task instance this number is incremented by one.
-    longMetric("numShufflePartitions") += 1
     longMetric("numStateStoreInstances") += numStateStoreInstances
   }
 
