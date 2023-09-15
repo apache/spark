@@ -488,7 +488,7 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE ${formattedViewName(viewName)}")
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
         parameters = Map(
           "viewName" -> toSQLId(tableIdentifier(viewName).nameParts),
           "operation" -> "SHOW CREATE TABLE"),

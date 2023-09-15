@@ -460,7 +460,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+      errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
       messageParameters = Map(
         "viewName" -> toSQLId(identifier.nameParts),
         "operation" -> "INSERT"),
@@ -488,9 +488,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = if (suggestAlternative) {
-        "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION"
+        "EXPECT_TABLE_NOT_VIEW"
       } else {
-        "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION"
+        "UNSUPPORTED_FEATURE.VIEW_OPERATION"
       },
       messageParameters = Map(
         "viewName" -> toSQLId(nameParts),
@@ -505,9 +505,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = if (suggestAlternative) {
-        "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION"
+        "EXPECT_VIEW_NOT_TABLE"
       } else {
-        "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION"
+        "UNSUPPORTED_FEATURE.TABLE_OPERATION"
       },
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
@@ -2857,7 +2857,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def tableIsNotViewError(name: TableIdentifier, replace: Boolean): Throwable = {
     val operation = if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
         "tableName" -> toSQLId(name.nameParts),
         "operation" -> operation

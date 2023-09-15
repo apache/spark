@@ -201,4 +201,8 @@ TRANSFORM with the DISTINCT/ALL clause.
 
 TRANSFORM with SERDE is only supported in hive mode.
 
+## VIEW_OPERATION
+
+View `<viewName>` does not support `<operation>`.
+
 

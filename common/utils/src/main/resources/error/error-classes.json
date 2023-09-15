@@ -860,6 +860,16 @@
       "Exceeds char/varchar type length limitation: <limit>."
     ]
   },
+  "EXPECT_TABLE_NOT_VIEW" : {
+    "message" : [
+      "The view <viewName> does not support <operation>, Please use ALTER VIEW instead."
+    ]
+  },
+  "EXPECT_VIEW_NOT_TABLE" : {
+    "message" : [
+      "The table <tableName> does not support <operation>, Please use ALTER TABLE instead."
+    ]
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -3239,6 +3249,11 @@
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
+      },
+      "VIEW_OPERATION" : {
+        "message" : [
+          "View <viewName> does not support <operation>."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -3427,45 +3442,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_OPERATION" : {
-    "message" : [
-      "The table <tableName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER TABLE instead."
-        ]
-      }
-    }
-  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_VIEW_OPERATION" : {
-    "message" : [
-      "The view <viewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
