@@ -76,10 +76,10 @@ private[spark] object Deploy {
     .createWithDefault(Int.MaxValue)
 
   val MAX_DRIVERS = ConfigBuilder("spark.deploy.maxDrivers")
-    .doc("The maximum number of drivers.")
+    .doc("The maximum number of running drivers.")
     .version("4.0.0")
     .intConf
-    .checkValue(_ > 0, "The maximum number of drivers should be positive.")
+    .checkValue(_ > 0, "The maximum number of running drivers should be positive.")
     .createWithDefault(Int.MaxValue)
 
 }
