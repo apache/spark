@@ -228,7 +228,6 @@ class IndexingTest(ComparisonTestBase):
         self.assert_eq(psdf.at[9, 1], pdf.at[9, 1])
 
     def test_at_multiindex(self):
-        pdf = self.pdf.set_index("b", append=True)
         psdf = self.psdf.set_index("b", append=True)
 
         self.assert_eq(psdf.at[(3, 6), "a"], 3)

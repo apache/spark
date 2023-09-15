@@ -32,7 +32,6 @@ import numpy as np
 
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
-from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
