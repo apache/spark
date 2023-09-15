@@ -2456,12 +2456,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val df = if (!arguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        arguments.asScala.mapValues(transformExpression).toMap,
+        arguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
         tracker)
     } else if (!posArguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        posArguments.asScala.map(transformExpression).toArray,
+        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
         tracker)
     } else if (!args.isEmpty) {
       session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
