@@ -21,7 +21,7 @@ check_dependencies(__name__)
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
+from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast, Type
 from multiprocessing.pool import ThreadPool
 import os
 
@@ -54,6 +54,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
     """
 
     _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+
+    @classmethod
+    def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+        """When the channel is closed, this method will be called before to make sure all outstanding calls
+        are closed."""
+        cls._release_thread_pool.close()
+        cls._release_thread_pool.join()
 
     def __init__(
         self,
