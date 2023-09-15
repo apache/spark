@@ -26,6 +26,7 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
@@ -7307,7 +7308,96 @@ object functions {
     from_xml(e, lit(schema.toDDL), options.iterator)
 
   // scalastyle:off line.size.limit
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified
+   * schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   * a string column containing XML data.
+   * @param schema
+   * the schema to use when parsing the XML string
+   * @param options
+   * options to control how the XML is parsed. accepts the same options and the XML data source.
+   * See <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_xml(e, schema, options.asScala.toMap)
 
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                xml data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    from_xml(e, schema, options.asScala.toMap)
+  }
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Scala-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                Xml data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: Map[String, String]): Column = {
+    val dataType = parseTypeWithFallback(
+      schema,
+      DataType.fromJson,
+      fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e      a string column containing XML data.
+   * @param schema the schema to use when parsing the XML string
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column): Column = {
+    from_xml(e, schema, Iterator.empty)
+  }
+
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into the data type corresponding to
    * the specified schema. Returns `null`, in the case of an unparseable string.

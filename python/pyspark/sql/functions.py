@@ -13042,6 +13042,120 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def from_xml(
+    col: "ColumnOrName",
+    schema: Union[StructType, Column, str],
+    options: Optional[Dict[str, str]] = None,
+) -> Column:
+    """
+    Parses a column containing a XML string to a row with
+    the specified schema. Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name in XML format
+    schema : :class:`StructType` or str
+        a StructType or Python string literal with a DDL-formatted string
+        to use when parsing the Xml column
+    options : dict, optional
+        options to control parsing. accepts the same options as the Xml datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of complex type from given XML object.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import *
+    >>> from pyspark.sql.functions import from_xml, schema_of_xml, lit
+    >>> data = [(1, '''<p><a>1</a></p>''')]
+    >>> schema = StructType([StructField("a", IntegerType())])
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=1))]
+    >>> df.select(from_xml(df.value, "a INT").alias("xml")).collect()
+    [Row(xml=Row(a=1))]
+    >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> schema = StructType([StructField("a", ArrayType(IntegerType()))])
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=[1, 2]))]
+    >>> schema = schema_of_xml(lit(data[0][1]))
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=[1, 2]))]
+    """
+
+    if isinstance(schema, StructType):
+        schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
+    elif not isinstance(schema, str):
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+        )
+    return _invoke_function("from_xml", _to_java_column(col), schema, _options_to_str(options))
+
+
+@_try_remote_functions
+def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    """
+    Parses a XML string and infers its schema in DDL format.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    xml : :class:`~pyspark.sql.Column` or str
+        a XML string or a foldable string column containing a XML string.
+    options : dict, optional
+        options to control parsing. accepts the same options as the XML datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+        .. versionchanged:: 4.0.0
+           It accepts `options` parameter to control schema inferring.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string representation of a :class:`StructType` parsed from given XML.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(schema_of_xml(lit('<p><a>1</a></p>')).alias("xml")).collect()
+    [Row(xml='STRUCT<a: BIGINT>')]
+    >>> df.select(schema_of_xml(lit('<p><a>1</a><a>2</a></p>')).alias("xml")).collect()
+    [Row(xml='STRUCT<a: ARRAY<BIGINT>>')]
+    >>> schema = schema_of_xml('<p><a attr="2">1</a></p>', {'excludeAttribute':'true'})
+    >>> df.select(schema.alias("xml")).collect()
+    [Row(xml='STRUCT<a: BIGINT>')]
+    """
+    if isinstance(xml, str):
+        col = _create_column_from_literal(xml)
+    elif isinstance(xml, Column):
+        col = _to_java_column(xml)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+        )
+
+    return _invoke_function("schema_of_xml", col, _options_to_str(options))
+
+
+@_try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
