@@ -965,7 +965,6 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.test_parity_utils",
         "pyspark.pandas.tests.connect.test_parity_window",
         "pyspark.pandas.tests.connect.indexes.test_parity_base",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime",
         "pyspark.pandas.tests.connect.indexes.test_parity_align",
         "pyspark.pandas.tests.connect.indexes.test_parity_indexing",
         "pyspark.pandas.tests.connect.indexes.test_parity_reindex",
@@ -1068,8 +1067,6 @@ pyspark_pandas_connect_part2 = Module(
         "pyspark.pandas.tests.connect.test_parity_expanding",
         "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby_rolling",
         "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
-        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames",
-        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.connect.groupby.test_parity_index",
         "pyspark.pandas.tests.connect.groupby.test_parity_describe",
         "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
@@ -1081,6 +1078,34 @@ pyspark_pandas_connect_part2 = Module(
     ],
 )
 
+
+pyspark_pandas_connect_part3 = Module(
+    name="pyspark-pandas-connect-part3",
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
+    source_file_regexes=[
+        "python/pyspark/pandas",
+    ],
+    python_test_goals=[
+        # pandas-on-Spark unittests
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime",
+        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames",
+        "pyspark.pandas.tests.connect.test_parity_ops_on_diff_frames_groupby",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_errors = Module(
+    name="pyspark-errors",
+    dependencies=[],
+    source_file_regexes=[
+        # SPARK-44544: Force the execution of pyspark_errors when there are any changes
+        # in PySpark, since the Python Packaging Tests is only enabled within this module.
+        # This module is the smallest Python test module, it contains only 1 test file
+        # and normally takes < 2 seconds, so the additional cost is small.
 
 pyspark_errors = Module(
     name="pyspark-errors",
