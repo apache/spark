@@ -60,7 +60,6 @@ if TYPE_CHECKING:
 
 def to_arrow_type(dt: DataType) -> "pa.DataType":
     """Convert Spark data type to pyarrow type"""
-    from distutils.version import LooseVersion
     import pyarrow as pa
 
     if type(dt) == BooleanType:
@@ -93,21 +92,9 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == StructType and LooseVersion(pa.__version__) < LooseVersion(
-            "2.0.0"
-        ):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "Array of StructType"},
-            )
         field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
         value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
         arrow_type = pa.map_(key_field, value_field)
@@ -142,8 +129,6 @@ def to_arrow_schema(schema: StructType) -> "pa.Schema":
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
     """Convert pyarrow type to Spark data type."""
-    from distutils.version import LooseVersion
-    import pyarrow as pa
     import pyarrow.types as types
 
     spark_type: DataType
@@ -182,11 +167,6 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         spark_type = MapType(
             from_arrow_type(at.key_type, prefer_timestamp_ntz),
             from_arrow_type(at.item_type, prefer_timestamp_ntz),
