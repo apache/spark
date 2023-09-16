@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from datetime import datetime
-from distutils.version import LooseVersion
 import sys
 import unittest
 from typing import List
@@ -254,7 +253,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(actual, pdf)
 
         # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-        if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+        if sys.version_info >= (3, 8):
             import numpy.typing as ntp
 
             psdf = ps.from_pandas(pdf)

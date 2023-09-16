@@ -47,7 +47,6 @@ from pyspark.sql.types import (
     NullType,
     DataType,
     UserDefinedType,
-    Row,
     _create_row,
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
@@ -61,7 +60,6 @@ if TYPE_CHECKING:
 
 def to_arrow_type(dt: DataType) -> "pa.DataType":
     """Convert Spark data type to pyarrow type"""
-    from distutils.version import LooseVersion
     import pyarrow as pa
 
     if type(dt) == BooleanType:
@@ -94,21 +92,9 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == StructType and LooseVersion(pa.__version__) < LooseVersion(
-            "2.0.0"
-        ):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "Array of StructType"},
-            )
         field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
         value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
         arrow_type = pa.map_(key_field, value_field)
@@ -143,8 +129,6 @@ def to_arrow_schema(schema: StructType) -> "pa.Schema":
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
     """Convert pyarrow type to Spark data type."""
-    from distutils.version import LooseVersion
-    import pyarrow as pa
     import pyarrow.types as types
 
     spark_type: DataType
@@ -183,11 +167,6 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         spark_type = MapType(
             from_arrow_type(at.key_type, prefer_timestamp_ntz),
             from_arrow_type(at.item_type, prefer_timestamp_ntz),
@@ -580,15 +559,21 @@ def _create_converter_to_pandas(
 
             if _ndarray_as_list:
                 if _element_conv is None:
-                    _element_conv = lambda x: x  # noqa: E731
 
-                def convert_array_ndarray_as_list(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
+                    def convert_array_ndarray_as_list(value: Any) -> Any:
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
-                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+                        return list(value)
+
+                else:
+
+                    def convert_array_ndarray_as_list(value: Any) -> Any:
+                        # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
+                        # whereas a list is expected.
+                        return [
+                            _element_conv(v) if v is not None else None  # type: ignore[misc]
+                            for v in value
+                        ]
 
                 return convert_array_ndarray_as_list
             else:
@@ -596,34 +581,53 @@ def _create_converter_to_pandas(
                     return None
 
                 def convert_array_ndarray_as_ndarray(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, np.ndarray):
+                    if isinstance(value, np.ndarray):
                         # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                        return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+                        return np.array(
+                            [
+                                _element_conv(v) if v is not None else None  # type: ignore[misc]
+                                for v in value
+                            ]
+                        )
                     else:
-                        assert isinstance(value, list)
                         # otherwise, `list` should be used.
-                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+                        return [
+                            _element_conv(v) if v is not None else None  # type: ignore[misc]
+                            for v in value
+                        ]
 
                 return convert_array_ndarray_as_ndarray
 
         elif isinstance(dt, MapType):
-            _key_conv = _converter(dt.keyType, _struct_in_pandas, _ndarray_as_list) or (lambda x: x)
-            _value_conv = _converter(dt.valueType, _struct_in_pandas, _ndarray_as_list) or (
-                lambda x: x
-            )
+            _key_conv = _converter(dt.keyType, _struct_in_pandas, _ndarray_as_list)
+            _value_conv = _converter(dt.valueType, _struct_in_pandas, _ndarray_as_list)
 
-            def convert_map(value: Any) -> Any:
-                if value is None:
-                    return None
-                elif isinstance(value, list):
+            if _key_conv is None and _value_conv is None:
+
+                def convert_map(value: Any) -> Any:
                     # `pyarrow.Table.to_pandas` uses `list` of key-value tuple.
-                    return {_key_conv(k): _value_conv(v) for k, v in value}
-                else:
-                    assert isinstance(value, dict)
                     # otherwise, `dict` should be used.
-                    return {_key_conv(k): _value_conv(v) for k, v in value.items()}
+                    return dict(value)
+
+            else:
+
+                def convert_map(value: Any) -> Any:
+                    if isinstance(value, list):
+                        # `pyarrow.Table.to_pandas` uses `list` of key-value tuple.
+                        return {
+                            (_key_conv(k) if _key_conv is not None and k is not None else k): (
+                                _value_conv(v) if _value_conv is not None and v is not None else v
+                            )
+                            for k, v in value
+                        }
+                    else:
+                        # otherwise, `dict` should be used.
+                        return {
+                            (_key_conv(k) if _key_conv is not None and k is not None else k): (
+                                _value_conv(v) if _value_conv is not None and v is not None else v
+                            )
+                            for k, v in value.items()
+                        }
 
             return convert_map
 
@@ -641,47 +645,78 @@ def _create_converter_to_pandas(
             dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
-                _converter(f.dataType, _struct_in_pandas, _ndarray_as_list) or (lambda x: x)
-                for f in dt.fields
+                _converter(f.dataType, _struct_in_pandas, _ndarray_as_list) for f in dt.fields
             ]
 
             if _struct_in_pandas == "row":
 
-                def convert_struct_as_row(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, dict):
-                        # `pyarrow.Table.to_pandas` uses `dict`.
-                        _values = [
-                            field_convs[i](value.get(name, None))
-                            for i, name in enumerate(dedup_field_names)
-                        ]
-                        return _create_row(field_names, _values)
-                    else:
-                        assert isinstance(value, Row)
-                        # otherwise, `Row` should be used.
-                        _values = [field_convs[i](value[i]) for i, name in enumerate(value)]
-                        return _create_row(field_names, _values)
+                if all(conv is None for conv in field_convs):
+
+                    def convert_struct_as_row(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            _values = [
+                                value.get(name, None) for i, name in enumerate(dedup_field_names)
+                            ]
+                            return _create_row(field_names, _values)
+                        else:
+                            # otherwise, `Row` should be used.
+                            return _create_row(field_names, value)
+
+                else:
+
+                    def convert_struct_as_row(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            _values = [
+                                conv(v) if conv is not None and v is not None else v
+                                for conv, v in zip(
+                                    field_convs,
+                                    (value.get(name, None) for name in dedup_field_names),
+                                )
+                            ]
+                            return _create_row(field_names, _values)
+                        else:
+                            # otherwise, `Row` should be used.
+                            _values = [
+                                conv(v) if conv is not None and v is not None else v
+                                for conv, v in zip(field_convs, value)
+                            ]
+                            return _create_row(field_names, _values)
 
                 return convert_struct_as_row
 
             elif _struct_in_pandas == "dict":
 
-                def convert_struct_as_dict(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, dict):
-                        # `pyarrow.Table.to_pandas` uses `dict`.
-                        return {
-                            name: field_convs[i](value.get(name, None))
-                            for i, name in enumerate(dedup_field_names)
-                        }
-                    else:
-                        assert isinstance(value, Row)
-                        # otherwise, `Row` should be used.
-                        return {
-                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
-                        }
+                if all(conv is None for conv in field_convs):
+
+                    def convert_struct_as_dict(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            return {name: value.get(name, None) for name in dedup_field_names}
+                        else:
+                            # otherwise, `Row` should be used.
+                            return dict(zip(dedup_field_names, value))
+
+                else:
+
+                    def convert_struct_as_dict(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            # `pyarrow.Table.to_pandas` uses `dict`.
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(
+                                    dedup_field_names,
+                                    field_convs,
+                                    (value.get(name, None) for name in dedup_field_names),
+                                )
+                            }
+                        else:
+                            # otherwise, `Row` should be used.
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                            }
 
                 return convert_struct_as_dict
 
@@ -696,42 +731,43 @@ def _create_converter_to_pandas(
             )
 
             def convert_timestamp(value: Any) -> Any:
-                if value is None:
-                    return None
+                if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                    ts = pd.Timestamp(value)
                 else:
-                    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-                        ts = pd.Timestamp(value)
-                    else:
-                        ts = pd.Timestamp(value).tz_localize(local_tz)
-                    return ts.tz_convert(timezone).tz_localize(None)
+                    ts = pd.Timestamp(value).tz_localize(local_tz)
+                return ts.tz_convert(timezone).tz_localize(None)
 
             return convert_timestamp
 
         elif isinstance(dt, TimestampNTZType):
 
             def convert_timestamp_ntz(value: Any) -> Any:
-                if value is None:
-                    return None
-                else:
-                    return pd.Timestamp(value)
+                return pd.Timestamp(value)
 
             return convert_timestamp_ntz
 
         elif isinstance(dt, UserDefinedType):
             udt: UserDefinedType = dt
 
-            conv = _converter(udt.sqlType(), _struct_in_pandas="row", _ndarray_as_list=True) or (
-                lambda x: x
-            )
+            conv = _converter(udt.sqlType(), _struct_in_pandas="row", _ndarray_as_list=True)
 
-            def convert_udt(value: Any) -> Any:
-                if value is None:
-                    return None
-                elif hasattr(value, "__UDT__"):
-                    assert isinstance(value.__UDT__, type(udt))
-                    return value
-                else:
-                    return udt.deserialize(conv(value))
+            if conv is None:
+
+                def convert_udt(value: Any) -> Any:
+                    if hasattr(value, "__UDT__"):
+                        assert isinstance(value.__UDT__, type(udt))
+                        return value
+                    else:
+                        return udt.deserialize(value)
+
+            else:
+
+                def convert_udt(value: Any) -> Any:
+                    if hasattr(value, "__UDT__"):
+                        assert isinstance(value.__UDT__, type(udt))
+                        return value
+                    else:
+                        return udt.deserialize(conv(value))  # type: ignore[misc]
 
             return convert_udt
 
@@ -740,7 +776,9 @@ def _create_converter_to_pandas(
 
     conv = _converter(data_type, struct_in_pandas, ndarray_as_list)
     if conv is not None:
-        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+        return lambda pser: pser.apply(  # type: ignore[return-value]
+            lambda x: conv(x) if x is not None else None  # type: ignore[misc]
+        )
     else:
         return lambda pser: pser
 
@@ -748,7 +786,7 @@ def _create_converter_to_pandas(
 def _create_converter_from_pandas(
     data_type: DataType,
     *,
-    timezone: Optional[str],
+    timezone: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
@@ -793,51 +831,94 @@ def _create_converter_from_pandas(
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
 
         if isinstance(dt, ArrayType):
-            _element_conv = _converter(dt.elementType) or (lambda x: x)
+            _element_conv = _converter(dt.elementType)
 
             if ignore_unexpected_complex_type_values:
+                if _element_conv is None:
 
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, Iterable):
-                        return [_element_conv(v) for v in value]
-                    else:
-                        return value
+                    def convert_array(value: Any) -> Any:
+                        if isinstance(value, Iterable):
+                            return list(value)
+                        else:
+                            return value
+
+                else:
+
+                    def convert_array(value: Any) -> Any:
+                        if isinstance(value, Iterable):
+                            return [
+                                _element_conv(v) if v is not None else None  # type: ignore[misc]
+                                for v in value
+                            ]
+                        else:
+                            return value
 
             else:
+                if _element_conv is None:
 
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, Iterable)
-                        return [_element_conv(v) for v in value]
+                    def convert_array(value: Any) -> Any:
+                        return list(value)
+
+                else:
+
+                    def convert_array(value: Any) -> Any:
+                        # Iterable
+                        return [
+                            _element_conv(v) if v is not None else None  # type: ignore[misc]
+                            for v in value
+                        ]
 
             return convert_array
 
         elif isinstance(dt, MapType):
-            _key_conv = _converter(dt.keyType) or (lambda x: x)
-            _value_conv = _converter(dt.valueType) or (lambda x: x)
+            _key_conv = _converter(dt.keyType)
+            _value_conv = _converter(dt.valueType)
 
             if ignore_unexpected_complex_type_values:
 
-                def convert_map(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, dict):
-                        return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
-                    else:
-                        return value
+                if _key_conv is None and _value_conv is None:
+
+                    def convert_map(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return list(value.items())
+                        else:
+                            return value
+
+                else:
+
+                    def convert_map(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return [
+                                (
+                                    _key_conv(k) if _key_conv is not None and k is not None else k,
+                                    _value_conv(v)
+                                    if _value_conv is not None and v is not None
+                                    else v,
+                                )
+                                for k, v in value.items()
+                            ]
+                        else:
+                            return value
 
             else:
 
-                def convert_map(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, dict)
-                        return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
+                if _key_conv is None and _value_conv is None:
+
+                    def convert_map(value: Any) -> Any:
+                        # dict
+                        return list(value.items())
+
+                else:
+
+                    def convert_map(value: Any) -> Any:
+                        # dict
+                        return [
+                            (
+                                _key_conv(k) if _key_conv is not None and k is not None else k,
+                                _value_conv(v) if _value_conv is not None and v is not None else v,
+                            )
+                            for k, v in value.items()
+                        ]
 
             return convert_map
 
@@ -853,40 +934,74 @@ def _create_converter_from_pandas(
 
             dedup_field_names = _dedup_names(field_names)
 
-            field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
+            field_convs = [_converter(f.dataType) for f in dt.fields]
 
             if ignore_unexpected_complex_type_values:
 
-                def convert_struct(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, dict):
-                        return {
-                            dedup_field_names[i]: field_convs[i](value.get(key, None))
-                            for i, key in enumerate(field_names)
-                        }
-                    elif isinstance(value, tuple):
-                        return {
-                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
-                        }
-                    else:
-                        return value
+                if all(conv is None for conv in field_convs):
+
+                    def convert_struct(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return {
+                                name: value.get(key, None)
+                                for name, key in zip(dedup_field_names, field_names)
+                            }
+                        elif isinstance(value, tuple):
+                            return dict(zip(dedup_field_names, value))
+                        else:
+                            return value
+
+                else:
+
+                    def convert_struct(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(
+                                    dedup_field_names,
+                                    field_convs,
+                                    (value.get(key, None) for key in field_names),
+                                )
+                            }
+                        elif isinstance(value, tuple):
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                            }
+                        else:
+                            return value
 
             else:
+                if all(conv is None for conv in field_convs):
 
-                def convert_struct(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    elif isinstance(value, dict):
-                        return {
-                            dedup_field_names[i]: field_convs[i](value.get(key, None))
-                            for i, key in enumerate(field_names)
-                        }
-                    else:
-                        assert isinstance(value, tuple)
-                        return {
-                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
-                        }
+                    def convert_struct(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return {
+                                name: value.get(key, None)
+                                for name, key in zip(dedup_field_names, field_names)
+                            }
+                        else:
+                            # tuple
+                            return dict(zip(dedup_field_names, value))
+
+                else:
+
+                    def convert_struct(value: Any) -> Any:
+                        if isinstance(value, dict):
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(
+                                    dedup_field_names,
+                                    field_convs,
+                                    (value.get(key, None) for key in field_names),
+                                )
+                            }
+                        else:
+                            # tuple
+                            return {
+                                name: conv(v) if conv is not None and v is not None else v
+                                for name, conv, v in zip(dedup_field_names, field_convs, value)
+                            }
 
             return convert_struct
 
@@ -894,27 +1009,28 @@ def _create_converter_from_pandas(
             assert timezone is not None
 
             def convert_timestamp(value: Any) -> Any:
-                if value is None:
-                    return None
+                if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                    ts = pd.Timstamp(value)
                 else:
-                    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-                        ts = pd.Timstamp(value)
-                    else:
-                        ts = pd.Timestamp(value).tz_localize(timezone)
-                    return ts.to_pydatetime()
+                    ts = pd.Timestamp(value).tz_localize(timezone)
+                return ts.to_pydatetime()
 
             return convert_timestamp
 
         elif isinstance(dt, UserDefinedType):
             udt: UserDefinedType = dt
 
-            conv = _converter(udt.sqlType()) or (lambda x: x)
+            conv = _converter(udt.sqlType())
 
-            def convert_udt(value: Any) -> Any:
-                if value is None:
-                    return None
-                else:
-                    return conv(udt.serialize(value))
+            if conv is None:
+
+                def convert_udt(value: Any) -> Any:
+                    return udt.serialize(value)
+
+            else:
+
+                def convert_udt(value: Any) -> Any:
+                    return conv(udt.serialize(value))  # type: ignore[misc]
 
             return convert_udt
 
@@ -922,7 +1038,9 @@ def _create_converter_from_pandas(
 
     conv = _converter(data_type)
     if conv is not None:
-        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+        return lambda pser: pser.apply(  # type: ignore[return-value]
+            lambda x: conv(x) if x is not None else None  # type: ignore[misc]
+        )
     else:
         return lambda pser: pser
 

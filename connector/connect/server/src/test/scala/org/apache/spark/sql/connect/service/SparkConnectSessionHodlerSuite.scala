@@ -231,7 +231,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     } finally {
       SparkConnectService.stop()
       // remove process termination listener
-      spark.streams.removeListener(spark.streams.listListeners()(0))
+      spark.streams.listListeners().foreach(spark.streams.removeListener)
     }
   }
 

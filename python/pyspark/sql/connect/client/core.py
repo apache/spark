@@ -33,6 +33,7 @@ import time
 import urllib.parse
 import uuid
 import sys
+from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -880,19 +881,30 @@ class SparkConnectClient(object):
 
         # Rename columns to avoid duplicated column names.
         renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+
+        pandas_options = {}
         if self_destruct:
             # Configure PyArrow to use as little memory as possible:
             # self_destruct - free columns as they are converted
             # split_blocks - create a separate Pandas block for each column
             # use_threads - convert one column at a time
-            pandas_options = {
-                "self_destruct": True,
-                "split_blocks": True,
-                "use_threads": False,
-            }
-            pdf = renamed_table.to_pandas(**pandas_options)
-        else:
-            pdf = renamed_table.to_pandas()
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
+        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+            # A legacy option to coerce date32, date64, duration, and timestamp
+            # time units to nanoseconds when converting to pandas.
+            # This option can only be added since 13.0.0.
+            pandas_options.update(
+                {
+                    "coerce_temporal_nanoseconds": True,
+                }
+            )
+        pdf = renamed_table.to_pandas(**pandas_options)
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
