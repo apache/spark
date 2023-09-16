@@ -41,14 +41,18 @@ sealed trait Parameter extends LeafExpression with Unevaluable {
 }
 
 /**
- * The expression represents a named parameter that should be replaced by a literal.
+ * The expression represents a named parameter that should be replaced by a literal or
+ * by a foldable expression constructed by `map()`, `array()`, `struct()`, or
+ * by `map_from_arrays()` and `map_from_entries()`.
  *
  * @param name The identifier of the parameter without the marker.
  */
 case class NamedParameter(name: String) extends Parameter
 
 /**
- * The expression represents a positional parameter that should be replaced by a literal.
+ * The expression represents a positional parameter that should be replaced by a literal or
+ * by a foldable expression constructed by `map()`, `array()`, `struct()`, or
+ * by `map_from_arrays()` and `map_from_entries()`.
  *
  * @param pos An unique position of the parameter in a SQL query text.
  */
@@ -92,7 +96,8 @@ object NameParameterizedQuery {
  * The logical plan representing a parameterized query with positional parameters.
  *
  * @param child The parameterized logical plan.
- * @param args The literal values of positional parameters.
+ * @param args The literal values or foldable expressions constructed via `map()`, `array()`,
+ *             `struct()`, `map_from_arrays()`, `map_from_entries()` of positional parameters.
  */
 case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
   extends ParameterizedQuery(child) {
@@ -102,8 +107,8 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
- * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals from the
- * user-specified arguments.
+ * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals or
+ * foldable `map`, `array` and `struct` expressions from the user-specified arguments.
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
