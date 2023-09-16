@@ -224,7 +224,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
 
     def orphanedGoldenFiles(): Iterable[File] = {
-      val errors = errorReader.errorInfoMap
       val subErrorFileNames = errors.filter(_._2.subClass.isDefined).map(error => {
         getErrorPath(error._1) + ".md"
       }).toSet
@@ -232,7 +231,6 @@ class SparkThrowableSuite extends SparkFunSuite {
       val docsDir = getWorkspaceFilePath("docs")
       val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).filter { f =>
         (f.getName.startsWith("sql-error-conditions-") && f.getName.endsWith("-error-class.md")) &&
-          !f.getName.equals("sql-error-conditions-sqlstates.md") &&
           !subErrorFileNames.contains(f.getName)
       }
       orphans
@@ -344,13 +342,13 @@ class SparkThrowableSuite extends SparkFunSuite {
     if (regenerateGoldenFiles) {
       if (orphans.nonEmpty) {
         logInfo(s"Orphaned error class documents (${orphans.size}) is not empty, " +
-          s"executing cleanup operation.")
+          "executing cleanup operation.")
         orphans.foreach { f =>
           FileUtils.deleteQuietly(f)
           logInfo(s"Cleanup orphaned error document: ${f.getName}.")
         }
       } else {
-        logInfo(s"Orphaned error class documents is empty")
+        logInfo("Orphaned error class documents is empty")
       }
     } else {
       assert(orphans.isEmpty,
