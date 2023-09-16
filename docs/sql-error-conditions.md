@@ -1113,7 +1113,7 @@ Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include 
 
 SQLSTATE: none assigned
 
-The argument `<name>` of `sql()` is invalid. Consider to replace it by a SQL literal.
+The argument `<name>` of `sql()` is invalid. Consider to replace it either by a SQL literal or by a map constructed by `map()`, `map_from_arrays()`, `map_from_entries()`, or by an array constructed by `array()`. Also such functions can be invoked via `call_function()`.
 
 ### [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
 
@@ -1835,7 +1835,7 @@ Unable to infer schema for `<format>`. It must be specified manually.
 
 [SQLSTATE: 42P02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to a SQL literal.
+Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or a map constructed by `map()`, `map_from_arrays()`, `map_from_entries()`, or an array constructed by `array()`. Also such functions can be invoked via `call_function()`.
 
 ### UNCLOSED_BRACKETED_COMMENT
 
