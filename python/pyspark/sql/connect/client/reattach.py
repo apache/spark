@@ -61,8 +61,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
     @classmethod
     def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
         """
-        When the channel is closed, this method will be called before to make sure all outstanding calls
-        are closed.
+        When the channel is closed, this method will be called before, to make sure all
+        outstanding calls are closed.
         """
         with cls._lock:
             if cls._release_thread_pool is not None:
