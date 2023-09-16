@@ -13077,8 +13077,8 @@ def from_xml(
     >>> from pyspark.sql.types import *
     >>> from pyspark.sql.functions import from_xml, schema_of_xml, lit
     >>> data = [(1, '''<p><a>1</a></p>''')]
-    >>> schema = StructType([StructField("a", IntegerType())])
     >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> schema = StructType([StructField("a", IntegerType())])
     >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
     >>> df.select(from_xml(df.value, "a INT").alias("xml")).collect()
@@ -13122,9 +13122,6 @@ def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         for the version you use.
 
         .. # noqa
-
-        .. versionchanged:: 4.0.0
-           It accepts `options` parameter to control schema inferring.
 
     Returns
     -------

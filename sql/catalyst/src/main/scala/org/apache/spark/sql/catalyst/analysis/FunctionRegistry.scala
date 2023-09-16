@@ -833,7 +833,7 @@ object FunctionRegistry {
     expression[StructsToCsv]("to_csv"),
 
     // Xml
-    expression[XmlToStructs] ("from_xml"),
+    expression[XmlToStructs]("from_xml"),
     expression[SchemaOfXml]("schema_of_xml")
   )
 

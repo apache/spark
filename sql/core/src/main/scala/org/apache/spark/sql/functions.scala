@@ -7370,8 +7370,9 @@ object functions {
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column = {
+    withExpr(XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema),
+      options.asScala.toMap, e.expr))
   }
 
   // scalastyle:off line.size.limit
@@ -7393,29 +7394,6 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    from_xml(e, schema, options.asScala.toMap)
-  }
-
-  // scalastyle:off line.size.limit
-
-  /**
-   * (Scala-specific) Parses a column containing a XML string into a `StructType`
-   * with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
-   *
-   * @param e       a string column containing XML data.
-   * @param schema  the schema as a DDL-formatted string.
-   * @param options options to control how the XML is parsed. accepts the same options and the
-   *                Xml data source.
-   *                See
-   *                <a href=
-   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
-   *                Data Source Option</a> in the version you use.
-   * @group collection_funcs
-   * @since 4.0.0
-   */
-  // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: String, options: Map[String, String]): Column = {
     val dataType = parseTypeWithFallback(
       schema,
       DataType.fromJson,
@@ -7476,7 +7454,7 @@ object functions {
    * @since 4.0.0
    */
   def from_xml(e: Column, schema: StructType): Column =
-    from_xml(e, schema, Map.empty[String, String])
+    from_xml(e, schema, Map.empty[String, String].asJava)
 
   /**
    * Parses a XML string and infers its schema in DDL format.
