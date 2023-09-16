@@ -186,7 +186,7 @@ class Binarizer(
         + "The features greater than the threshold will be binarized to 1.0. "
         + "The features equal to or less than the threshold will be binarized to 0.0",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
     thresholds: Param[List[float]] = Param(
         Params._dummy(),
         "thresholds",
@@ -195,38 +195,38 @@ class Binarizer(
         + "and thresholds is not set, but threshold is set, then threshold will "
         + "be applied across all columns.",
         typeConverter=TypeConverters.toListFloat,
-        )
+    )
 
     @overload
     def __init__(
-            self,
-            *,
-            threshold: float = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
+        self,
+        *,
+        threshold: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            thresholds: Optional[List[float]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        thresholds: Optional[List[float]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            threshold: float = 0.0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            thresholds: Optional[List[float]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        threshold: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        thresholds: Optional[List[float]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
@@ -240,35 +240,35 @@ class Binarizer(
 
     @overload
     def setParams(
-            self,
-            *,
-            threshold: float = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
+        self,
+        *,
+        threshold: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
     ) -> "Binarizer":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            thresholds: Optional[List[float]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        thresholds: Optional[List[float]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ) -> "Binarizer":
         ...
 
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            threshold: float = 0.0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            thresholds: Optional[List[float]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        threshold: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        thresholds: Optional[List[float]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ) -> "Binarizer":
         """
         setParams(self, \\*, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
@@ -331,7 +331,7 @@ class _LSHParams(HasInputCol, HasOutputCol):
         + "increasing number of hash tables lowers the false negative rate, "
         + "and decreasing it improves the running performance.",
         typeConverter=TypeConverters.toInt,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_LSHParams, self).__init__(*args)
@@ -386,11 +386,11 @@ class _LSHModel(JavaModel, _LSHParams):
         return self._set(outputCol=value)
 
     def approxNearestNeighbors(
-            self,
-            dataset: DataFrame,
-            key: Vector,
-            numNearestNeighbors: int,
-            distCol: str = "distCol",
+        self,
+        dataset: DataFrame,
+        key: Vector,
+        numNearestNeighbors: int,
+        distCol: str = "distCol",
     ) -> DataFrame:
         """
         Given a large dataset and an item, approximately find at most k items which have the
@@ -423,11 +423,11 @@ class _LSHModel(JavaModel, _LSHParams):
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors, distCol)
 
     def approxSimilarityJoin(
-            self,
-            datasetA: DataFrame,
-            datasetB: DataFrame,
-            threshold: float,
-            distCol: str = "distCol",
+        self,
+        datasetA: DataFrame,
+        datasetB: DataFrame,
+        threshold: float,
+        distCol: str = "distCol",
     ) -> DataFrame:
         """
         Join two datasets to approximately find all pairs of rows whose distance are smaller than
@@ -471,7 +471,7 @@ class _BucketedRandomProjectionLSHParams:
         "bucketLength",
         "the length of each hash bucket, " + "a larger bucket lowers the false negative rate.",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
 
     @since("2.2.0")
     def getBucketLength(self) -> float:
@@ -573,13 +573,13 @@ class BucketedRandomProjectionLSH(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            seed: Optional[int] = None,
-            numHashTables: int = 1,
-            bucketLength: Optional[float] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        seed: Optional[int] = None,
+        numHashTables: int = 1,
+        bucketLength: Optional[float] = None,
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
@@ -595,13 +595,13 @@ class BucketedRandomProjectionLSH(
     @keyword_only
     @since("2.2.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            seed: Optional[int] = None,
-            numHashTables: int = 1,
-            bucketLength: Optional[float] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        seed: Optional[int] = None,
+        numHashTables: int = 1,
+        bucketLength: Optional[float] = None,
     ) -> "BucketedRandomProjectionLSH":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
@@ -733,7 +733,7 @@ class Bucketizer(
         + "explicitly provided to cover all Double values; otherwise, values outside the "
         + "splits specified will be treated as errors.",
         typeConverter=TypeConverters.toListFloat,
-        )
+    )
 
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -748,7 +748,7 @@ class Bucketizer(
         + "any column, for 'skip' it will skip rows with any invalids in "
         + "any columns, etc.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     splitsArray: Param[List[List[float]]] = Param(
         Params._dummy(),
@@ -762,7 +762,7 @@ class Bucketizer(
         + "to cover all Double values; otherwise, values outside the splits "
         + "specified will be treated as errors.",
         typeConverter=TypeConverters.toListListFloat,
-        )
+    )
 
     includeLowest: Param[bool] = Param(
         Params._dummy(),
@@ -770,42 +770,42 @@ class Bucketizer(
         "define the range of values for the buckets, "
         + "which by default holds values in the range[v1,v2....). ",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
 
     @overload
     def __init__(
-            self,
-            *,
-            splits: Optional[List[float]] = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            handleInvalid: str = ...,
+        self,
+        *,
+        splits: Optional[List[float]] = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        handleInvalid: str = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            handleInvalid: str = ...,
-            splitsArray: Optional[List[List[float]]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        handleInvalid: str = ...,
+        splitsArray: Optional[List[List[float]]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            splits: Optional[List[float]] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
-            includeLowest: bool = True,
-            splitsArray: Optional[List[List[float]]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        splits: Optional[List[float]] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
+        includeLowest: bool = True,
+        splitsArray: Optional[List[List[float]]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
@@ -813,45 +813,45 @@ class Bucketizer(
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
-        self._setDefault(handleInvalid="error")
+        self._setDefault(handleInvalid="error", includeLowest=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @overload
     def setParams(
-            self,
-            *,
-            splits: Optional[List[float]] = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            handleInvalid: str = ...,
+        self,
+        *,
+        splits: Optional[List[float]] = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        handleInvalid: str = ...,
     ) -> "Bucketizer":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            handleInvalid: str = ...,
-            splitsArray: Optional[List[List[float]]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        handleInvalid: str = ...,
+        splitsArray: Optional[List[List[float]]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ) -> "Bucketizer":
         ...
 
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            splits: Optional[List[float]] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
-            includeLowest: bool = True,
-            splitsArray: Optional[List[List[float]]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        splits: Optional[List[float]] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
+        includeLowest: bool = True,
+        splitsArray: Optional[List[List[float]]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ) -> "Bucketizer":
         """
         setParams(self, \\*, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
@@ -936,7 +936,6 @@ class Bucketizer(
         return self.getOrDefault(self.includeLowest)
 
 
-
 class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
     """
     Params for :py:class:`CountVectorizer` and :py:class:`CountVectorizerModel`.
@@ -952,7 +951,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         + "specifies a fraction (out of the document's token count). Note that the parameter is "
         + "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
     minDF: Param[float] = Param(
         Params._dummy(),
         "minDF",
@@ -962,7 +961,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         + " appear in; if this is a double in [0,1), then this specifies the fraction of documents."
         + " Default 1.0",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
     maxDF: Param[float] = Param(
         Params._dummy(),
         "maxDF",
@@ -974,7 +973,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         + " fraction of documents the term could appear in."
         + " Default (2^63) - 1",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
     vocabSize: Param[int] = Param(
         Params._dummy(),
         "vocabSize",
@@ -989,7 +988,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         + " for discrete probabilistic models that model binary events rather than integer counts."
         + " Default False",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_CountVectorizerParams, self).__init__(*args)
@@ -1098,15 +1097,15 @@ class CountVectorizer(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            minTF: float = 1.0,
-            minDF: float = 1.0,
-            maxDF: float = 2**63 - 1,
-            vocabSize: int = 1 << 18,
-            binary: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        minTF: float = 1.0,
+        minDF: float = 1.0,
+        maxDF: float = 2**63 - 1,
+        vocabSize: int = 1 << 18,
+        binary: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18,\
@@ -1120,15 +1119,15 @@ class CountVectorizer(
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            minTF: float = 1.0,
-            minDF: float = 1.0,
-            maxDF: float = 2**63 - 1,
-            vocabSize: int = 1 << 18,
-            binary: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        minTF: float = 1.0,
+        minDF: float = 1.0,
+        maxDF: float = 2**63 - 1,
+        vocabSize: int = 1 << 18,
+        binary: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "CountVectorizer":
         """
         setParams(self, \\*, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18,\
@@ -1216,12 +1215,12 @@ class CountVectorizerModel(
     @classmethod
     @since("2.4.0")
     def from_vocabulary(
-            cls,
-            vocabulary: List[str],
-            inputCol: str,
-            outputCol: Optional[str] = None,
-            minTF: Optional[float] = None,
-            binary: Optional[bool] = None,
+        cls,
+        vocabulary: List[str],
+        inputCol: str,
+        outputCol: Optional[str] = None,
+        minTF: Optional[float] = None,
+        binary: Optional[bool] = None,
     ) -> "CountVectorizerModel":
         """
         Construct the model directly from a vocabulary list of strings,
@@ -1316,15 +1315,15 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         "inverse",
         "Set transformer to perform inverse DCT, " + "default False.",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inverse: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        inverse: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, inverse=False, inputCol=None, outputCol=None)
@@ -1338,11 +1337,11 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            inverse: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        inverse: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "DCT":
         """
         setParams(self, \\*, inverse=False, inputCol=None, outputCol=None)
@@ -1428,11 +1427,11 @@ class ElementwiseProduct(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            scalingVec: Optional[Vector] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        scalingVec: Optional[Vector] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, scalingVec=None, inputCol=None, outputCol=None)
@@ -1447,11 +1446,11 @@ class ElementwiseProduct(
     @keyword_only
     @since("1.5.0")
     def setParams(
-            self,
-            *,
-            scalingVec: Optional[Vector] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        scalingVec: Optional[Vector] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "ElementwiseProduct":
         """
         setParams(self, \\*, scalingVec=None, inputCol=None, outputCol=None)
@@ -1564,12 +1563,12 @@ class FeatureHasher(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            numFeatures: int = 1 << 18,
-            inputCols: Optional[List[str]] = None,
-            outputCol: Optional[str] = None,
-            categoricalCols: Optional[List[str]] = None,
+        self,
+        *,
+        numFeatures: int = 1 << 18,
+        inputCols: Optional[List[str]] = None,
+        outputCol: Optional[str] = None,
+        categoricalCols: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, numFeatures=1 << 18, inputCols=None, outputCol=None, \
@@ -1584,12 +1583,12 @@ class FeatureHasher(
     @keyword_only
     @since("2.3.0")
     def setParams(
-            self,
-            *,
-            numFeatures: int = 1 << 18,
-            inputCols: Optional[List[str]] = None,
-            outputCol: Optional[str] = None,
-            categoricalCols: Optional[List[str]] = None,
+        self,
+        *,
+        numFeatures: int = 1 << 18,
+        inputCols: Optional[List[str]] = None,
+        outputCol: Optional[str] = None,
+        categoricalCols: Optional[List[str]] = None,
     ) -> "FeatureHasher":
         """
         setParams(self, \\*, numFeatures=1 << 18, inputCols=None, outputCol=None, \
@@ -1684,16 +1683,16 @@ class HashingTF(
         + "This is useful for discrete probabilistic models that model binary events "
         + "rather than integer counts. Default False.",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            numFeatures: int = 1 << 18,
-            binary: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        numFeatures: int = 1 << 18,
+        binary: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
@@ -1707,12 +1706,12 @@ class HashingTF(
     @keyword_only
     @since("1.3.0")
     def setParams(
-            self,
-            *,
-            numFeatures: int = 1 << 18,
-            binary: bool = False,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        numFeatures: int = 1 << 18,
+        binary: bool = False,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "HashingTF":
         """
         setParams(self, \\*, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
@@ -1840,11 +1839,11 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            minDocFreq: int = 0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        minDocFreq: int = 0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, minDocFreq=0, inputCol=None, outputCol=None)
@@ -1857,11 +1856,11 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            minDocFreq: int = 0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        minDocFreq: int = 0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "IDF":
         """
         setParams(self, \\*, minDocFreq=0, inputCol=None, outputCol=None)
@@ -2104,39 +2103,39 @@ class Imputer(
 
     @overload
     def __init__(
-            self,
-            *,
-            strategy: str = ...,
-            missingValue: float = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            relativeError: float = ...,
+        self,
+        *,
+        strategy: str = ...,
+        missingValue: float = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        relativeError: float = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            strategy: str = ...,
-            missingValue: float = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            relativeError: float = ...,
+        self,
+        *,
+        strategy: str = ...,
+        missingValue: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        relativeError: float = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            strategy: str = "mean",
-            missingValue: float = float("nan"),
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
+        self,
+        *,
+        strategy: str = "mean",
+        missingValue: float = float("nan"),
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
     ):
         """
         __init__(self, \\*, strategy="mean", missingValue=float("nan"), inputCols=None, \
@@ -2149,40 +2148,40 @@ class Imputer(
 
     @overload
     def setParams(
-            self,
-            *,
-            strategy: str = ...,
-            missingValue: float = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            relativeError: float = ...,
+        self,
+        *,
+        strategy: str = ...,
+        missingValue: float = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        relativeError: float = ...,
     ) -> "Imputer":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            strategy: str = ...,
-            missingValue: float = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            relativeError: float = ...,
+        self,
+        *,
+        strategy: str = ...,
+        missingValue: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        relativeError: float = ...,
     ) -> "Imputer":
         ...
 
     @keyword_only
     @since("2.2.0")
     def setParams(
-            self,
-            *,
-            strategy: str = "mean",
-            missingValue: float = float("nan"),
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
+        self,
+        *,
+        strategy: str = "mean",
+        missingValue: float = float("nan"),
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
     ) -> "Imputer":
         """
         setParams(self, \\*, strategy="mean", missingValue=float("nan"), inputCols=None, \
@@ -2349,7 +2348,7 @@ class Interaction(
     @keyword_only
     @since("3.0.0")
     def setParams(
-            self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None
+        self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None
     ) -> "Interaction":
         """
         setParams(self, \\*, inputCols=None, outputCol=None)
@@ -2447,7 +2446,7 @@ class MaxAbsScaler(
     @keyword_only
     @since("2.0.0")
     def setParams(
-            self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ) -> "MaxAbsScaler":
         """
         setParams(self, \\*, inputCol=None, outputCol=None)
@@ -2581,12 +2580,12 @@ class MinHashLSH(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            seed: Optional[int] = None,
-            numHashTables: int = 1,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        seed: Optional[int] = None,
+        numHashTables: int = 1,
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
@@ -2599,12 +2598,12 @@ class MinHashLSH(
     @keyword_only
     @since("2.2.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            seed: Optional[int] = None,
-            numHashTables: int = 1,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        seed: Optional[int] = None,
+        numHashTables: int = 1,
     ) -> "MinHashLSH":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
@@ -2746,12 +2745,12 @@ class MinMaxScaler(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            min: float = 0.0,
-            max: float = 1.0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        min: float = 0.0,
+        max: float = 1.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, min=0.0, max=1.0, inputCol=None, outputCol=None)
@@ -2764,12 +2763,12 @@ class MinMaxScaler(
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            min: float = 0.0,
-            max: float = 1.0,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        min: float = 0.0,
+        max: float = 1.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "MinMaxScaler":
         """
         setParams(self, \\*, min=0.0, max=1.0, inputCol=None, outputCol=None)
@@ -2918,7 +2917,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
 
     @keyword_only
     def __init__(
-            self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
         """
         __init__(self, \\*, n=2, inputCol=None, outputCol=None)
@@ -2932,7 +2931,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     @keyword_only
     @since("1.5.0")
     def setParams(
-            self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ) -> "NGram":
         """
         setParams(self, \\*, n=2, inputCol=None, outputCol=None)
@@ -3013,7 +3012,7 @@ class Normalizer(
 
     @keyword_only
     def __init__(
-            self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
         """
         __init__(self, \\*, p=2.0, inputCol=None, outputCol=None)
@@ -3027,7 +3026,7 @@ class Normalizer(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ) -> "Normalizer":
         """
         setParams(self, \\*, p=2.0, inputCol=None, outputCol=None)
@@ -3081,7 +3080,7 @@ class _OneHotEncoderParams(
         + "is only used during transform; during fitting, invalid data will "
         + "result in an error.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     dropLast: Param[bool] = Param(
         Params._dummy(),
@@ -3175,36 +3174,36 @@ class OneHotEncoder(
 
     @overload
     def __init__(
-            self,
-            *,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            handleInvalid: str = ...,
-            dropLast: bool = ...,
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        dropLast: bool = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            handleInvalid: str = ...,
-            dropLast: bool = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
+        self,
+        *,
+        handleInvalid: str = ...,
+        dropLast: bool = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            handleInvalid: str = "error",
-            dropLast: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        dropLast: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
@@ -3217,37 +3216,37 @@ class OneHotEncoder(
 
     @overload
     def setParams(
-            self,
-            *,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            handleInvalid: str = ...,
-            dropLast: bool = ...,
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        dropLast: bool = ...,
     ) -> "OneHotEncoder":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            handleInvalid: str = ...,
-            dropLast: bool = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
+        self,
+        *,
+        handleInvalid: str = ...,
+        dropLast: bool = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
     ) -> "OneHotEncoder":
         ...
 
     @keyword_only
     @since("2.3.0")
     def setParams(
-            self,
-            *,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            handleInvalid: str = "error",
-            dropLast: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        dropLast: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "OneHotEncoder":
         """
         setParams(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", \
@@ -3414,7 +3413,7 @@ class PolynomialExpansion(
 
     @keyword_only
     def __init__(
-            self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ):
         """
         __init__(self, \\*, degree=2, inputCol=None, outputCol=None)
@@ -3430,7 +3429,7 @@ class PolynomialExpansion(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ) -> "PolynomialExpansion":
         """
         setParams(self, \\*, degree=2, inputCol=None, outputCol=None)
@@ -3579,7 +3578,7 @@ class QuantileDiscretizer(
         "Maximum number of buckets (quantiles, or "
         + "categories) into which data points are grouped. Must be >= 2.",
         typeConverter=TypeConverters.toInt,
-        )
+    )
 
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -3593,7 +3592,7 @@ class QuantileDiscretizer(
         + "any columns, for 'skip' it will skip rows with any invalids in "
         + "any columns, etc.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     numBucketsArray: Param[List[int]] = Param(
         Params._dummy(),
@@ -3604,44 +3603,44 @@ class QuantileDiscretizer(
         + "columns and numBucketsArray is not set, but numBuckets is set, "
         + "then numBuckets will be applied across all columns.",
         typeConverter=TypeConverters.toListInt,
-        )
+    )
 
     @overload
     def __init__(
-            self,
-            *,
-            numBuckets: int = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            relativeError: float = ...,
-            handleInvalid: str = ...,
+        self,
+        *,
+        numBuckets: int = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        relativeError: float = ...,
+        handleInvalid: str = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            relativeError: float = ...,
-            handleInvalid: str = ...,
-            numBucketsArray: Optional[List[int]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        relativeError: float = ...,
+        handleInvalid: str = ...,
+        numBucketsArray: Optional[List[int]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            numBuckets: int = 2,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
-            handleInvalid: str = "error",
-            numBucketsArray: Optional[List[int]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        numBuckets: int = 2,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
+        handleInvalid: str = "error",
+        numBucketsArray: Optional[List[int]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
@@ -3657,41 +3656,41 @@ class QuantileDiscretizer(
 
     @overload
     def setParams(
-            self,
-            *,
-            numBuckets: int = ...,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            relativeError: float = ...,
-            handleInvalid: str = ...,
+        self,
+        *,
+        numBuckets: int = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        relativeError: float = ...,
+        handleInvalid: str = ...,
     ) -> "QuantileDiscretizer":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            relativeError: float = ...,
-            handleInvalid: str = ...,
-            numBucketsArray: Optional[List[int]] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        relativeError: float = ...,
+        handleInvalid: str = ...,
+        numBucketsArray: Optional[List[int]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ) -> "QuantileDiscretizer":
         ...
 
     @keyword_only
     @since("2.0.0")
     def setParams(
-            self,
-            *,
-            numBuckets: int = 2,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
-            handleInvalid: str = "error",
-            numBucketsArray: Optional[List[int]] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        numBuckets: int = 2,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
+        handleInvalid: str = "error",
+        numBucketsArray: Optional[List[int]] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ) -> "QuantileDiscretizer":
         """
         setParams(self, \\*, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
@@ -3916,15 +3915,15 @@ class RobustScaler(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            lower: float = 0.25,
-            upper: float = 0.75,
-            withCentering: bool = False,
-            withScaling: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
+        self,
+        *,
+        lower: float = 0.25,
+        upper: float = 0.75,
+        withCentering: bool = False,
+        withScaling: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
     ):
         """
         __init__(self, \\*, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
@@ -3938,15 +3937,15 @@ class RobustScaler(
     @keyword_only
     @since("3.0.0")
     def setParams(
-            self,
-            *,
-            lower: float = 0.25,
-            upper: float = 0.75,
-            withCentering: bool = False,
-            withScaling: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            relativeError: float = 0.001,
+        self,
+        *,
+        lower: float = 0.25,
+        upper: float = 0.75,
+        withCentering: bool = False,
+        withScaling: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        relativeError: float = 0.001,
     ) -> "RobustScaler":
         """
         setParams(self, \\*, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
@@ -4113,7 +4112,7 @@ class RegexTokenizer(
         Params._dummy(),
         "gaps",
         "whether regex splits on gaps (True) or matches tokens " + "(False)",
-        )
+    )
     pattern: Param[str] = Param(
         Params._dummy(),
         "pattern",
@@ -4125,18 +4124,18 @@ class RegexTokenizer(
         "toLowercase",
         "whether to convert all characters to " + "lowercase before tokenizing",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            minTokenLength: int = 1,
-            gaps: bool = True,
-            pattern: str = "\\s+",
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            toLowercase: bool = True,
+        self,
+        *,
+        minTokenLength: int = 1,
+        gaps: bool = True,
+        pattern: str = "\\s+",
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        toLowercase: bool = True,
     ):
         """
         __init__(self, \\*, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
@@ -4151,14 +4150,14 @@ class RegexTokenizer(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            minTokenLength: int = 1,
-            gaps: bool = True,
-            pattern: str = "\\s+",
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            toLowercase: bool = True,
+        self,
+        *,
+        minTokenLength: int = 1,
+        gaps: bool = True,
+        pattern: str = "\\s+",
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        toLowercase: bool = True,
     ) -> "RegexTokenizer":
         """
         setParams(self, \\*, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
@@ -4398,12 +4397,12 @@ class StandardScaler(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            withMean: bool = False,
-            withStd: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        withMean: bool = False,
+        withStd: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, withMean=False, withStd=True, inputCol=None, outputCol=None)
@@ -4416,12 +4415,12 @@ class StandardScaler(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            withMean: bool = False,
-            withStd: bool = True,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        withMean: bool = False,
+        withStd: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "StandardScaler":
         """
         setParams(self, \\*, withMean=False, withStd=True, inputCol=None, outputCol=None)
@@ -4518,7 +4517,7 @@ class _StringIndexerParams(
         + "under frequencyDesc/Asc, the strings are further sorted "
         + "alphabetically",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -4529,7 +4528,7 @@ class _StringIndexerParams(
         + "error (throw an error), or 'keep' (put invalid data "
         + "in a special additional bucket, at index numLabels).",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_StringIndexerParams, self).__init__(*args)
@@ -4636,36 +4635,36 @@ class StringIndexer(
 
     @overload
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            handleInvalid: str = ...,
-            stringOrderType: str = ...,
+        self,
+        *,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        handleInvalid: str = ...,
+        stringOrderType: str = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            handleInvalid: str = ...,
-            stringOrderType: str = ...,
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        stringOrderType: str = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            handleInvalid: str = "error",
-            stringOrderType: str = "frequencyDesc",
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        stringOrderType: str = "frequencyDesc",
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
@@ -4678,37 +4677,37 @@ class StringIndexer(
 
     @overload
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            handleInvalid: str = ...,
-            stringOrderType: str = ...,
+        self,
+        *,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        handleInvalid: str = ...,
+        stringOrderType: str = ...,
     ) -> "StringIndexer":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
-            handleInvalid: str = ...,
-            stringOrderType: str = ...,
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        stringOrderType: str = ...,
     ) -> "StringIndexer":
         ...
 
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
-            handleInvalid: str = "error",
-            stringOrderType: str = "frequencyDesc",
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        stringOrderType: str = "frequencyDesc",
     ) -> "StringIndexer":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
@@ -4806,11 +4805,11 @@ class StringIndexerModel(
     @classmethod
     @since("2.4.0")
     def from_labels(
-            cls,
-            labels: List[str],
-            inputCol: str,
-            outputCol: Optional[str] = None,
-            handleInvalid: Optional[str] = None,
+        cls,
+        labels: List[str],
+        inputCol: str,
+        outputCol: Optional[str] = None,
+        handleInvalid: Optional[str] = None,
     ) -> "StringIndexerModel":
         """
         Construct the model directly from an array of label strings,
@@ -4833,11 +4832,11 @@ class StringIndexerModel(
     @classmethod
     @since("3.0.0")
     def from_arrays_of_labels(
-            cls,
-            arrayOfLabels: List[List[str]],
-            inputCols: List[str],
-            outputCols: Optional[List[str]] = None,
-            handleInvalid: Optional[str] = None,
+        cls,
+        arrayOfLabels: List[List[str]],
+        inputCols: List[str],
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: Optional[str] = None,
     ) -> "StringIndexerModel":
         """
         Construct the model directly from an array of array of label strings,
@@ -4907,15 +4906,15 @@ class IndexToString(
         "Optional array of labels specifying index-string mapping."
         + " If not provided or if empty, then metadata from inputCol is used instead.",
         typeConverter=TypeConverters.toListString,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            labels: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        labels: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, labels=None)
@@ -4928,11 +4927,11 @@ class IndexToString(
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            labels: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        labels: Optional[List[str]] = None,
     ) -> "IndexToString":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, labels=None)
@@ -5034,49 +5033,49 @@ class StopWordsRemover(
         "caseSensitive",
         "whether to do a case sensitive " + "comparison over the stop words",
         typeConverter=TypeConverters.toBoolean,
-        )
+    )
     locale: Param[str] = Param(
         Params._dummy(),
         "locale",
         "locale of the input. ignored when case sensitive " + "is true",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     @overload
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            stopWords: Optional[List[str]] = ...,
-            caseSensitive: bool = ...,
-            locale: Optional[str] = ...,
+        self,
+        *,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        stopWords: Optional[List[str]] = ...,
+        caseSensitive: bool = ...,
+        locale: Optional[str] = ...,
     ):
         ...
 
     @overload
     def __init__(
-            self,
-            *,
-            stopWords: Optional[List[str]] = ...,
-            caseSensitive: bool = ...,
-            locale: Optional[str] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        stopWords: Optional[List[str]] = ...,
+        caseSensitive: bool = ...,
+        locale: Optional[str] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ):
         ...
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            stopWords: Optional[List[str]] = None,
-            caseSensitive: bool = False,
-            locale: Optional[str] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        stopWords: Optional[List[str]] = None,
+        caseSensitive: bool = False,
+        locale: Optional[str] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
@@ -5096,40 +5095,40 @@ class StopWordsRemover(
 
     @overload
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = ...,
-            outputCol: Optional[str] = ...,
-            stopWords: Optional[List[str]] = ...,
-            caseSensitive: bool = ...,
-            locale: Optional[str] = ...,
+        self,
+        *,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+        stopWords: Optional[List[str]] = ...,
+        caseSensitive: bool = ...,
+        locale: Optional[str] = ...,
     ) -> "StopWordsRemover":
         ...
 
     @overload
     def setParams(
-            self,
-            *,
-            stopWords: Optional[List[str]] = ...,
-            caseSensitive: bool = ...,
-            locale: Optional[str] = ...,
-            inputCols: Optional[List[str]] = ...,
-            outputCols: Optional[List[str]] = ...,
+        self,
+        *,
+        stopWords: Optional[List[str]] = ...,
+        caseSensitive: bool = ...,
+        locale: Optional[str] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
     ) -> "StopWordsRemover":
         ...
 
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            stopWords: Optional[List[str]] = None,
-            caseSensitive: bool = False,
-            locale: Optional[str] = None,
-            inputCols: Optional[List[str]] = None,
-            outputCols: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        stopWords: Optional[List[str]] = None,
+        caseSensitive: bool = False,
+        locale: Optional[str] = None,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
     ) -> "StopWordsRemover":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
@@ -5276,7 +5275,7 @@ class Tokenizer(
     @keyword_only
     @since("1.3.0")
     def setParams(
-            self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
+        self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None
     ) -> "Tokenizer":
         """
         setParams(self, \\*, inputCol=None, outputCol=None)
@@ -5366,15 +5365,15 @@ class VectorAssembler(
         + "inferred from first rows of the data since it is safe to do so but "
         + "only in case of 'error' or 'skip').",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCols: Optional[List[str]] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
     ):
         """
         __init__(self, \\*, inputCols=None, outputCol=None, handleInvalid="error")
@@ -5388,11 +5387,11 @@ class VectorAssembler(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            inputCols: Optional[List[str]] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
     ) -> "VectorAssembler":
         """
         setParams(self, \\*, inputCols=None, outputCol=None, handleInvalid="error")
@@ -5434,7 +5433,7 @@ class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
         + "(>= 2). If a feature is found to have > maxCategories values, then "
         + "it is declared continuous.",
         typeConverter=TypeConverters.toInt,
-        )
+    )
 
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -5445,7 +5444,7 @@ class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
         + "invalid data in a special additional bucket, at index of the number "
         + "of categories of the feature).",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_VectorIndexerParams, self).__init__(*args)
@@ -5558,12 +5557,12 @@ class VectorIndexer(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            maxCategories: int = 20,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        maxCategories: int = 20,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
     ):
         """
         __init__(self, \\*, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
@@ -5576,12 +5575,12 @@ class VectorIndexer(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            maxCategories: int = 20,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        maxCategories: int = 20,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        handleInvalid: str = "error",
     ) -> "VectorIndexer":
         """
         setParams(self, \\*, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
@@ -5723,7 +5722,7 @@ class VectorSlicer(
         "An array of indices to select features from "
         + "a vector column. There can be no overlap with names.",
         typeConverter=TypeConverters.toListInt,
-        )
+    )
     names: Param[List[str]] = Param(
         Params._dummy(),
         "names",
@@ -5732,16 +5731,16 @@ class VectorSlicer(
         + "org.apache.spark.ml.attribute.Attribute. There can be no overlap with "
         + "indices.",
         typeConverter=TypeConverters.toListString,
-        )
+    )
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            indices: Optional[List[int]] = None,
-            names: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        indices: Optional[List[int]] = None,
+        names: Optional[List[str]] = None,
     ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, indices=None, names=None)
@@ -5755,12 +5754,12 @@ class VectorSlicer(
     @keyword_only
     @since("1.6.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            indices: Optional[List[int]] = None,
-            names: Optional[List[str]] = None,
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        indices: Optional[List[int]] = None,
+        names: Optional[List[str]] = None,
     ) -> "VectorSlicer":
         """
         setParams(self, \\*, inputCol=None, outputCol=None, indices=None, names=None):
@@ -5835,7 +5834,7 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
         "the minimum number of times a token must appear to be included in the "
         + "word2vec model's vocabulary",
         typeConverter=TypeConverters.toInt,
-        )
+    )
     windowSize: Param[int] = Param(
         Params._dummy(),
         "windowSize",
@@ -5849,7 +5848,7 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
         + "Any sentence longer than this threshold will "
         + "be divided into chunks up to the size.",
         typeConverter=TypeConverters.toInt,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_Word2VecParams, self).__init__(*args)
@@ -5973,18 +5972,18 @@ class Word2Vec(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            vectorSize: int = 100,
-            minCount: int = 5,
-            numPartitions: int = 1,
-            stepSize: float = 0.025,
-            maxIter: int = 1,
-            seed: Optional[int] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            windowSize: int = 5,
-            maxSentenceLength: int = 1000,
+        self,
+        *,
+        vectorSize: int = 100,
+        minCount: int = 5,
+        numPartitions: int = 1,
+        stepSize: float = 0.025,
+        maxIter: int = 1,
+        seed: Optional[int] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        windowSize: int = 5,
+        maxSentenceLength: int = 1000,
     ):
         """
         __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
@@ -5999,18 +5998,18 @@ class Word2Vec(
     @keyword_only
     @since("1.4.0")
     def setParams(
-            self,
-            *,
-            vectorSize: int = 100,
-            minCount: int = 5,
-            numPartitions: int = 1,
-            stepSize: float = 0.025,
-            maxIter: int = 1,
-            seed: Optional[int] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
-            windowSize: int = 5,
-            maxSentenceLength: int = 1000,
+        self,
+        *,
+        vectorSize: int = 100,
+        minCount: int = 5,
+        numPartitions: int = 1,
+        stepSize: float = 0.025,
+        maxIter: int = 1,
+        seed: Optional[int] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+        windowSize: int = 5,
+        maxSentenceLength: int = 1000,
     ) -> "Word2Vec":
         """
         setParams(self, \\*, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
@@ -6214,11 +6213,11 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            k: Optional[int] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        k: Optional[int] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, k=None, inputCol=None, outputCol=None)
@@ -6231,11 +6230,11 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
     @keyword_only
     @since("1.5.0")
     def setParams(
-            self,
-            *,
-            k: Optional[int] = None,
-            inputCol: Optional[str] = None,
-            outputCol: Optional[str] = None,
+        self,
+        *,
+        k: Optional[int] = None,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
     ) -> "PCA":
         """
         setParams(self, \\*, k=None, inputCol=None, outputCol=None)
@@ -6335,7 +6334,7 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
         + "is frequencyDesc. When the ordering is set to alphabetDesc, "
         + "RFormula drops the same category as R when encoding strings.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     handleInvalid: Param[str] = Param(
         Params._dummy(),
@@ -6345,7 +6344,7 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
         + "'error' (throw an error), or 'keep' (put invalid data in a special "
         + "additional bucket, at index numLabels).",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_RFormulaParams, self).__init__(*args)
@@ -6458,14 +6457,14 @@ class RFormula(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            formula: Optional[str] = None,
-            featuresCol: str = "features",
-            labelCol: str = "label",
-            forceIndexLabel: bool = False,
-            stringIndexerOrderType: str = "frequencyDesc",
-            handleInvalid: str = "error",
+        self,
+        *,
+        formula: Optional[str] = None,
+        featuresCol: str = "features",
+        labelCol: str = "label",
+        forceIndexLabel: bool = False,
+        stringIndexerOrderType: str = "frequencyDesc",
+        handleInvalid: str = "error",
     ):
         """
         __init__(self, \\*, formula=None, featuresCol="features", labelCol="label", \
@@ -6480,14 +6479,14 @@ class RFormula(
     @keyword_only
     @since("1.5.0")
     def setParams(
-            self,
-            *,
-            formula: Optional[str] = None,
-            featuresCol: str = "features",
-            labelCol: str = "label",
-            forceIndexLabel: bool = False,
-            stringIndexerOrderType: str = "frequencyDesc",
-            handleInvalid: str = "error",
+        self,
+        *,
+        formula: Optional[str] = None,
+        featuresCol: str = "features",
+        labelCol: str = "label",
+        forceIndexLabel: bool = False,
+        stringIndexerOrderType: str = "frequencyDesc",
+        handleInvalid: str = "error",
     ) -> "RFormula":
         """
         setParams(self, \\*, formula=None, featuresCol="features", labelCol="label", \
@@ -6571,7 +6570,7 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
         "The selector type. "
         + "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     numTopFeatures: Param[int] = Param(
         Params._dummy(),
@@ -6580,14 +6579,14 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
         + "If the number of features is < numTopFeatures, then this will select "
         + "all features.",
         typeConverter=TypeConverters.toInt,
-        )
+    )
 
     percentile: Param[float] = Param(
         Params._dummy(),
         "percentile",
         "Percentile of features that selector " + "will select, ordered by ascending p-value.",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
 
     fpr: Param[float] = Param(
         Params._dummy(),
@@ -6834,17 +6833,17 @@ class ChiSqSelector(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            numTopFeatures: int = 50,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            labelCol: str = "label",
-            selectorType: str = "numTopFeatures",
-            percentile: float = 0.1,
-            fpr: float = 0.05,
-            fdr: float = 0.05,
-            fwe: float = 0.05,
+        self,
+        *,
+        numTopFeatures: int = 50,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        labelCol: str = "label",
+        selectorType: str = "numTopFeatures",
+        percentile: float = 0.1,
+        fpr: float = 0.05,
+        fdr: float = 0.05,
+        fwe: float = 0.05,
     ):
         """
         __init__(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
@@ -6859,17 +6858,17 @@ class ChiSqSelector(
     @keyword_only
     @since("2.0.0")
     def setParams(
-            self,
-            *,
-            numTopFeatures: int = 50,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            labelCol: str = "label",
-            selectorType: str = "numTopFeatures",
-            percentile: float = 0.1,
-            fpr: float = 0.05,
-            fdr: float = 0.05,
-            fwe: float = 0.05,
+        self,
+        *,
+        numTopFeatures: int = 50,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        labelCol: str = "label",
+        selectorType: str = "numTopFeatures",
+        percentile: float = 0.1,
+        fpr: float = 0.05,
+        fdr: float = 0.05,
+        fwe: float = 0.05,
     ) -> "ChiSqSelector":
         """
         setParams(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
@@ -6953,11 +6952,11 @@ class VectorSizeHint(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            size: Optional[int] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        size: Optional[int] = None,
+        handleInvalid: str = "error",
     ):
         """
         __init__(self, \\*, inputCol=None, size=None, handleInvalid="error")
@@ -6970,11 +6969,11 @@ class VectorSizeHint(
     @keyword_only
     @since("2.3.0")
     def setParams(
-            self,
-            *,
-            inputCol: Optional[str] = None,
-            size: Optional[str] = None,
-            handleInvalid: str = "error",
+        self,
+        *,
+        inputCol: Optional[str] = None,
+        size: Optional[str] = None,
+        handleInvalid: str = "error",
     ) -> "VectorSizeHint":
         """
         setParams(self, \\*, inputCol=None, size=None, handleInvalid="error")
@@ -7021,7 +7020,7 @@ class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
         + "greater than this threshold will be removed. The default value "
         + "is 0.0.",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
 
     @since("3.1.0")
     def getVarianceThreshold(self) -> float:
@@ -7085,11 +7084,11 @@ class VarianceThresholdSelector(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            varianceThreshold: float = 0.0,
+        self,
+        *,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        varianceThreshold: float = 0.0,
     ):
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, varianceThreshold=0.0)
@@ -7105,11 +7104,11 @@ class VarianceThresholdSelector(
     @keyword_only
     @since("3.1.0")
     def setParams(
-            self,
-            *,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            varianceThreshold: float = 0.0,
+        self,
+        *,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        varianceThreshold: float = 0.0,
     ) -> "VarianceThresholdSelector":
         """
         setParams(self, \\*, featuresCol="features", outputCol=None, varianceThreshold=0.0)
@@ -7191,14 +7190,14 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
         "featureType",
         "The feature type. " + "Supported options: categorical, continuous.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     labelType: Param[str] = Param(
         Params._dummy(),
         "labelType",
         "The label type. " + "Supported options: categorical, continuous.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     selectionMode: Param[str] = Param(
         Params._dummy(),
@@ -7207,14 +7206,14 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
         + "Supported options: numTopFeatures (default), percentile, fpr, "
         + "fdr, fwe.",
         typeConverter=TypeConverters.toString,
-        )
+    )
 
     selectionThreshold: Param[float] = Param(
         Params._dummy(),
         "selectionThreshold",
         "The upper bound of the " + "features that selector will select.",
         typeConverter=TypeConverters.toFloat,
-        )
+    )
 
     def __init__(self, *args: Any):
         super(_UnivariateFeatureSelectorParams, self).__init__(*args)
@@ -7332,12 +7331,12 @@ class UnivariateFeatureSelector(
 
     @keyword_only
     def __init__(
-            self,
-            *,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            labelCol: str = "label",
-            selectionMode: str = "numTopFeatures",
+        self,
+        *,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        labelCol: str = "label",
+        selectionMode: str = "numTopFeatures",
     ):
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, \
@@ -7353,12 +7352,12 @@ class UnivariateFeatureSelector(
     @keyword_only
     @since("3.1.1")
     def setParams(
-            self,
-            *,
-            featuresCol: str = "features",
-            outputCol: Optional[str] = None,
-            labelCol: str = "label",
-            selectionMode: str = "numTopFeatures",
+        self,
+        *,
+        featuresCol: str = "features",
+        outputCol: Optional[str] = None,
+        labelCol: str = "label",
+        selectionMode: str = "numTopFeatures",
     ) -> "UnivariateFeatureSelector":
         """
         setParams(self, \\*, featuresCol="features", outputCol=None, \
