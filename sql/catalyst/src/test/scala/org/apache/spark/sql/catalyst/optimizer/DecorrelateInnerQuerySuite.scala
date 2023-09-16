@@ -59,6 +59,25 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     joinCond.zip(conditions).foreach(e => compareExpressions(e._1, e._2))
   }
 
+  private def check(
+      outputPlan: LogicalPlan,
+      joinCond: Seq[Expression],
+      correctAnswer: LogicalPlan,
+      conditions: Seq[Expression]): Unit = {
+    assert(!hasOuterReferences(outputPlan))
+    comparePlans(outputPlan, correctAnswer)
+    assert(joinCond.length == conditions.length)
+    joinCond.zip(conditions).foreach(e => compareExpressions(e._1, e._2))
+  }
+
+  // For tests involving window functions: extract and return the ROW_NUMBER function
+  // from the 'input' plan.
+  private def getRowNumberFunc(input: LogicalPlan): Alias = {
+    val windowFunction = input.collect({ case w: Window => w }).head
+    windowFunction.expressions.collect(
+      { case w: Alias if w.child.isInstanceOf[WindowExpression] => w }).head
+  }
+
   test("filter with correlated equality predicates only") {
     val outerPlan = testRelation2
     val innerPlan =
@@ -624,5 +643,97 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       DecorrelateInnerQuery(innerPlan, outerPlan.select())
     }
     assert(e.getMessage.contains("Correlated column is not allowed in"))
+  }
+
+  test("SPARK-36191: limit in the correlated subquery") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Project(Seq(x),
+        Limit(1, Filter(OuterReference(a) === x,
+          testRelation2)))
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val alias = getRowNumberFunc(outputPlan)
+
+    val correctAnswer = Project(Seq(x), Project(Seq(x, y, z),
+      Filter(GreaterThanOrEqual(1, alias.toAttribute),
+        Window(Seq(alias), Seq(x), Nil, testRelation2))))
+    check(outputPlan, joinCond, correctAnswer, Seq(x === a))
+  }
+
+  test("SPARK-36191: limit and order by in the correlated subquery") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Project(Seq(x),
+        Limit(5, Sort(Seq(SortOrder(x, Ascending)), true,
+          Filter(OuterReference(a) > x,
+            testRelation2))))
+
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val alias = getRowNumberFunc(outputPlan)
+    val rowNumber = WindowExpression(RowNumber(),
+      WindowSpecDefinition(Seq(a), Seq(SortOrder(x, Ascending)),
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    val rowNumberAlias = Alias(rowNumber, alias.name)()
+
+    val correctAnswer = Project(Seq(x, a), Project(Seq(a, x, y, z),
+      Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
+        Window(Seq(rowNumberAlias), Seq(a), Seq(SortOrder(x, Ascending)),
+          Filter(GreaterThan(a, x),
+            DomainJoin(Seq(a), testRelation2))))))
+    check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-36191: limit and order by in the correlated subquery with aggregation") {
+    val outerPlan = testRelation
+    val minY = Alias(min(y), "min_y")()
+
+    val innerPlan =
+      Project(Seq(x),
+        Limit(5, Sort(Seq(SortOrder(minY.toAttribute, Ascending)), true,
+          Aggregate(Seq(x), Seq(minY, x),
+            Filter(OuterReference(a) > x,
+              testRelation2)))))
+
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val alias = getRowNumberFunc(outputPlan)
+    val rowNumber = WindowExpression(RowNumber(),
+      WindowSpecDefinition(Seq(a), Seq(SortOrder(minY.toAttribute, Ascending)),
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    val rowNumberAlias = Alias(rowNumber, alias.name)()
+    val correctAnswer = Project(Seq(x, a), Project(Seq(minY.toAttribute, x, a),
+      Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
+        Window(Seq(rowNumberAlias), Seq(a),
+          Seq(SortOrder(minY.toAttribute, Ascending)),
+          Aggregate(Seq(x, a), Seq(minY, x, a),
+            Filter(GreaterThan(a, x),
+              DomainJoin(Seq(a), testRelation2)))))))
+    check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
+
+  }
+
+  test("SPARK-36191: order by with correlated attribute") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Project(Seq(x),
+        Limit(5, Sort(Seq(SortOrder(OuterReference(a), Ascending)), true,
+          Filter(OuterReference(a) > x,
+            testRelation2))))
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val alias = getRowNumberFunc(outputPlan)
+    val rowNumber = WindowExpression(RowNumber(),
+      WindowSpecDefinition(Seq(a), Seq(SortOrder(a, Ascending)),
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    val rowNumberAlias = Alias(rowNumber, alias.name)()
+
+    val correctAnswer = Project(Seq(x, a), Project(Seq(a, x, y, z),
+      Filter(LessThanOrEqual(rowNumberAlias.toAttribute, 5),
+        Window(Seq(rowNumberAlias), Seq(a), Seq(SortOrder(a, Ascending)),
+          Filter(GreaterThan(a, x),
+            DomainJoin(Seq(a), testRelation2))))))
+    check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
   }
 }

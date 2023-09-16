@@ -174,7 +174,7 @@ case class SchemaOfXml(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "xml",
+          "inputName" -> toSQLId("xml"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
     } else {

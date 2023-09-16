@@ -249,9 +249,9 @@ function renderDagVizForJob(svgContainer) {
     // existing ones, taking into account the position and width of the last stage's
     // container. We do not need to do this for the first stage of this job.
     if (i > 0) {
-      var existingStages = svgContainer.selectAll("g.cluster.stage");
-      if (!existingStages.empty()) {
-        var lastStage = d3.select(existingStages[0].pop());
+      var existingStages = svgContainer.selectAll("g.cluster.stage").nodes();
+      if (existingStages.length > 0) {
+        var lastStage = d3.select(existingStages.pop());
         var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
         var lastStagePosition = getAbsolutePosition(lastStage);
         var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
@@ -380,14 +380,12 @@ function resizeSvg(svg) {
 function interpretLineBreak(svg) {
   svg.selectAll("tspan").each(function() {
     var node = d3.select(this);
-    var original = node[0][0].innerHTML;
-    if (original.indexOf("\\n") != -1) {
+    var original = node.html();
+    if (original.indexOf("\\n") !== -1) {
       var arr = original.split("\\n");
       var newNode = this.cloneNode(this);
-
-      node[0][0].innerHTML = arr[0];
-      newNode.innerHTML = arr[1];
-
+      node.html(arr[0])
+      newNode.html(arr[1]);
       this.parentNode.appendChild(newNode);
     }
   });
@@ -497,7 +495,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
     ];
   }
 
-  var line = d3.line().interpolate("basis");
+  var line = d3.line().curve(d3.curveBasis);
   edgesContainer.append("path").datum(points).attr("d", line);
 }
 

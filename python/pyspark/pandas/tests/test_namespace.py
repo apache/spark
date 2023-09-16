@@ -15,10 +15,8 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 import itertools
 import inspect
-import unittest
 
 import pandas as pd
 import numpy as np
@@ -320,9 +318,7 @@ class NamespaceTestsMixin:
 
         ignore_indexes = [True, False]
         joins = ["inner", "outer"]
-        sorts = [True]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
-            sorts += [False]
+        sorts = [True, False]
         objs = [
             ([psdf, psdf.reset_index()], [pdf, pdf.reset_index()]),
             ([psdf.reset_index(), psdf], [pdf.reset_index(), pdf]),
@@ -356,21 +352,19 @@ class NamespaceTestsMixin:
             ([psdf["C"], psdf["A"]], [pdf["C"], pdf["A"]]),
         ]
 
-        # See also https://github.com/pandas-dev/pandas/issues/47127
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4.3"):
-            series_objs = [
-                # more than two Series
-                ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
-                # only one Series
-                ([psdf, psdf["C"]], [pdf, pdf["C"]]),
-                ([psdf["C"], psdf], [pdf["C"], pdf]),
-            ]
-            for psdfs, pdfs in series_objs:
-                for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
-                    self.assert_eq(
-                        ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
-                        pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
-                    )
+        series_objs = [
+            # more than two Series
+            ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
+            # only one Series
+            ([psdf, psdf["C"]], [pdf, pdf["C"]]),
+            ([psdf["C"], psdf], [pdf["C"], pdf]),
+        ]
+        for psdfs, pdfs in series_objs:
+            for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+                self.assert_eq(
+                    ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                )
 
         for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
@@ -409,11 +403,10 @@ class NamespaceTestsMixin:
             ([psdf3, psdf3[[("Y", "C"), ("X", "A")]]], [pdf3, pdf3[[("Y", "C"), ("X", "A")]]]),
         ]
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
-            objs += [
-                ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
-                ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
-            ]
+        objs += [
+            ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
+            ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
+        ]
 
         for ignore_index, sort in itertools.product(ignore_indexes, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
