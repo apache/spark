@@ -15,22 +15,11 @@
 # limitations under the License.
 #
 
-import inspect
 import unittest
-from distutils.version import LooseVersion
-from datetime import datetime, timedelta
 
-import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeDatetimeIndex,
-    MissingPandasLikeIndex,
-    MissingPandasLikeMultiIndex,
-    MissingPandasLikeTimedeltaIndex,
-)
 from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
@@ -228,77 +217,42 @@ class IndexesSlowTestsMixin:
             with self.subTest(data=data):
                 pmidx = pd.MultiIndex.from_tuples(data)
                 psmidx = ps.from_pandas(pmidx)
-                if LooseVersion(pd.__version__) < LooseVersion("1.1.4"):
-                    self.assert_eq(psmidx.is_monotonic_increasing, False)
-                    self.assert_eq(psmidx.is_monotonic_decreasing, False)
-                else:
-                    self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-                    self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+                self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+                self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-        # The datas below are tested another way since they cannot be an arguments for
-        # `MultiIndex.from_tuples` in pandas >= 1.1.0.
-        # Refer https://github.com/databricks/koalas/pull/1688#issuecomment-667156560 for detail.
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            pmidx = pd.MultiIndex.from_tuples(
-                [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
+        # For [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
+        psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
+        psdf["b"] = None
+        psmidx = psdf.set_index(["a", "b"]).index
+        pmidx = psmidx._to_pandas()
+        self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-            pmidx = pd.MultiIndex.from_tuples(
-                [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
+        # For [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
+        psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
+        psdf["a"] = None
+        psmidx = psdf.set_index(["a", "b"]).index
+        pmidx = psmidx._to_pandas()
+        self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-            pmidx = pd.MultiIndex.from_tuples(
-                [(None, None), (None, None), (None, None), (None, None), (None, None)]
-            )
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
+        # For [(None, None), (None, None), (None, None), (None, None), (None, None)]
+        psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
+        psdf["a"] = None
+        psdf["b"] = None
+        psmidx = psdf.set_index(["a", "b"]).index
+        pmidx = psmidx._to_pandas()
+        self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
-            pmidx = pd.MultiIndex.from_tuples([(None, None)])
-            psmidx = ps.from_pandas(pmidx)
-            self.assert_eq(psmidx.is_monotonic_increasing, False)
-            self.assert_eq(psmidx.is_monotonic_decreasing, False)
-
-        else:
-            # For [(-5, None), (-4, None), (-3, None), (-2, None), (-1, None)]
-            psdf = ps.DataFrame({"a": [-5, -4, -3, -2, -1], "b": [1, 1, 1, 1, 1]})
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, "e"), (None, "c"), (None, "b"), (None, "d"), (None, "a")]
-            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": ["e", "c", "b", "d", "a"]})
-            psdf["a"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, None), (None, None), (None, None), (None, None), (None, None)]
-            psdf = ps.DataFrame({"a": [1, 1, 1, 1, 1], "b": [1, 1, 1, 1, 1]})
-            psdf["a"] = None
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
-
-            # For [(None, None)]
-            psdf = ps.DataFrame({"a": [1], "b": [1]})
-            psdf["a"] = None
-            psdf["b"] = None
-            psmidx = psdf.set_index(["a", "b"]).index
-            pmidx = psmidx._to_pandas()
-            self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
-            self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
+        # For [(None, None)]
+        psdf = ps.DataFrame({"a": [1], "b": [1]})
+        psdf["a"] = None
+        psdf["b"] = None
+        psmidx = psdf.set_index(["a", "b"]).index
+        pmidx = psmidx._to_pandas()
+        self.assert_eq(psmidx.is_monotonic_increasing, pmidx.is_monotonic_increasing)
+        self.assert_eq(psmidx.is_monotonic_decreasing, pmidx.is_monotonic_decreasing)
 
     def test_union(self):
         # Index
@@ -500,77 +454,38 @@ class IndexesSlowTestsMixin:
         # other = MultiIndex
         pmidx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         psmidx = ps.from_pandas(pmidx)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(
-                psidx.intersection(psmidx).sort_values(),
-                psidx._psdf.head(0).index.rename(None),
-                almost=True,
-            )
-            self.assert_eq(
-                (psidx + 1).intersection(psmidx).sort_values(),
-                psidx._psdf.head(0).index.rename(None),
-                almost=True,
-            )
-        else:
-            self.assert_eq(
-                pidx.intersection(pmidx), psidx.intersection(psmidx).sort_values(), almost=True
-            )
-            self.assert_eq(
-                (pidx + 1).intersection(pmidx),
-                (psidx + 1).intersection(psmidx).sort_values(),
-                almost=True,
-            )
+        self.assert_eq(
+            pidx.intersection(pmidx), psidx.intersection(psmidx).sort_values(), almost=True
+        )
+        self.assert_eq(
+            (pidx + 1).intersection(pmidx),
+            (psidx + 1).intersection(psmidx).sort_values(),
+            almost=True,
+        )
 
         # other = Series
         pser = pd.Series([3, 4, 5, 6])
         psser = ps.from_pandas(pser)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(psidx.intersection(psser).sort_values(), ps.Index([3, 4], name="Koalas"))
-            self.assert_eq(
-                (psidx + 1).intersection(psser).sort_values(), ps.Index([3, 4, 5], name="Koalas")
-            )
-        else:
-            self.assert_eq(pidx.intersection(pser), psidx.intersection(psser).sort_values())
-            self.assert_eq(
-                (pidx + 1).intersection(pser), (psidx + 1).intersection(psser).sort_values()
-            )
+        self.assert_eq(pidx.intersection(pser), psidx.intersection(psser).sort_values())
+        self.assert_eq((pidx + 1).intersection(pser), (psidx + 1).intersection(psser).sort_values())
 
         pser_different_name = pd.Series([3, 4, 5, 6], name="Databricks")
         psser_different_name = ps.from_pandas(pser_different_name)
-        if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-            self.assert_eq(
-                psidx.intersection(psser_different_name).sort_values(),
-                ps.Index([3, 4], name="Koalas"),
-            )
-            self.assert_eq(
-                (psidx + 1).intersection(psser_different_name).sort_values(),
-                ps.Index([3, 4, 5], name="Koalas"),
-            )
-        else:
-            self.assert_eq(
-                pidx.intersection(pser_different_name),
-                psidx.intersection(psser_different_name).sort_values(),
-            )
-            self.assert_eq(
-                (pidx + 1).intersection(pser_different_name),
-                (psidx + 1).intersection(psser_different_name).sort_values(),
-            )
+        self.assert_eq(
+            pidx.intersection(pser_different_name),
+            psidx.intersection(psser_different_name).sort_values(),
+        )
+        self.assert_eq(
+            (pidx + 1).intersection(pser_different_name),
+            (psidx + 1).intersection(psser_different_name).sort_values(),
+        )
 
         others = ([3, 4, 5, 6], (3, 4, 5, 6), {3: None, 4: None, 5: None, 6: None})
         for other in others:
-            if LooseVersion(pd.__version__) < LooseVersion("1.2.0"):
-                self.assert_eq(
-                    psidx.intersection(other).sort_values(), ps.Index([3, 4], name="Koalas")
-                )
-                self.assert_eq(
-                    (psidx + 1).intersection(other).sort_values(),
-                    ps.Index([3, 4, 5], name="Koalas"),
-                )
-            else:
-                self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
-                self.assert_eq(
-                    (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
-                )
+            self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
+            self.assert_eq(
+                (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
+            )
 
         # MultiIndex / other = Index
         self.assert_eq(

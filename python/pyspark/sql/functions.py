@@ -1631,19 +1631,21 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column for computed results.
+        A column for the computed results.
 
     Examples
     --------
+    Example 1: Compute the ceiling of a column value
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1))).show()
     +----------+
@@ -1651,6 +1653,8 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     +----------+
     |         0|
     +----------+
+
+    Example 2: Compute the ceiling of a column value with a specified scale
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceil(sf.lit(-0.1), 1)).show()
@@ -1680,19 +1684,21 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to compute on.
+        The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the column for computed results.
+        A column for the computed results.
 
     Examples
     --------
+    Example 1: Compute the ceiling of a column value
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1))).show()
     +-------------+
@@ -1700,6 +1706,8 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     +-------------+
     |            0|
     +-------------+
+
+    Example 2: Compute the ceiling of a column value with a specified scale
 
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.ceiling(sf.lit(-0.1), 1)).show()
@@ -1928,9 +1936,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        column to find floor for.
+        The target column or column name to compute the floor on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionadded:: 4.0.0
 
@@ -1942,6 +1950,8 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     Examples
     --------
+    Example 1: Compute the floor of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.floor(sf.lit(2.5))).show()
     +----------+
@@ -1949,6 +1959,8 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     +----------+
     |         2|
     +----------+
+
+    Example 2: Compute the floor of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.floor(sf.lit(2.1267), sf.lit(2))).show()
@@ -5293,9 +5305,9 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column to round.
+        The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
                 Support Column type.
@@ -5303,10 +5315,12 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        rounded values.
+        A column for the rounded value.
 
     Examples
     --------
+    Example 1: Compute the rounded of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.5))).show()
     +-------------+
@@ -5314,6 +5328,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     +-------------+
     |          3.0|
     +-------------+
+
+    Example 2: Compute the rounded of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.round(sf.lit(2.1267), sf.lit(2))).show()
@@ -5344,9 +5360,9 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column to round.
+        The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int
-        an optional parameter to control the rounding behavior.
+        An optional parameter to control the rounding behavior.
 
             .. versionchanged:: 4.0.0
                 Support Column type.
@@ -5354,10 +5370,12 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        rounded values.
+        A column for the rounded value.
 
     Examples
     --------
+    Example 1: Compute the rounded of a column value
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.5))).show()
     +--------------+
@@ -5365,6 +5383,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     +--------------+
     |           2.0|
     +--------------+
+
+    Example 2: Compute the rounded of a column value with a specified scale
 
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.bround(sf.lit(2.1267), sf.lit(2))).show()
@@ -12451,37 +12471,126 @@ def inline(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
 
+    This function takes an input column containing an array of structs and returns a
+    new column where each struct in the array is exploded into a separate row.
+
     .. versionadded:: 3.4.0
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column of values to explode.
+        Input column of values to explode.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        generator expression with the inline exploded result.
+        Generator expression with the inline exploded result.
 
     See Also
     --------
-    :meth:`explode`
-
-    Notes
-    -----
-    Supports Spark Connect.
+    :meth:`pyspark.functions.explode`
+    :meth:`pyspark.functions.inline_outer`
 
     Examples
     --------
+    Example 1: Using inline with a single struct array column
+
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(inline(df.structlist)).show()
+    >>> df.select(sf.inline(df.structlist)).show()
     +---+---+
     |  a|  b|
     +---+---+
     |  1|  2|
     |  3|  4|
     +---+---+
+
+    Example 2: Using inline with a column name
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 3: Using inline with an alias
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist").alias("c1", "c2")).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 4: Using inline with multiple struct array columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist1=[Row(a=1, b=2), Row(a=3, b=4)],
+    ...         structlist2=[Row(c=5, d=6), Row(c=7, d=8)])
+    ... ])
+    >>> df.select(sf.inline("structlist1"), "structlist2") \\
+    ...     .select("a", "b", sf.inline("structlist2")).show()
+    +---+---+---+---+
+    |  a|  b|  c|  d|
+    +---+---+---+---+
+    |  1|  2|  5|  6|
+    |  1|  2|  7|  8|
+    |  3|  4|  5|  6|
+    |  3|  4|  7|  8|
+    +---+---+---+---+
+
+    Example 5: Using inline with a nested struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist=Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)]))
+    ... ])
+    >>> df.select(sf.inline("structlist.nested")).show()
+    +---+---+
+    |  c|  d|
+    +---+---+
+    |  3|  4|
+    |  5|  6|
+    +---+---+
+
+    Example 6: Using inline with an empty struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(structlist=[])], "structlist: array<struct<a:int,b:int>>")
+    >>> df.select(sf.inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    +---+---+
+
+    Example 7: Using inline with a struct array column containing null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), None, Row(a=3, b=4)])])
+    >>> df.select(sf.inline(df.structlist)).show()
+    +----+----+
+    |   a|   b|
+    +----+----+
+    |   1|   2|
+    |NULL|NULL|
+    |   3|   4|
+    +----+----+
     """
     return _invoke_function_over_columns("inline", col)
 

@@ -602,7 +602,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"round(intField, intField)\"",
-        "inputName" -> "scala",
+        "inputName" -> "`scala`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"intField\""))
 
@@ -649,7 +649,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"bround(intField, intField)\"",
-        "inputName" -> "scala",
+        "inputName" -> "`scala`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"intField\""))
     checkError(
@@ -753,7 +753,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "offset",
+          "inputName" -> "`offset`",
           "inputType" -> "\"INT\"",
           "inputExpr" -> "\"(- nonfoldableliteral())\""
         )

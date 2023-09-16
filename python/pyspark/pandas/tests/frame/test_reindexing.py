@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -822,31 +821,9 @@ class FrameReindexingMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
-        else:
-            expected = pd.DataFrame(
-                {
-                    "a": [True, False, True, True, False, False],
-                    "b": [True, False, False, True, False, True],
-                    "c": [False, False, False, True, False, True],
-                }
-            )
-            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
+        self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(
-                psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]})
-            )
-        else:
-            expected = pd.DataFrame(
-                {
-                    "a": [False, False, False, False, False, False],
-                    "b": [True, False, False, True, False, True],
-                    "c": [False, False, False, False, False, False],
-                }
-            )
-            self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), expected)
+        self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]}))
 
     def test_sample(self):
         psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])
