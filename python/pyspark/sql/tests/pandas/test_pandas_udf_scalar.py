@@ -28,7 +28,6 @@ from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -215,10 +214,6 @@ class ScalarPandasUDFTestsMixin:
             Row(res="[array([1, 2, 3], dtype=int32) array([4, 5], dtype=int32)]"),
         )
 
-    @unittest.skipIf(
-        pyarrow_version_less_than_minimum("2.0.0"),
-        "Pyarrow version must be 2.0.0 or higher",
-    )
     def test_pandas_array_struct(self):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
         import numpy as np
