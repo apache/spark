@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
