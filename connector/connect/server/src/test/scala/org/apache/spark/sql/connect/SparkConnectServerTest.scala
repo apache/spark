@@ -35,7 +35,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
  * with a real SparkConnectClient, communicating over RPC, but both in-process.
  */
-class SparkConnectServerTest extends SharedSparkSession {
+trait SparkConnectServerTest extends SharedSparkSession {
 
   // Server port
   val serverPort: Int =
