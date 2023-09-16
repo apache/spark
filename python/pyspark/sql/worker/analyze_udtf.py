@@ -127,6 +127,24 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
+        # Return whether the "with single partition" property is requested.
+        write_int(1 if result.with_single_partition else 0, outfile)
+        # Return the list of partitioning columns, if any.
+        write_int(len(result.partition_by), outfile)
+        for partitioning_col in result.partition_by:
+            write_with_length(partitioning_col.name.encode("utf-8"), outfile)
+        # Return the requested input table ordering, if any.
+        write_int(len(result.order_by), outfile)
+        for ordering_col in result.order_by:
+            write_with_length(ordering_col.name.encode("utf-8"), outfile)
+            write_int(1 if ordering_col.ascending else 0, outfile)
+            if ordering_col.overrideNullsFirst is None:
+                write_int(0, outfile)
+            elif ordering_col.overrideNullsFirst:
+                write_int(1, outfile)
+            else:
+                write_int(2, outfile)
+
     except BaseException as e:
         try:
             exc_info = None

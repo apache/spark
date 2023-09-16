@@ -18,13 +18,13 @@
 import unittest
 from pyspark.sql import SparkSession
 
+from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests
+
 have_torch = True
 try:
     import torch  # noqa: F401
 except ImportError:
     have_torch = False
-
-from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests
 
 
 @unittest.skipIf(not have_torch, "torch is required")

@@ -20,6 +20,13 @@
 /* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
 
 var shouldBlockUI = true;
+var taskThreadDumpEnabled = false;
+
+/* eslint-disable no-unused-vars */
+function setTaskThreadDumpEnabled(enabled){
+  taskThreadDumpEnabled = enabled;
+}
+/* eslint-enable no-unused-vars */
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
@@ -846,15 +853,21 @@ $(document).ready(function () {
             }
           },
           "columns": [
-            {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-              },
-              name: "Index"
-            },
+            {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
-            {data : "status", name: "Status"},
+            {
+              data : (row, _ignored_type) => {
+                if (taskThreadDumpEnabled && row.status === "RUNNING") {
+                  var threadUrl =
+                    uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
+                  return '<div><a href=' + threadUrl + '>' + row.status + '</a></div>'
+                } else {
+                  return row.status
+                }
+              },
+              name: "Status"
+            },
             {data : "taskLocality", name: "Locality Level"},
             {data : "executorId", name: "Executor ID"},
             {data : "host", name: "Host"},

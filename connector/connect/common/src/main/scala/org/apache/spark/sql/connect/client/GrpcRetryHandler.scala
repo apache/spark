@@ -26,7 +26,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
-private[client] class GrpcRetryHandler(
+private[sql] class GrpcRetryHandler(
     private val retryPolicy: GrpcRetryHandler.RetryPolicy,
     private val sleep: Long => Unit = Thread.sleep) {
 
@@ -48,10 +48,12 @@ private[client] class GrpcRetryHandler(
    *   The type of the response.
    */
   class RetryIterator[T, U](request: T, call: T => CloseableIterator[U])
-      extends CloseableIterator[U] {
+      extends WrappedCloseableIterator[U] {
 
     private var opened = false // we only retry if it fails on first call when using the iterator
     private var iter = call(request)
+
+    override def innerIterator: Iterator[U] = iter
 
     private def retryIter[V](f: Iterator[U] => V) = {
       if (!opened) {
@@ -146,7 +148,7 @@ private[client] class GrpcRetryHandler(
   }
 }
 
-private[client] object GrpcRetryHandler extends Logging {
+private[sql] object GrpcRetryHandler extends Logging {
 
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
@@ -217,7 +219,22 @@ private[client] object GrpcRetryHandler extends Logging {
    */
   private[client] def retryException(e: Throwable): Boolean = {
     e match {
-      case e: StatusRuntimeException => e.getStatus.getCode == Status.Code.UNAVAILABLE
+      case e: StatusRuntimeException =>
+        val statusCode: Status.Code = e.getStatus.getCode
+
+        if (statusCode == Status.Code.INTERNAL) {
+          val msg: String = e.toString
+
+          // This error happens if another RPC preempts this RPC.
+          if (msg.contains("INVALID_CURSOR.DISCONNECTED")) {
+            return true
+          }
+        }
+
+        if (statusCode == Status.Code.UNAVAILABLE) {
+          return true
+        }
+        false
       case _ => false
     }
   }

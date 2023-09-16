@@ -94,7 +94,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
         self._metadata = metadata
-        self._iterator: Iterator[pb2.ExecutePlanResponse] = iter(
+        self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
             self._stub.ExecutePlan(self._initial_request, metadata=metadata)
         )
 
@@ -131,18 +131,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     can_retry=SparkConnectClient.retry_exception, **self._retry_policy
                 ):
                     with attempt:
-                        # on first try, we use the existing iterator.
-                        if not attempt.is_first_try():
-                            # on retry, the iterator is borked, so we need a new one
-                            self._iterator = iter(
-                                self._stub.ReattachExecute(
-                                    self._create_reattach_execute_request(), metadata=self._metadata
-                                )
-                            )
-
                         if self._current is None:
                             try:
-                                self._current = self._call_iter(lambda: next(self._iterator))
+                                self._current = self._call_iter(
+                                    lambda: next(self._iterator)  # type: ignore[arg-type]
+                                )
                             except StopIteration:
                                 pass
 
@@ -154,16 +147,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         # arrive, we keep reattaching.
                         if not self._result_complete and not has_next:
                             while not has_next:
-                                self._iterator = iter(
-                                    self._stub.ReattachExecute(
-                                        self._create_reattach_execute_request(),
-                                        metadata=self._metadata,
-                                    )
-                                )
+                                # unset iterator for new ReattachExecute to be called in _call_iter
+                                self._iterator = None
                                 # shouldn't change
                                 assert not self._result_complete
                                 try:
-                                    self._current = self._call_iter(lambda: next(self._iterator))
+                                    self._current = self._call_iter(
+                                        lambda: next(self._iterator)  # type: ignore[arg-type]
+                                    )
                                 except StopIteration:
                                     pass
                                 has_next = self._current is not None
@@ -238,6 +229,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         Called inside retry block, so retryable failure will get handled upstream.
         """
+        if self._iterator is None:
+            # we get a new iterator with ReattachExecute if it was unset.
+            self._iterator = iter(
+                self._stub.ReattachExecute(
+                    self._create_reattach_execute_request(), metadata=self._metadata
+                )
+            )
+
         try:
             return iter_fun()
         except grpc.RpcError as e:
@@ -255,7 +254,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 )
                 raise RetryException()
             else:
+                # Remove the iterator, so that a new one will be created after retry.
+                self._iterator = None
                 raise e
+        except Exception as e:
+            # Remove the iterator, so that a new one will be created after retry.
+            self._iterator = None
+            raise e
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         reattach = pb2.ReattachExecuteRequest(

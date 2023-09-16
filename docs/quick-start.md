@@ -130,8 +130,8 @@ Dataset actions and transformations can be used for more complex computations. L
 <div data-lang="python" markdown="1">
 
 {% highlight python %}
->>> from pyspark.sql import functions as F
->>> textFile.select(F.size(F.split(textFile.value, "\s+")).name("numWords")).agg(F.max(F.col("numWords"))).collect()
+>>> from pyspark.sql import functions as sf
+>>> textFile.select(sf.size(sf.split(textFile.value, "\s+")).name("numWords")).agg(sf.max(sf.col("numWords"))).collect()
 [Row(max(numWords)=15)]
 {% endhighlight %}
 
@@ -140,7 +140,7 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(F.explode(F.split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(sf.explode(sf.split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
 Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
@@ -470,18 +470,18 @@ Congratulations on running your first Spark application!
 * For an in-depth overview of the API, start with the [RDD programming guide](rdd-programming-guide.html) and the [SQL programming guide](sql-programming-guide.html), or see "Programming Guides" menu for other components.
 * For running applications on a cluster, head to the [deployment overview](cluster-overview.html).
 * Finally, Spark includes several samples in the `examples` directory
-([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
+([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
+ [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
 You can run them as follows:
 
 {% highlight bash %}
-# For Scala and Java, use run-example:
-./bin/run-example SparkPi
-
 # For Python examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/python/pi.py
+
+# For Scala and Java, use run-example:
+./bin/run-example SparkPi
 
 # For R examples, use spark-submit directly:
 ./bin/spark-submit examples/src/main/r/dataframe.R

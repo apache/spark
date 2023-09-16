@@ -394,7 +394,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
-  <td>(none)</td>
+  <td>client</td>
   <td>
     The deploy mode of Spark driver program, either "client" or "cluster",
     Which means to launch driver program locally ("client")
@@ -431,6 +431,14 @@ of the most common options to set are:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.driver.log.localDir</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies a local directory to write driver logs and enable Driver Log UI Tab.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.log.dfsDir</code></td>
   <td>(none)</td>
   <td>
@@ -460,7 +468,7 @@ of the most common options to set are:
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex</td>
   <td>
-    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
+    The layout for the driver logs that are synced to <code>spark.driver.log.localDir</code> and <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
     use the default layout.
   </td>
@@ -686,10 +694,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.strategy</code></td>
-  <td>(none)</td>
+  <td>"" (disabled)</td>
   <td>
     Set the strategy of rolling of executor logs. By default it is disabled. It can
-    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    be set to "time" (time-based rolling) or "size" (size-based rolling) or "" (disabled). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
     For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.

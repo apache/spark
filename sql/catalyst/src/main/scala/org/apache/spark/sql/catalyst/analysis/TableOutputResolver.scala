@@ -87,7 +87,7 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols.map(_.name), query)
+        tableName, actualExpectedCols.map(_.name), query.output)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -103,22 +103,11 @@ object TableOutputResolver {
         errors += _,
         fillDefaultValue = supportColDefaultValue)
     } else {
-      // If the target table needs more columns than the input query, fill them with
-      // the columns' default values, if the `supportColDefaultValue` parameter is true.
-      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
-      val queryOutputCols = if (fillDefaultValue) {
-        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-        }
-      } else {
-        query.output
-      }
-      if (actualExpectedCols.size > queryOutputCols.size) {
+      if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols.map(_.name), query)
+          tableName, actualExpectedCols.map(_.name), query.output)
       }
-
-      resolveColumnsByPosition(tableName, queryOutputCols, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
     if (errors.nonEmpty) {
@@ -278,9 +267,13 @@ object TableOutputResolver {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"${toSQLId(col.name)}").mkString(", ")
-        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-          tableName, colPath.quoted, extraCols
-        )
+        if (colPath.isEmpty) {
+          throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
+            extraCols)
+        } else {
+          throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+            tableName, colPath.quoted, extraCols)
+        }
       } else {
         reordered
       }
@@ -301,16 +294,26 @@ object TableOutputResolver {
       val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
-      throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
-        tableName, colPath.quoted, extraColsStr
-      )
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+          tableName, colPath.quoted, extraColsStr
+        )
+      }
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
-      throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-        tableName, colPath.quoted, missingColsStr
-      )
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
+          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+          tableName, colPath.quoted, missingColsStr
+        )
+      }
     }
 
     inputCols.zip(expectedCols).flatMap { case (inputCol, expectedCol) =>

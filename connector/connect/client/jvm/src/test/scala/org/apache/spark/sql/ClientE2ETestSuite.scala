@@ -36,10 +36,10 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
@@ -107,6 +107,18 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       df = df.union(spark.range(a, a + 1))
     }
     assert(df.collect().length == 501)
+  }
+
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
   }
 
   test("many tables") {

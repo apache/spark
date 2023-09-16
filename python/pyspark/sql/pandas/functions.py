@@ -56,6 +56,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports keyword-arguments in SCALAR and GROUPED_AGG type.
+
     Parameters
     ----------
     f : function, optional
@@ -153,6 +156,20 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         |       [John, Doe]|
         +------------------+
 
+        This type of Pandas UDF can use keyword arguments:
+
+        >>> @pandas_udf(returnType=IntegerType())
+        ... def calc(a: pd.Series, b: pd.Series) -> pd.Series:
+        ...     return a + 10 * b
+        ...
+        >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+        +-----------------------------+
+        |calc(b => (id * 10), a => id)|
+        +-----------------------------+
+        |                            0|
+        |                          101|
+        +-----------------------------+
+
         .. note:: The length of the input is not that of the whole input column, but is the
             length of an internal batch used for each call to the function.
 
@@ -249,6 +266,24 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         |  1|        1.5|
         |  2|        6.0|
         +---+-----------+
+
+        This type of Pandas UDF can use keyword arguments:
+
+        >>> @pandas_udf("double")
+        ... def weighted_mean_udf(v: pd.Series, w: pd.Series) -> float:
+        ...     import numpy as np
+        ...     return np.average(v, weights=w)
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ...     ("id", "v", "w"))
+        >>> df.groupby("id").agg(weighted_mean_udf(w=df["w"], v=df["v"])).show()
+        +---+---------------------------------+
+        | id|weighted_mean_udf(w => w, v => v)|
+        +---+---------------------------------+
+        |  1|               1.6666666666666667|
+        |  2|                7.166666666666667|
+        +---+---------------------------------+
 
         This UDF can also be used as window functions as below:
 

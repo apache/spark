@@ -19,17 +19,13 @@ import os
 import tempfile
 import unittest
 import numpy as np
-from pyspark.ml.connect.feature import StandardScaler
-from pyspark.ml.connect.classification import LogisticRegression as LORV2
-from pyspark.ml.connect.pipeline import Pipeline
 from pyspark.sql import SparkSession
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
-
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
+if should_test_connect:
+    from pyspark.ml.connect.feature import StandardScaler
+    from pyspark.ml.connect.classification import LogisticRegression as LORV2
+    from pyspark.ml.connect.pipeline import Pipeline
 
 
 class PipelineTestsMixin:
@@ -164,6 +160,7 @@ class PipelineTestsMixin:
         assert lorv2.getOrDefault(lorv2.maxIter) == 200
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PipelineTests(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

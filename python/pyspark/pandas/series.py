@@ -1662,7 +1662,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         buf: Optional[IO[str]] = None,
         columns: Optional[List[Name]] = None,
-        col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
@@ -1682,11 +1681,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
-        warnings.warn(
-            "Argument `col_space` will be removed in 4.0.0.",
-            FutureWarning,
-        )
-
         args = locals()
         psseries = self
         return validate_arguments_and_invoke_function(
@@ -2257,7 +2251,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        last_non_null = SF.last_non_null(scol)
+        last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
         Window = get_window_class()

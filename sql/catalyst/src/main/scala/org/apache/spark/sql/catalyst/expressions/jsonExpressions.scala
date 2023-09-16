@@ -800,7 +800,7 @@ case class SchemaOfJson(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "json",
+          "inputName" -> toSQLId("json"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
     } else {

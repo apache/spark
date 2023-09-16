@@ -23,10 +23,9 @@ import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 import scala.util.Properties
 
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
 
 class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
@@ -51,29 +50,26 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   override def beforeAll(): Unit = {
-    // TODO(SPARK-44121) Remove this check condition
-    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
-      super.beforeAll()
-      ammoniteOut = new ByteArrayOutputStream()
-      testSuiteOut = new PipedOutputStream()
-      // Connect the `testSuiteOut` and `ammoniteIn` pipes
-      ammoniteIn = new PipedInputStream(testSuiteOut)
-      errorStream = new ByteArrayOutputStream()
+    super.beforeAll()
+    ammoniteOut = new ByteArrayOutputStream()
+    testSuiteOut = new PipedOutputStream()
+    // Connect the `testSuiteOut` and `ammoniteIn` pipes
+    ammoniteIn = new PipedInputStream(testSuiteOut)
+    errorStream = new ByteArrayOutputStream()
 
-      val args = Array("--port", serverPort.toString)
-      val task = new Runnable {
-        override def run(): Unit = {
-          ConnectRepl.doMain(
-            args = args,
-            semaphore = Some(semaphore),
-            inputStream = ammoniteIn,
-            outputStream = ammoniteOut,
-            errorStream = errorStream)
-        }
+    val args = Array("--port", serverPort.toString)
+    val task = new Runnable {
+      override def run(): Unit = {
+        ConnectRepl.doMain(
+          args = args,
+          semaphore = Some(semaphore),
+          inputStream = ammoniteIn,
+          outputStream = ammoniteOut,
+          errorStream = errorStream)
       }
-
-      executorService.submit(task)
     }
+
+    executorService.submit(task)
   }
 
   override def afterAll(): Unit = {
@@ -83,12 +79,10 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     semaphore.drainPermits()
-    if (ammoniteOut != null) {
-      ammoniteOut.reset()
-    }
   }
 
   def runCommandsInShell(input: String): String = {
+    ammoniteOut.reset()
     require(input.nonEmpty)
     // Pad the input with a semaphore release so that we know when the execution of the provided
     // input is complete.
@@ -107,6 +101,10 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       throw new RuntimeException(errorString)
     }
     getCleanString(ammoniteOut)
+  }
+
+  def runCommandsUsingSingleCellInShell(input: String): String = {
+    runCommandsInShell("{\n" + input + "\n}")
   }
 
   def assertContains(message: String, output: String): Unit = {
@@ -267,6 +265,31 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     assertContains("Array[org.apache.spark.sql.Row] = Array([id1,1], [id2,16], [id3,25])", output)
   }
 
+  test("Single Cell Compilation") {
+    val input =
+      """
+        |case class C1(value: Int)
+        |case class C2(value: Int)
+        |val h1 = classOf[C1].getDeclaringClass
+        |val h2 = classOf[C2].getDeclaringClass
+        |val same = h1 == h2
+        |""".stripMargin
+    assertContains("same: Boolean = false", runCommandsInShell(input))
+    assertContains("same: Boolean = true", runCommandsUsingSingleCellInShell(input))
+  }
+
+  test("Local relation containing REPL generated class") {
+    val input =
+      """
+        |case class MyTestClass(value: Int)
+        |val data = (0 to 10).map(MyTestClass)
+        |spark.createDataset(data).map(mtc => mtc.value).select(sum($"value")).as[Long].head
+        |""".stripMargin
+    val expected = "Long = 55L"
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
+  }
+
   test("Collect REPL generated class") {
     val input =
       """
@@ -279,8 +302,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => s"MyTestClass(${mtc.value})").
         |  mkString("[", ", ", "]")
           """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("""String = "[MyTestClass(1), MyTestClass(3)]"""", output)
+    val expected = """String = "[MyTestClass(1), MyTestClass(3)]""""
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("REPL class in encoder") {
@@ -292,8 +316,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => mtc.value).
         |  collect()
       """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("Array[Int] = Array(0, 1, 2)", output)
+    val expected = "Array[Int] = Array(0, 1, 2)"
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("REPL class in UDF") {
@@ -305,8 +330,9 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |  map(mtc => s"MyTestClass(${mtc.value})").
         |  mkString("[", ", ", "]")
       """.stripMargin
-    val output = runCommandsInShell(input)
-    assertContains("""String = "[MyTestClass(0), MyTestClass(1)]"""", output)
+    val expected = """String = "[MyTestClass(0), MyTestClass(1)]""""
+    assertContains(expected, runCommandsInShell(input))
+    assertContains(expected, runCommandsUsingSingleCellInShell(input))
   }
 
   test("streaming works with REPL generated code") {

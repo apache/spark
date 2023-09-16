@@ -31,24 +31,28 @@ output_rst_file_path = (
 )
 generate_supported_api(output_rst_file_path)
 
+# generate development/errors.rst
+from pyspark.errors_doc_gen import generate_errors_doc
+
+output_rst_file_path = (
+    "%s/development/errors.rst"
+    % os.path.dirname(os.path.abspath(__file__))
+)
+generate_errors_doc(output_rst_file_path)
+
+
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
-shutil.rmtree(
-    "%s/reference/api" % os.path.dirname(os.path.abspath(__file__)), ignore_errors=True)
-shutil.rmtree(
-    "%s/reference/pyspark.pandas/api" % os.path.dirname(os.path.abspath(__file__)),
-    ignore_errors=True)
-try:
-    os.mkdir("%s/reference/api" % os.path.dirname(os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
-try:
-    os.mkdir("%s/reference/pyspark.pandas/api" % os.path.dirname(
-        os.path.abspath(__file__)))
-except OSError as e:
-    if e.errno != errno.EEXIST:
-        raise
+gen_rst_dirs = ["reference/api", "reference/pyspark.pandas/api",
+    "reference/pyspark.sql/api", "reference/pyspark.ss/api"]
+for gen_rst_dir in gen_rst_dirs:
+    absolute_gen_rst_dir = "%s/%s" % (os.path.dirname(os.path.abspath(__file__)), gen_rst_dir)
+    shutil.rmtree(absolute_gen_rst_dir, ignore_errors=True)
+    try:
+        os.mkdir(absolute_gen_rst_dir)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
 # -- General configuration ------------------------------------------------
 
@@ -177,10 +181,17 @@ autosummary_generate = True
 # a list of builtin themes.
 html_theme = 'pydata_sphinx_theme'
 
+html_context = {
+    "switcher_json_url": "_static/versions.json",
+    "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
+}
+
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#html_theme_options = {}
+html_theme_options = {
+    "navbar_end": ["version-switcher"]
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 #html_theme_path = []

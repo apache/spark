@@ -3402,7 +3402,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null))
     )
     checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
-    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, 3, 2, 5, 1, 2))))
+
+    withSQLConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT.key -> "true") {
+      checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    }
   }
 
   test("transform function - array for primitive type not containing null") {
@@ -5881,11 +5885,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("CURRENT_SCHEMA()"), df.select(current_schema()))
   }
 
-  test("function current_user, user") {
+  test("function current_user, user, session_user") {
     val df = Seq((1, 2), (3, 1)).toDF("a", "b")
 
     checkAnswer(df.selectExpr("CURRENT_USER()"), df.select(current_user()))
     checkAnswer(df.selectExpr("USER()"), df.select(user()))
+    checkAnswer(df.selectExpr("SESSION_USER()"), df.select(session_user()))
   }
 
   test("named_struct function") {

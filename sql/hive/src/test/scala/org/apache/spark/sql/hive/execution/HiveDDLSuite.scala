@@ -3374,4 +3374,25 @@ class HiveDDLSuite
       )
     }
   }
+
+  test("SPARK-44911: Create the table with invalid column") {
+    val tbl = "t1"
+    withTable(tbl) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t1
+             |STORED AS parquet
+             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
+         """.stripMargin)
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t1`",
+          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
+      )
+    }
+  }
 }
