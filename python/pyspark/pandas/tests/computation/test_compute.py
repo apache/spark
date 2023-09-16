@@ -101,16 +101,10 @@ class FrameComputeMixin:
         with self.assertRaises(ValueError):
             psdf.mode(axis=2)
 
-        def f(index, iterator):
-            return ["3", "3", "3", "3", "4"] if index == 3 else ["0", "1", "2", "3", "4"]
-
-        rdd = self.spark.sparkContext.parallelize(
-            [
-                1,
-            ],
-            4,
-        ).mapPartitionsWithIndex(f)
-        df = self.spark.createDataFrame(rdd, schema="string")
+        data = [(i,) for i in ["3", "3", "3", "3", "4"]] + [
+            (i,) for i in ["0", "1", "2", "3", "4"]
+        ] * 3
+        df = self.spark.createDataFrame(data)
         psdf = df.pandas_api()
         self.assert_eq(psdf.mode(), psdf._to_pandas().mode())
 

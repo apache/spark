@@ -32,7 +32,7 @@ class SeriesPlotMatplotlibParityTests(
     def test_hist_plot(self):
         super().test_hist_plot()
 
-    @unittest.skip("TODO(SPARK-43629): Enable RDD with Spark Connect.")
+    @unittest.skip("TODO(SPARK-44372): Enable KernelDensity within Spark Connect.")
     def test_kde_plot(self):
         super().test_kde_plot()
 
