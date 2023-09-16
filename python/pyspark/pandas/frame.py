@@ -1329,7 +1329,7 @@ class DataFrame(Frame, Generic[T]):
 
         # TODO: We can implement shortcut theoretically since it creates new DataFrame
         #  anyway and we don't have to worry about operations on different DataFrames.
-        return self._apply_series_op(lambda psser: psser.apply(func))
+        return self.map(func=func)
 
     def map(self, func: Callable[[Any], Any]) -> "DataFrame":
         """
@@ -1391,7 +1391,9 @@ class DataFrame(Frame, Generic[T]):
         0   1.000000   4.494400
         1  11.262736  20.857489
         """
-        return self.applymap(func=func)
+        # TODO: We can implement shortcut theoretically since it creates new DataFrame
+        #  anyway and we don't have to worry about operations on different DataFrames.
+        return self._apply_series_op(lambda psser: psser.apply(func))
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
     def aggregate(self, func: Union[List[str], Dict[Name, List[str]]]) -> "DataFrame":
