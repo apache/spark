@@ -372,6 +372,8 @@ jobs:
             pyspark-pandas-connect-part1
           - >-
             pyspark-pandas-connect-part2
+          - >-
+            pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
