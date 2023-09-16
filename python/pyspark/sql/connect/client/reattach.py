@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from multiprocessing import RLock
-
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -24,6 +22,7 @@ import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
+from multiprocessing import RLock
 from multiprocessing.pool import ThreadPool
 import os
 
@@ -57,7 +56,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     # Lock to manage the pool
     _lock: ClassVar[RLock] = RLock()
-    _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+    _release_thread_pool: Optional[ThreadPool] = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
 
     @classmethod
     def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
@@ -66,7 +65,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         are closed.
         """
         with cls._lock:
-            if cls._release_thread_pool != None:
+            if cls._release_thread_pool is not None:
                 cls._release_thread_pool.close()
                 cls._release_thread_pool.join()
                 cls._release_thread_pool = None
@@ -77,7 +76,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         If the processing pool for the release calls is None, initialize the pool exactly once.
         """
         with cls._lock:
-            if cls._release_thread_pool == None:
+            if cls._release_thread_pool is None:
                 cls._release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
 
     def __init__(
