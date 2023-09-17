@@ -236,8 +236,8 @@ class SparkSession private[sql] (
    *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
    *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
    *   LocalDate.of(2023, 4, 2). A value can be also a Column` of a literal or a foldable
-   *   expression created by `map()`, `array()`, `struct()`, `map_from_arrays()`
-   *   or `map_from_entries()`, in that case it is taken as is.
+   *   expression created by `map()`, `array()`, `struct()`, `map_from_arrays()` or
+   *   `map_from_entries()`, in that case it is taken as is.
    *
    * @since 3.5.0
    */
