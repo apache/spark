@@ -1841,8 +1841,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # test from_xml
         for schema in [
             "a INT",
-#            StructType([StructField("a", IntegerType())]),
-#            StructType([StructField("a", ArrayType(IntegerType()))]),
+            # StructType([StructField("a", IntegerType())]),
+            # StructType([StructField("a", ArrayType(IntegerType()))]),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_xml(cdf.a, schema)),
@@ -1863,7 +1863,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         for schema in [
             "STRUCT<a: ARRAY<INT>>",
-#            StructType([StructField("a", ArrayType(IntegerType()))]),
+            # StructType([StructField("a", ArrayType(IntegerType()))]),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_xml(cdf.b, schema)),

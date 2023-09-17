@@ -479,7 +479,7 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_COLUMN_OR_STR_OR_STRUCT" : {
     "message" : [
-      "Argument `<arg_name>` should be a StructType or Column or str, got <arg_type>."
+      "Argument `<arg_name>` should be a StructType, Column or str, got <arg_type>."
     ]
   },
   "NOT_DATAFRAME" : {

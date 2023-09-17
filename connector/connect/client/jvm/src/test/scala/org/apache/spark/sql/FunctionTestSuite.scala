@@ -237,8 +237,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     from_xml(a, schema.json, Map.empty[String, String].asJava),
     from_xml(a, schema, Map.empty[String, String].asJava),
     from_xml(a, schema, Collections.emptyMap[String, String]),
-    from_xml(a, lit(schema.json), Collections.emptyMap[String, String])
-  )
+    from_xml(a, lit(schema.json), Collections.emptyMap[String, String]))
 
   testEquals(
     "from_avro",
