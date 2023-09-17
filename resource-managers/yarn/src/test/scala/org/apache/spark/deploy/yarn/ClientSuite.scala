@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
@@ -694,10 +694,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val client = createClient(sparkConf, args = Array("--jar", USER))
     val mockFileSystem = mock(classOf[FileSystem])
     val mockFsLookup: URI => FileSystem = _ => mockFileSystem
-    when(mockFileSystem.listStatus(new Path ("hdfs:/valid"))).thenReturn(Seq(
+    when(mockFileSystem.listStatus(any[Path], any[PathFilter])).thenReturn(Seq(
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/a.jar")),
       new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/b.jar")),
-      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/c.jar"))).toArray)
+      new FileStatus(1, true, 1, 1, 1L, new Path("hdfs:/valid/c"))).toArray)
     // Expect only a.jar and b.jar to be preloaded
     assert(client.getPreloadedStatCache(sparkConf.get(JARS_TO_DISTRIBUTE), mockFsLookup).size === 2)
   }

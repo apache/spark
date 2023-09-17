@@ -467,14 +467,14 @@ private[spark] class Client(
    * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, the corresponding file status
    * from the directory will be preloaded.
    *
-   * @param jars : the list of jars to upload
+   * @param files : the list of files to upload
    * @return a hashmap contains directories to be preloaded and all file names in that directory
    */
-  private[yarn] def directoriesToBePreloaded(jars: Seq[String]): HashMap[URI, HashSet[String]] = {
+  private[yarn] def directoriesToBePreloaded(files: Seq[String]): HashMap[URI, HashSet[String]] = {
     val directoryToFiles = new HashMap[URI, HashSet[String]]()
-    jars.foreach { jar =>
-      if (!Utils.isLocalUri(jar) && !new GlobPattern(jar).hasWildcard) {
-        val currentPath = new Path(Utils.resolveURI(jar))
+    files.foreach { file =>
+      if (!Utils.isLocalUri(file) && !new GlobPattern(file).hasWildcard) {
+        val currentPath = new Path(Utils.resolveURI(file))
         val parentUri = currentPath.getParent.toUri
         directoryToFiles.getOrElseUpdate(parentUri, new HashSet[String]()) += currentPath.getName
       }
@@ -494,11 +494,14 @@ private[spark] class Client(
       fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
     val statCache = HashMap[URI, FileStatus]()
     directoriesToBePreloaded(files).foreach { case (dir: URI, filesInDir: HashSet[String]) =>
-      fsLookup(dir).listStatus(new Path(dir)).filter(_.isFile()).
-        filter(f => filesInDir.contains(f.getPath.getName)).foreach { fileStatus =>
-          val uri = fileStatus.getPath.toUri
+      fsLookup(dir).listStatus(new Path(dir), new PathFilter() {
+        override def accept(path: Path): Boolean = filesInDir.contains(path.getName)
+      }).filter(_.isFile()).foreach { fileStatus =>
+        val uri = fileStatus.getPath.toUri
+        if (uri != null) {
           statCache.put(uri, fileStatus)
         }
+      }
     }
     statCache
   }
@@ -533,9 +536,12 @@ private[spark] class Client(
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
       // Consider only following configurations, as they involve the distribution of multiple files
-      val files = sparkConf.get(SPARK_JARS).orNull ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
-        sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
-        sparkConf.get(PY_FILES) ++ pySparkArchives
+      var files = sparkConf.get(JARS_TO_DISTRIBUTE) ++ sparkConf.get(FILES_TO_DISTRIBUTE) ++
+        sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++ sparkConf.get(PY_FILES) ++ pySparkArchives
+      if (!sparkConf.get(SPARK_JARS).isEmpty) {
+        files ++= sparkConf.get(SPARK_JARS).getOrElse(Nil)
+      }
+
       getPreloadedStatCache(files)
     } else {
       HashMap[URI, FileStatus]()
