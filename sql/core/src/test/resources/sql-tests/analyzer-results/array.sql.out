@@ -532,6 +532,13 @@ Project [array_insert(array(2, 3, cast(null as int), 4), -5, 1, false) AS array_
 
 
 -- !query
+select array_insert(array(1), 2, cast(2 as tinyint))
+-- !query analysis
+Project [array_insert(array(1), 2, cast(cast(2 as tinyint) as int), false) AS array_insert(array(1), 2, CAST(2 AS TINYINT))#x]
++- OneRowRelation
+
+
+-- !query
 set spark.sql.legacy.negativeIndexInArrayInsert=true
 -- !query analysis
 SetCommand (spark.sql.legacy.negativeIndexInArrayInsert,Some(true))
