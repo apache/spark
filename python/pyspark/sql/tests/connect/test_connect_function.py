@@ -1824,7 +1824,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
     def test_xml_functions(self):
         query = """
             SELECT * FROM VALUES
-            ('<p><a>1</a></p>', '<p><a>1</a><a>2</a><a>3</a></p>', '<p><a attr="s"><b>5.0</b></a></p>'),
+            ('<p><a>1</a></p>', '<p><a>1</a><a>2</a><a>3</a></p>',
+            '<p><a attr="s"><b>5.0</b></a></p>'),
             ('<p><a>0</a></p>', '<p><a>4</a><a>5</a><a>6</a></p>', '<p><a attr="t"></a></p>')
             AS tab(a, b, c)
             """
