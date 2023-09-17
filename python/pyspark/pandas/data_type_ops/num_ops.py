@@ -185,23 +185,33 @@ class NumericOps(DataTypeOps):
         return pyspark_column_op("__eq__", left, right, fillna=False)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        # _sanitize_list_like(right)
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().ne(left, right)
         return pyspark_column_op("__ne__", left, right, fillna=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        # _sanitize_list_like(right)
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().lt(left, right)
         return pyspark_column_op("__lt__", left, right, fillna=False)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().le(left, right)
         return pyspark_column_op("__le__", left, right, fillna=False)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().ge(left, right)
         return pyspark_column_op("__ge__", left, right, fillna=False)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().gt(left, right)
         return pyspark_column_op("__gt__", left, right, fillna=False)
 
 

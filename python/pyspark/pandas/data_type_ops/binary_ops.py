@@ -68,19 +68,19 @@ class BinaryOps(DataTypeOps):
             )
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
         return pyspark_column_op("__lt__", left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
         return pyspark_column_op("__le__", left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
         return pyspark_column_op("__ge__", left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        #_sanitize_list_like(right)
         return pyspark_column_op("__gt__", left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
