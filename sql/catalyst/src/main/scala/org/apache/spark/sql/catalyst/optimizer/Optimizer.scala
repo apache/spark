@@ -1316,13 +1316,44 @@ object TransposeWindow extends Rule[LogicalPlan] {
     _.containsPattern(WINDOW), ruleId) {
     case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
       if windowsCompatible(w1, w2) =>
-      Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
-
+      val passThroughSet = w2.passthroughExpressions.toSet
+      val childProjectSet = w1.windowExpressions ++ w2.passthroughExpressions ++
+        w2.partitionSpec.map(x => x.references).flatten
+          .filterNot(x => passThroughSet.contains(x)) ++
+        w2.orderSpec.map(x => x.references).flatten.filterNot(x => passThroughSet.contains(x))
+      val parentProject = w2.windowExpressions ++
+        w1.passthroughExpressions.filterNot(x => w2.windowOutputSet.contains(x)) ++
+          w1.windowOutputSet
+      Project(w1.output, w2.copy(projectList = parentProject,
+        child = w1.copy(projectList = childProjectSet,
+        child = grandChild)))
+/*
     case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
       if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
-      Project(
-        pl ++ w1.windowOutputSet,
-        w2.copy(child = w1.copy(child = grandChild)))
+      // val passThroughSet = w2.passthroughExpressions.toSet
+      // val childProjectSet = w1.windowExpressions ++ w2.passthroughExpressions ++
+      //  w2.partitionSpec.map(x => x.references).flatten
+      //    .filterNot(x => passThroughSet.contains(x)) ++
+      //  w2.orderSpec.map(x => x.references).flatten.filterNot(x => passThroughSet.contains(x))
+      // val parentProject = pl ++ w2.windowExpressions ++
+      //  w1.passthroughExpressions.filterNot(x => w2.windowOutputSet.contains(x)) ++
+      //  w1.windowOutputSet
+
+      // val parentAttrs = parentProject.map(_.toAttribute)
+
+      // Project(
+      //  pl ++ parentProject.map(_.toAttribute),
+      //  w2.copy(projectList = parentProject,
+      //    child = w1.copy(projectList = childProjectSet, child = grandChild)))
+      val outputChild = w2.outputSet
+      val windowExprChild = w2.windowOutputSet
+      val plExceptWindow = pl.filterNot(x => windowExprChild.contains(x))
+      val plIntersected = pl.intersect(w2.output)
+      // TODO: verify that project is a subset of w2.
+      val updatedInput = w1.copy(child = w2.copy(
+        projectList = w2.windowExpressions ++ plIntersected))
+      apply(updatedInput)
+*/
   }
 }
 

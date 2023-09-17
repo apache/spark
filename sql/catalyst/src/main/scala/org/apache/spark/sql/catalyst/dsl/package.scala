@@ -155,6 +155,11 @@ package object dsl {
     // TODO: Remove at Spark 4.0.0
     @deprecated("Use as(alias: String)", "3.4.0")
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
+
+    def over(spec: WindowSpecDefinition): Expression = WindowExpression(expr, spec)
+
+    def over(part: Seq[Expression], order: Seq[SortOrder], frame: WindowFrame): Expression =
+      WindowExpression(expr, WindowSpecDefinition(part, order, frame))
   }
 
   trait ExpressionConversions {

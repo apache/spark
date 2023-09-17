@@ -1221,7 +1221,8 @@ case class Window(
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
     // child.output ++ windowExpressions.map(_.toAttribute)
 
-  override def producedAttributes: AttributeSet = windowOutputSet
+  override def producedAttributes: AttributeSet =
+    AttributeSet(projectList.map(_.toAttribute)) // windowOutputSet
 
   final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
@@ -1234,6 +1235,9 @@ case class Window(
   def windowOutputSet: AttributeSet = AttributeSet(projectList
     .filter(WindowExpression.hasWindowExpression)
     .map(_.toAttribute))
+
+  def passthroughExpressions: Seq[NamedExpression]
+  = projectList.filterNot(x => windowOutputSet.contains(x.toAttribute))
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Window =
     copy(child = newChild)
