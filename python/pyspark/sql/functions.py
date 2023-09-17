@@ -13081,7 +13081,11 @@ def from_xml(
 
     >>> data = [(1, '''<p><a>1</a></p>''')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> schema = StructType([StructField("a", IntegerType())])
+
+    TODO: Fix StructType for spark connect
+    schema = StructType([StructField("a", IntegerType())])
+
+    >>> schema = "STRUCT<a: BIGINT>"
     >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
@@ -13092,7 +13096,11 @@ def from_xml(
 
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> schema = StructType([StructField("a", ArrayType(IntegerType()))])
+
+    TODO: Fix StructType for spark connect
+    schema = StructType([StructField("a", ArrayType(IntegerType()))])
+
+    >>> schema = "STRUCT<a: ARRAY<BIGINT>>"
     >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
 

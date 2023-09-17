@@ -1913,12 +1913,16 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         # test schema_of_xml
         self.assert_eq(
-            cdf.select(CF.schema_of_xml(CF.lit('<p><a>1</a></p>'))).toPandas(),
-            sdf.select(SF.schema_of_xml(SF.lit('<p><a>1</a></p>'))).toPandas(),
+            cdf.select(CF.schema_of_xml(CF.lit("<p><a>1</a></p>"))).toPandas(),
+            sdf.select(SF.schema_of_xml(SF.lit("<p><a>1</a></p>"))).toPandas(),
         )
         self.assert_eq(
-            cdf.select(CF.schema_of_xml(CF.lit('<p><a>1</a></p>'), {"mode": "FAILFAST"})).toPandas(),
-            sdf.select(SF.schema_of_xml(SF.lit('<p><a>1</a></p>'), {"mode": "FAILFAST"})).toPandas(),
+            cdf.select(
+                CF.schema_of_xml(CF.lit("<p><a>1</a></p>"), {"mode": "FAILFAST"})
+            ).toPandas(),
+            sdf.select(
+                SF.schema_of_xml(SF.lit("<p><a>1</a></p>"), {"mode": "FAILFAST"})
+            ).toPandas(),
         )
 
     def test_string_functions_one_arg(self):
