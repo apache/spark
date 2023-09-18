@@ -71,6 +71,8 @@ acquire_sbt_jar () {
     exit -1
     fi
     printf "Launching sbt from ${JAR}\n"
+  else
+    printf "Launching local sbt."
   fi
 }
 
