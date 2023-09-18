@@ -11763,8 +11763,8 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: returns null if the array is null, true if the array contains the
-    given value, and false otherwise.
+    Collection function: This function returns a boolean indicating whether the array contains the given value,
+    returning null if the array is null, true if the array contains the given value, and false otherwise.
 
     .. versionadded:: 1.5.0
 
@@ -11774,22 +11774,69 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        The target column containing the arrays.
     value :
-        value or column to check for in array
+        The value or column to check for in the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of Boolean type.
+        A new Column of Boolean type, where each value indicates whether the corresponding array from
+        the input column contains the specified value.
 
     Examples
     --------
+    Example 1: Basic usage of array_contains function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
-    >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
-    >>> df.select(array_contains(df.data, lit("a"))).collect()
-    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      true|
+    |     false|
+    +----------+
+
+    Example 2: Usage of array_contains function with a column.
+
+    >>> from pyspark.sql import functions as sf
+    >>> data = [("James", ["Java", "C++", "Python"], "Python"),
+    ...         ("Michael", ["Python", "Scala", "C#"], "Scala"),
+    ...         ("Robert", ["C#", "Java", "Python"], "C++")]
+    >>> df = spark.createDataFrame(data, ["name", "languages", "favorite"])
+    >>> df.select(sf.array_contains(df.languages, sf.col("favorite"))
+    ...   .alias("languages_contains_favorite")).show()
+    +---------------------------+
+    |languages_contains_favorite|
+    +---------------------------+
+    |                       true|
+    |                       true|
+    |                      false|
+    +---------------------------+
+
+    Example 3: Attempt to use array_contains function with a null array.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None,), (["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      NULL|
+    |      true|
+    +----------+
+
+    Example 4: Usage of array_contains with an array column containing null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      true|
+    +----------+
     """
     value = value._jc if isinstance(value, Column) else value
     return _invoke_function("array_contains", _to_java_column(col), value)
