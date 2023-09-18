@@ -101,8 +101,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
           case e: IOException if options.ignoreCorruptFiles =>
-            logWarning(
-              "Skipped the rest of the content in the corrupted file", e)
+            logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
         }
       }.reduceOption(typeMerger).iterator
