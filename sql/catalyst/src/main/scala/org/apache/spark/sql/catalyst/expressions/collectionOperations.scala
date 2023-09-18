@@ -4749,7 +4749,6 @@ case class ArrayInsert(
         }
       case (e1, e2, e3) => Seq.empty
     }
-    Seq.empty
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {

@@ -26,6 +26,7 @@ if should_test_connect:
     from pyspark.ml.connect.feature import StandardScaler
     from pyspark.ml.connect.classification import LogisticRegression as LORV2
     from pyspark.ml.connect.pipeline import Pipeline
+    import pandas as pd
 
 
 class PipelineTestsMixin:
@@ -81,7 +82,11 @@ class PipelineTestsMixin:
         model2 = pipeline2.fit(train_dataset)
         result2 = model2.transform(eval_dataset).toPandas()
         self._check_result(result2, expected_predictions, expected_probabilities)
-        local_transform_result2 = model2.transform(eval_dataset.toPandas())
+        local_eval_dataset = eval_dataset.toPandas()
+        local_eval_dataset_copy = local_eval_dataset.copy()
+        local_transform_result2 = model2.transform(local_eval_dataset)
+        # assert that `transform` doesn't mutate the input dataframe.
+        pd.testing.assert_frame_equal(local_eval_dataset, local_eval_dataset_copy)
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
         with tempfile.TemporaryDirectory() as tmp_dir:

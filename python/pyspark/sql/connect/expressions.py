@@ -879,7 +879,6 @@ class CastExpression(Expression):
 
 
 class UnresolvedNamedLambdaVariable(Expression):
-
     _lock: Lock = Lock()
     _nextVarNameId: int = 0
 

@@ -190,7 +190,7 @@ class SparkConf:
         elif key is not None:
             self.set("spark.executorEnv.{}".format(key), cast(str, value))
         elif pairs is not None:
-            for (k, v) in pairs:
+            for k, v in pairs:
                 self.set("spark.executorEnv.{}".format(k), v)
         return self
 
@@ -203,7 +203,7 @@ class SparkConf:
         pairs : iterable of tuples
             list of key-value pairs to set
         """
-        for (k, v) in pairs:
+        for k, v in pairs:
             self.set(k, v)
         return self
 

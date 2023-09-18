@@ -297,7 +297,6 @@ class MatrixUDT(UserDefinedType):
 
 
 class Vector:
-
     __UDT__ = VectorUDT()
 
     """
@@ -1200,7 +1199,6 @@ class Vectors:
 
 
 class Matrix:
-
     __UDT__ = MatrixUDT()
 
     """
