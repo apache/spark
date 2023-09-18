@@ -1712,9 +1712,9 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   public static class ReadOnlyPropertyBean implements Serializable {
-      public boolean isEmpty() {
-        return true;
-      }
+    public boolean isEmpty() {
+      return true;
+    }
   }
 
   @Test
@@ -1725,7 +1725,6 @@ public class JavaDatasetSuite implements Serializable {
             Encoders.bean(ReadOnlyPropertyBean.class));
     Assert.assertEquals(1, df.schema().length());
     Assert.assertEquals(1, df.collectAsList().size());
-
   }
 
   public class CircularReference1Bean implements Serializable {
