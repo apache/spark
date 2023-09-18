@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 
 from pyspark.sql import functions as sf
-
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -109,9 +108,9 @@ class FrameComputeMixin:
                         yield pd.DataFrame(
                             {
                                 "num": [
-                                    "0",
-                                    "1",
-                                    "2",
+                                    "3",
+                                    "3",
+                                    "3",
                                     "3",
                                     "4",
                                 ]
@@ -121,9 +120,9 @@ class FrameComputeMixin:
                         yield pd.DataFrame(
                             {
                                 "num": [
-                                    "3",
-                                    "3",
-                                    "3",
+                                    "0",
+                                    "1",
+                                    "2",
                                     "3",
                                     "4",
                                 ]
