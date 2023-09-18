@@ -19,64 +19,64 @@ package org.apache.spark.sql.catalyst;
 
 public class JavaTypeInferenceBeans {
 
-    static class JavaBeanWithGenericsA<T> {
-        public T getPropertyA() {
-            return null;
-        }
-
-        public void setPropertyA(T a) {
-
-        }
+  static class JavaBeanWithGenericsA<T> {
+    public T getPropertyA() {
+      return null;
     }
 
-    static class JavaBeanWithGenericsAB<T> extends JavaBeanWithGenericsA<String> {
-        public T getPropertyB() {
-            return null;
-        }
-
-        public void setPropertyB(T a) {
-
-        }
-    }
-
-    static class JavaBeanWithGenericsABC<T> extends JavaBeanWithGenericsAB<Long> {
-        public T getPropertyC() {
-            return null;
-        }
-
-        public void setPropertyC(T a) {
-
-        }
-    }
-
-    static class JavaBeanWithGenerics<T, A> {
-        private A attribute;
-
-        private T value;
-
-        public A getAttribute() {
-            return attribute;
-        }
-
-        public void setAttribute(A attribute) {
-            this.attribute = attribute;
-        }
-
-        public T getValue() {
-            return value;
-        }
-
-        public void setValue(T value) {
-            this.value = value;
-        }
-    }
-
-    static class JavaBeanWithGenericBase extends JavaBeanWithGenerics<String, String> {
+    public void setPropertyA(T a) {
 
     }
+  }
 
-    static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
+  static class JavaBeanWithGenericsAB<T> extends JavaBeanWithGenericsA<String> {
+    public T getPropertyB() {
+      return null;
+    }
+
+    public void setPropertyB(T a) {
 
     }
+  }
+
+  static class JavaBeanWithGenericsABC<T> extends JavaBeanWithGenericsAB<Long> {
+    public T getPropertyC() {
+      return null;
+    }
+
+    public void setPropertyC(T a) {
+
+    }
+  }
+
+  static class JavaBeanWithGenerics<T, A> {
+    private A attribute;
+
+    private T value;
+
+    public A getAttribute() {
+      return attribute;
+    }
+
+    public void setAttribute(A attribute) {
+      this.attribute = attribute;
+    }
+
+    public T getValue() {
+      return value;
+    }
+
+    public void setValue(T value) {
+      this.value = value;
+    }
+  }
+
+  static class JavaBeanWithGenericBase extends JavaBeanWithGenerics<String, String> {
+
+  }
+
+  static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
+
+  }
 }
 
