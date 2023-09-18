@@ -490,11 +490,15 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Get message in the specified format") {
     import ErrorMessageFormat._
     class TestQueryContext extends QueryContext {
+      override val contextType = QueryContextType.SQL
       override val objectName = "v1"
       override val objectType = "VIEW"
       override val startIndex = 2
       override val stopIndex = -1
       override val fragment = "1 / 0"
+      override def code: String = throw new UnsupportedOperationException
+      override def callSite: String = throw new UnsupportedOperationException
+      override val summary = ""
     }
     val e = new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
@@ -562,6 +566,55 @@ class SparkThrowableSuite extends SparkFunSuite {
         |    "message" : "Test message"
         |  }
         |}""".stripMargin)
+
+    class TestQueryContext2 extends QueryContext {
+      override val contextType = QueryContextType.Dataset
+      override def objectName: String = throw new UnsupportedOperationException
+      override def objectType: String = throw new UnsupportedOperationException
+      override def startIndex: Int = throw new UnsupportedOperationException
+      override def stopIndex: Int = throw new UnsupportedOperationException
+      override def fragment: String = throw new UnsupportedOperationException
+      override val code: String = "div"
+      override val callSite: String = "SimpleApp$.main(SimpleApp.scala:9)"
+      override val summary = ""
+    }
+    val e4 = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array(new TestQueryContext2),
+      summary = "Query summary")
+
+    assert(SparkThrowableHelper.getMessage(e4, PRETTY) ===
+        "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
+            "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+            "\nQuery summary")
+    // scalastyle:off line.size.limit
+    assert(SparkThrowableHelper.getMessage(e4, MINIMAL) ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "CONFIG"
+          |  },
+          |  "queryContext" : [ {
+          |    "code" : "div",
+          |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
+          |  } ]
+          |}""".stripMargin)
+    assert(SparkThrowableHelper.getMessage(e4, STANDARD) ===
+        """{
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "CONFIG"
+          |  },
+          |  "queryContext" : [ {
+          |    "code" : "div",
+          |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
+          |  } ]
+          |}""".stripMargin)
+    // scalastyle:on line.size.limit
   }
 
   test("overwrite error classes") {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
@@ -200,9 +200,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    */
   final def bind(
       f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = {
-    val res = bindInternal(f)
-    res.copyTagsFrom(this)
-    res
+    CurrentOrigin.withOrigin(origin) {
+      val res = bindInternal(f)
+      res.copyTagsFrom(this)
+      res
+    }
   }
 
   protected def bindInternal(

@@ -2687,7 +2687,9 @@ abstract class CSVSuite
                 readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
               },
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
+              context =
+                ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
           }
         }
       }

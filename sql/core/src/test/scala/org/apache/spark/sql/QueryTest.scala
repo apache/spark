@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.TimeZone
+import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 
@@ -228,6 +229,17 @@ abstract class QueryTest extends PlanTest {
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
+  }
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
 

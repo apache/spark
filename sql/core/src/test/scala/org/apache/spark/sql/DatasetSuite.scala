@@ -606,7 +606,8 @@ class DatasetSuite extends QueryTest
         }
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
+      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy function, flatMapSorted") {
@@ -634,7 +635,8 @@ class DatasetSuite extends QueryTest
         }
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"))
+      parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
+      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy, flatMapSorted desc") {
@@ -2269,7 +2271,8 @@ class DatasetSuite extends QueryTest
           sqlState = None,
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
-            "proposal" -> "`field.1`, `field 2`"))
+            "proposal" -> "`field.1`, `field 2`"),
+          context = ExpectedContext(code = "select", getCurrentClassCallSitePattern))
       }
     }
   }
@@ -2283,7 +2286,8 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`the`.`id`",
-        "proposal" -> "`the.id`"))
+        "proposal" -> "`the.id`"),
+      context = ExpectedContext(code = "select", getCurrentClassCallSitePattern))
   }
 
   test("SPARK-39783: backticks in error message for map candidate key with dots") {
@@ -2297,7 +2301,8 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`nonexisting`",
-        "proposal" -> "`map`, `other.column`"))
+        "proposal" -> "`map`, `other.column`"),
+      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy.as") {
@@ -2608,6 +2613,23 @@ class DatasetSuite extends QueryTest
   test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
     val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
     assert(ds.count() == 2)
+  }
+
+  test("SPARK-45022: exact DatasetQueryContext call site") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq(1).toDS
+      var callSitePattern: String = null
+      checkError(
+        exception = intercept[AnalysisException] {
+          callSitePattern = getNextLineCallSitePattern()
+          val c = col("a")
+          df.select(c)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
+        context = ExpectedContext(code = "col", callSitePattern = callSitePattern))
+    }
   }
 }
 
