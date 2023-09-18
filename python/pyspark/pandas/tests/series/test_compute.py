@@ -486,10 +486,6 @@ class SeriesComputeMixin:
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.explode(), psser.explode())
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43467): Enable SeriesTests.test_between for pandas 2.0.0.",
-    )
     def test_between(self):
         pser = pd.Series([np.nan, 1, 2, 3, 4])
         psser = ps.from_pandas(pser)
@@ -509,10 +505,10 @@ class SeriesComputeMixin:
             psser.between(1, 4, inclusive="middle")
 
         # Test for backward compatibility
-        self.assert_eq(psser.between(1, 4, inclusive=True), pser.between(1, 4, inclusive=True))
-        self.assert_eq(psser.between(1, 4, inclusive=False), pser.between(1, 4, inclusive=False))
-        with self.assertWarns(FutureWarning):
-            psser.between(1, 4, inclusive=True)
+        self.assert_eq(psser.between(1, 4, inclusive="both"), pser.between(1, 4, inclusive="both"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="neither"), pser.between(1, 4, inclusive="neither")
+        )
 
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")

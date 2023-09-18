@@ -415,7 +415,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         None,
     ]:  # None means it should infer the type from type hints.
-
         raise PySparkTypeError(
             error_class="INVALID_PANDAS_UDF_TYPE",
             message_parameters={

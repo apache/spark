@@ -28,7 +28,6 @@ from pyspark.sql import DataFrame
 
 
 class _TorchMetricEvaluator(Evaluator):
-
     metricName: Param[str] = Param(
         Params._dummy(),
         "metricName",
