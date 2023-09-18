@@ -3765,12 +3765,12 @@ def collect_set(col: "ColumnOrName") -> Column:
     Example 1: Collect values from a single column DataFrame
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df = spark.createDataFrame([(5,), (5,), (5,)], ('age',))
     >>> df.select(sf.collect_set('age')).show()
     +----------------+
     |collect_set(age)|
     +----------------+
-    |          [5, 2]|
+    |             [5]|
     +----------------+
 
     Example 2: Collect values from a DataFrame with multiple columns
