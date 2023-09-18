@@ -447,7 +447,6 @@ class GroupByTestsMixin:
 
     @staticmethod
     def test_is_multi_agg_with_relabel():
-
         assert is_multi_agg_with_relabel(a="max") is False
         assert is_multi_agg_with_relabel(a_min=("a", "max"), a_max=("a", "min")) is True
 

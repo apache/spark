@@ -900,7 +900,6 @@ def _plot(data, x=None, y=None, subplots=False, ax=None, kind="line", **kwds):
     if kind in ("scatter", "hexbin"):
         plot_obj = klass(data, x, y, subplots=subplots, ax=ax, kind=kind, **kwds)
     else:
-
         # check data type and do preprocess before applying plot
         if isinstance(data, DataFrame):
             if x is not None:

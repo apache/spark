@@ -1181,7 +1181,6 @@ class DataFrameTestsMixin:
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 

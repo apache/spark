@@ -430,7 +430,7 @@ class MemoryProfiler(Profiler):
             stream = sys.stdout
         template = "{0:>6} {1:>12} {2:>12}  {3:>10}   {4:<}"
 
-        for (filename, lines) in code_map.items():
+        for filename, lines in code_map.items():
             header = template.format(
                 "Line #", "Mem usage", "Increment", "Occurrences", "Line Contents"
             )
@@ -443,7 +443,7 @@ class MemoryProfiler(Profiler):
 
             float_format = "{0}.{1}f".format(precision + 4, precision)
             template_mem = "{0:" + float_format + "} MiB"
-            for (lineno, mem) in lines:
+            for lineno, mem in lines:
                 total_mem: Union[float, str]
                 inc: Union[float, str]
                 occurrences: Union[float, str]

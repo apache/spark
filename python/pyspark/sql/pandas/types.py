@@ -551,7 +551,6 @@ def _create_converter_to_pandas(
     def _converter(
         dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
     ) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
@@ -647,7 +646,6 @@ def _create_converter_to_pandas(
             ]
 
             if _struct_in_pandas == "row":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_row(value: Any) -> Any:
@@ -685,7 +683,6 @@ def _create_converter_to_pandas(
                 return convert_struct_as_row
 
             elif _struct_in_pandas == "dict":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_dict(value: Any) -> Any:
@@ -827,7 +824,6 @@ def _create_converter_from_pandas(
         return correct_timestamp
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType)
 
@@ -873,7 +869,6 @@ def _create_converter_from_pandas(
             _value_conv = _converter(dt.valueType)
 
             if ignore_unexpected_complex_type_values:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -899,7 +894,6 @@ def _create_converter_from_pandas(
                             return value
 
             else:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -921,7 +915,6 @@ def _create_converter_from_pandas(
             return convert_map
 
         elif isinstance(dt, StructType):
-
             field_names = dt.names
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
@@ -935,7 +928,6 @@ def _create_converter_from_pandas(
             field_convs = [_converter(f.dataType) for f in dt.fields]
 
             if ignore_unexpected_complex_type_values:
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct(value: Any) -> Any:
