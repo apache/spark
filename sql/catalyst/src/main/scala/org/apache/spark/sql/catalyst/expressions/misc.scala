@@ -24,11 +24,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.Utils
 
 /**
  * Print the result of an expression to stderr (used for debugging codegen).
@@ -72,17 +73,11 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError(str: Expression, map: Expression, dataType: DataType)
+case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: DataType)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  def this(str: Expression) = this(str, NullType)
-
-  def this(message: Expression) = {
-    this(Literal("USER_RAISED_EXCEPTION"), Map("errorMessage" -> message))
-  }
-
-  def this(message: Expression) = {
-    this(message, "USER_RAISED_EXCEPTION", Map[])
+  def this(str: Expression) = {
+    this(Literal("USER_RAISED_EXCEPTION"), CreateMap(Seq(Literal("errorMessage"), str)), NullType)
   }
 
   override def foldable: Boolean = false
@@ -90,44 +85,49 @@ case class RaiseError(str: Expression, map: Expression, dataType: DataType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringType, MapType)
 
-  override def first: Expression = str
-  override def second: Expression = pos
-  override def third: Expression = len
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def left: Expression = errorClass
+  override def right: Expression = errorParms
 
   override def prettyName: String = "raise_error"
 
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      throw raiseError(errorMessage = "", sqlState = "")
+    val error = errorClass.eval(input)
+    val parms: MapData = errorParms.eval(input).asInstanceOf[MapData]
+    val keys = parms.keyArray().toArray[String](StringType)
+    val values = parms.valueArray().toArray[String](StringType)
+    val parmMap: Map[String, String] = Utils.toMap(keys, values)
+    if (error == null) {
+      throw raiseError(error.toString, keys, values)
     }
-    throw raiseError(errorMessage = value.toString, sqlState = "")
+    throw raiseError(error.toString, keys, values)
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
+    val error = errorClass.genCode(ctx)
+    val parms = errorParms.genCode(ctx)
     ExprCode(
-      code = code"""${eval.code}
+      code = code"""${error.code}
         |if (true) {
-        |  if (${eval.isNull}) {
-        |    throw QueryExecutionErrors.raiseError("", "", "");
+        |  if (${error.isNull}) {
+        |    throw QueryExecutionErrors.raiseError("", new String[0], new String[0]);
         |  }
         |  throw QueryExecutionErrors.raiseError(
-        |    ${eval.value}.toString(), "", "");
+        |    ${error.value}.toString(), new String[0], new String[0]);
         |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
     )
   }
 
-  override protected def withNewChildInternal(newChild: Expression): RaiseError =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): RaiseError = {
+    copy(errorClass = newLeft, errorParms = newRight)
+  }
 }
 
 object RaiseError {
-  def apply(child: Expression): RaiseError = new RaiseError(child)
+  def apply(str: Expression): RaiseError = new RaiseError(str)
 }
 
 /**

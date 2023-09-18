@@ -2724,16 +2724,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def raiseError(errorMessage: String, sqlState: String,
-                 errorClass: String = "USER_RAISED_EXCEPTION"): RuntimeException = {
+  def raiseError(errorClass: String,
+                 errorParmKeys: Array[String],
+                 errorParmVals: Array[String]): RuntimeException = {
+    val errorParms = errorParmKeys.zip(errorParmVals).toMap
     if (errorClass == "USER_RAISED_EXCEPTION") {
         new SparkRuntimeException(
           errorClass = errorClass,
-          messageParameters = Map("errorMessage" -> errorMessage))
+          messageParameters = errorParms)
     } else if (SparkThrowableHelper.validateErrorClass(errorClass)) {
       new SparkRuntimeException(
         errorClass = errorClass,
-        messageParameters = Map("errorMessage" -> errorMessage))
+        messageParameters = errorParms)
     } else {
       new SparkRuntimeException(
         errorClass = "USER_RAISED_UNKNOWN_EXCEPTION",
