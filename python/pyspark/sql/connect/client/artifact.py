@@ -251,7 +251,7 @@ class ArtifactManager:
                 )
             )
         except Exception as e:
-            logger.error(f"Failed to submit addArtifact request: {e}")
+            logger.error(f"Failed to submit addArtifacts request: {e}")
             raise
 
     def _retrieve_responses(
@@ -276,7 +276,6 @@ class ArtifactManager:
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
             *path, pyfile=pyfile, archive=archive, file=file
         )
-
         self._request_add_artifacts(requests)
 
     def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:

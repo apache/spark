@@ -3,7 +3,6 @@ import os
 from typing import Optional
 
 __all__ = [
-    "logger",
     "getLogLevel",
 ]
 
