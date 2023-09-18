@@ -263,13 +263,15 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap
-    val arguments = sql.getArgumentsMap
+    val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!arguments.isEmpty) {
-      NameParameterizedQuery(parsedPlan, arguments.asScala.mapValues(transformExpression).toMap)
+    if (!namedArguments.isEmpty) {
+      NameParameterizedQuery(
+        parsedPlan,
+        namedArguments.asScala.mapValues(transformExpression).toMap)
     } else if (!posArguments.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
     } else if (!args.isEmpty) {
@@ -2449,14 +2451,14 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       executeHolder: ExecuteHolder): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
-    val arguments = getSqlCommand.getArgumentsMap
+    val namedArguments = getSqlCommand.getNamedArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
     val posArguments = getSqlCommand.getPosArgumentsList
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
-    val df = if (!arguments.isEmpty) {
+    val df = if (!namedArguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
-        arguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
+        namedArguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
         tracker)
     } else if (!posArguments.isEmpty) {
       session.sql(
@@ -2525,7 +2527,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             proto.SQL
               .newBuilder()
               .setQuery(getSqlCommand.getSql)
-              .putAllArguments(getSqlCommand.getArgumentsMap)
+              .putAllNamedArguments(getSqlCommand.getNamedArgumentsMap)
               .addAllPosArguments(getSqlCommand.getPosArgumentsList)
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
