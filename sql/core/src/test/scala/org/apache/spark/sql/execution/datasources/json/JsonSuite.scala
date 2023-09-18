@@ -1913,6 +1913,22 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-45035: json enable ignoreCorruptFiles with multi-Line") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e2 = intercept[SparkException] {
+          spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+        }
+        assert(e2.getCause.isInstanceOf[EOFException])
+        assert(e2.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+          .isEmpty)
+      }
+    })
+  }
+
   test("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath

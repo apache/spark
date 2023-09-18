@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.IOException
 import java.nio.charset.{Charset, StandardCharsets}
 
 import com.univocity.parsers.csv.CsvParser
@@ -168,7 +169,7 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object MultiLineCSVDataSource extends CSVDataSource {
+object MultiLineCSVDataSource extends CSVDataSource with Logging {
   override val isSplitable: Boolean = false
 
   override def readFile(
@@ -190,12 +191,19 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     csv.flatMap { lines =>
-      val path = new Path(lines.getPath())
-      UnivocityParser.tokenizeStream(
-        CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
-        shouldDropHeader = false,
-        new CsvParser(parsedOptions.asParserSettings),
-        encoding = parsedOptions.charset)
+      try {
+        val path = new Path(lines.getPath())
+        UnivocityParser.tokenizeStream(
+          CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
+          shouldDropHeader = false,
+          new CsvParser(parsedOptions.asParserSettings),
+          encoding = parsedOptions.charset)
+      } catch {
+        case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
+          logWarning(
+            s"Skipped the rest of the content in the corrupted file: ${lines.getPath()}", e)
+          Array.empty[Array[String]]
+      }
     }.take(1).headOption match {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis

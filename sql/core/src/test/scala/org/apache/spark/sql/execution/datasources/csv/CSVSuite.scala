@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
+import java.io.{EOFException, File}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
-import java.util.zip.GZIPOutputStream
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
@@ -1448,37 +1447,25 @@ abstract class CSVSuite
   }
 
   test("Enabling/disabling ignoreCorruptFiles") {
-    val inputFile = File.createTempFile("input-", ".gz")
-    try {
-      // Create a corrupt gzip file
-      val byteOutput = new ByteArrayOutputStream()
-      val gzip = new GZIPOutputStream(byteOutput)
-      try {
-        gzip.write(Array[Byte](1, 2, 3, 4))
-      } finally {
-        gzip.close()
-      }
-      val bytes = byteOutput.toByteArray
-      val o = new FileOutputStream(inputFile)
-      try {
-        // It's corrupt since we only write half of bytes into the file.
-        o.write(bytes.take(bytes.length / 2))
-      } finally {
-        o.close()
-      }
+    withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
         assert(e.getCause.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+        }
+        assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
+        assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+        assert(spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+          .isEmpty)
       }
-    } finally {
-      inputFile.delete()
-    }
+    })
   }
 
   test("SPARK-19610: Parse normal multi-line CSV files") {
