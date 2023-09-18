@@ -460,7 +460,7 @@ class Column:
                     error_class="SLICE_WITH_STEP",
                     message_parameters={},
                 )
-            return self.substr(k.start, k.stop)
+            return self.substring(k.start, k.stop)
         else:
             return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
 

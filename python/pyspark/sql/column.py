@@ -712,11 +712,11 @@ class Column:
         --------
         >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
         >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
-        +---------------+------+
-        |substr(l, 1, 3)|d[key]|
-        +---------------+------+
-        |            abc| value|
-        +---------------+------+
+        +------------------+------+
+        |substring(l, 1, 3)|d[key]|
+        +------------------+------+
+        |               abc| value|
+        +------------------+------+
         """
         if isinstance(k, slice):
             if k.step is not None:
@@ -724,7 +724,7 @@ class Column:
                     error_class="SLICE_WITH_STEP",
                     message_parameters={},
                 )
-            return self.substr(k.start, k.stop)
+            return self.substring(k.start, k.stop)
         else:
             return _bin_op("apply")(self, k)
 
