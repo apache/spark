@@ -82,12 +82,7 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = {
-            # TODO: XML functions will soon be added and removed from this list
-            # https://issues.apache.org/jira/browse/SPARK-44788
-            "from_xml",
-            "schema_of_xml",
-        }
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
@@ -1283,6 +1278,27 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+    def test_schema_of_xml(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.schema_of_xml(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": "int"},
+        )
+
+    def test_from_xml(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.from_xml(df.id, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 

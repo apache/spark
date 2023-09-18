@@ -285,7 +285,7 @@ class SparkContext:
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
 
-        for (k, v) in self._conf.getAll():
+        for k, v in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv.") :]
                 self.environment[varName] = v
