@@ -1050,7 +1050,6 @@ class LocIndexer(LocIndexerLike):
             if (start is None and rows_sel.start is not None) or (
                 stop is None and rows_sel.stop is not None
             ):
-
                 inc = index_column.is_monotonic_increasing
                 if inc is False:
                     dec = index_column.is_monotonic_decreasing

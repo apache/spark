@@ -176,5 +176,5 @@ def send_accumulator_updates(outfile: IO) -> None:
     Send the accumulator updates back to JVM.
     """
     write_int(len(_accumulatorRegistry), outfile)
-    for (aid, accum) in _accumulatorRegistry.items():
+    for aid, accum in _accumulatorRegistry.items():
         pickleSer._write_with_length((aid, accum._value), outfile)

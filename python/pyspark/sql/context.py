@@ -165,7 +165,6 @@ class SQLContext:
     def _get_or_create(
         cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
     ) -> "SQLContext":
-
         if (
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]

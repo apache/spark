@@ -300,7 +300,7 @@ class SQLProcessor:
         # TODO: use a string builder
         res = ""
         try:
-            for (pre, inner, _, _) in blocks:
+            for pre, inner, _, _ in blocks:
                 var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res

@@ -202,10 +202,6 @@ class DataFrameConversionTestsMixin:
             psdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43561): Enable DataFrameConversionTests.test_to_latex for pandas 2.0.0.",
-    )
     def test_to_latex(self):
         pdf = self.pdf
         psdf = self.psdf
