@@ -141,6 +141,7 @@ select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
 select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
 select array_insert(array(2, 3, NULL, 4), 5, 5);
 select array_insert(array(2, 3, NULL, 4), -5, 1);
+select array_insert(array(1), 2, cast(2 as tinyint));
 
 set spark.sql.legacy.negativeIndexInArrayInsert=true;
 select array_insert(array(1, 3, 4), -2, 2);
