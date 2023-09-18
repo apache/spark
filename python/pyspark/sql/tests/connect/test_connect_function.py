@@ -1840,6 +1840,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         sdf = self.spark.sql(query)
 
         # test from_xml
+        # TODO(SPARK-45190): Address StructType schema parse error
         for schema in [
             "a INT",
             # StructType([StructField("a", IntegerType())]),
