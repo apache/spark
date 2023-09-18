@@ -983,6 +983,8 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.computation.test_parity_melt",
         "pyspark.pandas.tests.connect.groupby.test_parity_stat",
         "pyspark.pandas.tests.connect.frame.test_parity_attrs",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_dot_frame",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_dot_series",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1017,8 +1019,6 @@ pyspark_pandas_connect_part1 = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_align",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_basic_slow",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov_corrwith",
-        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_dot_frame",
-        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_dot_series",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_index",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_series",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_setitem_frame",
