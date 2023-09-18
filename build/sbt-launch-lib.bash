@@ -172,6 +172,8 @@ process_args () {
 
 run() {
   # no jar? download it.
+  echo "$sbt_jar"
+  md5sum "$sbt_jar"
   [[ -f "$sbt_jar" ]] || acquire_sbt_jar "$sbt_version" || {
     # still no jar? uh-oh.
     echo "Download failed. Obtain the sbt-launch.jar manually and place it at $sbt_jar"
