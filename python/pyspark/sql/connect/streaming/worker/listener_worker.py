@@ -21,13 +21,16 @@ Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
 import json
+import traceback
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
+    write_with_length,
     UTF8Deserializer,
     CPickleSerializer,
+    SpecialLengths,
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
@@ -83,7 +86,14 @@ def main(infile: IO, outfile: IO) -> None:
     while True:
         event = utf8_deserializer.loads(infile)
         event_type = read_int(infile)
-        process(event, int(event_type))  # TODO(SPARK-44463): Propagate error to the user.
+        # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
+        # traceback string if error occurs.
+        try:
+            process(event, int(event_type))
+            write_int(0, outfile)
+        except Exception:
+            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
         outfile.flush()
 
 

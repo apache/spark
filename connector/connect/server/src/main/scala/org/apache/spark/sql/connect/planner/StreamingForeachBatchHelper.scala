@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
@@ -23,7 +24,7 @@ import java.util.concurrent.ConcurrentMap
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -125,8 +126,16 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.writeLong(args.batchId)
       dataOut.flush()
 
-      val ret = dataIn.readInt()
-      logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+      dataIn.readInt() match {
+        case ret if ret == 0 =>
+          logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+          val exLength = dataIn.readInt()
+          val obj = new Array[Byte](exLength)
+          dataIn.readFully(obj)
+          val msg = new String(obj, StandardCharsets.UTF_8)
+          throw new IllegalStateException(s"Found error inside foreachBatch Python process: $msg")
+      }
     }
 
     (dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder), RunnerCleaner(runner))

@@ -20,13 +20,16 @@ A worker for streaming foreachBatch in Spark Connect.
 Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
+import traceback
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     write_int,
+    write_with_length,
     read_long,
     UTF8Deserializer,
     CPickleSerializer,
+    SpecialLengths,
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
@@ -69,8 +72,14 @@ def main(infile: IO, outfile: IO) -> None:
     while True:
         df_ref_id = utf8_deserializer.loads(infile)
         batch_id = read_long(infile)
-        process(df_ref_id, int(batch_id))  # TODO(SPARK-44463): Propagate error to the user.
-        write_int(0, outfile)
+        # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
+        # traceback string if error occurs.
+        try:
+            process(df_ref_id, int(batch_id))
+            write_int(0, outfile)
+        except Exception:
+            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
         outfile.flush()
 
 
