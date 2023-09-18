@@ -3671,39 +3671,39 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Collect values from a single column DataFrame
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_list('age')).show()
-    +-----------------+
-    |collect_list(age)|
-    +-----------------+
-    |        [2, 5, 5]|
-    +-----------------+
-
-    Example 2: Collect values from a DataFrame with multiple columns
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_list('id')).show()
-    +----+----------------+
-    |name|collect_list(id)|
-    +----+----------------+
-    |John|          [1, 2]|
-    | Ana|             [3]|
-    +----+----------------+
-
-    Example 3: Collect values from a DataFrame and sort the result
+    Example 1: Collect values from a DataFrame and sort the result in ascending order
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
-    >>> df.select(sf.array_sort(sf.collect_list('value')).alias('sorted_list')).show()
+    >>> df.select(sf.sort_array(sf.collect_list('value')).alias('sorted_list')).show()
     +-----------+
     |sorted_list|
     +-----------+
     |  [1, 2, 2]|
     +-----------+
+
+    Example 2: Collect values from a DataFrame and sort the result in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_list('age'), asc=False).alias('sorted_list')).show()
+    +-----------+
+    |sorted_list|
+    +-----------+
+    |  [5, 5, 2]|
+    +-----------+
+
+    Example 3: Collect values from a DataFrame with multiple columns and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list')).show()
+    +----+-----------+
+    |name|sorted_list|
+    +----+-----------+
+    |John|     [1, 2]|
+    | Ana|        [3]|
+    +----+-----------+
     """
     return _invoke_function_over_columns("collect_list", col)
 
@@ -3762,39 +3762,39 @@ def collect_set(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Collect values from a single column DataFrame
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_set('age')).show()
-    +----------------+
-    |collect_set(age)|
-    +----------------+
-    |          [5, 2]|
-    +----------------+
-
-    Example 2: Collect values from a DataFrame with multiple columns
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_set('id')).show()
-    +----+---------------+
-    |name|collect_set(id)|
-    +----+---------------+
-    |John|         [1, 2]|
-    | Ana|            [3]|
-    +----+---------------+
-
-    Example 3: Collect values from a DataFrame and sort the result
+    Example 1: Collect values from a DataFrame and sort the result in ascending order
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
-    >>> df.select(sf.array_sort(sf.collect_set('value')).alias('sorted_set')).show()
+    >>> df.select(sf.sort_array(sf.collect_set('value')).alias('sorted_set')).show()
     +----------+
     |sorted_set|
     +----------+
     |    [1, 2]|
     +----------+
+
+    Example 2: Collect values from a DataFrame and sort the result in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_set('age'), asc=False).alias('sorted_set')).show()
+    +----------+
+    |sorted_set|
+    +----------+
+    |    [5, 2]|
+    +----------+
+
+    Example 3: Collect values from a DataFrame with multiple columns and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set')).show()
+    +----+----------+
+    |name|sorted_set|
+    +----+----------+
+    |John|    [1, 2]|
+    | Ana|       [3]|
+    +----+----------+
     """
     return _invoke_function_over_columns("collect_set", col)
 
