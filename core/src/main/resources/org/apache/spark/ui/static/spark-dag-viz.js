@@ -332,8 +332,7 @@ function preprocessGraphLayout(g, forJob) {
     g.setEdge(edge.v, edge.w, {
       curve: d3.curveBasis
     })
-    }
-  )
+  })
   // Adjust vertical separation between nodes
   if (forJob) {
     g.graph().rankSep = JobPageVizConstants.rankSep;
