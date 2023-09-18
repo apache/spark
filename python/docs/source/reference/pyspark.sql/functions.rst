@@ -264,6 +264,8 @@ Collection Functions
     str_to_map
     to_csv
     try_element_at
+    from_xml
+    schema_of_xml
 
 
 Partition Transformation Functions
