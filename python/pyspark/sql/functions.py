@@ -11686,7 +11686,8 @@ def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> 
 def array(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
-    """Creates a new array column.
+    """
+    Collection function: Creates a new array column from the input columns or column names.
 
     .. versionadded:: 1.4.0
 
@@ -11696,25 +11697,63 @@ def array(
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        column names or :class:`~pyspark.sql.Column`\\s that have
-        the same data type.
+        Column names or :class:`~pyspark.sql.Column` objects that have the same data type.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of array type.
+        A new Column of array type, where each value is an array containing the corresponding values
+        from the input columns.
 
     Examples
     --------
+    Example 1: Basic usage of array function with column names.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(array('age', 'age').alias("arr")).collect()
-    [Row(arr=[2, 2]), Row(arr=[5, 5])]
-    >>> df.select(array([df.age, df.age]).alias("arr")).collect()
-    [Row(arr=[2, 2]), Row(arr=[5, 5])]
-    >>> df.select(array('age', 'age').alias("col")).printSchema()
-    root
-     |-- col: array (nullable = false)
-     |    |-- element: long (containsNull = true)
+    >>> df.select(sf.array('name', 'age').alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 2: Usage of array function with Column objects.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array(df.name, df.age).alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 3: Single argument as list of column names.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array(['name', 'age']).alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 4: array function with a column containing null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", None), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array('name', 'age').alias("arr")).show()
+    +-------------+
+    |          arr|
+    +-------------+
+    |[Alice, NULL]|
+    |     [Bob, 5]|
+    +-------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
