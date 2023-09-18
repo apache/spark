@@ -19,28 +19,8 @@ package org.apache.spark.util
 
 import org.apache.spark.{SparkEnv, SparkException}
 
-private[spark] object SparkClosureCleaner {
-  /**
-   * Clean the given closure in place.
-   *
-   * More specifically, this renders the given closure serializable as long as it does not
-   * explicitly reference unserializable objects.
-   *
-   * @param closure           the closure to clean
-   * @param checkSerializable whether to verify that the closure is serializable after cleaning
-   * @param cleanTransitively whether to clean enclosing closures transitively
-   */
-  def clean(
-       closure: AnyRef,
-       checkSerializable: Boolean = true,
-       cleanTransitively: Boolean = true): Unit = {
-    ClosureCleaner.clean(closure, cleanTransitively)
-    if (checkSerializable) {
-      ensureSerializable(closure)
-    }
-  }
-
-  private def ensureSerializable(func: AnyRef): Unit = {
+private[spark] object SparkClosureCleaner extends ClosureCleaner {
+  override protected def ensureSerializable(func: AnyRef): Unit = {
     try {
       if (SparkEnv.get != null) {
         SparkEnv.get.closureSerializer.newInstance().serialize(func)

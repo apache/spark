@@ -183,7 +183,7 @@ object ScalarUserDefinedFunction {
       function: AnyRef,
       inputEncoders: Seq[AgnosticEncoder[_]],
       outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
-    ClosureCleaner.clean(function)
+    SparkConnectClosureCleaner.clean(function)
     val udfPacketBytes =
       SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     checkDeserializable(udfPacketBytes)
@@ -201,5 +201,13 @@ object ScalarUserDefinedFunction {
       function = function,
       inputEncoders = Seq.empty[AgnosticEncoder[_]],
       outputEncoder = RowEncoder.encoderForDataType(returnType, lenient = false))
+  }
+}
+
+
+object SparkConnectClosureCleaner extends ClosureCleaner {
+
+  protected override def ensureSerializable(closure: AnyRef): Unit = {
+    // we always check SparkConnect UDFs for serialization in the code above
   }
 }

@@ -32,11 +32,7 @@ import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-/**
- * A cleaner that renders closures serializable if they can be done so safely.
- */
-private[spark] object ClosureCleaner extends Logging {
-
+object ClosureCleaner {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private[util] def getClassReader(cls: Class[_]): ClassReader = {
     // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
@@ -57,6 +53,12 @@ private[spark] object ClosureCleaner extends Logging {
 
   private[util] def isDefinedInAmmonite(clazz: Class[_]): Boolean = clazz.getName.matches(
     "^ammonite\\.\\$sess\\.cmd[0-9]*.*")
+}
+/**
+ * A cleaner that renders closures serializable if they can be done so safely.
+ */
+private[spark] trait ClosureCleaner extends Logging {
+  import ClosureCleaner._
 
   // Check whether a class represents a Scala closure
   private def isClosure(cls: Class[_]): Boolean = {
@@ -153,8 +155,23 @@ private[spark] object ClosureCleaner extends Logging {
     clone
   }
 
-  def clean(func: AnyRef, cleanTransitively: Boolean = true): Unit = {
-    clean(func, cleanTransitively, Map.empty)
+  protected def ensureSerializable(closure: AnyRef)
+
+  /**
+   * Clean the given closure in place.
+   *
+   * More specifically, this renders the given closure serializable as long as it does not
+   * explicitly reference unserializable objects.
+   *
+   * @param closure the closure to clean
+   * @param checkSerializable whether to verify that the closure is serializable after cleaning
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   */
+  def clean(
+      closure: AnyRef,
+      checkSerializable: Boolean = true,
+      cleanTransitively: Boolean = true): Unit = {
+    clean(closure, checkSerializable, cleanTransitively, Map.empty)
   }
 
   /**
@@ -192,15 +209,15 @@ private[spark] object ClosureCleaner extends Logging {
    * pointer of a cloned scope "one" and set it the parent of scope "two", such that scope "two"
    * no longer references SomethingNotSerializable transitively.
    *
-   * @param func
-   *   the starting closure to clean
-   * @param cleanTransitively
-   *   whether to clean enclosing closures transitively
-   * @param accessedFields
-   *   a map from a class to a set of its fields that are accessed by the starting closure
+   * @param func              the starting closure to clean
+   * @param checkSerializable whether to verify that the closure is serializable after cleaning
+   * @param cleanTransitively whether to clean enclosing closures transitively
+   * @param accessedFields    a map from a class to a set of its fields that are accessed by
+   *                          the starting closure
    */
   private def clean(
       func: AnyRef,
+      checkSerializable: Boolean,
       cleanTransitively: Boolean,
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
@@ -312,7 +329,9 @@ private[spark] object ClosureCleaner extends Logging {
         // the already populated accessed fields map of the starting closure
         if (cleanTransitively && isClosure(clone.getClass)) {
           logDebug(s" + cleaning cloned closure recursively (${cls.getName})")
-          clean(clone, cleanTransitively, accessedFields)
+          // No need to check serializable here for the outer closures because we're
+          // only interested in the serializability of the starting closure
+          clean(clone, checkSerializable = false, cleanTransitively, accessedFields)
         }
         parent = clone
       }
@@ -379,6 +398,10 @@ private[spark] object ClosureCleaner extends Logging {
       }
 
       logDebug(s" +++ indylambda closure ($implMethodName) is now cleaned +++")
+    }
+
+    if (checkSerializable) {
+      ensureSerializable(func)
     }
   }
 
