@@ -162,7 +162,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
@@ -177,7 +177,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
@@ -199,7 +199,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDE 'whatever'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -210,7 +210,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -221,7 +221,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
@@ -232,7 +232,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
@@ -243,7 +243,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
@@ -254,7 +254,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
@@ -265,7 +265,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
@@ -276,7 +276,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... ADD PARTITION ..."
@@ -287,7 +287,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... DROP PARTITION ..."
@@ -298,7 +298,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
@@ -309,7 +309,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
@@ -339,7 +339,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "LOAD DATA"
@@ -354,7 +354,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "SHOW CREATE TABLE"
@@ -369,7 +369,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ANALYZE TABLE"
@@ -406,7 +406,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $viewName SELECT 1")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "INSERT"
@@ -421,7 +421,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "LOAD DATA"),

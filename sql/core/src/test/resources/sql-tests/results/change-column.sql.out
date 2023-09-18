@@ -270,7 +270,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
@@ -301,7 +301,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",

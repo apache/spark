@@ -460,7 +460,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
       messageParameters = Map(
         "viewName" -> toSQLId(identifier.nameParts),
         "operation" -> "INSERT"),
@@ -488,9 +488,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = if (suggestAlternative) {
-        "EXPECT_TABLE_NOT_VIEW"
+        "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW"
       } else {
-        "UNSUPPORTED_FEATURE.VIEW_OPERATION"
+        "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE"
       },
       messageParameters = Map(
         "viewName" -> toSQLId(nameParts),
@@ -505,7 +505,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = if (suggestAlternative) {
-        "EXPECT_VIEW_NOT_TABLE"
+        "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE"
       } else {
         "UNSUPPORTED_FEATURE.TABLE_OPERATION"
       },

@@ -2068,7 +2068,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> "`tmp_v`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),
@@ -2087,7 +2087,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),

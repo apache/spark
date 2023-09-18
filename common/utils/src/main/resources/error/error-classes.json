@@ -862,13 +862,32 @@
   },
   "EXPECT_TABLE_NOT_VIEW" : {
     "message" : [
-      "The view <viewName> does not support <operation>, Please use ALTER VIEW instead."
-    ]
+      "The view <viewName> does not support <operation>."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_VIEW" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
   },
   "EXPECT_VIEW_NOT_TABLE" : {
     "message" : [
-      "The table <tableName> does not support <operation>, Please use ALTER TABLE instead."
-    ]
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "USE_ALTER_TABLE" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -3248,11 +3267,6 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
-        ]
-      },
-      "VIEW_OPERATION" : {
-        "message" : [
-          "View <viewName> does not support <operation>."
         ]
       }
     },

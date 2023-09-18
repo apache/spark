@@ -713,7 +713,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       exception = intercept[AnalysisException] {
         spark.catalog.recoverPartitions("my_temp_table")
       },
-      errorClass = "UNSUPPORTED_FEATURE.VIEW_OPERATION",
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
       parameters = Map(
         "viewName" -> "`my_temp_table`",
         "operation" -> "recoverPartitions()")

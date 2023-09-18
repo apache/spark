@@ -4199,7 +4199,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               "[UNSUPPORTED_FEATURE.VIEW_OPERATION]*`cars`*")
+               "[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE]*`cars`*")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
