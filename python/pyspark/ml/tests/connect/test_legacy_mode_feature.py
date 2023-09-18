@@ -19,12 +19,12 @@
 import os
 import pickle
 import numpy as np
-import pandas as pd
 import tempfile
 import unittest
 
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
 
 if should_test_connect:
     from pyspark.ml.connect.feature import (
@@ -33,6 +33,7 @@ if should_test_connect:
         StandardScaler,
         StandardScalerModel,
     )
+    import pandas as pd
 
 
 class FeatureTestsMixin:

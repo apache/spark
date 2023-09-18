@@ -19,7 +19,6 @@ import os
 import tempfile
 import unittest
 import numpy as np
-import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -34,6 +33,7 @@ if should_test_connect:
         LogisticRegression as LORV2,
         LogisticRegressionModel as LORV2Model,
     )
+    import pandas as pd
 
 
 class ClassificationTestsMixin:

@@ -19,7 +19,6 @@ import os
 import tempfile
 import unittest
 import numpy as np
-import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -27,6 +26,7 @@ if should_test_connect:
     from pyspark.ml.connect.feature import StandardScaler
     from pyspark.ml.connect.classification import LogisticRegression as LORV2
     from pyspark.ml.connect.pipeline import Pipeline
+    import pandas as pd
 
 
 class PipelineTestsMixin:
