@@ -3687,7 +3687,7 @@ def collect_list(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
     >>> df.select(sf.sort_array(sf.collect_list('age'), asc=False).alias('sorted_list')).show()
-   +-----------+
+    +-----------+
     |sorted_list|
     +-----------+
     |  [5, 5, 2]|
