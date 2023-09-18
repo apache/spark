@@ -181,7 +181,7 @@ object Cast extends QueryErrorsBase {
   /**
    * A tag to decide if a CAST is specified by user.
    */
-  val USER_SPECIFIED_CAST = new TreeNodeTag[Boolean]("user_specified_cast")
+  val USER_SPECIFIED_CAST = new TreeNodeTag[Unit]("user_specified_cast")
 
   /**
    * Returns true iff we can cast `from` type to `to` type.

@@ -136,7 +136,7 @@ If you want to deploy a Spark Application into a Mesos cluster that is running i
 - `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key
 - `LIBPROCESS_SSL_CERT_FILE=pathToCRTFile.crt` the certificate file to be used
 
-All options can be found at http://mesos.apache.org/documentation/latest/ssl/
+All options can be found at [http://mesos.apache.org/documentation/latest/ssl/](http://mesos.apache.org/documentation/latest/ssl/)
 
 Then submit happens as described in Client mode or Cluster mode below
 
@@ -579,7 +579,7 @@ See the [configuration page](configuration.html) for information on Spark config
     This only affects docker containers, and must be one of "docker"
     or "mesos".  Mesos supports two types of
     containerizers for docker: the "docker" containerizer, and the preferred
-    "mesos" containerizer.  Read more here: http://mesos.apache.org/documentation/latest/container-image/
+    "mesos" containerizer.  Read more <a href="http://mesos.apache.org/documentation/latest/container-image/">here</a>.
   </td>
   <td>2.1.0</td>
 </tr>

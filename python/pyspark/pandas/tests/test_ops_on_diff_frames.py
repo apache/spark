@@ -201,32 +201,22 @@ class OpsOnDiffFramesEnabledTestsMixin:
         psdf1 = ps.from_pandas(pdf1)
         psdf2 = ps.from_pandas(pdf2)
 
-        def assert_eq(actual, expected):
-            if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-                self.assert_eq(actual, expected, check_exact=not check_extension)
-                if check_extension:
-                    if isinstance(actual, DataFrame):
-                        for dtype in actual.dtypes:
-                            self.assertTrue(isinstance(dtype, extension_dtypes))
-                    else:
-                        self.assertTrue(isinstance(actual.dtype, extension_dtypes))
-            else:
-                self.assert_eq(actual, expected)
-
         # Series
-        assert_eq((psdf1.a - psdf2.b).sort_index(), (pdf1.a - pdf2.b).sort_index())
+        self.assert_eq((psdf1.a - psdf2.b).sort_index(), (pdf1.a - pdf2.b).sort_index())
 
-        assert_eq((psdf1.a * psdf2.a).sort_index(), (pdf1.a * pdf2.a).sort_index())
+        self.assert_eq((psdf1.a * psdf2.a).sort_index(), (pdf1.a * pdf2.a).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq(
                 (psdf1["a"] / psdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index()
             )
         else:
-            assert_eq((psdf1["a"] / psdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index())
+            self.assert_eq(
+                (psdf1["a"] / psdf2["a"]).sort_index(), (pdf1["a"] / pdf2["a"]).sort_index()
+            )
 
         # DataFrame
-        assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
+        self.assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
@@ -236,47 +226,39 @@ class OpsOnDiffFramesEnabledTestsMixin:
         pdf2.columns = columns
 
         # Series
-        assert_eq(
+        self.assert_eq(
             (psdf1[("x", "a")] - psdf2[("x", "b")]).sort_index(),
             (pdf1[("x", "a")] - pdf2[("x", "b")]).sort_index(),
         )
 
-        assert_eq(
+        self.assert_eq(
             (psdf1[("x", "a")] - psdf2["x"]["b"]).sort_index(),
             (pdf1[("x", "a")] - pdf2["x"]["b"]).sort_index(),
         )
 
-        assert_eq(
+        self.assert_eq(
             (psdf1["x"]["a"] - psdf2[("x", "b")]).sort_index(),
             (pdf1["x"]["a"] - pdf2[("x", "b")]).sort_index(),
         )
 
         # DataFrame
-        assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
+        self.assert_eq((psdf1 + psdf2).sort_index(), (pdf1 + pdf2).sort_index())
 
     def _test_arithmetic_series(self, pser1, pser2, *, check_extension):
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
 
-        def assert_eq(actual, expected):
-            if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-                self.assert_eq(actual, expected, check_exact=not check_extension)
-                if check_extension:
-                    self.assertTrue(isinstance(actual.dtype, extension_dtypes))
-            else:
-                self.assert_eq(actual, expected)
-
         # MultiIndex Series
-        assert_eq((psser1 + psser2).sort_index(), (pser1 + pser2).sort_index())
+        self.assert_eq((psser1 + psser2).sort_index(), (pser1 + pser2).sort_index())
 
-        assert_eq((psser1 - psser2).sort_index(), (pser1 - pser2).sort_index())
+        self.assert_eq((psser1 - psser2).sort_index(), (pser1 - pser2).sort_index())
 
-        assert_eq((psser1 * psser2).sort_index(), (pser1 * pser2).sort_index())
+        self.assert_eq((psser1 * psser2).sort_index(), (pser1 * pser2).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq((psser1 / psser2).sort_index(), (pser1 / pser2).sort_index())
         else:
-            assert_eq((psser1 / psser2).sort_index(), (pser1 / pser2).sort_index())
+            self.assert_eq((psser1 / psser2).sort_index(), (pser1 / pser2).sort_index())
 
     def test_arithmetic_chain(self):
         self._test_arithmetic_chain_frame(self.pdf1, self.pdf2, self.pdf3, check_extension=False)
@@ -321,29 +303,12 @@ class OpsOnDiffFramesEnabledTestsMixin:
         psdf2 = ps.from_pandas(pdf2)
         psdf3 = ps.from_pandas(pdf3)
 
-        common_columns = set(psdf1.columns).intersection(psdf2.columns).intersection(psdf3.columns)
-
-        def assert_eq(actual, expected):
-            if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-                self.assert_eq(actual, expected, check_exact=not check_extension)
-                if check_extension:
-                    if isinstance(actual, DataFrame):
-                        for column, dtype in zip(actual.columns, actual.dtypes):
-                            if column in common_columns:
-                                self.assertTrue(isinstance(dtype, extension_dtypes))
-                            else:
-                                self.assertFalse(isinstance(dtype, extension_dtypes))
-                    else:
-                        self.assertTrue(isinstance(actual.dtype, extension_dtypes))
-            else:
-                self.assert_eq(actual, expected)
-
         # Series
-        assert_eq(
+        self.assert_eq(
             (psdf1.a - psdf2.b - psdf3.c).sort_index(), (pdf1.a - pdf2.b - pdf3.c).sort_index()
         )
 
-        assert_eq(
+        self.assert_eq(
             (psdf1.a * (psdf2.a * psdf3.c)).sort_index(), (pdf1.a * (pdf2.a * pdf3.c)).sort_index()
         )
 
@@ -353,18 +318,13 @@ class OpsOnDiffFramesEnabledTestsMixin:
                 (pdf1["a"] / pdf2["a"] / pdf3["c"]).sort_index(),
             )
         else:
-            assert_eq(
+            self.assert_eq(
                 (psdf1["a"] / psdf2["a"] / psdf3["c"]).sort_index(),
                 (pdf1["a"] / pdf2["a"] / pdf3["c"]).sort_index(),
             )
 
         # DataFrame
-        if check_extension and LooseVersion(pd.__version__) < LooseVersion("1.1"):
-            self.assert_eq(
-                (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
-            )
-        else:
-            assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
+        self.assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
 
         # Multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b")])
@@ -376,53 +336,46 @@ class OpsOnDiffFramesEnabledTestsMixin:
         psdf3.columns = columns
         pdf3.columns = columns
 
-        common_columns = set(psdf1.columns).intersection(psdf2.columns).intersection(psdf3.columns)
-
         # Series
-        assert_eq(
+        self.assert_eq(
             (psdf1[("x", "a")] - psdf2[("x", "b")] - psdf3[("y", "c")]).sort_index(),
             (pdf1[("x", "a")] - pdf2[("x", "b")] - pdf3[("y", "c")]).sort_index(),
         )
 
-        assert_eq(
+        self.assert_eq(
             (psdf1[("x", "a")] * (psdf2[("x", "b")] * psdf3[("y", "c")])).sort_index(),
             (pdf1[("x", "a")] * (pdf2[("x", "b")] * pdf3[("y", "c")])).sort_index(),
         )
 
         # DataFrame
-        if check_extension and LooseVersion(pd.__version__) < LooseVersion("1.1"):
-            self.assert_eq(
-                (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
-            )
-        else:
-            assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
+        self.assert_eq((psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index())
 
     def _test_arithmetic_chain_series(self, pser1, pser2, pser3, *, check_extension):
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
         psser3 = ps.from_pandas(pser3)
 
-        def assert_eq(actual, expected):
-            if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-                self.assert_eq(actual, expected, check_exact=not check_extension)
-                if check_extension:
-                    self.assertTrue(isinstance(actual.dtype, extension_dtypes))
-            else:
-                self.assert_eq(actual, expected)
-
         # MultiIndex Series
-        assert_eq((psser1 + psser2 - psser3).sort_index(), (pser1 + pser2 - pser3).sort_index())
+        self.assert_eq(
+            (psser1 + psser2 - psser3).sort_index(), (pser1 + pser2 - pser3).sort_index()
+        )
 
-        assert_eq((psser1 * psser2 * psser3).sort_index(), (pser1 * pser2 * pser3).sort_index())
+        self.assert_eq(
+            (psser1 * psser2 * psser3).sort_index(), (pser1 * pser2 * pser3).sort_index()
+        )
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq(
                 (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
             )
         else:
-            assert_eq((psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index())
+            self.assert_eq(
+                (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
+            )
 
-        assert_eq((psser1 + psser2 * psser3).sort_index(), (pser1 + pser2 * pser3).sort_index())
+        self.assert_eq(
+            (psser1 + psser2 * psser3).sort_index(), (pser1 + pser2 * pser3).sort_index()
+        )
 
     def test_mod(self):
         pser = pd.Series([100, None, -300, None, 500, -700])
@@ -509,13 +462,6 @@ class OpsOnDiffFramesEnabledTestsMixin:
         not extension_object_dtypes_available, "pandas extension object dtypes are not available"
     )
     def test_bitwise_extension_dtype(self):
-        def assert_eq(actual, expected):
-            if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-                self.assert_eq(actual, expected, check_exact=False)
-                self.assertTrue(isinstance(actual.dtype, extension_dtypes))
-            else:
-                self.assert_eq(actual, expected)
-
         pser1 = pd.Series(
             [True, False, True, False, np.nan, np.nan, True, False, np.nan], dtype="boolean"
         )
@@ -525,8 +471,8 @@ class OpsOnDiffFramesEnabledTestsMixin:
         psser1 = ps.from_pandas(pser1)
         psser2 = ps.from_pandas(pser2)
 
-        assert_eq((psser1 | psser2).sort_index(), pser1 | pser2)
-        assert_eq((psser1 & psser2).sort_index(), pser1 & pser2)
+        self.assert_eq((psser1 | psser2).sort_index(), pser1 | pser2)
+        self.assert_eq((psser1 & psser2).sort_index(), pser1 & pser2)
 
         pser1 = pd.Series([True, False, np.nan], index=list("ABC"), dtype="boolean")
         pser2 = pd.Series([False, True, np.nan], index=list("DEF"), dtype="boolean")
@@ -536,11 +482,11 @@ class OpsOnDiffFramesEnabledTestsMixin:
         # a pandas bug?
         # assert_eq((psser1 | psser2).sort_index(), pser1 | pser2)
         # assert_eq((psser1 & psser2).sort_index(), pser1 & pser2)
-        assert_eq(
+        self.assert_eq(
             (psser1 | psser2).sort_index(),
             pd.Series([True, None, None, None, True, None], index=list("ABCDEF"), dtype="boolean"),
         )
-        assert_eq(
+        self.assert_eq(
             (psser1 & psser2).sort_index(),
             pd.Series(
                 [None, False, None, False, None, None], index=list("ABCDEF"), dtype="boolean"
@@ -660,29 +606,14 @@ class OpsOnDiffFramesEnabledTestsMixin:
         pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
         psdf2 = ps.from_pandas(pdf2)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
-        else:
-            # pandas < 1.2.0 returns unexpected dtypes,
-            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
+        self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
 
         pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
         psdf1 = ps.from_pandas(pdf1)
         pdf2.columns = pd.MultiIndex.from_tuples([("C", "oak"), ("B", "pine")])
         psdf2 = ps.from_pandas(pdf2)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
-        else:
-            # pandas < 1.2.0 returns unexpected dtypes,
-            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            expected_pdf.columns = pd.MultiIndex.from_tuples(
-                [("A", "willow"), ("B", "pine"), ("C", "oak")]
-            )
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2).sort_index())
+        self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2).sort_index())
 
     def test_insert(self):
         #
@@ -727,152 +658,60 @@ class OpsOnDiffFramesEnabledTestsMixin:
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_compare(self):
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            pser1 = pd.Series(["b", "c", np.nan, "g", np.nan])
-            pser2 = pd.Series(["a", "c", np.nan, np.nan, "h"])
-            psser1 = ps.from_pandas(pser1)
-            psser2 = ps.from_pandas(pser2)
-            self.assert_eq(
-                pser1.compare(pser2).sort_index(),
-                psser1.compare(psser2).sort_index(),
-            )
+        pser1 = pd.Series(["b", "c", np.nan, "g", np.nan])
+        pser2 = pd.Series(["a", "c", np.nan, np.nan, "h"])
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        self.assert_eq(
+            pser1.compare(pser2).sort_index(),
+            psser1.compare(psser2).sort_index(),
+        )
 
-            # `keep_shape=True`
-            self.assert_eq(
-                pser1.compare(pser2, keep_shape=True).sort_index(),
-                psser1.compare(psser2, keep_shape=True).sort_index(),
-            )
-            # `keep_equal=True`
-            self.assert_eq(
-                pser1.compare(pser2, keep_equal=True).sort_index(),
-                psser1.compare(psser2, keep_equal=True).sort_index(),
-            )
-            # `keep_shape=True` and `keep_equal=True`
-            self.assert_eq(
-                pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
-                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
-            )
+        # `keep_shape=True`
+        self.assert_eq(
+            pser1.compare(pser2, keep_shape=True).sort_index(),
+            psser1.compare(psser2, keep_shape=True).sort_index(),
+        )
+        # `keep_equal=True`
+        self.assert_eq(
+            pser1.compare(pser2, keep_equal=True).sort_index(),
+            psser1.compare(psser2, keep_equal=True).sort_index(),
+        )
+        # `keep_shape=True` and `keep_equal=True`
+        self.assert_eq(
+            pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
+            psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
+        )
 
-            # MultiIndex
-            pser1.index = pd.MultiIndex.from_tuples(
-                [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
-            )
-            pser2.index = pd.MultiIndex.from_tuples(
-                [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
-            )
-            psser1 = ps.from_pandas(pser1)
-            psser2 = ps.from_pandas(pser2)
-            self.assert_eq(
-                pser1.compare(pser2).sort_index(),
-                psser1.compare(psser2).sort_index(),
-            )
+        # MultiIndex
+        pser1.index = pd.MultiIndex.from_tuples(
+            [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
+        )
+        pser2.index = pd.MultiIndex.from_tuples(
+            [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
+        )
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        self.assert_eq(
+            pser1.compare(pser2).sort_index(),
+            psser1.compare(psser2).sort_index(),
+        )
 
-            # `keep_shape=True` with MultiIndex
-            self.assert_eq(
-                pser1.compare(pser2, keep_shape=True).sort_index(),
-                psser1.compare(psser2, keep_shape=True).sort_index(),
-            )
-            # `keep_equal=True` with MultiIndex
-            self.assert_eq(
-                pser1.compare(pser2, keep_equal=True).sort_index(),
-                psser1.compare(psser2, keep_equal=True).sort_index(),
-            )
-            # `keep_shape=True` and `keep_equal=True` with MultiIndex
-            self.assert_eq(
-                pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
-                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
-            )
-        else:
-            psser1 = ps.Series(["b", "c", np.nan, "g", np.nan])
-            psser2 = ps.Series(["a", "c", np.nan, np.nan, "h"])
-            expected = ps.DataFrame(
-                [["b", "a"], ["g", None], [None, "h"]], index=[0, 3, 4], columns=["self", "other"]
-            )
-            self.assert_eq(expected, psser1.compare(psser2).sort_index())
-
-            # `keep_shape=True`
-            expected = ps.DataFrame(
-                [["b", "a"], [None, None], [None, None], ["g", None], [None, "h"]],
-                index=[0, 1, 2, 3, 4],
-                columns=["self", "other"],
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_shape=True).sort_index(),
-            )
-            # `keep_equal=True`
-            expected = ps.DataFrame(
-                [["b", "a"], ["g", None], [None, "h"]], index=[0, 3, 4], columns=["self", "other"]
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_equal=True).sort_index(),
-            )
-            # `keep_shape=True` and `keep_equal=True`
-            expected = ps.DataFrame(
-                [["b", "a"], ["c", "c"], [None, None], ["g", None], [None, "h"]],
-                index=[0, 1, 2, 3, 4],
-                columns=["self", "other"],
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
-            )
-
-            # MultiIndex
-            psser1 = ps.Series(
-                ["b", "c", np.nan, "g", np.nan],
-                index=pd.MultiIndex.from_tuples(
-                    [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
-                ),
-            )
-            psser2 = ps.Series(
-                ["a", "c", np.nan, np.nan, "h"],
-                index=pd.MultiIndex.from_tuples(
-                    [("a", "x"), ("b", "y"), ("c", "z"), ("x", "k"), ("q", "l")]
-                ),
-            )
-            expected = ps.DataFrame(
-                [["b", "a"], [None, "h"], ["g", None]],
-                index=pd.MultiIndex.from_tuples([("a", "x"), ("q", "l"), ("x", "k")]),
-                columns=["self", "other"],
-            )
-            self.assert_eq(expected, psser1.compare(psser2).sort_index())
-
-            # `keep_shape=True`
-            expected = ps.DataFrame(
-                [["b", "a"], [None, None], [None, None], [None, "h"], ["g", None]],
-                index=pd.MultiIndex.from_tuples(
-                    [("a", "x"), ("b", "y"), ("c", "z"), ("q", "l"), ("x", "k")]
-                ),
-                columns=["self", "other"],
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_shape=True).sort_index(),
-            )
-            # `keep_equal=True`
-            expected = ps.DataFrame(
-                [["b", "a"], [None, "h"], ["g", None]],
-                index=pd.MultiIndex.from_tuples([("a", "x"), ("q", "l"), ("x", "k")]),
-                columns=["self", "other"],
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_equal=True).sort_index(),
-            )
-            # `keep_shape=True` and `keep_equal=True`
-            expected = ps.DataFrame(
-                [["b", "a"], ["c", "c"], [None, None], [None, "h"], ["g", None]],
-                index=pd.MultiIndex.from_tuples(
-                    [("a", "x"), ("b", "y"), ("c", "z"), ("q", "l"), ("x", "k")]
-                ),
-                columns=["self", "other"],
-            )
-            self.assert_eq(
-                expected,
-                psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
-            )
+        # `keep_shape=True` with MultiIndex
+        self.assert_eq(
+            pser1.compare(pser2, keep_shape=True).sort_index(),
+            psser1.compare(psser2, keep_shape=True).sort_index(),
+        )
+        # `keep_equal=True` with MultiIndex
+        self.assert_eq(
+            pser1.compare(pser2, keep_equal=True).sort_index(),
+            psser1.compare(psser2, keep_equal=True).sort_index(),
+        )
+        # `keep_shape=True` and `keep_equal=True` with MultiIndex
+        self.assert_eq(
+            pser1.compare(pser2, keep_shape=True, keep_equal=True).sort_index(),
+            psser1.compare(psser2, keep_shape=True, keep_equal=True).sort_index(),
+        )
 
         # Different Index
         with self.assertRaisesRegex(

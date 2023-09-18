@@ -115,11 +115,11 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.8.8</maven.version>
+    <maven.version>3.9.4</maven.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.5</asm.version>
-    <slf4j.version>2.0.7</slf4j.version>
+    <slf4j.version>2.0.9</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
@@ -141,15 +141,19 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.0</orc.version>
+    <orc.version>1.9.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.51.v20230217</jetty.version>
+    <jetty.version>9.4.52.v20230823</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
+    <!--
+      SPARK-44968: don't upgrade Ivy to version 2.5.2 until the test aborted of
+      `HiveExternalCatalogVersionsSuite` in Java 11/17 daily tests is resolved.
+    -->
     <ivy.version>2.5.1</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
-    If you changes codahale.metrics.version, you also need to change
+    If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.2.19</codahale.metrics.version>
@@ -160,7 +164,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.16</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.17</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -171,8 +175,8 @@
     <scala.version>2.12.18</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
-    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
+    <!-- don't upgrade scala-maven-plugin to version 4.7.2 or higher, see SPARK-45144 for details -->
+    <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.16.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -187,7 +191,7 @@
     <snappy.version>1.1.10.3</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
-    <commons-compress.version>1.23.0</commons-compress.version>
+    <commons-compress.version>1.24.0</commons-compress.version>
     <commons-io.version>2.13.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -200,7 +204,7 @@
     <janino.version>3.1.9</janino.version>
     <!--
       Please don't upgrade the version to 3.0.0+,
-      Because it transition Jakarta REST API from javax to jakarta package.
+      Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.40</jersey.version>
     <joda.version>2.12.5</joda.version>
@@ -223,12 +227,12 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>12.0.1</arrow.version>
+    <arrow.version>13.0.0</arrow.version>
     <ammonite.version>2.5.9</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.8.0</kubernetes-client.version>
+    <kubernetes-client.version>6.8.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1297,6 +1301,13 @@
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-test</artifactId>
         <version>${curator.version}</version>
+        <!-- TODO(SPARK-44170): Remove this `exclusion` after Spark starts supporting JUnit5. -->
+        <exclusions>
+          <exclusion>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Hadoop 3.x dependencies -->
@@ -3008,6 +3019,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
+              <hive.conf.validation>false</hive.conf.validation>
             </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
@@ -3618,7 +3630,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.8</scala.version>
+        <scala.version>2.13.11</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3677,6 +3689,10 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
+                  <!--
+                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+                  -->
+                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

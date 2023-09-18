@@ -18,7 +18,7 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 have_torch = True
 try:
@@ -26,8 +26,13 @@ try:
 except ImportError:
     have_torch = False
 
+if should_test_connect:
+    from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
 
-@unittest.skipIf(not have_torch, "torch is required")
+
+@unittest.skipIf(
+    not should_test_connect or not have_torch, connect_requirement_message or "torch is required"
+)
 class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (

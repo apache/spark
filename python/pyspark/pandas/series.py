@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
@@ -67,6 +66,7 @@ from pyspark.sql.types import (
     Row,
     StructType,
     TimestampType,
+    NullType,
 )
 from pyspark.sql.window import Window
 from pyspark.sql.utils import get_column_class, get_window_class
@@ -893,7 +893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.rfloordiv(other), self.rmod(other)
 
-    def between(self, left: Any, right: Any, inclusive: Union[bool, str] = "both") -> "Series":
+    def between(self, left: Any, right: Any, inclusive: str = "both") -> "Series":
         """
         Return boolean Series equivalent to left <= series <= right.
         This function returns a boolean vector containing `True` wherever the
@@ -906,9 +906,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
+        inclusive : {"both", "neither", "left", "right"}
             Include boundaries. Whether to set each bound as closed or open.
-            Booleans are deprecated in favour of `both` or `neither`.
+
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -979,17 +980,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    False
         dtype: bool
         """
-        if inclusive is True or inclusive is False:
-            warnings.warn(
-                "Boolean inputs to the `inclusive` argument are deprecated in "
-                "favour of `both` or `neither`.",
-                FutureWarning,
-            )
-            if inclusive:
-                inclusive = "both"
-            else:
-                inclusive = "neither"
-
         if inclusive == "both":
             lmask = self >= left
             rmask = self <= right
@@ -1661,7 +1651,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         buf: Optional[IO[str]] = None,
         columns: Optional[List[Name]] = None,
-        col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
@@ -1681,11 +1670,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
-        warnings.warn(
-            "Argument `col_space` will be removed in 4.0.0.",
-            FutureWarning,
-        )
-
         args = locals()
         psseries = self
         return validate_arguments_and_invoke_function(
@@ -2256,7 +2240,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        last_non_null = SF.last_non_null(scol)
+        last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
         Window = get_window_class()
@@ -4024,7 +4008,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
-                if isinstance(spark_type, (BooleanType, NumericType)):
+                if isinstance(spark_type, (BooleanType, NumericType, NullType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
                     raise TypeError(
@@ -4059,7 +4043,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
+            If set to True, rank numeric Series, or raise TypeError for non-numeric Series.
+            False is not supported. This parameter is mainly for pandas compatibility.
 
         Returns
         -------
@@ -4127,18 +4112,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y    b
         z    c
         Name: A, dtype: object
-
-        >>> s.rank(numeric_only=True)
-        Series([], Name: A, dtype: float64)
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
-            return ps.Series([], dtype="float64", name=self.name)
+            raise TypeError("Series.rank does not allow numeric_only=True with non-numeric dtype.")
         else:
             return self._rank(method, ascending).spark.analyzed
 

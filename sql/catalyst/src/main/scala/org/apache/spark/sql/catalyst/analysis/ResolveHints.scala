@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -153,7 +153,7 @@ object ResolveHints {
         } else {
           // Otherwise, find within the subtree query plans to apply the hint.
           val relationNamesInHint = h.parameters.map {
-            case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
+            case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported =>
               throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
@@ -204,15 +204,11 @@ object ResolveHints {
       hint.parameters match {
         case Seq(IntegerLiteral(numPartitions)) =>
           Repartition(numPartitions, shuffle, hint.child)
-        case Seq(numPartitions: Int) =>
-          Repartition(numPartitions, shuffle, hint.child)
         // The "COALESCE" hint (shuffle = false) must have a partition number only
         case _ if !shuffle =>
           throw QueryCompilationErrors.invalidCoalesceHintParameterError(hintName)
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(numPartitions: Int, _*) if shuffle =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) if shuffle =>
           createRepartitionByExpression(None, param)
@@ -242,8 +238,6 @@ object ResolveHints {
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
-        case param @ Seq(numPartitions: Int, _*) =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
         case param @ Seq(_*) =>
           createRepartitionByExpression(None, param)
       }
@@ -266,24 +260,32 @@ object ResolveHints {
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
           createRebalancePartitions(param.tail, Some(numPartitions))
-        case param @ Seq(numPartitions: Int, _*) =>
-          createRebalancePartitions(param.tail, Some(numPartitions))
         case partitionExprs @ Seq(_*) =>
           createRebalancePartitions(partitionExprs, None)
       }
+    }
+
+    private def transformStringToAttribute(hint: UnresolvedHint): UnresolvedHint = {
+      // for all the coalesce hints, it's safe to transform the string literal to an attribute as
+      // all the parameters should be column names.
+      val parameters = hint.parameters.map {
+        case StringLiteral(name) => UnresolvedAttribute(name)
+        case e => e
+      }
+      hint.copy(parameters = parameters)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
-            createRepartition(shuffle = true, hint)
+            createRepartition(shuffle = true, transformStringToAttribute(hint))
           case "COALESCE" =>
-            createRepartition(shuffle = false, hint)
+            createRepartition(shuffle = false, transformStringToAttribute(hint))
           case "REPARTITION_BY_RANGE" =>
-            createRepartitionByRange(hint)
+            createRepartitionByRange(transformStringToAttribute(hint))
           case "REBALANCE" if conf.adaptiveExecutionEnabled =>
-            createRebalance(hint)
+            createRebalance(transformStringToAttribute(hint))
           case _ => hint
         }
     }

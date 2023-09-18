@@ -172,7 +172,7 @@ private[connect] class ExecuteHolder(
     }
   }
 
-  def removeGrpcResponseSender[_](sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
+  def removeGrpcResponseSender(sender: ExecuteGrpcResponseSender[_]): Unit = synchronized {
     // if closed, we are shutting down and interrupting all senders already
     if (closedTime.isEmpty) {
       grpcResponseSenders -=
@@ -181,6 +181,16 @@ private[connect] class ExecuteHolder(
         lastAttachedRpcTime = Some(System.currentTimeMillis())
       }
     }
+  }
+
+  // For testing.
+  private[connect] def setGrpcResponseSendersDeadline(deadlineMs: Long) = synchronized {
+    grpcResponseSenders.foreach(_.setDeadline(deadlineMs))
+  }
+
+  // For testing
+  private[connect] def interruptGrpcResponseSenders() = synchronized {
+    grpcResponseSenders.foreach(_.interrupt())
   }
 
   /**

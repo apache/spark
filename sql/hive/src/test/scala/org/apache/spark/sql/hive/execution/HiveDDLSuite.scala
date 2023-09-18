@@ -175,14 +175,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(sql("SELECT q.`a`, q.b FROM v"), Row("a", 1) :: Nil)
-
-      checkError(
-        exception = intercept[SparkException] {
-          spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-        },
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
-      )
     }
   }
 
@@ -3379,6 +3371,27 @@ class HiveDDLSuite
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`",
           "operation" -> "DELETE")
+      )
+    }
+  }
+
+  test("SPARK-44911: Create the table with invalid column") {
+    val tbl = "t1"
+    withTable(tbl) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t1
+             |STORED AS parquet
+             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
+         """.stripMargin)
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t1`",
+          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
       )
     }
   }

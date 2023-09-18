@@ -33,6 +33,7 @@ import time
 import urllib.parse
 import uuid
 import sys
+from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -92,7 +93,7 @@ from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_sch
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError, PySparkRuntimeError
+from pyspark.errors import PySparkValueError
 
 
 if TYPE_CHECKING:
@@ -584,10 +585,35 @@ class SparkConnectClient(object):
 
     @classmethod
     def retry_exception(cls, e: Exception) -> bool:
-        if isinstance(e, grpc.RpcError):
-            return e.code() == grpc.StatusCode.UNAVAILABLE
-        else:
+        """
+        Helper function that is used to identify if an exception thrown by the server
+        can be retried or not.
+
+        Parameters
+        ----------
+        e : Exception
+            The GRPC error as received from the server. Typed as Exception, because other exception
+            thrown during client processing can be passed here as well.
+
+        Returns
+        -------
+        True if the exception can be retried, False otherwise.
+
+        """
+        if not isinstance(e, grpc.RpcError):
             return False
+
+        if e.code() in [grpc.StatusCode.INTERNAL]:
+            msg = str(e)
+
+            # This error happens if another RPC preempts this RPC.
+            if "INVALID_CURSOR.DISCONNECTED" in msg:
+                return True
+
+        if e.code() == grpc.StatusCode.UNAVAILABLE:
+            return True
+
+        return False
 
     def __init__(
         self,
@@ -637,10 +663,17 @@ class SparkConnectClient(object):
         )
         self._user_id = None
         self._retry_policy = {
+            # Please synchronize changes here with Scala side
+            # GrpcRetryHandler.scala
+            #
+            # Note: the number of retries is selected so that the maximum tolerated wait
+            # is guaranteed to be at least 10 minutes
             "max_retries": 15,
-            "backoff_multiplier": 4,
+            "backoff_multiplier": 4.0,
             "initial_backoff": 50,
             "max_backoff": 60000,
+            "jitter": 500,
+            "min_jitter_threshold": 2000,
         }
         if retry_policy:
             self._retry_policy.update(retry_policy)
@@ -664,9 +697,16 @@ class SparkConnectClient(object):
         self._channel = self._builder.toChannel()
         self._closed = False
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
-        self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
+        self._artifact_manager = ArtifactManager(
+            self._user_id, self._session_id, self._channel, self._builder.metadata()
+        )
         self._use_reattachable_execute = use_reattachable_execute
         # Configure logging for the SparkConnect client.
+
+    def _retrying(self) -> "Retrying":
+        return Retrying(
+            can_retry=SparkConnectClient.retry_exception, **self._retry_policy  # type: ignore
+        )
 
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
@@ -840,19 +880,30 @@ class SparkConnectClient(object):
 
         # Rename columns to avoid duplicated column names.
         renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+
+        pandas_options = {}
         if self_destruct:
             # Configure PyArrow to use as little memory as possible:
             # self_destruct - free columns as they are converted
             # split_blocks - create a separate Pandas block for each column
             # use_threads - convert one column at a time
-            pandas_options = {
-                "self_destruct": True,
-                "split_blocks": True,
-                "use_threads": False,
-            }
-            pdf = renamed_table.to_pandas(**pandas_options)
-        else:
-            pdf = renamed_table.to_pandas()
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
+        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+            # A legacy option to coerce date32, date64, duration, and timestamp
+            # time units to nanoseconds when converting to pandas.
+            # This option can only be added since 13.0.0.
+            pandas_options.update(
+                {
+                    "coerce_temporal_nanoseconds": True,
+                }
+            )
+        pdf = renamed_table.to_pandas(**pandas_options)
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
@@ -965,6 +1016,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
+        ExecutePlanResponseReattachableIterator.shutdown()
         self._channel.close()
         self._closed = True
 
@@ -1089,9 +1141,7 @@ class SparkConnectClient(object):
             )
 
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1132,9 +1182,7 @@ class SparkConnectClient(object):
                 for b in generator:
                     handle_response(b)
             else:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             handle_response(b)
@@ -1219,9 +1267,7 @@ class SparkConnectClient(object):
                 for b in generator:
                     yield from handle_response(b)
             else:
-                for attempt in Retrying(
-                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-                ):
+                for attempt in self._retrying():
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
@@ -1330,9 +1376,7 @@ class SparkConnectClient(object):
         req = self._config_request_with_metadata()
         req.operation.CopyFrom(operation)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1375,9 +1419,7 @@ class SparkConnectClient(object):
     def interrupt_all(self) -> Optional[List[str]]:
         req = self._interrupt_request("all")
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1393,9 +1435,7 @@ class SparkConnectClient(object):
     def interrupt_tag(self, tag: str) -> Optional[List[str]]:
         req = self._interrupt_request("tag", tag)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1411,9 +1451,7 @@ class SparkConnectClient(object):
     def interrupt_operation(self, op_id: str) -> Optional[List[str]]:
         req = self._interrupt_request("operation", op_id)
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
+            for attempt in self._retrying():
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
                     if resp.session_id != self._session_id:
@@ -1537,12 +1575,14 @@ class RetryState:
         self._done = False
         self._count = 0
 
-    def set_exception(self, exc: Optional[BaseException]) -> None:
+    def set_exception(self, exc: BaseException) -> None:
         self._exception = exc
         self._count += 1
 
-    def exception(self) -> Optional[BaseException]:
-        return self._exception
+    def throw(self) -> None:
+        if self._exception is None:
+            raise RuntimeError("No exception is set")
+        raise self._exception
 
     def set_done(self) -> None:
         self._done = True
@@ -1613,13 +1653,19 @@ class Retrying:
         initial_backoff: int,
         max_backoff: int,
         backoff_multiplier: float,
+        jitter: int,
+        min_jitter_threshold: int,
         can_retry: Callable[..., bool] = lambda x: True,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._can_retry = can_retry
         self._max_retries = max_retries
         self._initial_backoff = initial_backoff
         self._max_backoff = max_backoff
         self._backoff_multiplier = backoff_multiplier
+        self._jitter = jitter
+        self._min_jitter_threshold = min_jitter_threshold
+        self._sleep = sleep
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
@@ -1630,35 +1676,25 @@ class Retrying:
         A generator that yields the current attempt.
         """
         retry_state = RetryState()
-        while True:
-            # Check if the operation was completed successfully.
-            if retry_state.done():
-                break
+        next_backoff: float = self._initial_backoff
 
-            # If the number of retries have exceeded the maximum allowed retries.
-            if retry_state.count() > self._max_retries:
-                e = retry_state.exception()
-                if e is not None:
-                    raise e
-                else:
-                    raise PySparkRuntimeError(
-                        error_class="EXCEED_RETRY",
-                        message_parameters={},
-                    )
+        if self._max_retries < 0:
+            raise ValueError("Can't have negative number of retries")
 
+        while not retry_state.done() and retry_state.count() <= self._max_retries:
             # Do backoff
             if retry_state.count() > 0:
-                backoff = random.randrange(
-                    0,
-                    int(
-                        min(
-                            self._initial_backoff * self._backoff_multiplier ** retry_state.count(),
-                            self._max_backoff,
-                        )
-                    ),
-                )
-                logger.debug(f"Retrying call after {backoff} ms sleep")
-                # Pythons sleep takes seconds as arguments.
-                time.sleep(backoff / 1000.0)
+                # Randomize backoff for this iteration
+                backoff = next_backoff
+                next_backoff = min(self._max_backoff, next_backoff * self._backoff_multiplier)
 
+                if backoff >= self._min_jitter_threshold:
+                    backoff += random.uniform(0, self._jitter)
+
+                logger.debug(f"Retrying call after {backoff} ms sleep")
+                self._sleep(backoff / 1000.0)
             yield AttemptManager(self._can_retry, retry_state)
+
+        if not retry_state.done():
+            # Exceeded number of retries, throw last exception we had
+            retry_state.throw()

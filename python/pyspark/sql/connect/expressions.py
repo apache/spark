@@ -488,6 +488,40 @@ class ColumnReference(Expression):
         )
 
 
+class GetColumnByOrdinal(Expression):
+    """Represents a column index (0-based). There is no guarantee that this column
+    actually exists. In the context of this project, we refer by its index and
+    treat it as an unresolved GetColumnByOrdinal"""
+
+    def __init__(self, ordinal: int, plan_id: Optional[int] = None):
+        super().__init__()
+
+        assert isinstance(ordinal, int) and ordinal >= 0
+        self._ordinal = ordinal
+
+        assert plan_id is None or isinstance(plan_id, int)
+        self._plan_id = plan_id
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        """Returns the Proto representation of the expression."""
+        expr = proto.Expression()
+        expr.get_column_by_ordinal.ordinal = self._ordinal
+        if self._plan_id is not None:
+            expr.get_column_by_ordinal.plan_id = self._plan_id
+        return expr
+
+    def __repr__(self) -> str:
+        return f"getcolumnbyordinal({self._ordinal})"
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            other is not None
+            and isinstance(other, GetColumnByOrdinal)
+            and other._ordinal == self._ordinal
+            and other._plan_id == self._plan_id
+        )
+
+
 class UnresolvedStar(Expression):
     def __init__(self, unparsed_target: Optional[str]):
         super().__init__()

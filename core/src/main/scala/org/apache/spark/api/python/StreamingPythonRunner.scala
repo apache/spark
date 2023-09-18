@@ -58,7 +58,7 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec")
+    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec)")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -99,7 +99,7 @@ private[spark] class StreamingPythonRunner(
       new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
 
     val resFromPython = dataIn.readInt()
-    logInfo(s"Runner initialization returned $resFromPython")
+    logInfo(s"Runner initialization succeeded (returned $resFromPython).")
 
     (dataOut, dataIn)
   }
@@ -108,8 +108,31 @@ private[spark] class StreamingPythonRunner(
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    pythonWorker.foreach { worker =>
-      SparkEnv.get.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+    logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
+
+    try {
+      pythonWorkerFactory.foreach { factory =>
+        pythonWorker.foreach { worker =>
+          factory.stopWorker(worker)
+          factory.stop()
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logError("Exception when trying to kill worker", e)
+    }
+  }
+
+  /**
+   * Returns whether the Python worker has been stopped.
+   * @return Some(true) if the Python worker has been stopped.
+   *         None if either the Python worker or the Python worker factory is not initialized.
+   */
+  def isWorkerStopped(): Option[Boolean] = {
+    pythonWorkerFactory.flatMap { factory =>
+      pythonWorker.map { worker =>
+        factory.isWorkerStopped(worker)
+      }
     }
   }
 }

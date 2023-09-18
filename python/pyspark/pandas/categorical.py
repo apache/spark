@@ -185,8 +185,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Categorical with new categories added or None if ``inplace=True``.
+        Series
+            Categorical with new categories added
 
         Raises
         ------
@@ -270,8 +270,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Ordered Categorical or None if ``inplace=True``.
+        Series
+            Ordered Categorical
 
         Examples
         --------
@@ -304,8 +304,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Unordered Categorical or None if ``inplace=True``.
+        Series
+            Unordered Categorical
 
         Examples
         --------
@@ -346,8 +346,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -421,8 +421,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with unused categories dropped or None if ``inplace=True``.
+        cat : Series
+            Categorical with unused categories dropped
 
         See Also
         --------
@@ -491,8 +491,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -583,8 +583,8 @@ class CategoricalAccessor:
 
         Returns
         -------
-        cat : Series or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : Series
+            Categorical with removed categories
 
         Raises
         ------
@@ -679,7 +679,7 @@ class CategoricalAccessor:
 
         Returns
         -------
-        Series with reordered categories or None if inplace.
+        Series with reordered categories
 
         Raises
         ------

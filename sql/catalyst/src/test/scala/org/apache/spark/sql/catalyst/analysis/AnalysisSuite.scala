@@ -1432,7 +1432,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     CTERelationDef.curId.set(0)
     val actual1 = PosParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
-      args = Array(Literal(10))).analyze
+      args = Seq(Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
@@ -1440,7 +1440,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     CTERelationDef.curId.set(0)
     val actual2 = PosParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
-      args = Array(Literal(20), Literal(10))).analyze
+      args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
     comparePlans(actual2, expected2)

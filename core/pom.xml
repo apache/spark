@@ -565,7 +565,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <shadeTestJar>true</shadeTestJar>
+          <shadeTestJar>false</shadeTestJar>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>

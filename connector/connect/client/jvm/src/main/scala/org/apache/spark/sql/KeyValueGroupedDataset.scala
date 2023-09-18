@@ -979,6 +979,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       outputEncoder = outputEncoder)
     udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
   }
+
+  /**
+   * We cannot deserialize a connect [[KeyValueGroupedDataset]] because of a class clash on the
+   * server side. We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
 
 private object KeyValueGroupedDatasetImpl {

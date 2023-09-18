@@ -26,15 +26,13 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  * instance of this class starts a python process, inside which has the python handling logic.
  * When a new event is received, it is serialized to json, and passed to the python process.
  */
-class PythonStreamingQueryListener(
-    listener: SimplePythonFunction,
-    sessionHolder: SessionHolder,
-    pythonExec: String)
+class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder: SessionHolder)
     extends StreamingQueryListener {
 
   private val port = SparkConnectService.localPort
   private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
-  private val runner = StreamingPythonRunner(
+  // Scoped for testing
+  private[connect] val runner = StreamingPythonRunner(
     listener,
     connectUrl,
     sessionHolder.sessionId,

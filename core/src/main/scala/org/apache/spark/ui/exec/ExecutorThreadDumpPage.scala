@@ -48,7 +48,9 @@ private[ui] class ExecutorThreadDumpPage(
             </div>
           case None => Text("")
         }
-        val heldLocks = thread.holdingLocks.mkString(", ")
+        val synchronizers = thread.synchronizers.map(l => s"Lock($l)")
+        val monitors = thread.monitors.map(m => s"Monitor($m)")
+        val heldLocks = (synchronizers ++ monitors).mkString(", ")
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId, false)"}
@@ -67,18 +69,17 @@ private[ui] class ExecutorThreadDumpPage(
         <p>Updated at {UIUtils.formatDate(time)}</p>
         {
           // scalastyle:off
-          <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
-            Expand All
-          </a></p>
-          <p><a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">
-            Collapse All
-          </a></p>
-          <div class="form-inline">
-            <div class="bs-example" data-example-id="simple-form-inline">
-              <div class="form-group">
-                <div class="input-group">
-                  <label class="mr-2" for="search">Search:</label>
-                  <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+          <div style="display: flex; align-items: center;">
+            <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
+            <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
+            <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
+            <div class="form-inline">
+              <div class="bs-example" data-example-id="simple-form-inline">
+                <div class="form-group">
+                  <div class="input-group">
+                    <label class="mr-2" for="search">Search:</label>
+                    <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+                  </div>
                 </div>
               </div>
             </div>

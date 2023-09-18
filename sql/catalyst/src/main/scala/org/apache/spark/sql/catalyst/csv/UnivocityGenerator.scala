@@ -60,6 +60,8 @@ class UnivocityGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+  private val nullAsQuotedEmptyString =
+    SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
 
   @scala.annotation.tailrec
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
@@ -96,8 +98,7 @@ class UnivocityGenerator(
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
-      } else if (
-        SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)) {
+      } else if (nullAsQuotedEmptyString) {
         values(i) = options.nullValue
       }
       i += 1
