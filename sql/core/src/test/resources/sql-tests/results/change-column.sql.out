@@ -271,7 +271,6 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-  "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`temp_view`"
@@ -302,7 +301,6 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-  "sqlState" : "0A000",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`global_temp`.`global_temp_view`"

@@ -509,17 +509,21 @@ SQLSTATE: none assigned
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
-### EXPECT_TABLE_NOT_VIEW
+### [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
 
 SQLSTATE: none assigned
 
-The view `<viewName>` does not support `<operation>`, Please use ALTER VIEW instead.
+The view `<viewName>` does not support `<operation>`.
 
-### EXPECT_VIEW_NOT_TABLE
+For more details see [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+### [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
 
 SQLSTATE: none assigned
 
-The table `<tableName>` does not support `<operation>`, Please use ALTER TABLE instead.
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
