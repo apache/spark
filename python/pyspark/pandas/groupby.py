@@ -2010,7 +2010,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return_schema = StructType([field.struct_field for field in data_fields])
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
-
             if is_series_groupby:
                 pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
             else:

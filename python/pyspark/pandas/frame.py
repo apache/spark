@@ -2473,7 +2473,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         buf: Optional[IO[str]] = None,
         columns: Optional[List[Name]] = None,
-        col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
@@ -2509,11 +2508,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Buffer to write to. If None, the output is returned as a string.
         columns : list of label, optional
             The subset of columns to write. Writes all columns by default.
-        col_space : int, optional
-            The minimum width of each column.
-
-            .. deprecated:: 3.4.0
-
         header : bool or list of str, default True
             Write out the column names. If a list of strings is given, it is assumed to be aliases
             for the column names.
@@ -2590,11 +2584,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         \bottomrule
         \end{tabular}
         """
-        warnings.warn(
-            "Argument `col_space` will be removed in 4.0.0.",
-            FutureWarning,
-        )
-
         args = locals()
         psdf = self
         return validate_arguments_and_invoke_function(
@@ -7912,7 +7901,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
         column_label_names = self._internal.column_label_names.copy()
-        column_label_names[i], column_label_names[j], = (
+        (
+            column_label_names[i],
+            column_label_names[j],
+        ) = (
             column_label_names[j],
             column_label_names[i],
         )
@@ -11317,7 +11309,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         level: Optional[int] = None,
         errors: str = "ignore",
     ) -> Optional["DataFrame"]:
-
         """
         Alter axes labels.
         Function / dict values must be unique (1-to-1). Labels not contained in a dict / Series
@@ -12987,7 +12978,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if (
             axis is None or axis == 1
         ) and left._internal.column_labels != right._internal.column_labels:
-
             if left._internal.column_labels_level != right._internal.column_labels_level:
                 raise ValueError("cannot join with no overlapping index names")
 

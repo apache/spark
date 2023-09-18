@@ -28,7 +28,6 @@ from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -1182,7 +1181,6 @@ class DataFrameTestsMixin:
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
@@ -1479,10 +1477,8 @@ class DataFrameTestsMixin:
         self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        pandas_requirement_message
-        or pyarrow_requirement_message
-        or "Pyarrow version must be 2.0.0 or higher",
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_to_pandas_for_array_of_struct(self):
         for is_arrow_enabled in [True, False]:

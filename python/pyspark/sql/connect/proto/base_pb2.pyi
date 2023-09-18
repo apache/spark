@@ -642,21 +642,24 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]
-    ) -> typing_extensions.Literal[
-        "schema",
-        "explain",
-        "tree_string",
-        "is_local",
-        "is_streaming",
-        "input_files",
-        "spark_version",
-        "ddl_parse",
-        "same_semantics",
-        "semantic_hash",
-        "persist",
-        "unpersist",
-        "get_storage_level",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "schema",
+            "explain",
+            "tree_string",
+            "is_local",
+            "is_streaming",
+            "input_files",
+            "spark_version",
+            "ddl_parse",
+            "same_semantics",
+            "semantic_hash",
+            "persist",
+            "unpersist",
+            "get_storage_level",
+        ]
+        | None
+    ): ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
 
@@ -979,21 +982,24 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result", b"result"]
-    ) -> typing_extensions.Literal[
-        "schema",
-        "explain",
-        "tree_string",
-        "is_local",
-        "is_streaming",
-        "input_files",
-        "spark_version",
-        "ddl_parse",
-        "same_semantics",
-        "semantic_hash",
-        "persist",
-        "unpersist",
-        "get_storage_level",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "schema",
+            "explain",
+            "tree_string",
+            "is_local",
+            "is_streaming",
+            "input_files",
+            "spark_version",
+            "ddl_parse",
+            "same_semantics",
+            "semantic_hash",
+            "persist",
+            "unpersist",
+            "get_storage_level",
+        ]
+        | None
+    ): ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
 
@@ -1508,16 +1514,19 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
-    ) -> typing_extensions.Literal[
-        "arrow_batch",
-        "sql_command_result",
-        "write_stream_operation_start_result",
-        "streaming_query_command_result",
-        "get_resources_command_result",
-        "streaming_query_manager_command_result",
-        "result_complete",
-        "extension",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "arrow_batch",
+            "sql_command_result",
+            "write_stream_operation_start_result",
+            "streaming_query_command_result",
+            "get_resources_command_result",
+            "streaming_query_manager_command_result",
+            "result_complete",
+            "extension",
+        ]
+        | None
+    ): ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
 
@@ -1637,9 +1646,12 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-        ) -> typing_extensions.Literal[
-            "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
-        ] | None: ...
+        ) -> (
+            typing_extensions.Literal[
+                "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
+            ]
+            | None
+        ): ...
 
     class Set(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

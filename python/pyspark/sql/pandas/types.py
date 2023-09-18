@@ -60,7 +60,6 @@ if TYPE_CHECKING:
 
 def to_arrow_type(dt: DataType) -> "pa.DataType":
     """Convert Spark data type to pyarrow type"""
-    from distutils.version import LooseVersion
     import pyarrow as pa
 
     if type(dt) == BooleanType:
@@ -93,21 +92,9 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == StructType and LooseVersion(pa.__version__) < LooseVersion(
-            "2.0.0"
-        ):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "Array of StructType"},
-            )
         field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
         value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
         arrow_type = pa.map_(key_field, value_field)
@@ -142,8 +129,6 @@ def to_arrow_schema(schema: StructType) -> "pa.Schema":
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
     """Convert pyarrow type to Spark data type."""
-    from distutils.version import LooseVersion
-    import pyarrow as pa
     import pyarrow.types as types
 
     spark_type: DataType
@@ -182,11 +167,6 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
-        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "MapType"},
-            )
         spark_type = MapType(
             from_arrow_type(at.key_type, prefer_timestamp_ntz),
             from_arrow_type(at.item_type, prefer_timestamp_ntz),
@@ -573,7 +553,6 @@ def _create_converter_to_pandas(
     def _converter(
         dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
     ) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
@@ -669,7 +648,6 @@ def _create_converter_to_pandas(
             ]
 
             if _struct_in_pandas == "row":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_row(value: Any) -> Any:
@@ -707,7 +685,6 @@ def _create_converter_to_pandas(
                 return convert_struct_as_row
 
             elif _struct_in_pandas == "dict":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_dict(value: Any) -> Any:
@@ -849,7 +826,6 @@ def _create_converter_from_pandas(
         return correct_timestamp
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType)
 
@@ -895,7 +871,6 @@ def _create_converter_from_pandas(
             _value_conv = _converter(dt.valueType)
 
             if ignore_unexpected_complex_type_values:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -921,7 +896,6 @@ def _create_converter_from_pandas(
                             return value
 
             else:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -943,7 +917,6 @@ def _create_converter_from_pandas(
             return convert_map
 
         elif isinstance(dt, StructType):
-
             field_names = dt.names
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
@@ -957,7 +930,6 @@ def _create_converter_from_pandas(
             field_convs = [_converter(f.dataType) for f in dt.fields]
 
             if ignore_unexpected_complex_type_values:
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct(value: Any) -> Any:

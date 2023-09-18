@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage.BlockManagerId
 
 /**
@@ -52,6 +53,8 @@ private[spark] trait SchedulerBackend {
       interruptThread: Boolean,
       reason: String): Unit =
     throw new UnsupportedOperationException
+
+  def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace]
 
   def isReady(): Boolean = true
 
