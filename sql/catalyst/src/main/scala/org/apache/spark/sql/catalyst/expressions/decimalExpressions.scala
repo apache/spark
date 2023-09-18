@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.types.PhysicalDecimalType
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -146,7 +146,7 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
+  override def initQueryContext(): Option[QueryContext] = if (!nullOnOverflow) {
     Some(origin.context)
   } else {
     None
@@ -158,7 +158,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: SQLQueryContext) extends UnaryExpression with SupportQueryContext {
+    context: QueryContext) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -210,7 +210,7 @@ case class CheckOverflowInSum(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
 
-  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
+  override def initQueryContext(): Option[QueryContext] = Option(context)
 }
 
 /**
@@ -256,12 +256,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    context: SQLQueryContext,
+    context: QueryContext,
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
+  override def initQueryContext(): Option[QueryContext] = Option(context)
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {

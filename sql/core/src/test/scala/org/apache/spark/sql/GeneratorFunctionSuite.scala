@@ -293,7 +293,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "1",
         "inputSql" -> "\"array()\"",
         "inputType" -> "\"ARRAY<VOID>\"",
-        "requiredType" -> "\"ARRAY<STRUCT>\"")
+        "requiredType" -> "\"ARRAY<STRUCT>\""),
+      context = ExpectedContext(code = "inline", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -331,7 +332,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(b))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"))
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"),
+      context = ExpectedContext(code = "array", callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       df.select(inline(array(struct('a), struct('b.alias("a"))))),
@@ -346,7 +348,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(2))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"))
+        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"),
+      context = ExpectedContext(code = "array", callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       df.select(inline(array(struct('a), struct(lit(2).alias("a"))))),

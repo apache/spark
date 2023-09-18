@@ -1917,7 +1917,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Seq("xyz").toDF.select("value", "default").write.insertInto("t")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"))
+        parameters = Map("objectName" -> "`default`", "proposal" -> "`value`"),
+        context =
+          ExpectedContext(code = "select", callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 

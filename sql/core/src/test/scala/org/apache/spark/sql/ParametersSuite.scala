@@ -600,6 +600,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
               array(str_to_map(Column(Literal("a:1,b:2,c:3")))))))
       },
       errorClass = "INVALID_SQL_ARG",
-      parameters = Map("name" -> "m"))
+      parameters = Map("name" -> "m"),
+      context =
+        ExpectedContext(code = "map_from_arrays", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 }
