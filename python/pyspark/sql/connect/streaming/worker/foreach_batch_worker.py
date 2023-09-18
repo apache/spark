@@ -20,6 +20,7 @@ A worker for streaming foreachBatch in Spark Connect.
 Usually this is ran on the driver side of the Spark Connect Server.
 """
 import os
+import sys
 import traceback
 
 from pyspark.java_gateway import local_connect_and_auth
@@ -77,9 +78,27 @@ def main(infile: IO, outfile: IO) -> None:
         try:
             process(df_ref_id, int(batch_id))
             write_int(0, outfile)
-        except Exception:
-            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
+        except BaseException as e:
+            try:
+                exc_info = None
+                if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
+                    tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
+                    if tb is not None:
+                        e.__cause__ = None
+                        exc_info = "".join(traceback.format_exception(type(e), e, tb))
+                if exc_info is None:
+                    exc_info = traceback.format_exc()
+
+                write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+                write_with_length(exc_info.encode("utf-8"), outfile)
+            except IOError:
+                # JVM close the socket
+                pass
+            except BaseException:
+                # Write the error to stderr if it happened while serializing
+                print("PySpark worker failed with exception:", file=sys.stderr)
+                print(traceback.format_exc(), file=sys.stderr)
+
         outfile.flush()
 
 

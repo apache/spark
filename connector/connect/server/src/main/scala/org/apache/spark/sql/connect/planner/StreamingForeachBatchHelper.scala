@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.io.EOFException
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentMap
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
@@ -126,15 +128,20 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.writeLong(args.batchId)
       dataOut.flush()
 
-      dataIn.readInt() match {
-        case ret if ret == 0 =>
-          logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
-        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
-          throw new IllegalStateException(s"Found error inside foreachBatch Python process: $msg")
+      try {
+        dataIn.readInt() match {
+          case ret if ret == 0 =>
+            logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+          case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+            val exLength = dataIn.readInt()
+            val obj = new Array[Byte](exLength)
+            dataIn.readFully(obj)
+            val msg = new String(obj, StandardCharsets.UTF_8)
+            throw new IllegalStateException(s"Found error inside foreachBatch Python process: $msg")
+        }
+      } catch {
+        case eof: EOFException =>
+          throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
       }
     }
 
