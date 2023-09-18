@@ -23,6 +23,7 @@ import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Relation
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -86,6 +87,25 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
 
 class ExampleCommandPlugin extends CommandPlugin {
   override def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit] = {
+    if (!command.is(classOf[proto.ExamplePluginCommand])) {
+      return None
+    }
+    val cmd = command.unpack(classOf[proto.ExamplePluginCommand])
+    assert(planner.session != null)
+    SparkContext.getActive.get.setLocalProperty("testingProperty", cmd.getCustomField)
+    Some()
+  }
+}
+
+class ExampleCommandPluginWithQueryPlanningTracker extends CommandPluginWithQueryPlanningTracker {
+  override def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit] = {
+    throw new SparkException("This should not be called here")
+  }
+
+  override def process(
+      command: protobuf.Any,
+      planner: SparkConnectPlanner,
+      tracker: QueryPlanningTracker): Option[Unit] = {
     if (!command.is(classOf[proto.ExamplePluginCommand])) {
       return None
     }
@@ -199,6 +219,28 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
       new SparkConnectPlanner(executeHolder.sessionHolder)
         .process(plan, new MockObserver(), executeHolder)
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
+    }
+  }
+
+  test("SPARK-45204: End to end Command test - CommandPluginWithQueryPlanningTracker") {
+    withSparkConf(
+      Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES.key ->
+        "org.apache.spark.sql.connect.plugin.ExampleCommandPluginWithQueryPlanningTracker") {
+      spark.sparkContext.setLocalProperty("testingProperty", "notset")
+      val plan = proto.Command
+        .newBuilder()
+        .setExtension(
+          protobuf.Any.pack(
+            proto.ExamplePluginCommand
+              .newBuilder()
+              .setCustomField("Robert")
+              .build()))
+        .build()
+
+      val executeHolder = buildExecutePlanHolder(plan)
+      new SparkConnectPlanner(executeHolder.sessionHolder)
+        .process(plan, new MockObserver(), executeHolder)
+      assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Robert"))
     }
   }
 

@@ -59,7 +59,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.plugin.{CommandPlugin, CommandPluginWithQueryPlanningTracker, SparkConnectPluginRegistry}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -2626,7 +2626,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p =>
+        p match {
+          case p: CommandPluginWithQueryPlanningTracker =>
+            val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+            p.process(extension, this, tracker)
+          case p: CommandPlugin => p.process(extension, this)
+        })
       // Find the first non-empty transformation or throw.
       .find(_.nonEmpty)
       .flatten
