@@ -3140,7 +3140,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
           case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
-            Window(windowExpressions.toSeq, partitionSpec, orderSpec, last)
+            Window(last.output ++ windowExpressions.toSeq, partitionSpec, orderSpec, last)
         }
 
       // Finally, we create a Project to output windowOps's output

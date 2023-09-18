@@ -40,6 +40,14 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
       }.copy(child = newChild)
 
+    case w: Window if nonDeterministic(w.partitionSpec ++ w.orderSpec ++ w.windowExpressions) =>
+      val nondeterToAttr = getNondeterToAttr(
+        w.partitionSpec ++ w.orderSpec ++ w.windowExpressions)
+      val newChild = Project(w.child.output ++ nondeterToAttr.values, w.child)
+      w.transformExpressions { case e =>
+        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+      }.copy(child = newChild)
+
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
     // and we want to retain them inside the aggregate functions.
     case m: CollectMetrics => m
@@ -58,6 +66,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
+
+  private def nonDeterministic(exprs: Seq[Expression]): Boolean = exprs.exists(!_.deterministic)
 
   private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
     exprs.filterNot(_.deterministic).flatMap { expr =>

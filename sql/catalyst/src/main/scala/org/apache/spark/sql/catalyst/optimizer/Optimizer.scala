@@ -879,13 +879,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
 
-    // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
+    // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation/Window
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
+    case a @ Window(_, _, _, child) if !child.outputSet.subsetOf(a.references) =>
+      a.copy(child = prunedChild(child, a.references))
 
     // prune unused columns from child of MergeRows for row-level operations
     case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
@@ -928,7 +930,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
 
     // Prune unnecessary window expressions
-    case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
+    case p @ Project(_, w: Window) if !w.outputSet.subsetOf(p.references) =>
       val projList = w.projectList.filter(p.references.contains)
       val newChild = if (projList.isEmpty) w.child else w.copy(projectList = projList)
       p.copy(child = newChild)
@@ -1027,6 +1029,9 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+      case Project(projectList, w: Window)
+        if canCollapseExpressions(projectList, w.projectList, alwaysInline) =>
+        w.copy(projectList = buildCleanedProjectList(projectList, w.projectList))
     }
   }
 
