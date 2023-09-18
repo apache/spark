@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -32,8 +33,9 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -2563,11 +2565,6 @@ class DatasetSuite extends QueryTest
   }
 
   test("CLASS_UNSUPPORTED_BY_MAP_OBJECTS when creating dataset") {
-    import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
-    import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder}
-    import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
-    import scala.reflect.ClassTag
-
     withSQLConf(
       // Set CODEGEN_FACTORY_MODE to default value to reproduce CLASS_UNSUPPORTED_BY_MAP_OBJECTS
       SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
