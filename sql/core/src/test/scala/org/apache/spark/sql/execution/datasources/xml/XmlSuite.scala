@@ -1264,7 +1264,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val outputDF = Seq("0.0000", "0.01")
       .map { n => s"<Row> <Number>$n</Number> </Row>" }
       .toDF("xml")
-      .withColumn("parsed", from_xml($"xml", schema, Map("rowTag" -> "Row")))
+      .withColumn("parsed", from_xml($"xml", schema, Map("rowTag" -> "Row").asJava))
       .select("parsed.Number")
 
     val results = outputDF.collect()
