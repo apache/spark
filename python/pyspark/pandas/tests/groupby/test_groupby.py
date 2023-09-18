@@ -17,7 +17,6 @@
 
 import unittest
 import inspect
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -686,21 +685,13 @@ class GroupByTestsMixin:
             psdf.groupby("a").agg({"b": "nunique"}).sort_index(),
             pdf.groupby("a").agg({"b": "nunique"}).sort_index(),
         )
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            expected = ps.DataFrame({"b": [2, 2]}, index=pd.Index([0, 1], name="a"))
-            self.assert_eq(psdf.groupby("a").nunique().sort_index(), expected)
-            self.assert_eq(
-                psdf.groupby("a").nunique(dropna=False).sort_index(),
-                expected,
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby("a").nunique().sort_index(), pdf.groupby("a").nunique().sort_index()
-            )
-            self.assert_eq(
-                psdf.groupby("a").nunique(dropna=False).sort_index(),
-                pdf.groupby("a").nunique(dropna=False).sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby("a").nunique().sort_index(), pdf.groupby("a").nunique().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby("a").nunique(dropna=False).sort_index(),
+            pdf.groupby("a").nunique(dropna=False).sort_index(),
+        )
         self.assert_eq(
             psdf.groupby("a")["b"].nunique().sort_index(),
             pdf.groupby("a")["b"].nunique().sort_index(),
@@ -722,25 +713,14 @@ class GroupByTestsMixin:
         pdf.columns = columns
         psdf.columns = columns
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            expected = ps.DataFrame({("y", "b"): [2, 2]}, index=pd.Index([0, 1], name=("x", "a")))
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique().sort_index(),
-                expected,
-            )
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-                expected,
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique().sort_index(),
-                pdf.groupby(("x", "a")).nunique().sort_index(),
-            )
-            self.assert_eq(
-                psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-                pdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby(("x", "a")).nunique().sort_index(),
+            pdf.groupby(("x", "a")).nunique().sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
+            pdf.groupby(("x", "a")).nunique(dropna=False).sort_index(),
+        )
 
     def test_unique(self):
         for pdf in [

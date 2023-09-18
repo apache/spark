@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class ArrowWriterSuite extends SparkFunSuite {
 
@@ -66,6 +66,7 @@ class ArrowWriterSuite extends SparkFunSuite {
             case TimestampNTZType => reader.getLong(rowId)
             case _: YearMonthIntervalType => reader.getInt(rowId)
             case _: DayTimeIntervalType => reader.getLong(rowId)
+            case CalendarIntervalType => reader.getInterval(rowId)
           }
           assert(value === datum)
       }
@@ -92,6 +93,12 @@ class ArrowWriterSuite extends SparkFunSuite {
       .foreach(check(_, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue)))
     DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_,
       Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L), (Long.MinValue + 808L))))
+    check(CalendarIntervalType,
+      Seq(new CalendarInterval(1, 2, 3),
+        new CalendarInterval(11, 22, 33),
+        new CalendarInterval(-1, -2, -3),
+        new CalendarInterval(-11, -22, -33),
+        null))
   }
 
   test("get multiple") {
