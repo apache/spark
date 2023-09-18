@@ -1053,12 +1053,30 @@ object SimplifyCasts extends Rule[LogicalPlan] {
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
+    // Release cast from attribute to support predicate push down
+    case c @ BinaryComparison(Cast(a: AttributeReference, _, _, _), right)
+      if isEquivalentCast(a.dataType, right.dataType) =>
+      c.makeCopy(Array(a, Cast(right, a.dataType, Option(SQLConf.get.sessionLocalTimeZone))))
+    case c @ BinaryComparison(left, Cast(a: AttributeReference, _, _, _))
+      if isEquivalentCast(a.dataType, left.dataType) =>
+      c.makeCopy(Array(Cast(left, a.dataType, Option(SQLConf.get.sessionLocalTimeZone)), a))
   }
 
   // Returns whether the from DataType can be safely casted to the to DataType without losing
   // any precision or range.
   private def isWiderCast(from: DataType, to: NumericType): Boolean =
     from.isInstanceOf[NumericType] && Cast.canUpCast(from, to)
+
+  // Returns whether the from DataType can be safely casted to the to DataType without losing
+  // or expanding any precision or range.
+  private def isEquivalentCast(from: DataType, to: DataType): Boolean = {
+    ((from, to) match {
+      case (f, t) if f == t => true
+      case (StringType, _: AtomicType) => true
+      case (_: AtomicType, StringType) => true
+      case _ => false
+    }) && Cast.canCast(from, to)
+  }
 }
 
 

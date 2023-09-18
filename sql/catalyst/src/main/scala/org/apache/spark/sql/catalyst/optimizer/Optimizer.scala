@@ -92,6 +92,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
+        SimplifyCasts,
         // Constant folding and strength reduction
         OptimizeRepartition,
         TransposeWindow,
@@ -115,7 +116,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
-        SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
         RewriteLateralSubquery,

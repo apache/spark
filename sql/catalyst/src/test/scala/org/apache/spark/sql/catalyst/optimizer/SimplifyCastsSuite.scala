@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.sql.Date
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -116,5 +119,34 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze),
       input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze)
+  }
+
+  test("SPARK-45199: Release cast from attribute in filter to support predicate push down") {
+    val input = LocalRelation($"a".date, $"b".string, $"c".int, $"d".long)
+    val timeZoneOpt = Option(SQLConf.get.sessionLocalTimeZone)
+
+    // Move cast from attribute side to another side in binary comparison
+    comparePlans(
+      Optimize.execute(
+        input.select($"a").where(EqualTo($"a".cast(StringType), Literal("2023-09-16"))).analyze),
+      input.select($"a")
+        .where(EqualTo($"a", Cast(Literal("2023-09-16"), DateType, timeZoneOpt))).analyze)
+
+    val date = Date.valueOf("2023-09-16")
+    comparePlans(
+      Optimize.execute(
+        input.select($"b").where(EqualTo($"b".cast(DateType), Literal(date))).analyze),
+      input.select($"b").where(EqualTo($"b", Cast(Literal(date), StringType, timeZoneOpt))).analyze)
+
+    // Do not move cast if original cast will lose or expand precision or range
+    comparePlans(
+      Optimize.execute(
+        input.select($"c").where(EqualTo(Literal(-1L), $"c".cast(LongType))).analyze),
+      input.select($"c").where(EqualTo(Literal(-1L), $"c".cast(LongType))).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        input.select($"d").where(EqualTo($"d".cast(IntegerType), Literal(-1))).analyze),
+      input.select($"d").where(EqualTo($"d".cast(IntegerType), Literal(-1))).analyze)
   }
 }
