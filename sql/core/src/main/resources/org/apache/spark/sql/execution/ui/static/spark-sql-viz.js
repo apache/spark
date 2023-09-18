@@ -110,11 +110,10 @@ function preprocessGraphLayout(g) {
   }
   // Curve the edges
   g.edges().forEach(function (edge) {
-      g.setEdge(edge.v, edge.w, {
-        curve: d3.curveBasis
-      })
-    }
-  )
+    g.setEdge(edge.v, edge.w, {
+      curve: d3.curveBasis
+    })
+  })
 }
 
 /*
