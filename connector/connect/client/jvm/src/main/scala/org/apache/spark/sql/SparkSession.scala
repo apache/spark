@@ -40,7 +40,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, Spa
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.client.util.Cleaner
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -248,7 +248,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -305,7 +305,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toBuffer.toSeq
