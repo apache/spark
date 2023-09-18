@@ -344,7 +344,6 @@ class CategoricalIndexTestsMixin:
         psidxs = [ps.from_pandas(pidx) for pidx in pidxs]
 
         for pidx, psidx in zip(pidxs, psidxs):
-
             # Apply dict
             self.assert_eq(
                 pidx.map({1: "one", 2: "two", 3: "three"}),
