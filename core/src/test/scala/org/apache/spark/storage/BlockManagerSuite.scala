@@ -1999,6 +1999,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
   test("SPARK-43221: the BlockManager with the persisted block is preferred.") {
     val locationsAndStatusOption = setupBlockManagerMasterWithDiskBlocks()
+
     assert(locationsAndStatusOption.get.status.memSize == 0)
     assert(locationsAndStatusOption.get.status.diskSize == 128)
   }
