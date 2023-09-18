@@ -189,7 +189,7 @@ case class SchemaOfCsv(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "csv",
+          "inputName" -> toSQLId("csv"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
     } else {

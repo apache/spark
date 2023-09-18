@@ -166,6 +166,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "invalidFormat" -> toSQLValue(invalidFormat, StringType)))
   }
 
+  def nullArgumentError(funcName: String, parameter: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE.NULL",
+      messageParameters = Map(
+        "parameter" -> toSQLId(parameter),
+        "functionName" -> toSQLId(funcName)))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -473,45 +481,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def expectTableNotViewError(
-      nameParts: Seq[String],
-      isTemp: Boolean,
-      cmd: String,
-      hint: Boolean,
-      t: TreeNode[_]): Throwable = {
-    if (isTemp) {
-      new AnalysisException(
-        errorClass = if (hint) {
-          "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION"
-        } else {
-          "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION"
-        },
-        messageParameters = Map(
-          "tempViewName" -> toSQLId(nameParts),
-          "operation" -> cmd),
-        origin = t.origin)
-    } else {
-      new AnalysisException(
-        errorClass = if (hint) {
-          "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION"
-        } else {
-          "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION"
-        },
-        messageParameters = Map(
-          "viewName" -> toSQLId(nameParts),
-          "operation" -> cmd),
-        origin = t.origin)
-    }
-  }
-
-  def expectViewNotTempViewError(
+  def unsupportedViewOperationError(
       nameParts: Seq[String],
       cmd: String,
+      suggestAlternative: Boolean,
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+      errorClass = if (suggestAlternative) {
+        "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION"
+      } else {
+        "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION"
+      },
       messageParameters = Map(
-        "tempViewName" -> toSQLId(nameParts),
+        "viewName" -> toSQLId(nameParts),
         "operation" -> cmd),
       origin = t.origin)
   }
@@ -529,16 +511,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       },
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
-        "operation" -> cmd),
-      origin = t.origin)
-  }
-
-  def expectTableOrPermanentViewNotTempViewError(
-      nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tempViewName" -> toSQLId(nameParts),
         "operation" -> cmd),
       origin = t.origin)
   }

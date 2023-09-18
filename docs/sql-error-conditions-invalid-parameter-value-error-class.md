@@ -45,6 +45,10 @@ expects one of binary formats 'base64', 'hex', 'utf-8', but got `<invalidFormat>
 
 expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal `<invalidValue>`.
 
+## NULL
+
+expects a non-NULL value.
+
 ## PATTERN
 
 `<value>`.

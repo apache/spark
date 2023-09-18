@@ -2057,4 +2057,35 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
     assert(df.collect.toSet === Set(Row("smith", 1)))
   }
+
+  test("SPARK-44866: SnowflakeDialect BOOLEAN type mapping") {
+    val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
+    assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("SPARK-45139: DatabricksDialect url handling") {
+    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") == DatabricksDialect)
+  }
+
+  test("SPARK-45139: DatabricksDialect catalyst type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.TINYINT, "", 1, null) == Some(ByteType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null) == Some(ShortType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.REAL, "", 1, null) == Some(FloatType))
+  }
+
+  test("SPARK-45139: DatabricksDialect JDBC type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+    assert(databricksDialect
+      .getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "DOUBLE")
+    assert(databricksDialect
+      .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
+    assert(databricksDialect
+      .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
 }

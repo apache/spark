@@ -405,18 +405,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
-      codeType: String, dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2015",
-      messageParameters = Map(
-        "codeType" -> codeType,
-        "dataType" -> dataType.catalogString))
+      codeType: String, dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"Cannot generate $codeType code for incomparable type: ${toSQLType(dataType)}.")
   }
 
-  def cannotInterpolateClassIntoCodeBlockError(arg: Any): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2016",
-      messageParameters = Map("arg" -> arg.getClass.getName))
+  def cannotInterpolateClassIntoCodeBlockError(arg: Any): Throwable = {
+    SparkException.internalError(s"Can not interpolate ${arg.getClass.getName} into code block.")
   }
 
   def customCollectionClsNotResolvedError(): SparkUnsupportedOperationException = {
@@ -1279,11 +1274,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
+    cannotParseJSONFieldError(parser.getCurrentName, parser.getText, jsonType, dataType)
+  }
+
+  def cannotParseJSONFieldError(
+      fieldName: String,
+      fieldValue: String,
+      jsonType: JsonToken,
+      dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_JSON_FIELD",
       messageParameters = Map(
-        "fieldName" -> toSQLValue(parser.getCurrentName, StringType),
-        "fieldValue" -> parser.getText,
+        "fieldName" -> toSQLValue(fieldName, StringType),
+        "fieldValue" -> fieldValue,
         "jsonType" -> jsonType.toString(),
         "dataType" -> toSQLType(dataType)))
   }

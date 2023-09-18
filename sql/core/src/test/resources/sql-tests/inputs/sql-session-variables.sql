@@ -80,6 +80,9 @@ DECLARE OR REPLACE VARIABLE var1 INT;
 DROP TEMPORARY VARIABLE sysTem.sesSion.vAr1;
 DROP TEMPORARY VARIABLE var1;
 
+SET VARIABLE title = 'Test variable in aggregate';
+SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title);
+
 SET VARIABLE title = 'Test qualifiers - fail';
 DECLARE OR REPLACE VARIABLE builtin.var1 INT;
 DECLARE OR REPLACE VARIABLE system.sesion.var1 INT;

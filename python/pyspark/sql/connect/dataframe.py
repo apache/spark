@@ -68,7 +68,10 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import UnresolvedRegex
+from pyspark.sql.connect.expressions import (
+    UnresolvedRegex,
+    GetColumnByOrdinal,
+)
 from pyspark.sql.connect.functions import (
     _to_col_with_plan_id,
     _to_col,
@@ -85,6 +88,7 @@ from pyspark.sql.pandas.types import from_arrow_schema
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
+        ColumnOrNameOrOrdinal,
         LiteralType,
         PrimitiveType,
         OptionalPrimitiveType,
@@ -476,7 +480,7 @@ class DataFrame:
 
     first.__doc__ = PySparkDataFrame.first.__doc__
 
-    def groupBy(self, *cols: "ColumnOrName") -> GroupedData:
+    def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> GroupedData:
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
 
@@ -486,6 +490,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -505,6 +515,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -522,6 +538,12 @@ class DataFrame:
                 _cols.append(c)
             elif isinstance(c, str):
                 _cols.append(self[c])
+            elif isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                if c < 1:
+                    raise IndexError(f"Column ordinal must be positive but got {c}")
+                # ordinal is 1-based
+                _cols.append(self[c - 1])
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
@@ -586,7 +608,9 @@ class DataFrame:
     tail.__doc__ = PySparkDataFrame.tail.__doc__
 
     def _sort_cols(
-        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+        self,
+        cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
+        kwargs: Dict[str, Any],
     ) -> List[Column]:
         """Return a JVM Seq of Columns that describes the sort order"""
         if cols is None:
@@ -595,11 +619,24 @@ class DataFrame:
                 message_parameters={"item": "cols"},
             )
 
-        _cols: List[Column] = []
         if len(cols) == 1 and isinstance(cols[0], list):
-            _cols = [_to_col(c) for c in cols[0]]
-        else:
-            _cols = [_to_col(cast("ColumnOrName", c)) for c in cols]
+            cols = cols[0]
+
+        _cols: List[Column] = []
+        for c in cols:
+            if isinstance(c, int) and not isinstance(c, bool):
+                # TODO: should introduce dedicated error class
+                # ordinal is 1-based
+                if c > 0:
+                    _c = self[c - 1]
+                # negative ordinal means sort by desc
+                elif c < 0:
+                    _c = self[-c - 1].desc()
+                else:
+                    raise IndexError("Column ordinal must not be zero!")
+            else:
+                _c = c  # type: ignore[assignment]
+            _cols.append(_to_col(cast("ColumnOrName", _c)))
 
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
@@ -616,7 +653,9 @@ class DataFrame:
         return _cols
 
     def sort(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Sort(
@@ -632,7 +671,9 @@ class DataFrame:
     orderBy = sort
 
     def sortWithinPartitions(
-        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+        self,
+        *cols: Union[int, str, Column, List[Union[int, str, Column]]],
+        **kwargs: Any,
     ) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Sort(
@@ -1616,10 +1657,10 @@ class DataFrame:
         ...
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
-        if isinstance(item, str):
-            if self._plan is None:
-                raise SparkConnectException("Cannot analyze on empty plan.")
+        if self._plan is None:
+            raise SparkConnectException("Cannot analyze on empty plan.")
 
+        if isinstance(item, str):
             # validate the column name
             if not hasattr(self._session, "is_mock_session"):
                 self.select(item).isLocal()
@@ -1633,7 +1674,15 @@ class DataFrame:
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            return col(self.columns[item])
+            n = len(self.columns)
+            # 1, convert bool; 2, covert negative index; 3, validate index
+            item = range(0, n)[int(item)]
+            return Column(
+                GetColumnByOrdinal(
+                    ordinal=item,
+                    plan_id=self._plan._plan_id,
+                )
+            )
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
@@ -2184,10 +2233,6 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.connect.dataframe.__dict__.copy()
-    # Spark Connect does not support RDD but the tests depend on them.
-    del pyspark.sql.connect.dataframe.DataFrame.coalesce.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
-    del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__

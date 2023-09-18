@@ -463,7 +463,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"jsonField\"",
-    "inputName" : "json",
+    "inputName" : "`json`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"schema_of_json(jsonField)\""
   },

@@ -233,6 +233,26 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2")))
     checkAnswer(df.select(reflect(lit("java.util.UUID"), lit("fromString"), col("a"))),
       Seq(Row("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2")))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("reflect(cast(null as string), 'fromString', a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "`class`",
+        "sqlExpr" -> "\"reflect(CAST(NULL AS STRING), fromString, a)\""),
+      context = ExpectedContext("", "", 0, 45, "reflect(cast(null as string), 'fromString', a)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("reflect('java.util.UUID', cast(null as string), a)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "`method`",
+        "sqlExpr" -> "\"reflect(java.util.UUID, CAST(NULL AS STRING), a)\""),
+      context = ExpectedContext("", "", 0, 49,
+        "reflect('java.util.UUID', cast(null as string), a)"))
   }
 
   test("java_method") {

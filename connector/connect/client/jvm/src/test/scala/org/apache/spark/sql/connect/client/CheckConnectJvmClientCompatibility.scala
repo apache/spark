@@ -208,8 +208,6 @@ object CheckConnectJvmClientCompatibility {
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.functions.try_reflect"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
@@ -358,6 +356,12 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.application.ConnectRepl$" // developer API
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ExtendedCodeClassWrapper" // developer API
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ExtendedCodeClassWrapper$" // developer API
       ),
 
       // SparkSession

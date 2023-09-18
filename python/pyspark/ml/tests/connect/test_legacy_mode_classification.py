@@ -33,6 +33,7 @@ if should_test_connect:
         LogisticRegression as LORV2,
         LogisticRegressionModel as LORV2Model,
     )
+    import pandas as pd
 
 
 class ClassificationTestsMixin:
@@ -81,7 +82,11 @@ class ClassificationTestsMixin:
 
         result = model.transform(eval_df1).toPandas()
         self._check_result(result, expected_predictions, expected_probabilities)
-        local_transform_result = model.transform(eval_df1.toPandas())
+        pandas_eval_df1 = eval_df1.toPandas()
+        pandas_eval_df1_copy = pandas_eval_df1.copy()
+        local_transform_result = model.transform(pandas_eval_df1)
+        # assert that `transform` doesn't mutate the input dataframe.
+        pd.testing.assert_frame_equal(pandas_eval_df1, pandas_eval_df1_copy)
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
         model.set(model.probabilityCol, "")

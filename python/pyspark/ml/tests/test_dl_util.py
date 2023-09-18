@@ -26,7 +26,6 @@ from pyspark.ml.dl_util import FunctionPickler
 
 
 class TestFunctionPickler(unittest.TestCase):
-
     # Function that will be used to test pickling.
     @staticmethod
     def _test_function(x: float, y: float) -> float:

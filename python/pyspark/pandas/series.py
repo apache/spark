@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
@@ -894,7 +893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.rfloordiv(other), self.rmod(other)
 
-    def between(self, left: Any, right: Any, inclusive: Union[bool, str] = "both") -> "Series":
+    def between(self, left: Any, right: Any, inclusive: str = "both") -> "Series":
         """
         Return boolean Series equivalent to left <= series <= right.
         This function returns a boolean vector containing `True` wherever the
@@ -907,9 +906,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
+        inclusive : {"both", "neither", "left", "right"}
             Include boundaries. Whether to set each bound as closed or open.
-            Booleans are deprecated in favour of `both` or `neither`.
+
+            .. versionchanged:: 4.0.0
 
         Returns
         -------
@@ -980,17 +980,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    False
         dtype: bool
         """
-        if inclusive is True or inclusive is False:
-            warnings.warn(
-                "Boolean inputs to the `inclusive` argument are deprecated in "
-                "favour of `both` or `neither`.",
-                FutureWarning,
-            )
-            if inclusive:
-                inclusive = "both"
-            else:
-                inclusive = "neither"
-
         if inclusive == "both":
             lmask = self >= left
             rmask = self <= right
@@ -1662,7 +1651,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         buf: Optional[IO[str]] = None,
         columns: Optional[List[Name]] = None,
-        col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
@@ -1682,11 +1670,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
-        warnings.warn(
-            "Argument `col_space` will be removed in 4.0.0.",
-            FutureWarning,
-        )
-
         args = locals()
         psseries = self
         return validate_arguments_and_invoke_function(
@@ -2257,7 +2240,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        last_non_null = SF.last_non_null(scol)
+        last_non_null = F.last(scol, True)
         null_index = SF.null_index(scol)
 
         Window = get_window_class()
