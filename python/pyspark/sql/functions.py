@@ -3675,7 +3675,7 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_list('age')).show()
+    >>> df.select(sf.sort_array(sf.collect_list('age'))).show()
     +-----------------+
     |collect_list(age)|
     +-----------------+
@@ -3686,7 +3686,7 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_list('id')).show()
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_list('id'))).show()
     +----+----------------+
     |name|collect_list(id)|
     +----+----------------+
@@ -3765,19 +3765,19 @@ def collect_set(col: "ColumnOrName") -> Column:
     Example 1: Collect values from a single column DataFrame
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(5,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_set('age')).show()
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_set('age'))).show()
     +----------------+
     |collect_set(age)|
     +----------------+
-    |             [5]|
+    |          [2, 5]|
     +----------------+
 
     Example 2: Collect values from a DataFrame with multiple columns
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_set('id')).show()
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_set('id'))).show()
     +----+---------------+
     |name|collect_set(id)|
     +----+---------------+
