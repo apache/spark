@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{ByteArrayOutputStream, File, FileOutputStream}
 import java.util.zip.GZIPOutputStream
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
