@@ -177,19 +177,22 @@ class Command(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal[
-        "register_function",
-        "write_operation",
-        "create_dataframe_view",
-        "write_operation_v2",
-        "sql_command",
-        "write_stream_operation_start",
-        "streaming_query_command",
-        "get_resources_command",
-        "streaming_query_manager_command",
-        "register_table_function",
-        "extension",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "register_function",
+            "write_operation",
+            "create_dataframe_view",
+            "write_operation_v2",
+            "sql_command",
+            "write_stream_operation_start",
+            "streaming_query_command",
+            "get_resources_command",
+            "streaming_query_manager_command",
+            "register_table_function",
+            "extension",
+        ]
+        | None
+    ): ...
 
 global___Command = Command
 
@@ -901,9 +904,12 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
-    ) -> typing_extensions.Literal[
-        "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
+        ]
+        | None
+    ): ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
@@ -1150,16 +1156,19 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> typing_extensions.Literal[
-        "status",
-        "last_progress",
-        "recent_progress",
-        "stop",
-        "process_all_available",
-        "explain",
-        "exception",
-        "await_termination",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "status",
+            "last_progress",
+            "recent_progress",
+            "stop",
+            "process_all_available",
+            "explain",
+            "exception",
+            "await_termination",
+        ]
+        | None
+    ): ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
 
@@ -1388,9 +1397,12 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal[
-        "status", "recent_progress", "explain", "exception", "await_termination"
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "status", "recent_progress", "explain", "exception", "await_termination"
+        ]
+        | None
+    ): ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
 
@@ -1561,15 +1573,18 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> typing_extensions.Literal[
-        "active",
-        "get_query",
-        "await_any_termination",
-        "reset_terminated",
-        "add_listener",
-        "remove_listener",
-        "list_listeners",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "active",
+            "get_query",
+            "await_any_termination",
+            "reset_terminated",
+            "add_listener",
+            "remove_listener",
+            "list_listeners",
+        ]
+        | None
+    ): ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
 
@@ -1753,15 +1768,18 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal[
-        "active",
-        "query",
-        "await_any_termination",
-        "reset_terminated",
-        "add_listener",
-        "remove_listener",
-        "list_listeners",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "active",
+            "query",
+            "await_any_termination",
+            "reset_terminated",
+            "add_listener",
+            "remove_listener",
+            "list_listeners",
+        ]
+        | None
+    ): ...
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
 

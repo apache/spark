@@ -15,42 +15,14 @@
 # limitations under the License.
 #
 import unittest
-import pandas as pd
-import numpy as np
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.computation.test_compute import FrameComputeMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
-    def test_mode(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, None, 4, 5, 4, 2],
-                "B": [-0.1, 0.2, -0.3, np.nan, 0.5, -0.1, -0.1],
-                "C": ["d", "b", "c", "c", "e", "a", "a"],
-                "D": [np.nan, np.nan, np.nan, np.nan, 0.1, -0.1, -0.1],
-                "E": [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mode(), pdf.mode())
-        self.assert_eq(psdf.mode(numeric_only=True), pdf.mode(numeric_only=True))
-        self.assert_eq(psdf.mode(dropna=False), pdf.mode(dropna=False))
-
-        # dataframe with single column
-        for c in ["A", "B", "C", "D", "E"]:
-            self.assert_eq(psdf[[c]].mode(), pdf[[c]].mode())
-
-        with self.assertRaises(ValueError):
-            psdf.mode(axis=2)
+    pass
 
 
 if __name__ == "__main__":

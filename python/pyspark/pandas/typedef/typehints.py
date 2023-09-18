@@ -23,7 +23,6 @@ import decimal
 import sys
 import typing
 from collections.abc import Iterable
-from distutils.version import LooseVersion
 from inspect import isclass
 from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hints
 
@@ -149,7 +148,7 @@ def as_spark_type(
     - Python3's typing system
     """
     # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-    if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+    if sys.version_info >= (3, 8):
         if (
             hasattr(tpe, "__origin__")
             and tpe.__origin__ is np.ndarray  # type: ignore[union-attr]
@@ -293,7 +292,9 @@ def spark_type_to_pandas_dtype(
         ),
     ):
         return np.dtype("object")
-    elif isinstance(spark_type, types.TimestampType):
+    elif isinstance(spark_type, types.DayTimeIntervalType):
+        return np.dtype("timedelta64[ns]")
+    elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
         return np.dtype("datetime64[ns]")
     else:
         return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())

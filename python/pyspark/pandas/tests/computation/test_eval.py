@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
+
 import unittest
 
 import numpy as np
@@ -60,9 +60,7 @@ class FrameEvalMixin:
         pdf.eval("A = B + C", inplace=True)
         psdf.eval("A = B + C", inplace=True)
         self.assert_eq(pdf, psdf)
-        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47449
-        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.3")):
-            self.assert_eq(pser, psser)
+        self.assert_eq(pser, psser)
 
         # doesn't support for multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("y", "b"), ("z", "c")])

@@ -737,16 +737,21 @@ def abs(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def mode(col: "ColumnOrName") -> Column:
+def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     """
     Returns the most frequent value in a group.
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 4.0.0
+            Supports deterministic argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
+    deterministic : bool, optional
+        if there are multiple equally-frequent results then return the lowest (defaults to false).
 
     Returns
     -------
@@ -765,14 +770,26 @@ def mode(col: "ColumnOrName") -> Column:
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
     >>> df.groupby("course").agg(mode("year")).show()
-    +------+----------+
-    |course|mode(year)|
-    +------+----------+
-    |  Java|      2012|
-    |dotNET|      2012|
-    +------+----------+
+    +------+-----------------+
+    |course|mode(year, false)|
+    +------+-----------------+
+    |  Java|             2012|
+    |dotNET|             2012|
+    +------+-----------------+
+
+    When multiple values have the same greatest frequency then either any of values is returned if
+    deterministic is false or is not defined, or the lowest value is returned if deterministic is
+    true.
+
+    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df2.select(mode("col", False), mode("col", True)).show()
+    +----------------+---------------+
+    |mode(col, false)|mode(col, true)|
+    +----------------+---------------+
+    |               0|            -10|
+    +----------------+---------------+
     """
-    return _invoke_function_over_columns("mode", col)
+    return _invoke_function("mode", _to_java_column(col), deterministic)
 
 
 @_try_remote_functions
@@ -12471,37 +12488,126 @@ def inline(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
 
+    This function takes an input column containing an array of structs and returns a
+    new column where each struct in the array is exploded into a separate row.
+
     .. versionadded:: 3.4.0
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column of values to explode.
+        Input column of values to explode.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        generator expression with the inline exploded result.
+        Generator expression with the inline exploded result.
 
     See Also
     --------
-    :meth:`explode`
-
-    Notes
-    -----
-    Supports Spark Connect.
+    :meth:`pyspark.functions.explode`
+    :meth:`pyspark.functions.inline_outer`
 
     Examples
     --------
+    Example 1: Using inline with a single struct array column
+
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(inline(df.structlist)).show()
+    >>> df.select(sf.inline(df.structlist)).show()
     +---+---+
     |  a|  b|
     +---+---+
     |  1|  2|
     |  3|  4|
     +---+---+
+
+    Example 2: Using inline with a column name
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 3: Using inline with an alias
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist").alias("c1", "c2")).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 4: Using inline with multiple struct array columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist1=[Row(a=1, b=2), Row(a=3, b=4)],
+    ...         structlist2=[Row(c=5, d=6), Row(c=7, d=8)])
+    ... ])
+    >>> df.select(sf.inline("structlist1"), "structlist2") \\
+    ...     .select("a", "b", sf.inline("structlist2")).show()
+    +---+---+---+---+
+    |  a|  b|  c|  d|
+    +---+---+---+---+
+    |  1|  2|  5|  6|
+    |  1|  2|  7|  8|
+    |  3|  4|  5|  6|
+    |  3|  4|  7|  8|
+    +---+---+---+---+
+
+    Example 5: Using inline with a nested struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist=Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)]))
+    ... ])
+    >>> df.select(sf.inline("structlist.nested")).show()
+    +---+---+
+    |  c|  d|
+    +---+---+
+    |  3|  4|
+    |  5|  6|
+    +---+---+
+
+    Example 6: Using inline with an empty struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(structlist=[])], "structlist: array<struct<a:int,b:int>>")
+    >>> df.select(sf.inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    +---+---+
+
+    Example 7: Using inline with a struct array column containing null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), None, Row(a=3, b=4)])])
+    >>> df.select(sf.inline(df.structlist)).show()
+    +----+----+
+    |   a|   b|
+    +----+----+
+    |   1|   2|
+    |NULL|NULL|
+    |   3|   4|
+    +----+----+
     """
     return _invoke_function_over_columns("inline", col)
 
@@ -12950,6 +13056,135 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
     """
     return _invoke_function_over_columns("json_object_keys", col)
+
+
+@_try_remote_functions
+def from_xml(
+    col: "ColumnOrName",
+    schema: Union[StructType, Column, str],
+    options: Optional[Dict[str, str]] = None,
+) -> Column:
+    """
+    Parses a column containing a XML string to a row with
+    the specified schema. Returns `null`, in the case of an unparseable string.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name in XML format
+    schema : :class:`StructType`, :class:`~pyspark.sql.Column` or str
+        a StructType, Column or Python string literal with a DDL-formatted string
+        to use when parsing the Xml column
+    options : dict, optional
+        options to control parsing. accepts the same options as the Xml datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of complex type from given XML object.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import *
+    >>> from pyspark.sql.functions import from_xml, schema_of_xml, lit
+
+    StructType input with simple IntegerType.
+
+    >>> data = [(1, '''<p><a>1</a></p>''')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+
+    TODO: Fix StructType for spark connect
+    schema = StructType([StructField("a", IntegerType())])
+
+    >>> schema = "STRUCT<a: BIGINT>"
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=1))]
+
+    String input.
+
+    >>> df.select(from_xml(df.value, "a INT").alias("xml")).collect()
+    [Row(xml=Row(a=1))]
+
+    >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+
+    TODO: Fix StructType for spark connect
+    schema = StructType([StructField("a", ArrayType(IntegerType()))])
+
+    >>> schema = "STRUCT<a: ARRAY<BIGINT>>"
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=[1, 2]))]
+
+    Column input generated by schema_of_xml.
+
+    >>> schema = schema_of_xml(lit(data[0][1]))
+    >>> df.select(from_xml(df.value, schema).alias("xml")).collect()
+    [Row(xml=Row(a=[1, 2]))]
+    """
+
+    if isinstance(schema, StructType):
+        schema = schema.json()
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
+    elif not isinstance(schema, str):
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+        )
+    return _invoke_function("from_xml", _to_java_column(col), schema, _options_to_str(options))
+
+
+@_try_remote_functions
+def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    """
+    Parses a XML string and infers its schema in DDL format.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    xml : :class:`~pyspark.sql.Column` or str
+        a XML string or a foldable string column containing a XML string.
+    options : dict, optional
+        options to control parsing. accepts the same options as the XML datasource.
+        See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        for the version you use.
+
+        .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string representation of a :class:`StructType` parsed from given XML.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(schema_of_xml(lit('<p><a>1</a></p>')).alias("xml")).collect()
+    [Row(xml='STRUCT<a: BIGINT>')]
+    >>> df.select(schema_of_xml(lit('<p><a>1</a><a>2</a></p>')).alias("xml")).collect()
+    [Row(xml='STRUCT<a: ARRAY<BIGINT>>')]
+    >>> schema = schema_of_xml('<p><a attr="2">1</a></p>', {'excludeAttribute':'true'})
+    >>> df.select(schema.alias("xml")).collect()
+    [Row(xml='STRUCT<a: BIGINT>')]
+    """
+    if isinstance(xml, str):
+        col = _create_column_from_literal(xml)
+    elif isinstance(xml, Column):
+        col = _to_java_column(xml)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+        )
+
+    return _invoke_function("schema_of_xml", col, _options_to_str(options))
 
 
 @_try_remote_functions

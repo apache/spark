@@ -50,4 +50,12 @@ public class JavaModuleOptions {
     public static String defaultModuleOptions() {
       return String.join(" ", DEFAULT_MODULE_OPTIONS);
     }
+
+    /**
+     * Returns the default Java option array related to `--add-opens' and
+     * `-XX:+IgnoreUnrecognizedVMOptions` used by Spark.
+     */
+    public static String[] defaultModuleOptionArray() {
+      return DEFAULT_MODULE_OPTIONS;
+    }
 }

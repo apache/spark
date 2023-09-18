@@ -17,7 +17,6 @@
 
 import unittest
 from collections import defaultdict
-from distutils.version import LooseVersion
 import inspect
 
 from datetime import datetime, timedelta
@@ -94,11 +93,7 @@ class SeriesTestsMixin:
         self.assertEqual(s.__repr__(), s.rename("a").__repr__())
 
     def _check_extension(self, psser, pser):
-        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(psser, pser, check_exact=False)
-            self.assertTrue(isinstance(psser.dtype, extension_dtypes))
-        else:
-            self.assert_eq(psser, pser)
+        self.assert_eq(psser, pser)
 
     def test_empty_series(self):
         pser_a = pd.Series([], dtype="i1")
@@ -337,13 +332,7 @@ class SeriesTestsMixin:
         pser = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0], name="a")
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
-        else:
-            expected = pd.Series(
-                [False, True, False, False, False, True, False, True, True], name="a"
-            )
-            self.assert_eq(psser.isin([1, 5, 0, None]), expected)
+        self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
 
     def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
@@ -763,21 +752,13 @@ class SeriesTestsMixin:
 
         # other = list
         other = [np.nan, 1, 3, 4, np.nan, 6]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
-            self.assert_eq(pser == other, (psser == other).sort_index())
-        else:
-            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
-            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
+        self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
+        self.assert_eq(pser == other, (psser == other).sort_index())
 
         # other = tuple
         other = (np.nan, 1, 3, 4, np.nan, 6)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
-            self.assert_eq(pser == other, (psser == other).sort_index())
-        else:
-            self.assert_eq(pser.eq(other).rename("x"), psser.eq(other).sort_index())
-            self.assert_eq((pser == other).rename("x"), (psser == other).sort_index())
+        self.assert_eq(pser.eq(other), psser.eq(other).sort_index())
+        self.assert_eq(pser == other, (psser == other).sort_index())
 
         # other = list with the different length
         other = [np.nan, 1, 3, 4, np.nan]

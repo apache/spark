@@ -18,10 +18,11 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+from threading import RLock
 import warnings
 import uuid
 from collections.abc import Generator
-from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast
+from typing import Optional, Dict, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
 from multiprocessing.pool import ThreadPool
 import os
 
@@ -53,7 +54,30 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ReleaseExecute RPCs that instruct the server to release responses that it already processed.
     """
 
-    _release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+    # Lock to manage the pool
+    _lock: ClassVar[RLock] = RLock()
+    _release_thread_pool: Optional[ThreadPool] = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+
+    @classmethod
+    def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+        """
+        When the channel is closed, this method will be called before, to make sure all
+        outstanding calls are closed.
+        """
+        with cls._lock:
+            if cls._release_thread_pool is not None:
+                cls._release_thread_pool.close()
+                cls._release_thread_pool.join()
+                cls._release_thread_pool = None
+
+    @classmethod
+    def _initialize_pool_if_necessary(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+        """
+        If the processing pool for the release calls is None, initialize the pool exactly once.
+        """
+        with cls._lock:
+            if cls._release_thread_pool is None:
+                cls._release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
 
     def __init__(
         self,
@@ -62,6 +86,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         retry_policy: Dict[str, Any],
         metadata: Iterable[Tuple[str, str]],
     ):
+        ExecutePlanResponseReattachableIterator._initialize_pool_if_necessary()
         self._request = request
         self._retry_policy = retry_policy
         if request.operation_id:
@@ -111,7 +136,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         self._last_returned_response_id = ret.response_id
         if ret.HasField("result_complete"):
-            self._result_complete = True
             self._release_all()
         else:
             self._release_until(self._last_returned_response_id)
@@ -190,7 +214,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
+            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
 
     def _release_all(self) -> None:
         """
@@ -218,7 +243,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
+            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:
