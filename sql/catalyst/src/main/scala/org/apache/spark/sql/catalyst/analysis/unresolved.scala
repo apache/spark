@@ -104,12 +104,11 @@ object UnresolvedRelation {
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
       isStreaming: Boolean): UnresolvedRelation = {
-    UnresolvedRelation(
-      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+    UnresolvedRelation(tableIdentifier.nameParts, extraOptions, isStreaming)
   }
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
-    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
+    UnresolvedRelation(tableIdentifier.nameParts)
 }
 
 /**
