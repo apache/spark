@@ -728,7 +728,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.ntile(2), SF.ntile(2)),
             (CF.ntile(4), SF.ntile(4)),
         ]:
-
             for cwin, swin in [
                 (CW.orderBy("b"), SW.orderBy("b")),
                 (CW.partitionBy("a").orderBy("b"), SW.partitionBy("a").orderBy("b")),
@@ -743,7 +742,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                     SW.partitionBy("a").orderBy("b", sdf.c.desc()),
                 ),
             ]:
-
                 self.assert_eq(
                     cdf.select(ccol.over(cwin)).toPandas(),
                     sdf.select(scol.over(swin)).toPandas(),
@@ -756,7 +754,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             (CF.max(cdf.c), SF.max(sdf.c)),
             (CF.min(cdf.c), SF.min(sdf.c)),
         ]:
-
             for cwin, swin in [
                 (CW.orderBy("b"), SW.orderBy("b")),
                 (
@@ -857,7 +854,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                     .rangeBetween(SW.currentRow, SW.unboundedFollowing),
                 ),
             ]:
-
                 self.assert_eq(
                     cdf.select(ccol.over(cwin)).toPandas(),
                     sdf.select(scol.over(swin)).toPandas(),

@@ -30,7 +30,6 @@ from pyspark.ml.torch.distributor import TorchDistributor
 
 
 class DeepspeedTorchDistributor(TorchDistributor):
-
     _DEEPSPEED_SSL_CONF = "deepspeed.spark.distributor.ignoreSsl"
 
     def __init__(

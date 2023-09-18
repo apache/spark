@@ -811,7 +811,6 @@ class SparkSession:
         """
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
-
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
