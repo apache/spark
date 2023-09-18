@@ -48,9 +48,9 @@ private[sql] object CloseableIterator {
    */
   def apply[T](iterator: Iterator[T]): CloseableIterator[T] = iterator match {
     case closeable: CloseableIterator[T] => closeable
-    case _ =>
+    case iter =>
       new WrappedCloseableIterator[T] {
-        override def innerIterator = iterator
+        override def innerIterator: Iterator[T] = iter
       }
   }
 }
