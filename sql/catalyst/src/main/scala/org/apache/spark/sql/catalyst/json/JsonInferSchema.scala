@@ -100,7 +100,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             val wrappedCharException = new CharConversionException(msg)
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
-          case e @ (_: RuntimeException | _: IOException) if options.ignoreCorruptFiles =>
+          case e: IOException if options.ignoreCorruptFiles =>
             logWarning(
               "Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
