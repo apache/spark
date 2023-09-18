@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import pandas as pd
 import numpy as np
 from pandas.api.types import CategoricalDtype
@@ -187,11 +185,7 @@ class CategoricalOpsTestsMixin:
         self.assert_eq(pser.astype("category"), psser.astype("category"))
 
         cat_type = CategoricalDtype(categories=[3, 1, 2])
-        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
-        else:
-            self.assert_eq(psser.astype(cat_type), pser)
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
         # Empty
         pser = pd.Series([], dtype="category")
