@@ -23,6 +23,8 @@ on:
   push:
     branches:
     - '**'
+  pull_request_target:
+    types: [opened, reopened, synchronize]
 
 jobs:
   call-build-and-test:
