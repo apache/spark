@@ -11763,8 +11763,9 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: This function returns a boolean indicating whether the array contains the given value,
-    returning null if the array is null, true if the array contains the given value, and false otherwise.
+    Collection function: This function returns a boolean indicating whether the array
+    contains the given value, returning null if the array is null, true if the array
+    contains the given value, and false otherwise.
 
     .. versionadded:: 1.5.0
 
@@ -11781,8 +11782,8 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new Column of Boolean type, where each value indicates whether the corresponding array from
-        the input column contains the specified value.
+        A new Column of Boolean type, where each value indicates whether the corresponding array
+        from the input column contains the specified value.
 
     Examples
     --------
@@ -11801,19 +11802,18 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     Example 2: Usage of array_contains function with a column.
 
     >>> from pyspark.sql import functions as sf
-    >>> data = [("James", ["Java", "C++", "Python"], "Python"),
-    ...         ("Michael", ["Python", "Scala", "C#"], "Scala"),
-    ...         ("Robert", ["C#", "Java", "Python"], "C++")]
-    >>> df = spark.createDataFrame(data, ["name", "languages", "favorite"])
-    >>> df.select(sf.array_contains(df.languages, sf.col("favorite"))
-    ...   .alias("languages_contains_favorite")).show()
-    +---------------------------+
-    |languages_contains_favorite|
-    +---------------------------+
-    |                       true|
-    |                       true|
-    |                      false|
-    +---------------------------+
+    >>> df = spark.createDataFrame([(["a", "b", "c"], "c"),
+    ...                            (["c", "d", "e"], "d"),
+    ...                            (["e", "a", "c"], "b")], ["data", "item"])
+    >>> df.select(sf.array_contains(df.data, sf.col("item"))
+    ...   .alias("data_contains_item")).show()
+    +------------------+
+    |data_contains_item|
+    +------------------+
+    |              true|
+    |              true|
+    |             false|
+    +------------------+
 
     Example 3: Attempt to use array_contains function with a null array.
 
@@ -11845,25 +11845,76 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     """
-    Collection function: returns true if the arrays contain any common non-null element; if not,
-    returns null if both the arrays are non-empty and any of them contains a null element; returns
-    false otherwise.
+    Collection function: This function returns a boolean column indicating if the input arrays
+    have common non-null elements, returning true if they do, null if the arrays do not contain
+    any common elements but are not empty and at least one of them contains a null element,
+    and false otherwise.
 
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    Parameters
+    ----------
+    a1, a2 : :class:`~pyspark.sql.Column` or str
+        The names of the columns that contain the input arrays.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of Boolean type.
+        A new Column of Boolean type, where each value indicates whether the corresponding arrays
+        from the input columns contain any common elements.
 
     Examples
     --------
+    Example 1: Basic usage of arrays_overlap function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
-    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
-    [Row(overlap=True), Row(overlap=False)]
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   true|
+    |  false|
+    +-------+
+
+    Example 2: Usage of arrays_overlap function with arrays containing null elements.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None], ["b", None]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   NULL|
+    |  false|
+    +-------+
+
+    Example 3: Usage of arrays_overlap function with arrays that are null.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None, ["b", "c"]), (["a"], None)], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   NULL|
+    |   NULL|
+    +-------+
+
+    Example 4: Usage of arrays_overlap on arrays with identical elements.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b"], ["a", "b"]), (["a"], ["a"])], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   true|
+    |   true|
+    +-------+
     """
     return _invoke_function_over_columns("arrays_overlap", a1, a2)
 
