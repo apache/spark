@@ -3784,7 +3784,7 @@ def collect_set(col: "ColumnOrName") -> Column:
     |    [5, 2]|
     +----------+
 
-    Example 2: Collect values from a DataFrame with multiple columns and sort the result
+    Example 3: Collect values from a DataFrame with multiple columns and sort the result
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
