@@ -751,6 +751,12 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
+  private[spark] def getTaskThreadDump(
+      taskId: Long,
+      executorId: String): Option[ThreadStackTrace] = {
+    schedulerBackend.getTaskThreadDump(taskId, executorId)
+  }
+
   /**
    * Called by the web UI to obtain executor heap histogram.
    */

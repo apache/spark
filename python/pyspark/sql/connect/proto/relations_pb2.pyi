@@ -507,59 +507,62 @@ class Relation(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
-    ) -> typing_extensions.Literal[
-        "read",
-        "project",
-        "filter",
-        "join",
-        "set_op",
-        "sort",
-        "limit",
-        "aggregate",
-        "sql",
-        "local_relation",
-        "sample",
-        "offset",
-        "deduplicate",
-        "range",
-        "subquery_alias",
-        "repartition",
-        "to_df",
-        "with_columns_renamed",
-        "show_string",
-        "drop",
-        "tail",
-        "with_columns",
-        "hint",
-        "unpivot",
-        "to_schema",
-        "repartition_by_expression",
-        "map_partitions",
-        "collect_metrics",
-        "parse",
-        "group_map",
-        "co_group_map",
-        "with_watermark",
-        "apply_in_pandas_with_state",
-        "html_string",
-        "cached_local_relation",
-        "cached_remote_relation",
-        "common_inline_user_defined_table_function",
-        "fill_na",
-        "drop_na",
-        "replace",
-        "summary",
-        "crosstab",
-        "describe",
-        "cov",
-        "corr",
-        "approx_quantile",
-        "freq_items",
-        "sample_by",
-        "catalog",
-        "extension",
-        "unknown",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "read",
+            "project",
+            "filter",
+            "join",
+            "set_op",
+            "sort",
+            "limit",
+            "aggregate",
+            "sql",
+            "local_relation",
+            "sample",
+            "offset",
+            "deduplicate",
+            "range",
+            "subquery_alias",
+            "repartition",
+            "to_df",
+            "with_columns_renamed",
+            "show_string",
+            "drop",
+            "tail",
+            "with_columns",
+            "hint",
+            "unpivot",
+            "to_schema",
+            "repartition_by_expression",
+            "map_partitions",
+            "collect_metrics",
+            "parse",
+            "group_map",
+            "co_group_map",
+            "with_watermark",
+            "apply_in_pandas_with_state",
+            "html_string",
+            "cached_local_relation",
+            "cached_remote_relation",
+            "common_inline_user_defined_table_function",
+            "fill_na",
+            "drop_na",
+            "replace",
+            "summary",
+            "crosstab",
+            "describe",
+            "cov",
+            "corr",
+            "approx_quantile",
+            "freq_items",
+            "sample_by",
+            "catalog",
+            "extension",
+            "unknown",
+        ]
+        | None
+    ): ...
 
 global___Relation = Relation
 
@@ -1647,28 +1650,15 @@ class CachedLocalRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    USERID_FIELD_NUMBER: builtins.int
-    SESSIONID_FIELD_NUMBER: builtins.int
     HASH_FIELD_NUMBER: builtins.int
-    userId: builtins.str
-    """(Required) An identifier of the user which created the local relation"""
-    sessionId: builtins.str
-    """(Required) An identifier of the Spark SQL session in which the user created the local relation."""
     hash: builtins.str
     """(Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation."""
     def __init__(
         self,
         *,
-        userId: builtins.str = ...,
-        sessionId: builtins.str = ...,
         hash: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "hash", b"hash", "sessionId", b"sessionId", "userId", b"userId"
-        ],
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["hash", b"hash"]) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
 

@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 import unittest
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
+from pyspark.sql import functions as sf
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -101,16 +101,40 @@ class FrameComputeMixin:
         with self.assertRaises(ValueError):
             psdf.mode(axis=2)
 
-        def f(index, iterator):
-            return ["3", "3", "3", "3", "4"] if index == 3 else ["0", "1", "2", "3", "4"]
+        def func(iterator):
+            for pdf in iterator:
+                if len(pdf) > 0:
+                    if pdf["partition"][0] == 3:
+                        yield pd.DataFrame(
+                            {
+                                "num": [
+                                    "3",
+                                    "3",
+                                    "3",
+                                    "3",
+                                    "4",
+                                ]
+                            }
+                        )
+                    else:
+                        yield pd.DataFrame(
+                            {
+                                "num": [
+                                    "0",
+                                    "1",
+                                    "2",
+                                    "3",
+                                    "4",
+                                ]
+                            }
+                        )
 
-        rdd = self.spark.sparkContext.parallelize(
-            [
-                1,
-            ],
-            4,
-        ).mapPartitionsWithIndex(f)
-        df = self.spark.createDataFrame(rdd, schema="string")
+        df = (
+            self.spark.range(0, 4, 1, 4)
+            .select(sf.spark_partition_id().alias("partition"))
+            .mapInPandas(func, "num string")
+        )
+
         psdf = df.pandas_api()
         self.assert_eq(psdf.mode(), psdf._to_pandas().mode())
 

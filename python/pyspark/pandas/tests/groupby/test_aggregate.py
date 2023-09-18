@@ -186,7 +186,6 @@ class GroupbyAggregateMixin:
 
         agg_funcs = ["max", "min", ["min", "max"]]
         for aggfunc in agg_funcs:
-
             # Since in Koalas groupby, the order of rows might be different
             # so sort on index to ensure they have same output
             sorted_agg_psdf = psdf.groupby("kind").agg(aggfunc).sort_index()

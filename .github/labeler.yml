@@ -42,12 +42,11 @@ INFRA:
   - ".asf.yaml"
   - ".gitattributes"
   - ".gitignore"
-  - "dev/github_jira_sync.py"
   - "dev/merge_spark_pr.py"
   - "dev/run-tests-jenkins*"
 BUILD:
  # Can be supported when a stable release with correct all/any is released
- #- any: ['dev/**/*', '!dev/github_jira_sync.py', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
+ #- any: ['dev/**/*', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
  - "dev/**/*"
  - "build/**/*"
  - "project/**/*"
@@ -58,7 +57,6 @@ BUILD:
  - "scalastyle-config.xml"
  # These can be added in the above `any` clause (and the /dev/**/* glob removed) when
  # `any`/`all` support is released
- # - "!dev/github_jira_sync.py"
  # - "!dev/merge_spark_pr.py"
  # - "!dev/run-tests-jenkins*"
  # - "!dev/.rat-excludes"

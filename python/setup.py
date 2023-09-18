@@ -130,7 +130,8 @@ if in_spark:
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst.
-_minimum_pandas_version = "1.0.5"
+_minimum_pandas_version = "1.4.4"
+_minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "4.0.0"
 _minimum_grpc_version = "1.56.0"
 _minimum_googleapis_common_protos_version = "1.56.4"
@@ -307,17 +308,17 @@ try:
         # if you're updating the versions or dependencies.
         install_requires=["py4j==0.10.9.7"],
         extras_require={
-            "ml": ["numpy>=1.15"],
-            "mllib": ["numpy>=1.15"],
+            "ml": ["numpy>=%s" % _minimum_numpy_version],
+            "mllib": ["numpy>=%s" % _minimum_numpy_version],
             "sql": [
                 "pandas>=%s" % _minimum_pandas_version,
                 "pyarrow>=%s" % _minimum_pyarrow_version,
-                "numpy>=1.15",
+                "numpy>=%s" % _minimum_numpy_version,
             ],
             "pandas_on_spark": [
                 "pandas>=%s" % _minimum_pandas_version,
                 "pyarrow>=%s" % _minimum_pyarrow_version,
-                "numpy>=1.15",
+                "numpy>=%s" % _minimum_numpy_version,
             ],
             "connect": [
                 "pandas>=%s" % _minimum_pandas_version,
@@ -325,7 +326,7 @@ try:
                 "grpcio>=%s" % _minimum_grpc_version,
                 "grpcio-status>=%s" % _minimum_grpc_version,
                 "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
-                "numpy>=1.15",
+                "numpy>=%s" % _minimum_numpy_version,
             ],
         },
         python_requires=">=3.8",

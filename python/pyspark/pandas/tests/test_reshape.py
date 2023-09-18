@@ -17,7 +17,6 @@
 
 import datetime
 from decimal import Decimal
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -312,32 +311,16 @@ class ReshapeTestsMixin:
                 .reset_index(drop=True)
             ),
         )
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                pd.merge_asof(
-                    pdf_left.set_index("a"), pdf_right, left_index=True, right_on="a"
-                ).sort_index(),
-                ps.merge_asof(
-                    psdf_left.set_index("a"), psdf_right, left_index=True, right_on="a"
-                ).sort_index(),
-            )
-        else:
-            expected = pd.DataFrame(
-                {
-                    "b_x": ["x", "y", "z"],
-                    "left_val": ["a", "b", "c"],
-                    "a": [1, 3, 7],
-                    "b_y": ["v", "x", "z"],
-                    "right_val": [1, 3, 7],
-                },
-                index=pd.Index([1, 5, 10], name="a"),
-            )
-            self.assert_eq(
-                expected,
-                ps.merge_asof(
-                    psdf_left.set_index("a"), psdf_right, left_index=True, right_on="a"
-                ).sort_index(),
-            )
+
+        self.assert_eq(
+            pd.merge_asof(
+                pdf_left.set_index("a"), pdf_right, left_index=True, right_on="a"
+            ).sort_index(),
+            ps.merge_asof(
+                psdf_left.set_index("a"), psdf_right, left_index=True, right_on="a"
+            ).sort_index(),
+        )
+
         self.assert_eq(
             pd.merge_asof(
                 pdf_left, pdf_right.set_index("a"), left_on="a", right_index=True

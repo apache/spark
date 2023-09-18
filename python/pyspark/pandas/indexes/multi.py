@@ -1267,14 +1267,6 @@ class MultiIndex(Index):
         # Always returns "mixed" for MultiIndex
         return "mixed"
 
-    @property
-    def asi8(self) -> None:
-        """
-        Integer representation of the values.
-        """
-        # Always returns None for MultiIndex
-        return None
-
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1
     ) -> Tuple["MultiIndex", pd.Index]:

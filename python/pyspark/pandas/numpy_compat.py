@@ -215,7 +215,6 @@ def maybe_dispatch_ufunc_to_spark_func(
         and (op_name in unary_np_spark_mappings or op_name in binary_np_spark_mappings)
         and kwargs.get("out") is None
     ):
-
         np_spark_map_func = unary_np_spark_mappings.get(op_name) or binary_np_spark_mappings.get(
             op_name
         )
