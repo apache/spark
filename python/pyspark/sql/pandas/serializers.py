@@ -185,7 +185,22 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
         # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        s = arrow_column.to_pandas(date_as_object=True)
+        pandas_options = {"date_as_object": True}
+
+        import pyarrow as pa
+        from distutils.version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+            # A legacy option to coerce date32, date64, duration, and timestamp
+            # time units to nanoseconds when converting to pandas.
+            # This option can only be added since 13.0.0.
+            pandas_options.update(
+                {
+                    "coerce_temporal_nanoseconds": True,
+                }
+            )
+
+        s = arrow_column.to_pandas(**pandas_options)
 
         # TODO(SPARK-43579): cache the converter for reuse
         converter = _create_converter_to_pandas(

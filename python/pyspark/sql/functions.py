@@ -737,16 +737,21 @@ def abs(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def mode(col: "ColumnOrName") -> Column:
+def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     """
     Returns the most frequent value in a group.
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 4.0.0
+            Supports deterministic argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to compute on.
+    deterministic : bool, optional
+        if there are multiple equally-frequent results then return the lowest (defaults to false).
 
     Returns
     -------
@@ -765,14 +770,26 @@ def mode(col: "ColumnOrName") -> Column:
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
     >>> df.groupby("course").agg(mode("year")).show()
-    +------+----------+
-    |course|mode(year)|
-    +------+----------+
-    |  Java|      2012|
-    |dotNET|      2012|
-    +------+----------+
+    +------+-----------------+
+    |course|mode(year, false)|
+    +------+-----------------+
+    |  Java|             2012|
+    |dotNET|             2012|
+    +------+-----------------+
+
+    When multiple values have the same greatest frequency then either any of values is returned if
+    deterministic is false or is not defined, or the lowest value is returned if deterministic is
+    true.
+
+    >>> df2 = spark.createDataFrame([(-10,), (0,), (10,)], ["col"])
+    >>> df2.select(mode("col", False), mode("col", True)).show()
+    +----------------+---------------+
+    |mode(col, false)|mode(col, true)|
+    +----------------+---------------+
+    |               0|            -10|
+    +----------------+---------------+
     """
-    return _invoke_function_over_columns("mode", col)
+    return _invoke_function("mode", _to_java_column(col), deterministic)
 
 
 @_try_remote_functions
@@ -12471,37 +12488,126 @@ def inline(col: "ColumnOrName") -> Column:
     """
     Explodes an array of structs into a table.
 
+    This function takes an input column containing an array of structs and returns a
+    new column where each struct in the array is exploded into a separate row.
+
     .. versionadded:: 3.4.0
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column of values to explode.
+        Input column of values to explode.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        generator expression with the inline exploded result.
+        Generator expression with the inline exploded result.
 
     See Also
     --------
-    :meth:`explode`
-
-    Notes
-    -----
-    Supports Spark Connect.
+    :meth:`pyspark.functions.explode`
+    :meth:`pyspark.functions.inline_outer`
 
     Examples
     --------
+    Example 1: Using inline with a single struct array column
+
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(inline(df.structlist)).show()
+    >>> df.select(sf.inline(df.structlist)).show()
     +---+---+
     |  a|  b|
     +---+---+
     |  1|  2|
     |  3|  4|
     +---+---+
+
+    Example 2: Using inline with a column name
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist")).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 3: Using inline with an alias
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(sf.inline("structlist").alias("c1", "c2")).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 4: Using inline with multiple struct array columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist1=[Row(a=1, b=2), Row(a=3, b=4)],
+    ...         structlist2=[Row(c=5, d=6), Row(c=7, d=8)])
+    ... ])
+    >>> df.select(sf.inline("structlist1"), "structlist2") \\
+    ...     .select("a", "b", sf.inline("structlist2")).show()
+    +---+---+---+---+
+    |  a|  b|  c|  d|
+    +---+---+---+---+
+    |  1|  2|  5|  6|
+    |  1|  2|  7|  8|
+    |  3|  4|  5|  6|
+    |  3|  4|  7|  8|
+    +---+---+---+---+
+
+    Example 5: Using inline with a nested struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(structlist=Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)]))
+    ... ])
+    >>> df.select(sf.inline("structlist.nested")).show()
+    +---+---+
+    |  c|  d|
+    +---+---+
+    |  3|  4|
+    |  5|  6|
+    +---+---+
+
+    Example 6: Using inline with an empty struct array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(structlist=[])], "structlist: array<struct<a:int,b:int>>")
+    >>> df.select(sf.inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    +---+---+
+
+    Example 7: Using inline with a struct array column containing null values
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), None, Row(a=3, b=4)])])
+    >>> df.select(sf.inline(df.structlist)).show()
+    +----+----+
+    |   a|   b|
+    +----+----+
+    |   1|   2|
+    |NULL|NULL|
+    |   3|   4|
+    +----+----+
     """
     return _invoke_function_over_columns("inline", col)
 
