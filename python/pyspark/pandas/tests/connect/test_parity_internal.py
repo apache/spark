@@ -15,86 +15,16 @@
 # limitations under the License.
 #
 import unittest
-import pandas as pd
 
 from pyspark.pandas.tests.test_internal import InternalFrameTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.pandas.internal import (
-    InternalFrame,
-    SPARK_DEFAULT_INDEX_NAME,
-    SPARK_INDEX_NAME_FORMAT,
-)
-from pyspark.pandas.utils import spark_column_equals
 
 
 class InternalFrameParityTests(
     InternalFrameTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    def test_from_pandas(self):
-        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-
-        internal = InternalFrame.from_pandas(pdf)
-
-        self.assert_eq(internal.index_spark_column_names, [SPARK_DEFAULT_INDEX_NAME])
-        self.assert_eq(internal.index_names, [None])
-        self.assert_eq(internal.column_labels, [("a",), ("b",)])
-        self.assert_eq(internal.data_spark_column_names, ["a", "b"])
-
-        self.assert_eq(internal.to_pandas_frame, pdf)
-
-        # non-string column name
-        pdf1 = pd.DataFrame({0: [1, 2, 3], 1: [4, 5, 6]})
-
-        internal = InternalFrame.from_pandas(pdf1)
-
-        self.assert_eq(internal.index_spark_column_names, [SPARK_DEFAULT_INDEX_NAME])
-        self.assert_eq(internal.index_names, [None])
-        self.assert_eq(internal.column_labels, [(0,), (1,)])
-        self.assert_eq(internal.data_spark_column_names, ["0", "1"])
-
-        self.assert_eq(internal.to_pandas_frame, pdf1)
-
-        # categorical column
-        pdf2 = pd.DataFrame({0: [1, 2, 3], 1: pd.Categorical([4, 5, 6])})
-        internal = InternalFrame.from_pandas(pdf2)
-
-        self.assert_eq(internal.index_spark_column_names, [SPARK_DEFAULT_INDEX_NAME])
-        self.assert_eq(internal.index_names, [None])
-        self.assert_eq(internal.column_labels, [(0,), (1,)])
-        self.assert_eq(internal.data_spark_column_names, ["0", "1"])
-
-        self.assert_eq(internal.to_pandas_frame, pdf2)
-
-        # multi-index
-        pdf.set_index("a", append=True, inplace=True)
-
-        internal = InternalFrame.from_pandas(pdf)
-
-        self.assert_eq(
-            internal.index_spark_column_names,
-            [SPARK_INDEX_NAME_FORMAT(0), SPARK_INDEX_NAME_FORMAT(1)],
-        )
-        self.assert_eq(internal.index_names, [None, ("a",)])
-        self.assert_eq(internal.column_labels, [("b",)])
-        self.assert_eq(internal.data_spark_column_names, ["b"])
-
-        self.assert_eq(internal.to_pandas_frame, pdf)
-
-        # multi-index columns
-        pdf.columns = pd.MultiIndex.from_tuples([("x", "b")])
-
-        internal = InternalFrame.from_pandas(pdf)
-
-        self.assert_eq(
-            internal.index_spark_column_names,
-            [SPARK_INDEX_NAME_FORMAT(0), SPARK_INDEX_NAME_FORMAT(1)],
-        )
-        self.assert_eq(internal.index_names, [None, ("a",)])
-        self.assert_eq(internal.column_labels, [("x", "b")])
-        self.assert_eq(internal.data_spark_column_names, ["(x, b)"])
-
-        self.assert_eq(internal.to_pandas_frame, pdf)
+    pass
 
 
 if __name__ == "__main__":
