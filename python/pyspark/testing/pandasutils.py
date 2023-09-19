@@ -560,7 +560,6 @@ class ComparisonTestBase(PandasOnSparkTestCase):
 
 
 def compare_both(f=None, almost=True):
-
     if f is None:
         return functools.partial(compare_both, almost=almost)
     elif isinstance(f, bool):
@@ -644,7 +643,6 @@ def assert_produces_warning(
     __tracebackhide__ = True
 
     with warnings.catch_warnings(record=True) as w:
-
         saw_warning = False
         warnings.simplefilter(filter_level)
         yield w

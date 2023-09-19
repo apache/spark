@@ -21,6 +21,7 @@ from collections.abc import Generator
 from typing import Optional, Any
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
@@ -150,20 +151,6 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             attach_ops=ResponseGenerator(attach) if attach is not None else None,
         )
 
-    def assertEventually(self, callable, timeout_ms=1000):
-        """Helper method that will continuously evaluate the callable to not raise an
-        exception."""
-        import time
-
-        limit = time.monotonic_ns() + timeout_ms * 1000 * 1000
-        while time.monotonic_ns() < limit:
-            try:
-                callable()
-                break
-            except Exception:
-                time.sleep(0.1)
-        callable()
-
     def test_basic_flow(self):
         stub = self._stub_with([self.response, self.finished])
         ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
@@ -176,7 +163,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(1, stub.release_calls)
             self.assertEqual(1, stub.execute_calls)
 
-        self.assertEventually(check_all, timeout_ms=1000)
+        eventually(timeout=1, catch_assertions=True)(check_all)()
 
     def test_fail_during_execute(self):
         def fatal():
@@ -194,7 +181,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(1, stub.release_until_calls)
             self.assertEqual(1, stub.execute_calls)
 
-        self.assertEventually(check, timeout_ms=1000)
+        eventually(timeout=1, catch_assertions=True)(check)()
 
     def test_fail_and_retry_during_execute(self):
         def non_fatal():
@@ -213,7 +200,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(3, stub.release_until_calls)
             self.assertEqual(1, stub.execute_calls)
 
-        self.assertEventually(check, timeout_ms=1000)
+        eventually(timeout=1, catch_assertions=True)(check)()
 
     def test_fail_and_retry_during_reattach(self):
         count = 0
@@ -239,7 +226,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(1, stub.release_calls)
             self.assertEqual(1, stub.execute_calls)
 
-        self.assertEventually(check, timeout_ms=1000)
+        eventually(timeout=1, catch_assertions=True)(check)()
 
 
 class TestException(grpc.RpcError, grpc.Call):

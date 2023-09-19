@@ -1892,7 +1892,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
+      "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -2768,7 +2768,7 @@
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42P02"
   },
