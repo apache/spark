@@ -1093,24 +1093,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Examples
         --------
+        >>> import numpy as np
         >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5]}, columns=['A', 'B'])
         >>> g = df.groupby('A')
         >>> g.nth(0)
-             B
-        A
-        1  NaN
-        2  3.0
+           A    B
+        0  1  NaN
+        2  2  3.0
         >>> g.nth(1)
-             B
-        A
-        1  2.0
-        2  5.0
+           A    B
+        1  1  2.0
+        4  2  5.0
         >>> g.nth(-1)
-             B
-        A
-        1  4.0
-        2  5.0
+           A    B
+        3  1  4.0
+        4  2  5.0
 
         See Also
         --------
