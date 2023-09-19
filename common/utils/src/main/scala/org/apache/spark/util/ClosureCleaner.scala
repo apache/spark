@@ -155,7 +155,7 @@ private[spark] trait ClosureCleaner extends Logging {
     clone
   }
 
-  protected def ensureSerializable(closure: AnyRef)
+  protected def ensureSerializable(closure: AnyRef): Unit
 
   /**
    * Clean the given closure in place.

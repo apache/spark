@@ -204,7 +204,6 @@ object ScalarUserDefinedFunction {
   }
 }
 
-
 object SparkConnectClosureCleaner extends ClosureCleaner {
 
   protected override def ensureSerializable(closure: AnyRef): Unit = {
