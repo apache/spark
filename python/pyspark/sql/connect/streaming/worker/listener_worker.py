@@ -26,10 +26,8 @@ from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
-    write_with_length,
     UTF8Deserializer,
     CPickleSerializer,
-    SpecialLengths,
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
