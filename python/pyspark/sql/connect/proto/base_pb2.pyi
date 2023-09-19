@@ -2872,7 +2872,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
     ERRORS_FIELD_NUMBER: builtins.int
     root_error_idx: builtins.int
-    """The index of the root error in errors."""
+    """The index of the root error in errors. The field will not be set if the error is not found."""
     @property
     def errors(
         self,

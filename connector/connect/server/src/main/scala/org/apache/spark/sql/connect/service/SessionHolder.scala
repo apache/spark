@@ -51,7 +51,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
-  val errorIdToError = CacheBuilder
+  private[connect] val errorIdToError = CacheBuilder
     .newBuilder()
     .ticker(Ticker.systemTicker())
     .maximumSize(ERROR_CACHE_SIZE)
