@@ -293,7 +293,7 @@ Fail to assign a value of `<sourceType>` type to the `<targetType>` type column 
 
 SQLSTATE: none assigned
 
-class ``<cls>`` is not supported by `MapObjects` as resulting collection.
+`MapObjects` does not support the class `<cls>` as resulting collection.
 
 ### CODEC_NOT_AVAILABLE
 
