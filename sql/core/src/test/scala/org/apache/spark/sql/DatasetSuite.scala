@@ -2592,7 +2592,7 @@ class DatasetSuite extends QueryTest
       // Expression decoding error
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_2151",
+        errorClass = "EXPRESSION_DECODING_FAILED",
         parameters = Map(
           "e" -> exception.getCause.toString(),
           "expressions" -> expressions.map(
