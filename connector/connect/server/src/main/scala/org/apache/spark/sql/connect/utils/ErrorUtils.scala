@@ -98,7 +98,7 @@ private[connect] object ErrorUtils extends Logging {
           .setMessage(error.getMessage)
           .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
 
-        if (idx + 1 < MAX_ERROR_CHAIN_LENGTH) {
+        if (error.getCause != null) {
           builder.setCauseIdx(idx + 1)
         }
 
