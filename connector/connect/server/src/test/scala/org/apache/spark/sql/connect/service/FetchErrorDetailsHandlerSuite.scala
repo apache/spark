@@ -66,7 +66,6 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     ThreadUtils.awaitResult(promise.future, 5.seconds)
   }
 
-
   for (serverStacktraceEnabled <- Seq(false, true)) {
     test(s"error chain is properly constructed - $serverStacktraceEnabled") {
       val testError =
