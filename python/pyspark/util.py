@@ -382,7 +382,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return f  # type: ignore[return-value]
 
 
-def handle_worker_exception(e: BaseException, outfile: IO):
+def handle_worker_exception(e: BaseException, outfile: IO) -> None:
     """
     Handles exception for Python worker which writes SpecialLengths.PYTHON_EXCEPTION_THROWN (-2)
     and exception traceback info to outfile. JVM could then read from the outfile and perform
