@@ -48,6 +48,9 @@ acquire_sbt_jar () {
 
   sbt_jar=$JAR
 
+  echo "$sbt_jar"
+  md5sum "$sbt_jar"
+
   if [[ ! -f "$sbt_jar" ]]; then
     # Download sbt launch jar if it hasn't been downloaded yet
     if [ ! -f "${JAR}" ]; then
@@ -72,7 +75,7 @@ acquire_sbt_jar () {
     fi
     printf "Launching sbt from ${JAR}\n"
   else
-    printf "Launching local sbt."
+    printf "Launching local sbt.\n"
   fi
 }
 
@@ -172,8 +175,6 @@ process_args () {
 
 run() {
   # no jar? download it.
-  echo "$sbt_jar"
-  md5sum "$sbt_jar"
   [[ -f "$sbt_jar" ]] || acquire_sbt_jar "$sbt_version" || {
     # still no jar? uh-oh.
     echo "Download failed. Obtain the sbt-launch.jar manually and place it at $sbt_jar"
@@ -184,6 +185,9 @@ run() {
   process_args "$@"
   set -- "${residual_args[@]}"
   argumentCount=$#
+
+  echo "$sbt_jar"
+  md5sum "$sbt_jar"
 
   # run sbt
   execRunner "$java_cmd" \
