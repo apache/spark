@@ -954,7 +954,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
                 error_class="NOT_COLUMN",
                 message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
             )
-        return repr(left) == repr(right)
+        return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:
         return left._jc.equals(right._jc)
 
