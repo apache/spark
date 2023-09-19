@@ -488,7 +488,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
-    [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64)]
     >>> inferred.spark_type
     StructType([StructField('c0', LongType(), True), StructField('c1', LongType(), True)])
 
@@ -496,7 +496,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
-    [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    [dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64)]
     >>> inferred.spark_type
     StructType([StructField('a', LongType(), True), StructField('b', LongType(), True)])
 
@@ -504,7 +504,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtype
-    CategoricalDtype(categories=[3, 4, 5], ordered=False)
+    CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64)
     >>> inferred.spark_type
     LongType()
 
@@ -522,7 +522,8 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
-    [dtype('int64'), dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    [dtype('int64'), dtype('int64'),
+     CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64)]
     >>> inferred.spark_type.simpleString()
     'struct<__index_level_0__:bigint,c0:bigint,c1:bigint>'
     >>> inferred.index_fields
@@ -534,7 +535,8 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
-    [CategoricalDtype(categories=[3, 4, 5], ordered=False), dtype('int64'), dtype('int64')]
+    [CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64),
+     dtype('int64'), dtype('int64')]
     >>> inferred.spark_type.simpleString()
     'struct<index:bigint,id:bigint,A:bigint>'
     >>> inferred.index_fields
@@ -545,7 +547,8 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
-    [dtype('int64'), dtype('int64'), CategoricalDtype(categories=[3, 4, 5], ordered=False)]
+    [dtype('int64'), dtype('int64'),
+     CategoricalDtype(categories=[3, 4, 5], ordered=False, categories_dtype=int64)]
     >>> inferred.spark_type.simpleString()
     'struct<__index_level_0__:bigint,a:bigint,b:bigint>'
     >>> inferred.index_fields

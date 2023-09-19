@@ -170,7 +170,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   test("python foreachBatch process: process terminates after query is stopped") {
     // scalastyle:off assume
-    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
     // scalastyle:on assume
 
     val sessionHolder = SessionHolder.forTesting(spark)
@@ -237,7 +237,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   test("python listener process: process terminates after listener is removed") {
     // scalastyle:off assume
-    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
     // scalastyle:on assume
 
     val sessionHolder = SessionHolder.forTesting(spark)

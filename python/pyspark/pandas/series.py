@@ -21,6 +21,7 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
+import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
@@ -2074,6 +2075,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Method to use for filling holes in reindexed Series pad / ffill: propagate last valid
             observation forward to next valid backfill / bfill:
             use NEXT valid observation to fill gap
+
+            .. deprecated:: 4.0.0
+
         axis : {0 or `index`}
             1 and `columns` are not supported.
         inplace : boolean, default False
@@ -2084,6 +2088,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             consecutive NaNs, it will only be partially filled. If method is not specified,
             this is the maximum number of entries along the entire axis where NaNs will be filled.
             Must be greater than 0 if not None
+
+            .. deprecated:: 4.0.0
+
 
         Returns
         -------
@@ -2136,6 +2143,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         psser = self._fillna(value=value, method=method, axis=axis, limit=limit)
 
         if method is not None:
+            warnings.warn(
+                "Series.fillna with 'method' is deprecated and will raise in a future version. "
+                "Use Series.ffill() or Series.bfill() instead.",
+                FutureWarning,
+            )
             psser = DataFrame(psser._psdf._internal.resolved_copy)._psser_for(self._column_label)
 
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -2690,6 +2702,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         When having a Series with dates as index, this function can
         select the last few elements based on a date offset.
 
+        .. deprecated:: 4.0.0
+
         Parameters
         ----------
         offset : str or DateOffset
@@ -2728,6 +2742,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-11 was
         not returned.
         """
+        warnings.warn(
+            "last is deprecated and will be removed in a future version. "
+            "Please create a mask and filter using `.loc` instead",
+            FutureWarning,
+        )
         return first_series(self.to_frame().last(offset)).rename(self.name)
 
     def first(self, offset: Union[str, DateOffset]) -> "Series":
@@ -2736,6 +2755,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         When having a Series with dates as index, this function can
         select the first few elements based on a date offset.
+
+        .. deprecated:: 4.0.0
 
         Parameters
         ----------
@@ -2775,6 +2796,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3 observed days in the dataset, and therefore data for 2018-04-13 was
         not returned.
         """
+        warnings.warn(
+            "first is deprecated and will be removed in a future version. "
+            "Please create a mask and filter using `.loc` instead",
+            FutureWarning,
+        )
         return first_series(self.to_frame().first(offset)).rename(self.name)
 
     # TODO: Categorical type isn't supported (due to PySpark's limitation) and
@@ -3120,6 +3146,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Interchange axes and swap values axes appropriately.
 
+        .. deprecated:: 4.0.0
+
         Parameters
         ----------
         i: {0 or 'index', 1 or 'columns'}. The axis to swap.
@@ -3145,6 +3173,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         z    3
         dtype: int64
         """
+        warnings.warn(
+            "'Series.swapaxes' is deprecated and will be removed in a future version. "
+            "Please use 'Series.transpose' instead.",
+            FutureWarning,
+        )
         assert copy is True
 
         i = validate_axis(i)
@@ -4371,6 +4404,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if results[0][0] is None:
             # This will only happen when skipna is False because we will
             # place nulls first.
+            warnings.warn(
+                "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
+                "is deprecated. In a future version this will raise ValueError",
+                FutureWarning,
+            )
             return np.nan
         values = list(results[0][1:])
         if len(values) == 1:
@@ -4479,6 +4517,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if results[0][0] is None:
             # This will only happen when skipna is False because we will
             # place nulls first.
+            warnings.warn(
+                "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
+                "is deprecated. In a future version this will raise ValueError",
+                FutureWarning,
+            )
             return np.nan
         values = list(results[0][1:])
         if len(values) == 1:
@@ -4805,7 +4848,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.index
 
-    # TODO: introduce 'method', 'limit', 'in_place'; fully support 'regex'
+    # TODO: introduce 'in_place'; fully support 'regex'
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -6185,6 +6228,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         10    10
         dtype: int64
         """
+        warnings.warn(
+            "The behavior of Series.argsort in the presence of NA values is deprecated. "
+            "In a future version, NA values will be ordered last instead of set to -1.",
+            FutureWarning,
+        )
         notnull = self.loc[self.notnull()]
 
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
@@ -6290,9 +6338,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s.argmax()
         3
-
-        >>> s.argmax(skipna=False)
-        -1
         """
         axis = validate_axis(axis, none_axis=0)
         if axis == 1:
@@ -6317,7 +6362,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             max_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
-            return -1 if max_value[0] is None else max_value[1]
+            if max_value[0] is None:
+                warnings.warn(
+                    "The behavior of Series.argmax/argmin "
+                    "with skipna=False and NAs, or with all-NAs is deprecated. "
+                    "In a future version this will raise ValueError.",
+                    FutureWarning,
+                )
+                return -1
+            else:
+                return max_value[1]
 
     def argmin(self, axis: Axis = None, skipna: bool = True) -> int:
         """
@@ -6377,7 +6431,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             min_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
-            return -1 if min_value[0] is None else min_value[1]
+            if min_value[0] is None:
+                warnings.warn(
+                    "The behavior of Series.argmax/argmin "
+                    "with skipna=False and NAs, or with all-NAs is deprecated. "
+                    "In a future version this will raise ValueError.",
+                    FutureWarning,
+                )
+                return -1
+            else:
+                return min_value[1]
 
     def compare(
         self, other: "Series", keep_shape: bool = False, keep_equal: bool = False
@@ -7156,6 +7219,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
     def __getitem__(self, key: Any) -> Any:
+        if type(key) == int and not isinstance(self.index.spark.data_type, (IntegerType, LongType)):
+            warnings.warn(
+                "Series.__getitem__ treating keys as positions is deprecated. "
+                "In a future version, integer keys will always be treated as labels "
+                "(consistent with DataFrame behavior). "
+                "To access a value by position, use `ser.iloc[pos]`",
+                FutureWarning,
+            )
         try:
             if (isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])) or (
                 type(key) == int

@@ -34,9 +34,7 @@ import pandas as pd
 import numpy as np
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
-    is_interval_dtype,
     is_bool_dtype,
-    is_categorical_dtype,
     is_integer_dtype,
     is_float_dtype,
     is_numeric_dtype,
@@ -1023,7 +1021,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
         False
         """
-        return is_categorical_dtype(self.dtype)
+        return isinstance(self.dtype, pd.CategoricalDtype)
 
     def is_floating(self) -> bool:
         """
@@ -1056,7 +1054,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_interval()
         False
         """
-        return is_interval_dtype(self.dtype)
+        return isinstance(self.dtype, pd.IntervalDtype)
 
     def is_numeric(self) -> bool:
         """
