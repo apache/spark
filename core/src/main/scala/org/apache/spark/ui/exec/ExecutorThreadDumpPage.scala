@@ -22,7 +22,10 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, Text}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.UIUtils.prependBaseUri
+import org.apache.spark.ui.flamegraph.FlamegraphNode
 
 private[ui] class ExecutorThreadDumpPage(
     parent: SparkUITab,
@@ -87,6 +90,7 @@ private[ui] class ExecutorThreadDumpPage(
           <p></p>
           // scalastyle:on
         }
+        {drawExecutorFlamegraph(request, threadDump)}
         <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
           <thead>
             <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
@@ -105,5 +109,17 @@ private[ui] class ExecutorThreadDumpPage(
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
+  }
+
+  // scalastyle:off
+  private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
+    <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
+    <div id="executor-flamegraph-chart">
+      <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
+      <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
+      <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+      <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
+      <script>drawFlamegraph()</script>
+    </div>
   }
 }
