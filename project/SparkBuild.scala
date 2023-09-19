@@ -355,7 +355,7 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.deploy",
         "org.apache.spark.util.collection"
       ).mkString(":"),
-      "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc",
+      "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     ) ++ {
       // Do not attempt to scaladoc javadoc comments under 2.12 since it can't handle inner classes
       if (scalaBinaryVersion.value == "2.12") Seq("-no-java-comments") else Seq.empty
