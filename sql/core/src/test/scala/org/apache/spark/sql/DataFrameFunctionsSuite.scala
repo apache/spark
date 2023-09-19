@@ -82,10 +82,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k",
-      // TODO: XML functions will soon be added to SQL Function registry and removed from this list
-      // https://issues.apache.org/jira/browse/SPARK-44787
-      "from_xml", "schema_of_xml"
+      "collect_top_k"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other

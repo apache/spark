@@ -983,7 +983,6 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
     ):
-
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
         for i in range(num_conf):
