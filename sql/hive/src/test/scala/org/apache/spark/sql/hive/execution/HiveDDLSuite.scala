@@ -63,20 +63,6 @@ class HiveDDLSuite
       super.afterEach()
     }
   }
-  // check if the directory for recording the data of the table exists.
-  private def tableDirectoryExists(
-      tableIdentifier: TableIdentifier,
-      dbPath: Option[String] = None): Boolean = {
-    val expectedTablePath =
-      if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
-      } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
-      }
-    val filesystemPath = new Path(expectedTablePath.toString)
-    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
-    fs.exists(filesystemPath)
-  }
 
   protected override def generateTable(
       catalog: SessionCatalog,
@@ -150,6 +136,21 @@ class HiveDDLSuite
       // View texts are checked separately
       viewText = None
     )
+  }
+
+  // check if the directory for recording the data of the table exists.
+  private def tableDirectoryExists(
+      tableIdentifier: TableIdentifier,
+      dbPath: Option[String] = None): Boolean = {
+    val expectedTablePath =
+      if (dbPath.isEmpty) {
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
+      } else {
+        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
+      }
+    val filesystemPath = new Path(expectedTablePath.toString)
+    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.exists(filesystemPath)
   }
 
   test("alter table: set properties") {
