@@ -91,35 +91,40 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
       serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
-    val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).map { case error =>
-      val builder = FetchErrorDetailsResponse.Error
-        .newBuilder()
-        .setMessage(error.getMessage)
-        .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
+    val errors =
+      traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).zipWithIndex.map { case (error, idx) =>
+        val builder = FetchErrorDetailsResponse.Error
+          .newBuilder()
+          .setMessage(error.getMessage)
+          .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
 
-      if (serverStackTraceEnabled) {
-        builder.addAllStackTrace(
-          error.getStackTrace
-            .map { stackTraceElement =>
-              FetchErrorDetailsResponse.StackTraceElement
-                .newBuilder()
-                .setDeclaringClass(stackTraceElement.getClassName)
-                .setMethodName(stackTraceElement.getMethodName)
-                .setFileName(stackTraceElement.getFileName)
-                .setLineNumber(stackTraceElement.getLineNumber)
-                .build()
-            }
-            .toIterable
-            .asJava)
+        if (idx + 1 < MAX_ERROR_CHAIN_LENGTH) {
+          builder.setCauseIdx(idx + 1)
+        }
+
+        if (serverStackTraceEnabled) {
+          builder.addAllStackTrace(
+            error.getStackTrace
+              .map { stackTraceElement =>
+                FetchErrorDetailsResponse.StackTraceElement
+                  .newBuilder()
+                  .setDeclaringClass(stackTraceElement.getClassName)
+                  .setMethodName(stackTraceElement.getMethodName)
+                  .setFileName(stackTraceElement.getFileName)
+                  .setLineNumber(stackTraceElement.getLineNumber)
+                  .build()
+              }
+              .toIterable
+              .asJava)
+        }
+
+        builder.build()
       }
-
-      builder.build()
-    }
 
     FetchErrorDetailsResponse
       .newBuilder()
-      .setErrorChain(
-        FetchErrorDetailsResponse.ErrorChain.newBuilder().addAllErrors(errorChain.asJava).build())
+      .setRootErrorIdx(0)
+      .addAllErrors(errors.asJava)
       .build()
   }
 

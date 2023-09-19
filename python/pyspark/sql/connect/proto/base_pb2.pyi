@@ -2814,6 +2814,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ERROR_TYPE_HIERARCHY_FIELD_NUMBER: builtins.int
         MESSAGE_FIELD_NUMBER: builtins.int
         STACK_TRACE_FIELD_NUMBER: builtins.int
+        CAUSE_IDX_FIELD_NUMBER: builtins.int
         @property
         def error_type_hierarchy(
             self,
@@ -2830,6 +2831,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             """The stackTrace of the exception. It will be set
             if the SQLConf spark.sql.connect.serverStacktrace.enabled is true.
             """
+        cause_idx: builtins.int
+        """The index of the cause error in errors."""
         def __init__(
             self,
             *,
@@ -2839,10 +2842,21 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 global___FetchErrorDetailsResponse.StackTraceElement
             ]
             | None = ...,
+            cause_idx: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_cause_idx", b"_cause_idx", "cause_idx", b"cause_idx"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_cause_idx",
+                b"_cause_idx",
+                "cause_idx",
+                b"cause_idx",
                 "error_type_hierarchy",
                 b"error_type_hierarchy",
                 "message",
@@ -2851,52 +2865,46 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"stack_trace",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_cause_idx", b"_cause_idx"]
+        ) -> typing_extensions.Literal["cause_idx"] | None: ...
 
-    class ErrorChain(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ERRORS_FIELD_NUMBER: builtins.int
-        @property
-        def errors(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___FetchErrorDetailsResponse.Error
-        ]:
-            """A list of errors with cause relationship.
-            The i-th error is caused by the i+1-th error in the list.
-            """
-        def __init__(
-            self,
-            *,
-            errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["errors", b"errors"]
-        ) -> None: ...
-
-    ERROR_CHAIN_FIELD_NUMBER: builtins.int
+    ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
+    ERRORS_FIELD_NUMBER: builtins.int
+    root_error_idx: builtins.int
+    """The index of the root error in errors."""
     @property
-    def error_chain(self) -> global___FetchErrorDetailsResponse.ErrorChain:
-        """The matched error chain for a given error_id."""
+    def errors(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___FetchErrorDetailsResponse.Error
+    ]:
+        """A list of errors."""
     def __init__(
         self,
         *,
-        error_chain: global___FetchErrorDetailsResponse.ErrorChain | None = ...,
+        root_error_idx: builtins.int | None = ...,
+        errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_error_chain", b"_error_chain", "error_chain", b"error_chain"
+            "_root_error_idx", b"_root_error_idx", "root_error_idx", b"root_error_idx"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_error_chain", b"_error_chain", "error_chain", b"error_chain"
+            "_root_error_idx",
+            b"_root_error_idx",
+            "errors",
+            b"errors",
+            "root_error_idx",
+            b"root_error_idx",
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_error_chain", b"_error_chain"]
-    ) -> typing_extensions.Literal["error_chain"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_root_error_idx", b"_root_error_idx"]
+    ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse

@@ -74,26 +74,25 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .put(errorId, testError)
 
     val response = fetchErrorDetails(userId, sessionId, errorId)
-    assert(response.hasErrorChain)
-    assert(response.getErrorChain.getErrorsCount == 2)
-    assert(response.getErrorChain.getErrors(0).getMessage == "test1")
-    assert(
-      response.getErrorChain.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
-    assert(
-      response.getErrorChain.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
+    assert(response.hasRootErrorIdx)
+    assert(response.getRootErrorIdx == 0)
 
-    assert(response.getErrorChain.getErrors(1).getMessage == "test2")
+    assert(response.getErrorsCount == 2)
+    assert(response.getErrors(0).getMessage == "test1")
+    assert(response.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+    assert(response.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
+
+    assert(response.getErrors(1).getMessage == "test2")
+    assert(response.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
     assert(
-      response.getErrorChain.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
-    assert(
-      response.getErrorChain
+      response
         .getErrors(1)
         .getStackTraceCount == testError.getCause.getStackTrace.length)
   }
 
   test("error not found") {
     val response = fetchErrorDetails(userId, sessionId, UUID.randomUUID().toString())
-    assert(!response.hasErrorChain)
+    assert(!response.hasRootErrorIdx)
   }
 
   test("invalidate cached exceptions after first request") {
@@ -106,9 +105,11 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .put(errorId, testError)
 
     val response = fetchErrorDetails(userId, sessionId, errorId)
-    assert(response.hasErrorChain)
-    assert(response.getErrorChain.getErrorsCount == 1)
-    assert(response.getErrorChain.getErrors(0).getMessage == "test1")
+    assert(response.hasRootErrorIdx)
+    assert(response.getRootErrorIdx == 0)
+
+    assert(response.getErrorsCount == 1)
+    assert(response.getErrors(0).getMessage == "test1")
 
     assert(
       SparkConnectService

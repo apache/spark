@@ -820,16 +820,16 @@ message FetchErrorDetailsResponse {
     // The stackTrace of the exception. It will be set
     // if the SQLConf spark.sql.connect.serverStacktrace.enabled is true.
     repeated StackTraceElement stack_trace = 3;
+
+    // The index of the cause error in errors.
+    optional int32 cause_idx = 4;
   }
 
-  message ErrorChain {
-    // A list of errors with cause relationship.
-    // The i-th error is caused by the i+1-th error in the list.
-    repeated Error errors = 1;
-  }
+  // The index of the root error in errors. The field will not be set if the error is not found.
+  optional int32 root_error_idx = 1;
 
-  // The matched error chain for a given error_id.
-  optional ErrorChain error_chain = 1;
+  // A list of errors.
+  repeated Error errors = 2;
 }
 
 // Main interface for the SparkConnect service.
