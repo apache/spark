@@ -25,6 +25,10 @@ The table `<tableName>` does not support `<operation>`.
 
 This error class has the following derived error classes:
 
+## NO_ALTERNATIVE
+
+
+
 ## USE_ALTER_TABLE
 
 Please use ALTER TABLE instead.

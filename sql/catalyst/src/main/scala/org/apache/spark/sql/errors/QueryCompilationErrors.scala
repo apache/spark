@@ -481,7 +481,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def unsupportedViewOperationError(
+  def expectTableNotViewError(
       nameParts: Seq[String],
       cmd: String,
       suggestAlternative: Boolean,
@@ -498,7 +498,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def unsupportedTableOperationError(
+  def expectTableOrPermanentViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP",
+      messageParameters = Map(
+        "viewName" -> toSQLId(nameParts),
+        "operation" -> cmd),
+      origin = t.origin)
+  }
+
+  def expectViewNotTableError(
       nameParts: Seq[String],
       cmd: String,
       suggestAlternative: Boolean,
@@ -511,6 +523,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       },
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
+        "operation" -> cmd),
+      origin = t.origin)
+  }
+
+  def expectPermanentViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+      messageParameters = Map(
+        "viewName" -> toSQLId(nameParts),
         "operation" -> cmd),
       origin = t.origin)
   }
@@ -2856,14 +2880,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def unsupportedCreateOrReplaceViewOnTableError(
       name: TableIdentifier, replace: Boolean): Throwable = {
-    val operation = if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(name.nameParts),
-        "operation" -> operation
+    if (replace) {
+      new AnalysisException(
+        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+        messageParameters = Map(
+          "tableName" -> toSQLId(name.nameParts),
+          "operation" -> "CREATE OR REPLACE VIEW"
+        )
       )
-    )
+    } else {
+      new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        messageParameters = Map(
+          "relationName" -> toSQLId(name.nameParts)
+        )
+      )
+    }
   }
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {

@@ -115,7 +115,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
           "operation" -> "CREATE OR REPLACE VIEW")
@@ -124,10 +124,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map(
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
-          "operation" -> "CREATE VIEW")
+          "relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
       checkError(
         exception = intercept[AnalysisException] {
@@ -162,7 +161,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
@@ -177,7 +176,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
@@ -354,7 +353,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        errorClass = "EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "SHOW CREATE TABLE"
@@ -369,7 +368,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
-        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        errorClass = "EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
           "viewName" -> s"`$viewName`",
           "operation" -> "ANALYZE TABLE"

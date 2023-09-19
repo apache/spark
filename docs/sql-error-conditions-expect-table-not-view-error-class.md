@@ -21,7 +21,7 @@ license: |
 
 SQLSTATE: none assigned
 
-The view `<viewName>` does not support `<operation>`.
+'`<operation>`' expects a table but `<viewName>` is a view.
 
 This error class has the following derived error classes:
 

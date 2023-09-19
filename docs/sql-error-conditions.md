@@ -509,13 +509,25 @@ SQLSTATE: none assigned
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXPECT_PERMANENT_VIEW_NOT_TEMP
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a permanent view but `<viewName>` is a temp view.
+
 ### [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
 
 SQLSTATE: none assigned
 
-The view `<viewName>` does not support `<operation>`.
+'`<operation>`' expects a table but `<viewName>` is a view.
 
 For more details see [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+### EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a table or permanent view but `<viewName>` is a temp view.
 
 ### [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
 
