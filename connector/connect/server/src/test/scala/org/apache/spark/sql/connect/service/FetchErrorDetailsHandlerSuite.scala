@@ -26,6 +26,9 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.sql.connect.ResourceHelper
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
 
@@ -63,31 +66,53 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     ThreadUtils.awaitResult(promise.future, 5.seconds)
   }
 
-  test("error chain is properly constructed") {
-    val testError =
-      new Exception("test1", new Exception("test2"))
-    val errorId = UUID.randomUUID().toString()
 
-    SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
-      .errorIdToError
-      .put(errorId, testError)
+  for (serverStacktraceEnabled <- Seq(false, true)) {
+    test(s"error chain is properly constructed - $serverStacktraceEnabled") {
+      val testError =
+        new Exception("test1", new Exception("test2"))
+      val errorId = UUID.randomUUID().toString()
 
-    val response = fetchErrorDetails(userId, sessionId, errorId)
-    assert(response.hasRootErrorIdx)
-    assert(response.getRootErrorIdx == 0)
+      val sessionHolder = SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId)
 
-    assert(response.getErrorsCount == 2)
-    assert(response.getErrors(0).getMessage == "test1")
-    assert(response.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
-    assert(response.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
+      sessionHolder.errorIdToError.put(errorId, testError)
 
-    assert(response.getErrors(1).getMessage == "test2")
-    assert(response.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
-    assert(
-      response
-        .getErrors(1)
-        .getStackTraceCount == testError.getCause.getStackTrace.length)
+      sessionHolder.session.conf
+        .set(Connect.CONNECT_SERVER_STACKTRACE_ENABLED.key, serverStacktraceEnabled)
+      sessionHolder.session.conf
+        .set(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED.key, false)
+      try {
+        val response = fetchErrorDetails(userId, sessionId, errorId)
+        assert(response.hasRootErrorIdx)
+        assert(response.getRootErrorIdx == 0)
+
+        assert(response.getErrorsCount == 2)
+        assert(response.getErrors(0).getMessage == "test1")
+        assert(response.getErrors(0).getErrorTypeHierarchyCount == 3)
+        assert(response.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+        assert(response.getErrors(0).getErrorTypeHierarchy(1) == classOf[Throwable].getName)
+        assert(response.getErrors(0).getErrorTypeHierarchy(2) == classOf[Object].getName)
+
+        assert(response.getErrors(1).getMessage == "test2")
+        assert(response.getErrors(1).getErrorTypeHierarchyCount == 3)
+        assert(response.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+        assert(response.getErrors(1).getErrorTypeHierarchy(1) == classOf[Throwable].getName)
+        assert(response.getErrors(1).getErrorTypeHierarchy(2) == classOf[Object].getName)
+        if (serverStacktraceEnabled) {
+          assert(response.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
+          assert(
+            response.getErrors(1).getStackTraceCount ==
+              testError.getCause.getStackTrace.length)
+        } else {
+          assert(response.getErrors(0).getStackTraceCount == 0)
+          assert(response.getErrors(1).getStackTraceCount == 0)
+        }
+      } finally {
+        sessionHolder.session.conf.unset(Connect.CONNECT_SERVER_STACKTRACE_ENABLED.key)
+        sessionHolder.session.conf.unset(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED.key)
+      }
+    }
   }
 
   test("error not found") {
@@ -116,5 +141,24 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
         .getOrCreateIsolatedSession(userId, sessionId)
         .errorIdToError
         .size() == 0)
+  }
+
+  test("error chain is truncated after reaching max depth") {
+    var testError = new Exception("test")
+    for (i <- 0 until 2 * ErrorUtils.MAX_ERROR_CHAIN_LENGTH) {
+      val errorId = UUID.randomUUID().toString()
+
+      SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId)
+        .errorIdToError
+        .put(errorId, testError)
+
+      val response = fetchErrorDetails(userId, sessionId, errorId)
+      val expectedErrorCount = Math.min(i + 1, ErrorUtils.MAX_ERROR_CHAIN_LENGTH)
+      assert(response.getErrorsCount == expectedErrorCount)
+      assert(response.getErrors(expectedErrorCount - 1).hasCauseIdx == false)
+
+      testError = new Exception(s"test$i", testError)
+    }
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.utils
 import java.util.UUID
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -44,21 +45,6 @@ import org.apache.spark.sql.internal.SQLConf
 
 private[connect] object ErrorUtils extends Logging {
 
-  /**
-   * Convert a throwable to an error chain based on cause.
-   * @param t
-   *   the throwable to be converted.
-   * @return
-   *   the error chain.
-   */
-  private def traverseCauses(t: Throwable): List[Throwable] = {
-    if (t == null) {
-      List.empty
-    } else {
-      t :: traverseCauses(t.getCause)
-    }
-  }
-
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
     if (cl != null && !cl.equals(classOf[java.lang.Object])) {
@@ -77,7 +63,7 @@ private[connect] object ErrorUtils extends Logging {
   }
 
   // The maximum length of the error chain.
-  private val MAX_ERROR_CHAIN_LENGTH = 5
+  private[connect] val MAX_ERROR_CHAIN_LENGTH = 5
 
   /**
    * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
@@ -91,21 +77,20 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
       serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
-    val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH)
 
-    val responseBuilder = FetchErrorDetailsResponse
-      .newBuilder()
-      .setRootErrorIdx(0)
+    var currentError = st
+    val buffer = mutable.Buffer.empty[FetchErrorDetailsResponse.Error]
 
-    for ((error, idx) <- errorChain.zipWithIndex) {
+    while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(error.getMessage)
-        .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
+        .setMessage(currentError.getMessage)
+        .addAllErrorTypeHierarchy(
+          ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
       if (serverStackTraceEnabled) {
         builder.addAllStackTrace(
-          error.getStackTrace
+          currentError.getStackTrace
             .map { stackTraceElement =>
               FetchErrorDetailsResponse.StackTraceElement
                 .newBuilder()
@@ -119,14 +104,22 @@ private[connect] object ErrorUtils extends Logging {
             .asJava)
       }
 
-      if (idx + 1 < errorChain.length) {
-        builder.setCauseIdx(idx + 1)
+      val causeIdx = buffer.size + 1
+
+      if (causeIdx < MAX_ERROR_CHAIN_LENGTH && currentError.getCause != null) {
+        builder.setCauseIdx(causeIdx)
       }
 
-      responseBuilder.addErrors(builder.build())
+      buffer.append(builder.build())
+
+      currentError = currentError.getCause
     }
 
-    responseBuilder.build()
+    FetchErrorDetailsResponse
+      .newBuilder()
+      .setRootErrorIdx(0)
+      .addAllErrors(buffer.asJava)
+      .build()
   }
 
   private def buildStatusFromThrowable(st: Throwable, sessionHolder: SessionHolder): RPCStatus = {
