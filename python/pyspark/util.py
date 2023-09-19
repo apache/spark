@@ -389,6 +389,7 @@ def handle_worker_exception(e: BaseException, outfile: IO):
     exception handling there.
     """
     from pyspark.serializers import write_int, write_with_length, SpecialLengths
+
     try:
         exc_info = None
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):

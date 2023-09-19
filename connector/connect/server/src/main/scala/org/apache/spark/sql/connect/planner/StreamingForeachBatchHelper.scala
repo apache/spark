@@ -137,10 +137,13 @@ object StreamingForeachBatchHelper extends Logging {
             val obj = new Array[Byte](exLength)
             dataIn.readFully(obj)
             val msg = new String(obj, StandardCharsets.UTF_8)
-            throw new PythonException(s"Found error inside foreachBatch Python process: $msg", null)
+            throw new PythonException(
+              s"Found error inside foreachBatch Python process: $msg",
+              null)
           case otherValue =>
-            throw new IllegalStateException(s"Unexpected return value $otherValue from the " +
-              s"Python worker.")
+            throw new IllegalStateException(
+              s"Unexpected return value $otherValue from the " +
+                s"Python worker.")
         }
       } catch {
         // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid

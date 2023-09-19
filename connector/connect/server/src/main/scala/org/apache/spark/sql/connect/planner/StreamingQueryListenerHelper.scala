@@ -32,7 +32,8 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  * When a new event is received, it is serialized to json, and passed to the python process.
  */
 class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder: SessionHolder)
-    extends StreamingQueryListener with Logging {
+    extends StreamingQueryListener
+    with Logging {
 
   private val port = SparkConnectService.localPort
   private val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
@@ -88,11 +89,14 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
           val obj = new Array[Byte](exLength)
           dataIn.readFully(obj)
           val msg = new String(obj, StandardCharsets.UTF_8)
-          throw new PythonException(s"Found error inside Streaming query listener Python " +
-            s"process for function $functionName: $msg", null)
+          throw new PythonException(
+            s"Found error inside Streaming query listener Python " +
+              s"process for function $functionName: $msg",
+            null)
         case otherValue =>
-          throw new IllegalStateException(s"Unexpected return value $otherValue from the " +
-            s"Python worker.")
+          throw new IllegalStateException(
+            s"Unexpected return value $otherValue from the " +
+              s"Python worker.")
       }
     } catch {
       case eof: EOFException =>
