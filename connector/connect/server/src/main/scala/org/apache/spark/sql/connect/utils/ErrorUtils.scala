@@ -86,8 +86,6 @@ private[connect] object ErrorUtils extends Logging {
    *   the Throwable to be converted
    * @param serverStackTraceEnabled
    *   whether to return the server stack trace.
-   * @param pySparkJVMStackTraceEnabled
-   *   whether to return the server stack trace for Python client.
    * @param stackTraceInMessage
    *   whether to include the server stack trace in the message.
    * @return
@@ -96,7 +94,6 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
       serverStackTraceEnabled: Boolean = false,
-      pySparkJVMStackTraceEnabled: Boolean = false,
       stackTraceInMessage: Boolean = false): FetchErrorDetailsResponse = {
     val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).map { case error =>
       val builder = FetchErrorDetailsResponse.Error
@@ -104,14 +101,12 @@ private[connect] object ErrorUtils extends Logging {
         .setMessage(error.getMessage)
         .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
 
-      if (stackTraceInMessage) {
-        if (serverStackTraceEnabled || pySparkJVMStackTraceEnabled) {
+      if (serverStackTraceEnabled) {
+        if (stackTraceInMessage) {
           builder.setMessage(
             s"${error.getMessage}\n\n" +
               s"JVM stacktrace:\n${ExceptionUtils.getStackTrace(error)}")
-        }
-      } else {
-        if (serverStackTraceEnabled) {
+        } else {
           builder.addAllStackTrace(
             error.getStackTrace
               .map { stackTraceElement =>

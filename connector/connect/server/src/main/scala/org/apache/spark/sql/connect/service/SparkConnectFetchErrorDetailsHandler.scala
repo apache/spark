@@ -43,10 +43,9 @@ class SparkConnectFetchErrorDetailsHandler(
 
         ErrorUtils.throwableToFetchErrorDetailsResponse(
           st = error,
-          serverStackTraceEnabled =
-            sessionHolder.session.conf.get(Connect.CONNECT_SERVER_STACKTRACE_ENABLED),
-          pySparkJVMStackTraceEnabled =
-            sessionHolder.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED),
+          serverStackTraceEnabled = sessionHolder.session.conf.get(
+            Connect.CONNECT_SERVER_STACKTRACE_ENABLED) || sessionHolder.session.conf.get(
+            SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED),
           stackTraceInMessage = v.getStacktraceInMessage)
       }
       .getOrElse(FetchErrorDetailsResponse.newBuilder().build())

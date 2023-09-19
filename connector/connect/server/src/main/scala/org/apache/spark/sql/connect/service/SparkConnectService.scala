@@ -290,9 +290,7 @@ object SparkConnectService extends Logging {
   }
 
   private val userSessionMapping =
-    cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS)
-      .removalListener(new RemoveSessionListener)
-      .build[SessionCacheKey, SessionHolder]()
+    cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
   private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
@@ -307,9 +305,7 @@ object SparkConnectService extends Logging {
   }
 
   // Simple builder for creating the cache of Sessions.
-  private[service] def cacheBuilder(
-      cacheSize: Int,
-      timeoutSeconds: Int): CacheBuilder[Object, Object] = {
+  private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
     if (cacheSize >= 0) {
       cacheBuilder = cacheBuilder.maximumSize(cacheSize)
@@ -317,6 +313,7 @@ object SparkConnectService extends Logging {
     if (timeoutSeconds >= 0) {
       cacheBuilder.expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
     }
+    cacheBuilder.removalListener(new RemoveSessionListener)
     cacheBuilder
   }
 

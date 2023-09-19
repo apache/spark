@@ -19,10 +19,13 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.internal.Logging
@@ -48,10 +51,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
-  val errorIdToError =
-    SparkConnectService
-      .cacheBuilder(ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC)
-      .build[String, Throwable]()
+  val errorIdToError = CacheBuilder
+    .newBuilder()
+    .ticker(Ticker.systemTicker())
+    .maximumSize(ERROR_CACHE_SIZE)
+    .expireAfterAccess(ERROR_CACHE_TIMEOUT_SEC, TimeUnit.SECONDS)
+    .build[String, Throwable]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
