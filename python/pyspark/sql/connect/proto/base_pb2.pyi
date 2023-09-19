@@ -2852,25 +2852,51 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class ErrorChain(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ERRORS_FIELD_NUMBER: builtins.int
+        @property
+        def errors(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.Error
+        ]:
+            """A list of errors with cause relationship.
+            The i-th error is caused by the i+1-th error in the list.
+            """
+        def __init__(
+            self,
+            *,
+            errors: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["errors", b"errors"]
+        ) -> None: ...
+
     ERROR_CHAIN_FIELD_NUMBER: builtins.int
     @property
-    def error_chain(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___FetchErrorDetailsResponse.Error
-    ]:
-        """The matched error chain for a given error_id. The i-th error is caused by
-        the i+1-th error in the chain. The field will be an empty list
-        if the corresponding error is not found.
-        """
+    def error_chain(self) -> global___FetchErrorDetailsResponse.ErrorChain:
+        """The matched error chain for a given error_id."""
     def __init__(
         self,
         *,
-        error_chain: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error]
-        | None = ...,
+        error_chain: global___FetchErrorDetailsResponse.ErrorChain | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_error_chain", b"_error_chain", "error_chain", b"error_chain"
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["error_chain", b"error_chain"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_error_chain", b"_error_chain", "error_chain", b"error_chain"
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_error_chain", b"_error_chain"]
+    ) -> typing_extensions.Literal["error_chain"] | None: ...
 
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse
