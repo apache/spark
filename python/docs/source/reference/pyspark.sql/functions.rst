@@ -529,6 +529,8 @@ Xml Functions
 .. autosummary::
     :toctree: api/
 
+    from_xml
+    schema_of_xml
     xpath
     xpath_boolean
     xpath_double

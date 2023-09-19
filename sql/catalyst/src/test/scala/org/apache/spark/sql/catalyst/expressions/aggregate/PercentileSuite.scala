@@ -278,7 +278,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
-            "inputName" -> "percentage",
+            "inputName" -> toSQLId("percentage"),
             "inputType" -> toSQLType(percentage.dataType),
             "inputExpr" -> toSQLExpr(percentage))
         )

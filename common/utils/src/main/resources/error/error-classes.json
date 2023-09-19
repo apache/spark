@@ -1592,7 +1592,7 @@
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
     ]
   },
   "INVALID_IDENTIFIER" : {
@@ -1897,7 +1897,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
+      "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -2773,7 +2773,7 @@
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42P02"
   },
@@ -3445,23 +3445,6 @@
       "WITH_SUGGESTION" : {
         "message" : [
           "Please use ALTER TABLE instead."
-        ]
-      }
-    }
-  },
-  "UNSUPPORTED_TEMP_VIEW_OPERATION" : {
-    "message" : [
-      "The temp view <tempViewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
         ]
       }
     }
@@ -4947,16 +4930,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2015" : {
-    "message" : [
-      "Cannot generate <codeType> code for incomparable type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2016" : {
-    "message" : [
-      "Can not interpolate <arg> into code block."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {

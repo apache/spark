@@ -43,7 +43,10 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   }
 
   def convertIterator[T](iter: CloseableIterator[T]): CloseableIterator[T] = {
-    new CloseableIterator[T] {
+    new WrappedCloseableIterator[T] {
+
+      override def innerIterator: Iterator[T] = iter
+
       override def hasNext: Boolean = {
         convert {
           iter.hasNext
@@ -107,7 +110,7 @@ private[client] object GrpcExceptionConverter extends JsonUtils {
   private def toThrowable(ex: StatusRuntimeException): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
-    val fallbackEx = new SparkException(status.getMessage, ex.getCause)
+    val fallbackEx = new SparkException(ex.toString, ex.getCause)
 
     val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))

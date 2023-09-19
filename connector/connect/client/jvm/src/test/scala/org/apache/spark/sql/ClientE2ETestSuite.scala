@@ -109,6 +109,18 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df.collect().length == 501)
   }
 
+  test("handle unknown exception") {
+    var df = spark.range(1)
+    val limit = spark.conf.get("spark.connect.grpc.marshallerRecursionLimit").toInt + 1
+    for (a <- 1 to limit) {
+      df = df.union(spark.range(a, a + 1))
+    }
+    val ex = intercept[SparkException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
+  }
+
   test("many tables") {
     withSQLConf("spark.sql.execution.arrow.maxRecordsPerBatch" -> "10") {
       val numTables = 20
@@ -1036,6 +1048,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -1047,6 +1062,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {

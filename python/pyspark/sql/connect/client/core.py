@@ -33,6 +33,7 @@ import time
 import urllib.parse
 import uuid
 import sys
+from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -176,7 +177,6 @@ class ChannelBuilder:
 
             # 'spark.local.connect' is set when we use the local mode in Spark Connect.
             if session is not None and session.conf.get("spark.local.connect", "0") == "1":
-
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
@@ -585,10 +585,35 @@ class SparkConnectClient(object):
 
     @classmethod
     def retry_exception(cls, e: Exception) -> bool:
-        if isinstance(e, grpc.RpcError):
-            return e.code() == grpc.StatusCode.UNAVAILABLE
-        else:
+        """
+        Helper function that is used to identify if an exception thrown by the server
+        can be retried or not.
+
+        Parameters
+        ----------
+        e : Exception
+            The GRPC error as received from the server. Typed as Exception, because other exception
+            thrown during client processing can be passed here as well.
+
+        Returns
+        -------
+        True if the exception can be retried, False otherwise.
+
+        """
+        if not isinstance(e, grpc.RpcError):
             return False
+
+        if e.code() in [grpc.StatusCode.INTERNAL]:
+            msg = str(e)
+
+            # This error happens if another RPC preempts this RPC.
+            if "INVALID_CURSOR.DISCONNECTED" in msg:
+                return True
+
+        if e.code() == grpc.StatusCode.UNAVAILABLE:
+            return True
+
+        return False
 
     def __init__(
         self,
@@ -855,19 +880,30 @@ class SparkConnectClient(object):
 
         # Rename columns to avoid duplicated column names.
         renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+
+        pandas_options = {}
         if self_destruct:
             # Configure PyArrow to use as little memory as possible:
             # self_destruct - free columns as they are converted
             # split_blocks - create a separate Pandas block for each column
             # use_threads - convert one column at a time
-            pandas_options = {
-                "self_destruct": True,
-                "split_blocks": True,
-                "use_threads": False,
-            }
-            pdf = renamed_table.to_pandas(**pandas_options)
-        else:
-            pdf = renamed_table.to_pandas()
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
+        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+            # A legacy option to coerce date32, date64, duration, and timestamp
+            # time units to nanoseconds when converting to pandas.
+            # This option can only be added since 13.0.0.
+            pandas_options.update(
+                {
+                    "coerce_temporal_nanoseconds": True,
+                }
+            )
+        pdf = renamed_table.to_pandas(**pandas_options)
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
@@ -980,6 +1016,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
+        ExecutePlanResponseReattachableIterator.shutdown()
         self._channel.close()
         self._closed = True
 

@@ -135,8 +135,6 @@ class StreamingTestsForeachBatchMixin:
         df = df.union(df)
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        # write to delta table?
-
     @staticmethod
     def my_test_function_2():
         return 2

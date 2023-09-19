@@ -485,9 +485,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SET VARIABLE title = 'Test qualifiers - fail'
+SET VARIABLE title = 'Test variable in aggregate'
 -- !query analysis
 SetVariable [variablereference(system.session.title='Test qualifiers - success')]
++- Project [Test variable in aggregate AS title#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title)
+-- !query analysis
+Project [scalar-subquery#x [title#x] AS scalarsubquery(title)#xL]
+:  +- Aggregate [max(id#xL) AS max(id)#xL]
+:     +- Filter (id#xL < cast(outer(title#x) as bigint))
+:        +- Range (0, 10, step=1, splits=None)
++- SubqueryAlias t
+   +- LocalRelation [title#x]
+
+
+-- !query
+SET VARIABLE title = 'Test qualifiers - fail'
+-- !query analysis
+SetVariable [variablereference(system.session.title='Test variable in aggregate')]
 +- Project [Test qualifiers - fail AS title#x]
    +- OneRowRelation
 
@@ -1881,10 +1900,10 @@ Project [var1#x AS 2#x]
 SELECT c1 AS `2` FROM VALUES(2) AS T(var1), LATERAL(SELECT var1) AS TT(c1)
 -- !query analysis
 Project [c1#x AS 2#x]
-+- LateralJoin lateral-subquery#x [], Inner
++- LateralJoin lateral-subquery#x [var1#x], Inner
    :  +- SubqueryAlias TT
    :     +- Project [var1#x AS c1#x]
-   :        +- Project [variablereference(system.session.var1=1) AS var1#x]
+   :        +- Project [outer(var1#x)]
    :           +- OneRowRelation
    +- SubqueryAlias T
       +- LocalRelation [var1#x]

@@ -45,9 +45,15 @@ class DatetimeIndex(Index):
         inferred frequency upon creation.
     normalize : bool, default False
         Normalize start/end dates to midnight before generating date range.
+
+        .. deprecated:: 4.0.0
+
     closed : {'left', 'right'}, optional
         Set whether to include `start` and `end` that are on the
         boundary. The default includes boundary points on either end.
+
+        .. deprecated:: 4.0.0
+
     ambiguous : 'infer', bool-ndarray, 'NaT', default 'raise'
         When clocks moved backward due to DST, ambiguous times may arise.
         For example in Central European Time (UTC+01), when going from 03:00
@@ -111,6 +117,18 @@ class DatetimeIndex(Index):
         copy=False,
         name=None,
     ) -> "DatetimeIndex":
+        if closed is not None:
+            warnings.warn(
+                "The 'closed' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+        if normalize is not None:
+            warnings.warn(
+                "The 'normalize' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 

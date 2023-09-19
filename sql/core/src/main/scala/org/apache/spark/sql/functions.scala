@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -870,7 +870,21 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+  def mode(e: Column): Column = mode(e, deterministic = false)
+
+  /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * When multiple values have the same greatest frequency then either any of values is returned
+   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
+   * is true.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def mode(e: Column, deterministic: Boolean): Column = withAggregateFunction {
+    Mode(e.expr, deterministicExpr = lit(deterministic).expr)
+  }
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -2920,6 +2934,17 @@ object functions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = withExpr {
+    Round(e.expr, scale.expr)
+  }
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2935,6 +2960,17 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = withExpr {
+    BRound(e.expr, scale.expr)
+  }
 
   /**
    * @param e angle in radians
@@ -4438,6 +4474,7 @@ object functions {
     new ToBinary(e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -4459,11 +4496,20 @@ object functions {
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
    *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = call_function("to_char", e, format)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -4485,9 +4531,17 @@ object functions {
    *   'PR': Only allowed at the end of the format string; specifies that the result string will be
    *     wrapped by angle brackets if the input value is negative.
    *
+   *  If `e` is a datetime, `format` shall be a valid datetime pattern, see
+   *  <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+   *  If `e` is a binary, it is converted to a string in one of the formats:
+   *     'base64': a base 64 string.
+   *     'hex': a string in the hexadecimal format.
+   *     'utf-8': the input binary is decoded to UTF-8 string.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_varchar(e: Column, format: Column): Column = call_function("to_varchar", e, format)
 
   /**
@@ -6265,8 +6319,8 @@ object functions {
    * }}}
    *
    * @param column the input array column
-   * @param f (col, index) => transformed_col, the lambda function to filter the input column
-   *           given the index. Indices start at 0.
+   * @param f (col, index) => transformed_col, the lambda function to transform the input
+   *           column given the index. Indices start at 0.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -7365,15 +7419,61 @@ object functions {
    *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    *                Data Source Option</a> in the version you use.
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column = {
+    withExpr(XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema),
+      options.asScala.toMap, e.expr))
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                xml data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    val dataType = parseTypeWithFallback(
+      schema,
+      DataType.fromJson,
+      fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
   }
 
   // scalastyle:off line.size.limit
 
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column): Column = {
+    from_xml(e, schema, Map.empty[String, String].asJava)
+  }
+
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into a `StructType`
    * with the specified schema. Returns `null`, in the case of an unparseable string.
@@ -7387,7 +7487,7 @@ object functions {
    *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    *                Data Source Option</a> in the version you use.
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
@@ -7403,10 +7503,10 @@ object functions {
    * @param schema  the schema to use when parsing the XML string
 
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   def from_xml(e: Column, schema: StructType): Column =
-    from_xml(e, schema, Map.empty[String, String])
+    from_xml(e, schema, Map.empty[String, String].asJava)
 
   /**
    * Parses a XML string and infers its schema in DDL format.

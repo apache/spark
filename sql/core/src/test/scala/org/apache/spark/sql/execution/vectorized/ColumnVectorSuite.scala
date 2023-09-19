@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.vectorized
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.columnar.ColumnAccessor
+import org.apache.spark.sql.execution.columnar.{ColumnAccessor, ColumnDictionary}
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -395,6 +395,84 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(testVector.getStruct(0).get(1, DoubleType) === 3.45)
     assert(testVector.getStruct(1).get(0, IntegerType) === 456)
     assert(testVector.getStruct(1).get(1, DoubleType) === 5.67)
+  }
+
+  testVectors("SPARK-44805: getInts with dictionary", 3, IntegerType) { testVector =>
+    val dict = new ColumnDictionary(Array[Int](7, 8, 9))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getInts(0, 3)(0) == 7)
+    assert(testVector.getInts(0, 3)(1) == 8)
+    assert(testVector.getInts(0, 3)(2) == 9)
+  }
+
+  testVectors("SPARK-44805: getShorts with dictionary", 3, ShortType) { testVector =>
+    val dict = new ColumnDictionary(Array[Int](7, 8, 9))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getShorts(0, 3)(0) == 7)
+    assert(testVector.getShorts(0, 3)(1) == 8)
+    assert(testVector.getShorts(0, 3)(2) == 9)
+  }
+
+  testVectors("SPARK-44805: getBytes with dictionary", 3, ByteType) { testVector =>
+    val dict = new ColumnDictionary(Array[Int](7, 8, 9))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getBytes(0, 3)(0) == 7)
+    assert(testVector.getBytes(0, 3)(1) == 8)
+    assert(testVector.getBytes(0, 3)(2) == 9)
+  }
+
+  testVectors("SPARK-44805: getLongs with dictionary", 3, LongType) { testVector =>
+    val dict = new ColumnDictionary(Array[Long](2147483648L, 2147483649L, 2147483650L))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getLongs(0, 3)(0) == 2147483648L)
+    assert(testVector.getLongs(0, 3)(1) == 2147483649L)
+    assert(testVector.getLongs(0, 3)(2) == 2147483650L)
+  }
+
+  testVectors("SPARK-44805: getFloats with dictionary", 3, FloatType) { testVector =>
+    val dict = new ColumnDictionary(Array[Float](0.1f, 0.2f, 0.3f))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getFloats(0, 3)(0) == 0.1f)
+    assert(testVector.getFloats(0, 3)(1) == 0.2f)
+    assert(testVector.getFloats(0, 3)(2) == 0.3f)
+  }
+
+  testVectors("SPARK-44805: getDoubles with dictionary", 3, DoubleType) { testVector =>
+    val dict = new ColumnDictionary(Array[Double](1342.17727d, 1342.17728d, 1342.17729d))
+    testVector.setDictionary(dict)
+    testVector.reserveDictionaryIds(3)
+    testVector.getDictionaryIds.putInt(0, 0)
+    testVector.getDictionaryIds.putInt(1, 1)
+    testVector.getDictionaryIds.putInt(2, 2)
+
+    assert(testVector.getDoubles(0, 3)(0) == 1342.17727d)
+    assert(testVector.getDoubles(0, 3)(1) == 1342.17728d)
+    assert(testVector.getDoubles(0, 3)(2) == 1342.17729d)
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts array data") {

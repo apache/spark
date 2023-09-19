@@ -1317,6 +1317,13 @@ class Frame(object, metaclass=ABCMeta):
         >>> df['b'].sum(min_count=3)
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sum with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1418,6 +1425,13 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.product with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1870,6 +1884,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.std with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1962,6 +1983,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.var with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2191,6 +2219,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sem with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2448,6 +2483,8 @@ class Frame(object, metaclass=ABCMeta):
         This must be a boolean scalar value, either True or False. Raise a ValueError if
         the object does not have exactly 1 element, or that element is not boolean
 
+        .. deprecated:: 4.0.0
+
         Returns
         -------
         bool
@@ -2479,6 +2516,11 @@ class Frame(object, metaclass=ABCMeta):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
         """
+        warnings.warn(
+            f"{self.__class__.__name__}.bool is now deprecated "
+            "and will be removed in future version.",
+            FutureWarning,
+        )
         if isinstance(self, ps.DataFrame):
             df = self
         elif isinstance(self, ps.Series):

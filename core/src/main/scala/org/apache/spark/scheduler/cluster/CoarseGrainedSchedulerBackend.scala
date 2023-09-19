@@ -40,6 +40,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 
 /**
@@ -1076,6 +1077,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
   }
 
+  override def getTaskThreadDump(
+      taskId: Long,
+      executorId: String): Option[ThreadStackTrace] = withLock {
+    if (isExecutorActive(executorId)) {
+      val executorData = executorDataMap(executorId)
+      executorData.executorEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
+    } else {
+      None
+    }
+  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

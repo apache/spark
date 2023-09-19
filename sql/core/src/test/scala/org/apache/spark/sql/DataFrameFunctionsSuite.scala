@@ -83,10 +83,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
       "collect_top_k",
-      "listagg_distinct",
-      // TODO: XML functions will soon be added to SQL Function registry and removed from this list
-      // https://issues.apache.org/jira/browse/SPARK-44787
-      "from_xml", "schema_of_xml"
+      "listagg_distinct"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other

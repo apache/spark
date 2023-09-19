@@ -977,7 +977,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 SQLSTATE: none assigned
 
-Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -1119,7 +1119,7 @@ Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include 
 
 SQLSTATE: none assigned
 
-The argument `<name>` of `sql()` is invalid. Consider to replace it by a SQL literal.
+The argument `<name>` of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
 
@@ -1841,7 +1841,7 @@ Unable to infer schema for `<format>`. It must be specified manually.
 
 [SQLSTATE: 42P02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to a SQL literal.
+Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### UNCLOSED_BRACKETED_COMMENT
 
@@ -2105,14 +2105,6 @@ SQLSTATE: none assigned
 The table `<tableName>` does not support `<operation>`.
 
 For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
-
-### [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The temp view `<tempViewName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
 
 ### UNSUPPORTED_TYPED_LITERAL
 
