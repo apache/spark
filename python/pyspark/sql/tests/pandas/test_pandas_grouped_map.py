@@ -85,7 +85,6 @@ class GroupedApplyInPandasTestsMixin:
         )
 
     def test_supported_types(self):
-
         values = [
             1,
             2,
@@ -557,7 +556,6 @@ class GroupedApplyInPandasTestsMixin:
             self.check_column_order()
 
     def check_column_order(self):
-
         # Helper function to set column names from a list
         def rename_pdf(pdf, names):
             pdf.rename(
@@ -692,7 +690,6 @@ class GroupedApplyInPandasTestsMixin:
         self.assertEqual(result, expected)
 
     def test_grouped_over_window(self):
-
         data = [
             (0, 1, "2018-03-10T00:00:00+00:00", [0]),
             (1, 2, "2018-03-11T00:00:00+00:00", [0]),
@@ -724,7 +721,6 @@ class GroupedApplyInPandasTestsMixin:
         self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_grouped_over_window_with_key(self):
-
         data = [
             (0, 1, "2018-03-10T00:00:00+00:00", [0]),
             (1, 2, "2018-03-11T00:00:00+00:00", [0]),

@@ -28,6 +28,26 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Converts an XML input string to a [[StructType]] with the specified schema.
+ * It is assumed that the XML input string constitutes a single record; so the
+ * [[rowTag]] option will be not applicable.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(xmlStr, schema[, options]) - Returns a struct value with the given `xmlStr` and `schema`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('<p><a>1</a><b>0.8</b></p>', 'a INT, b DOUBLE');
+       {"a":1,"b":0.8}
+      > SELECT _FUNC_('<p><time>26/08/2015</time></p>', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":2015-08-26 00:00:00}
+      > SELECT _FUNC_('<p><teacher>Alice</teacher><student><name>Bob</name><rank>1</rank></student><student><name>Charlie</name><rank>2</rank></student></p>', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
+       {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
+  """,
+  group = "xml_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
 case class XmlToStructs(
     schema: DataType,
     options: Map[String, String],
@@ -138,8 +158,10 @@ case class XmlToStructs(
   usage = "_FUNC_(xml[, options]) - Returns schema in the DDL format of XML string.",
   examples = """
     Examples:
-      > SELECT _FUNC_('1,abc');
-       STRUCT<_c0: INT, _c1: STRING>
+      > SELECT _FUNC_('<p><a>1</a></p>');
+       STRUCT<a: BIGINT>
+      > SELECT _FUNC_('<p><a attr="2">1</a><a>3</a></p>', map('excludeAttribute', 'true'));
+       STRUCT<a: ARRAY<BIGINT>>
   """,
   since = "4.0.0",
   group = "xml_funcs")
