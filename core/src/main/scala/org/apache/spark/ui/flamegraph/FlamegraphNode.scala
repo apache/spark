@@ -18,7 +18,7 @@ package org.apache.spark.ui.flamegraph
 
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.shaded.org.apache.commons.text.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.api.v1.ThreadStackTrace
 
