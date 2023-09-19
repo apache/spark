@@ -1608,14 +1608,15 @@ class SparkSession(SparkConversionMixin):
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
 
+        >>> from pyspark.sql.functions import array
         >>> spark.sql(
-        ...   "SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
-        ...   args=[5, 2], df=mydf).show()
-        +---+---+
-        |  A|  B|
-        +---+---+
-        |  3|  6|
-        +---+---+
+        ...   "SELECT *, element_at(?, 1) AS C FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
+        ...   args=[array(lit(1), lit(2), lit(3)), 5, 2], df=mydf).show()
+        +---+---+---+
+        |  A|  B|  C|
+        +---+---+---+
+        |  3|  6|  1|
+        +---+---+---+
         """
 
         formatter = SQLStringFormatter(self)
