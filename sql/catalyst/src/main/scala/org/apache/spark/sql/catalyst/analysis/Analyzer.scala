@@ -1151,7 +1151,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
         lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
+            throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
           case other => other
         }.getOrElse(u)

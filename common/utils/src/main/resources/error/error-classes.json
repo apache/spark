@@ -882,11 +882,6 @@
       }
     }
   },
-  "EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP" : {
-    "message" : [
-      "'<operation>' expects a table or permanent view but <viewName> is a temp view."
-    ]
-  },
   "EXPECT_VIEW_NOT_TABLE" : {
     "message" : [
       "The table <tableName> does not support <operation>."

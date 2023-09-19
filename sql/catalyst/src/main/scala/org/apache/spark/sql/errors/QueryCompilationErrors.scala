@@ -498,18 +498,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def expectTableOrPermanentViewNotTempViewError(
-      nameParts: Seq[String],
-      cmd: String,
-      t: TreeNode[_]): Throwable = {
-    new AnalysisException(
-      errorClass = "EXPECT_TABLE_OR_PERMANENT_VIEW_NOT_TEMP",
-      messageParameters = Map(
-        "viewName" -> toSQLId(nameParts),
-        "operation" -> cmd),
-      origin = t.origin)
-  }
-
   def expectViewNotTableError(
       nameParts: Seq[String],
       cmd: String,
@@ -519,7 +507,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = if (suggestAlternative) {
         "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE"
       } else {
-        "UNSUPPORTED_FEATURE.TABLE_OPERATION"
+        "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE"
       },
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
