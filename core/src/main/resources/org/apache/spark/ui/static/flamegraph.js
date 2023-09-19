@@ -19,12 +19,18 @@
 
 /* eslint-disable no-unused-vars */
 function drawFlamegraph() {
-  const chart = flamegraph().width(window.innerWidth);
+  const width = (window.innerWidth * 95) / 100;
+  const chart = flamegraph()
+    .width(width)
+    .cellHeight(18)
+    .transitionEase(d3.easeCubic)
+    .sort(true)
+    .title("");
   const jsonStr = d3.select("#executor-flamegraph-data").text().trim()
   const jsonData = JSON.parse(jsonStr);
   d3.select("#executor-flamegraph-chart")
 		.datum(jsonData)
     .call(chart);
-  window.onresize = () => chart.width(window.innerWidth);
+  window.onresize = () => chart.width(width);
 }
 /* eslint-enable no-unused-vars */

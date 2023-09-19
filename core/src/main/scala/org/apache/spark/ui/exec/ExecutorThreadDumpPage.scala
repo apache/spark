@@ -70,8 +70,10 @@ private[ui] class ExecutorThreadDumpPage(
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
+        {drawExecutorFlamegraph(request, threadDump)}
         {
           // scalastyle:off
+          <p></p>
           <div style="display: flex; align-items: center;">
             <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
             <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
@@ -90,7 +92,6 @@ private[ui] class ExecutorThreadDumpPage(
           <p></p>
           // scalastyle:on
         }
-        {drawExecutorFlamegraph(request, threadDump)}
         <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
           <thead>
             <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
@@ -113,13 +114,16 @@ private[ui] class ExecutorThreadDumpPage(
 
   // scalastyle:off
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
-    <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
-    <div id="executor-flamegraph-chart">
-      <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
-      <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
-      <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-      <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
-      <script>drawFlamegraph()</script>
+    <div>
+      <div id="executor-flamegraph-data" class="d-none">{FlamegraphNode(thread).toJsonString}</div>
+      <div id="executor-flamegraph-chart">
+        <link rel="stylesheet" type="text/css" href={prependBaseUri(request, "/static/d3-flamegraph.css")}></link>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+        <script src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
+        <script>drawFlamegraph()</script>
+      </div>
     </div>
   }
+  // scalastyle:off
 }
