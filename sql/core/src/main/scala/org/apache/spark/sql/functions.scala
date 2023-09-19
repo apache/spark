@@ -3416,7 +3416,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = withExpr { new Uuid() }
+  def uuid(): Column = withExpr { Uuid(Some(Utils.random.nextLong)) }
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3777,7 +3777,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(): Column = call_function("random")
+  def random(): Column = random(lit(Utils.random.nextLong))
 
   /**
    * Returns the bucket number for the given input column.
@@ -7136,7 +7136,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr) }
+  def shuffle(e: Column): Column = withExpr { Shuffle(e.expr, Some(Utils.random.nextLong)) }
 
   /**
    * Returns a reversed string or an array with reverse order of elements.

@@ -1966,6 +1966,18 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         Some(
           CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
+      case "uuid" if fun.getArgumentsCount == 1 =>
+        // Uuid does not have a constructor which accepts Expression typed 'seed'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val seed = extractLong(children(0), "seed")
+        Some(Uuid(Some(seed)))
+
+      case "shuffle" if fun.getArgumentsCount == 2 =>
+        // Shuffle does not have a constructor which accepts Expression typed 'seed'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val seed = extractLong(children(1), "seed")
+        Some(Shuffle(children(0), Some(seed)))
+
       case _ => None
     }
   }
@@ -2002,6 +2014,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def extractInteger(expr: Expression, field: String): Int = expr match {
     case Literal(int: Int, IntegerType) => int
     case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
+  }
+
+  private def extractLong(expr: Expression, field: String): Long = expr match {
+    case Literal(long: Long, LongType) => long
+    case other => throw InvalidPlanInput(s"$field should be a literal long, but got $other")
   }
 
   private def extractString(expr: Expression, field: String): String = expr match {
