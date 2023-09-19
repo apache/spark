@@ -2819,6 +2819,7 @@
                     <excludes>
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
                     </excludes>
