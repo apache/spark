@@ -498,9 +498,7 @@ private[spark] class Client(
         override def accept(path: Path): Boolean = filesInDir.contains(path.getName)
       }).filter(_.isFile()).foreach { fileStatus =>
         val uri = fileStatus.getPath.toUri
-        if (uri != null) {
-          statCache.put(uri, fileStatus)
-        }
+        statCache.put(uri, fileStatus)
       }
     }
     statCache
@@ -536,11 +534,9 @@ private[spark] class Client(
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
       // Consider only following configurations, as they involve the distribution of multiple files
-      var files = sparkConf.get(JARS_TO_DISTRIBUTE) ++ sparkConf.get(FILES_TO_DISTRIBUTE) ++
-        sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++ sparkConf.get(PY_FILES) ++ pySparkArchives
-      if (!sparkConf.get(SPARK_JARS).isEmpty) {
-        files ++= sparkConf.get(SPARK_JARS).getOrElse(Nil)
-      }
+      var files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
+        sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
+        sparkConf.get(PY_FILES) ++ pySparkArchives
 
       getPreloadedStatCache(files)
     } else {
