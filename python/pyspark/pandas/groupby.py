@@ -143,7 +143,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def _handle_output(self, psdf: DataFrame) -> FrameLike:
+    def _handle_output(
+        self, psdf: DataFrame, agg_column_names: Optional[List[str]] = None
+    ) -> FrameLike:
         pass
 
     # TODO: Series support is not implemented yet.
@@ -1120,13 +1122,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not isinstance(n, int):
             raise TypeError("Invalid index %s" % type(n).__name__)
 
-        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, agg_columns, sdf = self._prepare_reduce(
-            groupkey_names=groupkey_names,
-            accepted_spark_types=None,
-            bool_to_numeric=False,
-        )
-        psdf: DataFrame = DataFrame(internal)
+        groupkey_names: List[str] = [str(groupkey.name) for groupkey in self._groupkeys]
+        psdf = self._psdf
+        internal = psdf._internal
+        sdf = internal.spark_frame
 
         if len(psdf._internal.column_labels) > 0:
             window1 = Window.partitionBy(*groupkey_names).orderBy(NATURAL_ORDER_COLUMN_NAME)
@@ -1162,7 +1161,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             data_fields=None,
         )
 
-        return self._prepare_return(DataFrame(internal))
+        agg_column_names = (
+            [str(agg_column.name) for agg_column in self._agg_columns]
+            if self._agg_columns_selected
+            else None
+        )
+
+        return self._prepare_return(DataFrame(internal), agg_column_names=agg_column_names)
 
     def prod(self, numeric_only: Optional[bool] = True, min_count: int = 0) -> FrameLike:
         """
@@ -3595,7 +3600,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(psdf)
 
-    def _prepare_return(self, psdf: DataFrame) -> FrameLike:
+    def _prepare_return(
+        self, psdf: DataFrame, agg_column_names: Optional[List[str]] = None
+    ) -> FrameLike:
         if self._dropna:
             psdf = DataFrame(
                 psdf._internal.with_new_sdf(
@@ -3622,7 +3629,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
-        return self._handle_output(psdf)
+        return self._handle_output(psdf, agg_column_names)
 
     def _prepare_reduce(
         self,
@@ -3864,8 +3871,13 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             internal = internal.resolved_copy
         return DataFrame(internal)
 
-    def _handle_output(self, psdf: DataFrame) -> DataFrame:
-        return psdf
+    def _handle_output(
+        self, psdf: DataFrame, agg_column_names: Optional[List[str]] = None
+    ) -> DataFrame:
+        if agg_column_names is not None:
+            return psdf[agg_column_names]
+        else:
+            return psdf
 
     # TODO: Implement 'percentiles', 'include', and 'exclude' arguments.
     # TODO: Add ``DataFrame.select_dtypes`` to See Also when 'include'
@@ -4016,8 +4028,13 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _handle_output(self, psdf: DataFrame) -> Series:
-        return first_series(psdf).rename(self._psser.name)
+    def _handle_output(
+        self, psdf: DataFrame, agg_column_names: Optional[List[str]] = None
+    ) -> Series:
+        if agg_column_names is not None:
+            return psdf[agg_column_names[0]].rename(self._psser.name)
+        else:
+            return first_series(psdf).rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
