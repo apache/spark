@@ -77,10 +77,6 @@ private[connect] object ErrorUtils extends Logging {
     classes.toSeq
   }
 
-  private def serializeClasses(t: Throwable): String = {
-    JsonMethods.compact(JsonMethods.render(allClasses(t.getClass).map(_.getName)))
-  }
-
   // The maximum length of the error chain.
   private val MAX_ERROR_CHAIN_LENGTH = 5
 
