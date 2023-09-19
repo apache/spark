@@ -32,7 +32,7 @@ class AvailableNowDataStreamWrapper(val delegate: SparkDataStream)
   logWarning(s"Activating the wrapper implementation of Trigger.AvailableNow for source " +
     s"[$delegate]. Note that this might introduce possibility of deduplication, dataloss, " +
     s"correctness issue. Enable the config with extreme care. We strongly recommend to contact " +
-    "with data source developer to support Trigger.AvailableNow.")
+    "the data source developer to support Trigger.AvailableNow.")
 
   private var fetchedOffset: streaming.Offset = _
 
