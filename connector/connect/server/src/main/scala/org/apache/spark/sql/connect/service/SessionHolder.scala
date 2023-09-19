@@ -32,6 +32,7 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
+import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
@@ -44,6 +45,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
+
+  // The cache that maps an error id to a throwable. The throwable in cache is independent to
+  // each other.
+  val errorIdToError =
+    SparkConnectService
+      .cacheBuilder(ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC)
+      .build[String, Throwable]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
@@ -264,6 +272,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 }
 
 object SessionHolder {
+
+  // The maximum number of distinct errors in the cache.
+  private val ERROR_CACHE_SIZE = 20
+
+  // The maximum time for an error to stay in the cache.
+  private val ERROR_CACHE_TIMEOUT_SEC = 60
 
   /** Creates a dummy session holder for use in tests. */
   def forTesting(session: SparkSession): SessionHolder = {

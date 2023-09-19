@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connect.utils
 
+import java.util.UUID
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.{Any => ProtoAny}
@@ -33,6 +36,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
+import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.ExecuteEventsManager
@@ -40,6 +44,22 @@ import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.internal.SQLConf
 
 private[connect] object ErrorUtils extends Logging {
+
+  /**
+   * Convert a throwable to an error chain based on cause.
+   * @param t
+   *   the throwable to be converted.
+   * @return
+   *   the error chain.
+   */
+  private def traverseCauses(t: Throwable): List[Throwable] = {
+    if (t == null) {
+      List.empty
+    } else {
+      t :: traverseCauses(t.getCause)
+    }
+  }
+
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
     if (cl != null && !cl.equals(classOf[java.lang.Object])) {
@@ -57,7 +77,76 @@ private[connect] object ErrorUtils extends Logging {
     classes.toSeq
   }
 
-  private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
+  private def serializeClasses(t: Throwable): String = {
+    JsonMethods.compact(JsonMethods.render(allClasses(t.getClass).map(_.getName)))
+  }
+
+  // The maximum length of the error chain.
+  private val MAX_ERROR_CHAIN_LENGTH = 5
+
+  /**
+   * Convert Throwable to a protobuf message FetchErrorDetailsResponse.
+   * @param st
+   *   the Throwable to be converted
+   * @param serverStackTraceEnabled
+   *   whether to return the server stack trace.
+   * @param pySparkJVMStackTraceEnabled
+   *   whether to return the server stack trace for Python client.
+   * @param stackTraceInMessage
+   *   whether to include the server stack trace in the message.
+   * @return
+   *   FetchErrorDetailsResponse
+   */
+  private[connect] def throwableToFetchErrorDetailsResponse(
+      st: Throwable,
+      serverStackTraceEnabled: Boolean = false,
+      pySparkJVMStackTraceEnabled: Boolean = false,
+      stackTraceInMessage: Boolean = false): FetchErrorDetailsResponse = {
+    val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).map { case error =>
+      val builder = FetchErrorDetailsResponse.Error
+        .newBuilder()
+        .setMessage(error.getMessage)
+        .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
+
+      if (stackTraceInMessage) {
+        if (serverStackTraceEnabled || pySparkJVMStackTraceEnabled) {
+          builder.setMessage(
+            s"${error.getMessage}\n\n" +
+              s"JVM stacktrace:\n${ExceptionUtils.getStackTrace(error)}")
+        }
+      } else {
+        if (serverStackTraceEnabled) {
+          builder.addAllStackTrace(
+            error.getStackTrace
+              .map { stackTraceElement =>
+                FetchErrorDetailsResponse.StackTraceElement
+                  .newBuilder()
+                  .setDeclaringClass(stackTraceElement.getClassName)
+                  .setMethodName(stackTraceElement.getMethodName)
+                  .setFileName(stackTraceElement.getFileName)
+                  .setLineNumber(stackTraceElement.getLineNumber)
+                  .build()
+              }
+              .toIterable
+              .asJava)
+        }
+      }
+
+      builder.build()
+    }
+
+    FetchErrorDetailsResponse
+      .newBuilder()
+      .addAllErrorChain(errorChain.asJava)
+      .build()
+  }
+
+  private def buildStatusFromThrowable(
+      st: Throwable,
+      stackTraceEnabled: Boolean,
+      enrichErrorEnabled: Boolean,
+      userId: String,
+      sessionId: String): RPCStatus = {
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
@@ -65,6 +154,18 @@ private[connect] object ErrorUtils extends Logging {
       .putMetadata(
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
+
+    if (enrichErrorEnabled) {
+      // Generate a new unique key for this exception.
+      val errorId = UUID.randomUUID().toString
+
+      errorInfo.putMetadata("errorId", errorId)
+
+      SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId)
+        .errorIdToError
+        .put(errorId, st)
+    }
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
     val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
@@ -112,16 +213,30 @@ private[connect] object ErrorUtils extends Logging {
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
     val stackTraceEnabled = session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED)
+    val enrichErrorEnabled = session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED)
 
     val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case se: SparkException if isPythonExecutionException(se) =>
         (
           se,
           StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
+            buildStatusFromThrowable(
+              se.getCause,
+              stackTraceEnabled,
+              enrichErrorEnabled,
+              userId,
+              sessionId)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
+        (
+          e,
+          StatusProto.toStatusRuntimeException(
+            buildStatusFromThrowable(
+              e,
+              stackTraceEnabled,
+              enrichErrorEnabled,
+              userId,
+              sessionId)))
 
       case e: Throwable =>
         (

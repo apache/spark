@@ -2728,3 +2728,176 @@ class ReleaseExecuteResponse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["operation_id"] | None: ...
 
 global___ReleaseExecuteResponse = ReleaseExecuteResponse
+
+class FetchErrorDetailsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    ERROR_ID_FIELD_NUMBER: builtins.int
+    STACKTRACE_IN_MESSAGE_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required)
+    The session_id specifies a Spark session for a user identified by user_context.user_id.
+    The id should be a UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """User context"""
+    error_id: builtins.str
+    """(Required)
+    The id of the error.
+    """
+    stacktrace_in_message: builtins.bool
+    """Specifies whether to include the stacktrace in the error message when
+    the SQLConf spark.sql.connect.serverStacktrace.enabled is set to true.
+    """
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        error_id: builtins.str = ...,
+        stacktrace_in_message: builtins.bool | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_stacktrace_in_message",
+            b"_stacktrace_in_message",
+            "stacktrace_in_message",
+            b"stacktrace_in_message",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_stacktrace_in_message",
+            b"_stacktrace_in_message",
+            "error_id",
+            b"error_id",
+            "session_id",
+            b"session_id",
+            "stacktrace_in_message",
+            b"stacktrace_in_message",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_stacktrace_in_message", b"_stacktrace_in_message"],
+    ) -> typing_extensions.Literal["stacktrace_in_message"] | None: ...
+
+global___FetchErrorDetailsRequest = FetchErrorDetailsRequest
+
+class FetchErrorDetailsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class StackTraceElement(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DECLARING_CLASS_FIELD_NUMBER: builtins.int
+        METHOD_NAME_FIELD_NUMBER: builtins.int
+        FILE_NAME_FIELD_NUMBER: builtins.int
+        LINE_NUMBER_FIELD_NUMBER: builtins.int
+        declaring_class: builtins.str
+        """The fully qualified name of the class containing the execution point."""
+        method_name: builtins.str
+        """The name of the method containing the execution point."""
+        file_name: builtins.str
+        """The name of the file containing the execution point."""
+        line_number: builtins.int
+        """The line number of the source line containing the execution point."""
+        def __init__(
+            self,
+            *,
+            declaring_class: builtins.str = ...,
+            method_name: builtins.str = ...,
+            file_name: builtins.str = ...,
+            line_number: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "declaring_class",
+                b"declaring_class",
+                "file_name",
+                b"file_name",
+                "line_number",
+                b"line_number",
+                "method_name",
+                b"method_name",
+            ],
+        ) -> None: ...
+
+    class Error(google.protobuf.message.Message):
+        """Error defines the schema for the representing exception."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ERROR_TYPE_HIERARCHY_FIELD_NUMBER: builtins.int
+        MESSAGE_FIELD_NUMBER: builtins.int
+        STACK_TRACE_FIELD_NUMBER: builtins.int
+        @property
+        def error_type_hierarchy(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """The fully qualified names of the exception class and its parent classes."""
+        message: builtins.str
+        """The detailed message of the exception."""
+        @property
+        def stack_trace(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.StackTraceElement
+        ]:
+            """The stackTrace of the exception. It will be set
+            if the SQLConf spark.sql.connect.serverStacktrace.enabled is true.
+            """
+        def __init__(
+            self,
+            *,
+            error_type_hierarchy: collections.abc.Iterable[builtins.str] | None = ...,
+            message: builtins.str = ...,
+            stack_trace: collections.abc.Iterable[
+                global___FetchErrorDetailsResponse.StackTraceElement
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "error_type_hierarchy",
+                b"error_type_hierarchy",
+                "message",
+                b"message",
+                "stack_trace",
+                b"stack_trace",
+            ],
+        ) -> None: ...
+
+    ERROR_CHAIN_FIELD_NUMBER: builtins.int
+    @property
+    def error_chain(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___FetchErrorDetailsResponse.Error
+    ]:
+        """The matched error chain for a given error_id. The i-th error is caused by
+        the i+1-th error in the chain. The field will be an empty list
+        if the corresponding error is not found.
+        """
+    def __init__(
+        self,
+        *,
+        error_chain: collections.abc.Iterable[global___FetchErrorDetailsResponse.Error]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["error_chain", b"error_chain"]
+    ) -> None: ...
+
+global___FetchErrorDetailsResponse = FetchErrorDetailsResponse

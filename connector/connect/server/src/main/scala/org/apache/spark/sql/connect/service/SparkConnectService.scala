@@ -201,6 +201,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
+  override def fetchErrorDetails(
+      request: proto.FetchErrorDetailsRequest,
+      responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]): Unit = {
+    try {
+      new SparkConnectFetchErrorDetailsHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "getErrorInfo",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
   private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
       : MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
@@ -276,7 +290,9 @@ object SparkConnectService extends Logging {
   }
 
   private val userSessionMapping =
-    cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
+    cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS)
+      .removalListener(new RemoveSessionListener)
+      .build[SessionCacheKey, SessionHolder]()
 
   private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
@@ -291,7 +307,9 @@ object SparkConnectService extends Logging {
   }
 
   // Simple builder for creating the cache of Sessions.
-  private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
+  private[service] def cacheBuilder(
+      cacheSize: Int,
+      timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
     if (cacheSize >= 0) {
       cacheBuilder = cacheBuilder.maximumSize(cacheSize)
@@ -299,7 +317,6 @@ object SparkConnectService extends Logging {
     if (timeoutSeconds >= 0) {
       cacheBuilder.expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
     }
-    cacheBuilder.removalListener(new RemoveSessionListener)
     cacheBuilder
   }
 
