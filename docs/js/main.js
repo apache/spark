@@ -63,7 +63,7 @@ function codeTabs() {
     // while retaining the scroll position
     e.preventDefault();
     var scrollOffset = $(this).offset().top - $(document).scrollTop();
-    $("." + $(this).attr('class')).tab('show');
+    $("." + $(this).attr('class').split(" ").join(".")).tab('show');
     $(document).scrollTop($(this).offset().top - scrollOffset);
   });
 }
