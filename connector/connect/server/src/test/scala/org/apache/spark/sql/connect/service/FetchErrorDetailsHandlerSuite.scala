@@ -93,12 +93,15 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
         assert(response.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
         assert(response.getErrors(0).getErrorTypeHierarchy(1) == classOf[Throwable].getName)
         assert(response.getErrors(0).getErrorTypeHierarchy(2) == classOf[Object].getName)
+        assert(response.getErrors(0).hasCauseIdx)
+        assert(response.getErrors(0).getCauseIdx == 1)
 
         assert(response.getErrors(1).getMessage == "test2")
         assert(response.getErrors(1).getErrorTypeHierarchyCount == 3)
         assert(response.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
         assert(response.getErrors(1).getErrorTypeHierarchy(1) == classOf[Throwable].getName)
         assert(response.getErrors(1).getErrorTypeHierarchy(2) == classOf[Object].getName)
+        assert(!response.getErrors(1).hasCauseIdx)
         if (serverStacktraceEnabled) {
           assert(response.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
           assert(
