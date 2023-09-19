@@ -91,41 +91,42 @@ private[connect] object ErrorUtils extends Logging {
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
       serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
-    val errors =
-      traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).zipWithIndex.map { case (error, idx) =>
-        val builder = FetchErrorDetailsResponse.Error
-          .newBuilder()
-          .setMessage(error.getMessage)
-          .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
+    val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH)
 
-        if (error.getCause != null) {
-          builder.setCauseIdx(idx + 1)
-        }
-
-        if (serverStackTraceEnabled) {
-          builder.addAllStackTrace(
-            error.getStackTrace
-              .map { stackTraceElement =>
-                FetchErrorDetailsResponse.StackTraceElement
-                  .newBuilder()
-                  .setDeclaringClass(stackTraceElement.getClassName)
-                  .setMethodName(stackTraceElement.getMethodName)
-                  .setFileName(stackTraceElement.getFileName)
-                  .setLineNumber(stackTraceElement.getLineNumber)
-                  .build()
-              }
-              .toIterable
-              .asJava)
-        }
-
-        builder.build()
-      }
-
-    FetchErrorDetailsResponse
+    val responseBuilder = FetchErrorDetailsResponse
       .newBuilder()
       .setRootErrorIdx(0)
-      .addAllErrors(errors.asJava)
-      .build()
+
+    for ((error, idx) <- errorChain.zipWithIndex) {
+      val builder = FetchErrorDetailsResponse.Error
+        .newBuilder()
+        .setMessage(error.getMessage)
+        .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
+
+      if (serverStackTraceEnabled) {
+        builder.addAllStackTrace(
+          error.getStackTrace
+            .map { stackTraceElement =>
+              FetchErrorDetailsResponse.StackTraceElement
+                .newBuilder()
+                .setDeclaringClass(stackTraceElement.getClassName)
+                .setMethodName(stackTraceElement.getMethodName)
+                .setFileName(stackTraceElement.getFileName)
+                .setLineNumber(stackTraceElement.getLineNumber)
+                .build()
+            }
+            .toIterable
+            .asJava)
+      }
+
+      if (idx + 1 < errorChain.length) {
+        builder.setCauseIdx(idx + 1)
+      }
+
+      responseBuilder.addErrors(builder.build())
+    }
+
+    responseBuilder.build()
   }
 
   private def buildStatusFromThrowable(st: Throwable, sessionHolder: SessionHolder): RPCStatus = {
