@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -870,7 +870,21 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+  def mode(e: Column): Column = mode(e, deterministic = false)
+
+  /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * When multiple values have the same greatest frequency then either any of values is returned
+   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
+   * is true.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def mode(e: Column, deterministic: Boolean): Column = withAggregateFunction {
+    Mode(e.expr, deterministicExpr = lit(deterministic).expr)
+  }
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -7367,15 +7381,61 @@ object functions {
    *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    *                Data Source Option</a> in the version you use.
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column = {
+    withExpr(XmlToStructs(CharVarcharUtils.failIfHasCharVarchar(schema),
+      options.asScala.toMap, e.expr))
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                xml data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    val dataType = parseTypeWithFallback(
+      schema,
+      DataType.fromJson,
+      fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
   }
 
   // scalastyle:off line.size.limit
 
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column): Column = {
+    from_xml(e, schema, Map.empty[String, String].asJava)
+  }
+
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into a `StructType`
    * with the specified schema. Returns `null`, in the case of an unparseable string.
@@ -7389,7 +7449,7 @@ object functions {
    *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
    *                Data Source Option</a> in the version you use.
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
@@ -7405,10 +7465,10 @@ object functions {
    * @param schema  the schema to use when parsing the XML string
 
    * @group collection_funcs
-   * @since
+   * @since 4.0.0
    */
   def from_xml(e: Column, schema: StructType): Column =
-    from_xml(e, schema, Map.empty[String, String])
+    from_xml(e, schema, Map.empty[String, String].asJava)
 
   /**
    * Parses a XML string and infers its schema in DDL format.

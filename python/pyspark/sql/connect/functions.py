@@ -1136,8 +1136,8 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 min_by.__doc__ = pysparkfuncs.min_by.__doc__
 
 
-def mode(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("mode", col)
+def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
+    return _invoke_function("mode", _to_col(col), lit(deterministic))
 
 
 mode.__doc__ = pysparkfuncs.mode.__doc__
@@ -1855,6 +1855,32 @@ def from_json(
 from_json.__doc__ = pysparkfuncs.from_json.__doc__
 
 
+def from_xml(
+    col: "ColumnOrName",
+    schema: Union[StructType, Column, str],
+    options: Optional[Dict[str, str]] = None,
+) -> Column:
+    if isinstance(schema, Column):
+        _schema = schema
+    elif isinstance(schema, StructType):
+        _schema = lit(schema.json())
+    elif isinstance(schema, str):
+        _schema = lit(schema)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+        )
+
+    if options is None:
+        return _invoke_function("from_xml", _to_col(col), _schema)
+    else:
+        return _invoke_function("from_xml", _to_col(col), _schema, _options_to_col(options))
+
+
+from_xml.__doc__ = pysparkfuncs.from_xml.__doc__
+
+
 def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     index = lit(index) if isinstance(index, int) else index
 
@@ -2062,6 +2088,26 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
+
+
+def schema_of_xml(xml: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+    if isinstance(xml, Column):
+        _xml = xml
+    elif isinstance(xml, str):
+        _xml = lit(xml)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+        )
+
+    if options is None:
+        return _invoke_function("schema_of_xml", _xml)
+    else:
+        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+
+
+schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:

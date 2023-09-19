@@ -51,6 +51,7 @@ import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 
@@ -886,6 +887,10 @@ private[spark] class Executor(
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
     }
+
+    private[executor] def theadDump(): Option[ThreadStackTrace] = {
+      Utils.getThreadDumpForThread(getThreadId)
+    }
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
@@ -979,7 +984,7 @@ private[spark] class Executor(
             logWarning(s"Killed task $taskId is still running after $elapsedTimeMs ms")
             if (takeThreadDump) {
               try {
-                Utils.getThreadDumpForThread(taskRunner.getThreadId).foreach { thread =>
+                taskRunner.theadDump().foreach { thread =>
                   if (thread.threadName == taskRunner.threadName) {
                     logWarning(s"Thread dump from task $taskId:\n${thread.toString}")
                   }
@@ -1232,6 +1237,16 @@ private[spark] class Executor(
             s"more than $HEARTBEAT_MAX_FAILURES times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
+    }
+  }
+
+  def getTaskThreadDump(taskId: Long): Option[ThreadStackTrace] = {
+    val runner = runningTasks.get(taskId)
+    if (runner != null) {
+      runner.theadDump()
+    } else {
+      logWarning(s"Failed to dump thread for task $taskId")
+      None
     }
   }
 }

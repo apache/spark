@@ -43,7 +43,6 @@ class DefaultIndexTestsMixin:
         with ps.option_context(
             "compute.default_index_type", "distributed-sequence"
         ), ps.option_context("compute.ops_on_diff_frames", True):
-
             with ps.option_context("compute.default_index_cache", "LOCAL_CHECKPOINT"):
                 cached_rdd_ids = [rdd_id for rdd_id in self.spark._jsc.getPersistentRDDs()]
 

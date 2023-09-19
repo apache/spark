@@ -263,10 +263,18 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap
+    val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
+    val posArguments = sql.getPosArgumentsList
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!args.isEmpty) {
+    if (!namedArguments.isEmpty) {
+      NameParameterizedQuery(
+        parsedPlan,
+        namedArguments.asScala.mapValues(transformExpression).toMap)
+    } else if (!posArguments.isEmpty) {
+      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+    } else if (!args.isEmpty) {
       NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else if (!posArgs.isEmpty) {
       PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
@@ -2455,9 +2463,21 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       executeHolder: ExecuteHolder): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
+    val namedArguments = getSqlCommand.getNamedArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
+    val posArguments = getSqlCommand.getPosArgumentsList
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
-    val df = if (!args.isEmpty) {
+    val df = if (!namedArguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        namedArguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
+        tracker)
+    } else if (!posArguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
+        tracker)
+    } else if (!args.isEmpty) {
       session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
@@ -2519,6 +2539,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             proto.SQL
               .newBuilder()
               .setQuery(getSqlCommand.getSql)
+              .putAllNamedArguments(getSqlCommand.getNamedArgumentsMap)
+              .addAllPosArguments(getSqlCommand.getPosArgumentsList)
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
     }
