@@ -3292,6 +3292,14 @@ object functions {
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
   /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
+
+  /**
    * Returns the estimated number of unique values given the binary representation of a
    * Datasketches HllSketch.
    *

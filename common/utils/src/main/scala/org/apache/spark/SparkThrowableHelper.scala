@@ -64,6 +64,10 @@ private[spark] object SparkThrowableHelper {
     errorReader.validateErrorClass(errorClass)
   }
 
+  def getMessageParameters(errorClass: String): Seq[String] = {
+    errorReader.getMessageParameters(errorClass)
+  }
+
   def isInternalError(errorClass: String): Boolean = {
     errorClass.startsWith("INTERNAL_ERROR")
   }

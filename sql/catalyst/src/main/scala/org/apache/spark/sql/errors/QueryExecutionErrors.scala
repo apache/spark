@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.DateTimeException
+import java.util.Locale
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
@@ -41,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -2724,22 +2725,41 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def raiseError(errorClass: String,
-                 errorParmKeys: Array[String],
-                 errorParmVals: Array[String]): RuntimeException = {
-    val errorParms = errorParmKeys.zip(errorParmVals).toMap
-    if (errorClass == "USER_RAISED_EXCEPTION") {
-        new SparkRuntimeException(
-          errorClass = errorClass,
-          messageParameters = errorParms)
-    } else if (SparkThrowableHelper.validateErrorClass(errorClass)) {
-      new SparkRuntimeException(
-        errorClass = errorClass,
-        messageParameters = errorParms)
+  def raiseError(errorClass: UTF8String,
+                 errorParms: MapData): RuntimeException = {
+    val errorClassStr = errorClass.toString.toUpperCase(Locale.ROOT)
+    val errorParmsMap = if (errorParms != null) {
+      val errorParmsMutable = collection.mutable.Map[String, String]()
+      errorParms.foreach(StringType, StringType, { case (key, value) =>
+        errorParmsMutable += (key.toString -> value.toString)
+      })
+      errorParmsMutable.toMap
     } else {
+      Map.empty[String, String]
+    }
+
+    // Is the error class a known error class? If not raise an error
+    if (!SparkThrowableHelper.validateErrorClass(errorClassStr)) {
       new SparkRuntimeException(
-        errorClass = "USER_RAISED_UNKNOWN_EXCEPTION",
-        messageParameters = Map("errorClass" -> errorClass))
+        errorClass = "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
+        messageParameters = Map("errorClass" -> toSQLValue(errorClassStr)))
+    } else {
+      // Did the user provide all parameters? If not raise an error
+      val expectedParms = SparkThrowableHelper.getMessageParameters(errorClassStr).sorted
+      val providedParms = errorParmsMap.keys.toSeq.sorted
+      if (expectedParms != providedParms) {
+        new SparkRuntimeException(
+          errorClass = "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+          messageParameters = Map("errorClass" -> errorClassStr,
+            "expectedParms" -> expectedParms.mkString(","),
+            "providedParms" -> providedParms.mkString(",")))
+      } else {
+
+        // All good, raise the error
+        new SparkRuntimeException(
+          errorClass = errorClassStr,
+          messageParameters = errorParmsMap)
+      }
     }
   }
 }

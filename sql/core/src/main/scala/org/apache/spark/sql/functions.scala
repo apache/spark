@@ -3309,6 +3309,16 @@ object functions {
   }
 
   /**
+   * Throws an exception with the provided error class and parameter map.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def raise_error(c: Column, e: Column): Column = withExpr {
+    RaiseError(c.expr, e.expr)
+  }
+
+  /**
    * Returns the estimated number of unique values given the binary representation
    * of a Datasketches HllSketch.
    *

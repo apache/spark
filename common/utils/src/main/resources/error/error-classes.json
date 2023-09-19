@@ -3507,7 +3507,15 @@
     ],
     "sqlState" : "P0001"
   },
-  "USER_RAISED_UNKNOWN_EXCEPTION" : {
+  "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH" : {
+    "message" : [
+      "The `raise_error()` function was used to raise error class: <errorClass> which expects parameters: <expectedParms>.",
+      "The provided parameters <providedParms> do not match the expected parameters.",
+      "Please make sure to provide all expected parameters."
+    ],
+    "sqlState" : "P0001"
+  },
+  "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS" : {
     "message" : [
       "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
     ],

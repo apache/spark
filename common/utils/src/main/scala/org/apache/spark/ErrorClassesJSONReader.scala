@@ -57,6 +57,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
   }
 
+  def getMessageParameters(errorClass: String): Seq[String] = {
+    val messageTemplate = getMessageTemplate(errorClass)
+    val pattern = "<([a-zA-Z0-9_-]+)>".r
+    val matches = pattern.findAllIn(messageTemplate).toSeq
+    matches.map(m => m.stripSuffix(">").stripPrefix("<"))
+  }
+
   def getMessageTemplate(errorClass: String): String = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)

@@ -29,7 +29,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.Utils
 
 /**
  * Print the result of an expression to stderr (used for debugging codegen).
@@ -69,7 +68,10 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     Examples:
       > SELECT _FUNC_('custom error message');
        java.lang.RuntimeException
-       custom error message
+       [USER_RAISED_EXCEPTION] custom error message
+
+      > SELECT _FUNC_('VIEW_NOT_FOUND', Map('relationName' -> '`V1`'))
+       [VIEW_NOT_FOUND] The view `V1` cannot be found. ...
   """,
   since = "3.1.0",
   group = "misc_funcs")
@@ -80,10 +82,14 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
     this(Literal("USER_RAISED_EXCEPTION"), CreateMap(Seq(Literal("errorMessage"), str)), NullType)
   }
 
+  def this(errorClass: Expression, errorParms: Expression) = {
+    this(errorClass, errorParms, NullType)
+  }
+
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, MapType)
+    Seq(StringType, MapType(StringType, StringType))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -91,15 +97,9 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def prettyName: String = "raise_error"
 
   override def eval(input: InternalRow): Any = {
-    val error = errorClass.eval(input)
+    val error = errorClass.eval(input).asInstanceOf[UTF8String]
     val parms: MapData = errorParms.eval(input).asInstanceOf[MapData]
-    val keys = parms.keyArray().toArray[String](StringType)
-    val values = parms.valueArray().toArray[String](StringType)
-    val parmMap: Map[String, String] = Utils.toMap(keys, values)
-    if (error == null) {
-      throw raiseError(error.toString, keys, values)
-    }
-    throw raiseError(error.toString, keys, values)
+    throw raiseError(error, parms)
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
@@ -109,11 +109,9 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
     ExprCode(
       code = code"""${error.code}
         |if (true) {
-        |  if (${error.isNull}) {
-        |    throw QueryExecutionErrors.raiseError("", new String[0], new String[0]);
-        |  }
         |  throw QueryExecutionErrors.raiseError(
-        |    ${error.value}.toString(), new String[0], new String[0]);
+        |    ${error.value},
+        |    ${parms.value});
         |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
@@ -128,6 +126,9 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
 object RaiseError {
   def apply(str: Expression): RaiseError = new RaiseError(str)
+
+  def apply(errorClass: Expression, parms: Expression): RaiseError =
+    new RaiseError(errorClass, parms)
 }
 
 /**
