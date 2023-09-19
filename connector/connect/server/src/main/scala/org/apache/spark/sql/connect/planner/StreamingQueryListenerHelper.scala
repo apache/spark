@@ -77,11 +77,12 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     runner.stop()
   }
 
+  // TODO: Reuse the same method in StreamingForeachBatchHelper to avoid duplication.
   private def handlePythonWorkerError(functionName: String): Unit = {
     try {
       dataIn.readInt() match {
-        case ret if ret == 0 =>
-          logInfo(s"Streaming query listener function $functionName completed (ret: $ret)")
+        case 0 =>
+          logInfo(s"Streaming query listener function $functionName completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           val exLength = dataIn.readInt()
           val obj = new Array[Byte](exLength)
@@ -89,6 +90,9 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
           val msg = new String(obj, StandardCharsets.UTF_8)
           throw new PythonException(s"Found error inside Streaming query listener Python " +
             s"process for function $functionName: $msg", null)
+        case otherValue =>
+          throw new IllegalStateException(s"Unexpected return value $otherValue from the " +
+            s"Python worker.")
       }
     } catch {
       case eof: EOFException =>

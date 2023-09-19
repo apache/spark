@@ -130,16 +130,21 @@ object StreamingForeachBatchHelper extends Logging {
 
       try {
         dataIn.readInt() match {
-          case ret if ret == 0 =>
-            logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+          case 0 =>
+            logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
             val exLength = dataIn.readInt()
             val obj = new Array[Byte](exLength)
             dataIn.readFully(obj)
             val msg = new String(obj, StandardCharsets.UTF_8)
             throw new PythonException(s"Found error inside foreachBatch Python process: $msg", null)
+          case otherValue =>
+            throw new IllegalStateException(s"Unexpected return value $otherValue from the " +
+              s"Python worker.")
         }
       } catch {
+        // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid
+        // transient errors, same for StreamingQueryListenerHelper.
         case eof: EOFException =>
           throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
       }
