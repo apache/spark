@@ -45,8 +45,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
   private def fetchErrorDetails(
       userId: String,
       sessionId: String,
-      errorId: String,
-      stacktraceInMessage: Boolean = false): FetchErrorDetailsResponse = {
+      errorId: String): FetchErrorDetailsResponse = {
     val promise = Promise[FetchErrorDetailsResponse]
     val handler =
       new SparkConnectFetchErrorDetailsHandler(new FetchErrorDetailsResponseObserver(promise))
@@ -59,7 +58,6 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .setUserContext(context)
       .setSessionId(sessionId)
       .setErrorId(errorId)
-      .setStacktraceInMessage(stacktraceInMessage)
       .build()
     handler.handle(request)
     ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -76,20 +74,26 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .put(errorId, testError)
 
     val response = fetchErrorDetails(userId, sessionId, errorId)
-    assert(response.getErrorChainCount == 2)
-    assert(response.getErrorChain(0).getMessage == "test1")
-    assert(response.getErrorChain(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
-    assert(response.getErrorChain(0).getStackTraceCount == testError.getStackTrace.length)
-
-    assert(response.getErrorChain(1).getMessage == "test2")
-    assert(response.getErrorChain(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+    assert(response.hasErrorChain)
+    assert(response.getErrorChain.getErrorsCount == 2)
+    assert(response.getErrorChain.getErrors(0).getMessage == "test1")
     assert(
-      response.getErrorChain(1).getStackTraceCount == testError.getCause.getStackTrace.length)
+      response.getErrorChain.getErrors(0).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+    assert(
+      response.getErrorChain.getErrors(0).getStackTraceCount == testError.getStackTrace.length)
+
+    assert(response.getErrorChain.getErrors(1).getMessage == "test2")
+    assert(
+      response.getErrorChain.getErrors(1).getErrorTypeHierarchy(0) == classOf[Exception].getName)
+    assert(
+      response.getErrorChain
+        .getErrors(1)
+        .getStackTraceCount == testError.getCause.getStackTrace.length)
   }
 
   test("error not found") {
     val response = fetchErrorDetails(userId, sessionId, UUID.randomUUID().toString())
-    assert(response.getErrorChainCount == 0)
+    assert(!response.hasErrorChain)
   }
 
   test("invalidate cached exceptions after first request") {
@@ -102,27 +106,14 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .put(errorId, testError)
 
     val response = fetchErrorDetails(userId, sessionId, errorId)
-    assert(response.getErrorChainCount == 1)
-    assert(response.getErrorChain(0).getMessage == "test1")
+    assert(response.hasErrorChain)
+    assert(response.getErrorChain.getErrorsCount == 1)
+    assert(response.getErrorChain.getErrors(0).getMessage == "test1")
 
     assert(
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .errorIdToError
         .size() == 0)
-  }
-
-  test("jvm stacktrace in message") {
-    val testError = new Exception("test1")
-    val errorId = UUID.randomUUID().toString()
-
-    SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
-      .errorIdToError
-      .put(errorId, testError)
-
-    val response = fetchErrorDetails(userId, sessionId, errorId, stacktraceInMessage = true)
-    assert(response.getErrorChainCount == 1)
-    assert(response.getErrorChain(0).getMessage.contains("JVM stacktrace:"))
   }
 }

@@ -25,7 +25,8 @@ import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Handles [[proto.FetchErrorDetailsRequest]]s for the [[SparkConnectService]].
+ * Handles [[proto.FetchErrorDetailsRequest]]s for the [[SparkConnectService]]. The handler
+ * retrieves the matched error with details from the cache based on a provided error id.
  *
  * @param responseObserver
  */
@@ -39,14 +40,15 @@ class SparkConnectFetchErrorDetailsHandler(
 
     val response = Option(sessionHolder.errorIdToError.getIfPresent(v.getErrorId))
       .map { error =>
+        // This error can only be fetched once,
+        // if a connection dies in the middle you cannot repeat.
         sessionHolder.errorIdToError.invalidate(v.getErrorId)
 
         ErrorUtils.throwableToFetchErrorDetailsResponse(
           st = error,
           serverStackTraceEnabled = sessionHolder.session.conf.get(
             Connect.CONNECT_SERVER_STACKTRACE_ENABLED) || sessionHolder.session.conf.get(
-            SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED),
-          stackTraceInMessage = v.getStacktraceInMessage)
+            SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
       }
       .getOrElse(FetchErrorDetailsResponse.newBuilder().build())
 

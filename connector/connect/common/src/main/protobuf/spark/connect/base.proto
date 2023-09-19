@@ -791,10 +791,6 @@ message FetchErrorDetailsRequest {
   // (Required)
   // The id of the error.
   string error_id = 3;
-
-  // Specifies whether to include the stacktrace in the error message when
-  // the SQLConf spark.sql.connect.serverStacktrace.enabled is set to true.
-  optional bool stacktrace_in_message = 4;
 }
 
 message FetchErrorDetailsResponse {
@@ -826,10 +822,14 @@ message FetchErrorDetailsResponse {
     repeated StackTraceElement stack_trace = 3;
   }
 
-  // The matched error chain for a given error_id. The i-th error is caused by
-  // the i+1-th error in the chain. The field will be an empty list
-  // if the corresponding error is not found.
-  repeated Error error_chain = 1;
+  message ErrorChain {
+    // A list of errors with cause relationship.
+    // The i-th error is caused by the i+1-th error in the list.
+    repeated Error errors = 1;
+  }
+
+  // The matched error chain for a given error_id.
+  optional ErrorChain error_chain = 1;
 }
 
 // Main interface for the SparkConnect service.

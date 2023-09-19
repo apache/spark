@@ -39,8 +39,7 @@ import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.ExecuteEventsManager
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
 
 private[connect] object ErrorUtils extends Logging {
@@ -86,15 +85,12 @@ private[connect] object ErrorUtils extends Logging {
    *   the Throwable to be converted
    * @param serverStackTraceEnabled
    *   whether to return the server stack trace.
-   * @param stackTraceInMessage
-   *   whether to include the server stack trace in the message.
    * @return
    *   FetchErrorDetailsResponse
    */
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
-      serverStackTraceEnabled: Boolean = false,
-      stackTraceInMessage: Boolean = false): FetchErrorDetailsResponse = {
+      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
     val errorChain = traverseCauses(st).take(MAX_ERROR_CHAIN_LENGTH).map { case error =>
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
@@ -102,25 +98,19 @@ private[connect] object ErrorUtils extends Logging {
         .addAllErrorTypeHierarchy(ErrorUtils.allClasses(error.getClass).map(_.getName).asJava)
 
       if (serverStackTraceEnabled) {
-        if (stackTraceInMessage) {
-          builder.setMessage(
-            s"${error.getMessage}\n\n" +
-              s"JVM stacktrace:\n${ExceptionUtils.getStackTrace(error)}")
-        } else {
-          builder.addAllStackTrace(
-            error.getStackTrace
-              .map { stackTraceElement =>
-                FetchErrorDetailsResponse.StackTraceElement
-                  .newBuilder()
-                  .setDeclaringClass(stackTraceElement.getClassName)
-                  .setMethodName(stackTraceElement.getMethodName)
-                  .setFileName(stackTraceElement.getFileName)
-                  .setLineNumber(stackTraceElement.getLineNumber)
-                  .build()
-              }
-              .toIterable
-              .asJava)
-        }
+        builder.addAllStackTrace(
+          error.getStackTrace
+            .map { stackTraceElement =>
+              FetchErrorDetailsResponse.StackTraceElement
+                .newBuilder()
+                .setDeclaringClass(stackTraceElement.getClassName)
+                .setMethodName(stackTraceElement.getMethodName)
+                .setFileName(stackTraceElement.getFileName)
+                .setLineNumber(stackTraceElement.getLineNumber)
+                .build()
+            }
+            .toIterable
+            .asJava)
       }
 
       builder.build()
@@ -128,16 +118,12 @@ private[connect] object ErrorUtils extends Logging {
 
     FetchErrorDetailsResponse
       .newBuilder()
-      .addAllErrorChain(errorChain.asJava)
+      .setErrorChain(
+        FetchErrorDetailsResponse.ErrorChain.newBuilder().addAllErrors(errorChain.asJava).build())
       .build()
   }
 
-  private def buildStatusFromThrowable(
-      st: Throwable,
-      stackTraceEnabled: Boolean,
-      enrichErrorEnabled: Boolean,
-      userId: String,
-      sessionId: String): RPCStatus = {
+  private def buildStatusFromThrowable(st: Throwable, sessionHolder: SessionHolder): RPCStatus = {
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
@@ -146,25 +132,25 @@ private[connect] object ErrorUtils extends Logging {
         "classes",
         JsonMethods.compact(JsonMethods.render(allClasses(st.getClass).map(_.getName))))
 
-    if (enrichErrorEnabled) {
+    if (sessionHolder.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED)) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
 
       errorInfo.putMetadata("errorId", errorId)
 
-      SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
-        .errorIdToError
+      sessionHolder.errorIdToError
         .put(errorId, st)
     }
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
-    val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
-      val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
-    } else {
-      errorInfo
-    }
+    val withStackTrace =
+      if (sessionHolder.session.conf.get(
+          SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty) {
+        val maxSize = SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE)
+        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
+      } else {
+        errorInfo
+      }
 
     RPCStatus
       .newBuilder()
@@ -199,35 +185,19 @@ private[connect] object ErrorUtils extends Logging {
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
       isInterrupted: Boolean = false): PartialFunction[Throwable, Unit] = {
-    val session =
+    val sessionHolder =
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
-        .session
-    val stackTraceEnabled = session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED)
-    val enrichErrorEnabled = session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED)
 
     val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case se: SparkException if isPythonExecutionException(se) =>
         (
           se,
           StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(
-              se.getCause,
-              stackTraceEnabled,
-              enrichErrorEnabled,
-              userId,
-              sessionId)))
+            buildStatusFromThrowable(se.getCause, sessionHolder)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        (
-          e,
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(
-              e,
-              stackTraceEnabled,
-              enrichErrorEnabled,
-              userId,
-              sessionId)))
+        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolder)))
 
       case e: Throwable =>
         (

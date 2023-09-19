@@ -2735,7 +2735,6 @@ class FetchErrorDetailsRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     ERROR_ID_FIELD_NUMBER: builtins.int
-    STACKTRACE_IN_MESSAGE_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
     The session_id specifies a Spark session for a user identified by user_context.user_id.
@@ -2748,48 +2747,22 @@ class FetchErrorDetailsRequest(google.protobuf.message.Message):
     """(Required)
     The id of the error.
     """
-    stacktrace_in_message: builtins.bool
-    """Specifies whether to include the stacktrace in the error message when
-    the SQLConf spark.sql.connect.serverStacktrace.enabled is set to true.
-    """
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         error_id: builtins.str = ...,
-        stacktrace_in_message: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_stacktrace_in_message",
-            b"_stacktrace_in_message",
-            "stacktrace_in_message",
-            b"stacktrace_in_message",
-            "user_context",
-            b"user_context",
-        ],
+        self, field_name: typing_extensions.Literal["user_context", b"user_context"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_stacktrace_in_message",
-            b"_stacktrace_in_message",
-            "error_id",
-            b"error_id",
-            "session_id",
-            b"session_id",
-            "stacktrace_in_message",
-            b"stacktrace_in_message",
-            "user_context",
-            b"user_context",
+            "error_id", b"error_id", "session_id", b"session_id", "user_context", b"user_context"
         ],
     ) -> None: ...
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_stacktrace_in_message", b"_stacktrace_in_message"],
-    ) -> typing_extensions.Literal["stacktrace_in_message"] | None: ...
 
 global___FetchErrorDetailsRequest = FetchErrorDetailsRequest
 
