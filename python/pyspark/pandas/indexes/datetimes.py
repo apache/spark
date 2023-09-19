@@ -45,9 +45,15 @@ class DatetimeIndex(Index):
         inferred frequency upon creation.
     normalize : bool, default False
         Normalize start/end dates to midnight before generating date range.
+
+        .. deprecated:: 4.0.0
+
     closed : {'left', 'right'}, optional
         Set whether to include `start` and `end` that are on the
         boundary. The default includes boundary points on either end.
+
+        .. deprecated:: 4.0.0
+
     ambiguous : 'infer', bool-ndarray, 'NaT', default 'raise'
         When clocks moved backward due to DST, ambiguous times may arise.
         For example in Central European Time (UTC+01), when going from 03:00
@@ -111,6 +117,18 @@ class DatetimeIndex(Index):
         copy=False,
         name=None,
     ) -> "DatetimeIndex":
+        if closed is not None:
+            warnings.warn(
+                "The 'closed' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+        if normalize is not None:
+            warnings.warn(
+                "The 'normalize' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
@@ -730,24 +748,32 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
-        >>> psidx  # doctest: +SKIP
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()  # doctest: +SKIP
+        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
         Index([1, 2], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)  # doctest: +SKIP
+        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)
         Index([1], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)  # doctest: +SKIP
+        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)
         Index([2], dtype='int64')
         """
 
         def pandas_between_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
-            return pdf.between_time(start_time, end_time, include_start, include_end)
+            if include_start and include_end:
+                inclusive = "both"
+            elif not include_start and not include_end:
+                inclusive = "neither"
+            elif include_start and not include_end:
+                inclusive = "left"
+            elif not include_start and include_end:
+                inclusive = "right"
+            return pdf.between_time(start_time, end_time, inclusive=inclusive)
 
         psdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(psdf, "__id_column__")

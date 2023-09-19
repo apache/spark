@@ -34,9 +34,7 @@ import pandas as pd
 import numpy as np
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
-    is_interval_dtype,
     is_bool_dtype,
-    is_categorical_dtype,
     is_integer_dtype,
     is_float_dtype,
     is_numeric_dtype,
@@ -289,7 +287,7 @@ class Index(IndexOpsMixin):
 
         if name is None:
             name = type(self).__name__
-        return "%s: %s entries%s" % (name, total_count, index_summary)
+        return "%s: %s entries%s" % (name, int(total_count), index_summary)
 
     @property
     def size(self) -> int:
@@ -623,44 +621,6 @@ class Index(IndexOpsMixin):
         """
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
         return self.to_numpy()
-
-    @property
-    def asi8(self) -> np.ndarray:
-        """
-        Integer representation of the values.
-
-        .. warning:: We recommend using `Index.to_numpy()` instead.
-
-        .. note:: This method should only be used if the resulting NumPy ndarray is expected
-            to be small, as all the data is loaded into the driver's memory.
-
-        .. deprecated:: 3.4.0
-
-        Returns
-        -------
-        numpy.ndarray
-            An ndarray with int64 dtype.
-
-        Examples
-        --------
-        >>> ps.Index([1, 2, 3]).asi8
-        array([1, 2, 3])
-
-        Returns None for non-int64 dtype
-
-        >>> ps.Index(['a', 'b', 'c']).asi8 is None
-        True
-        """
-        warnings.warn(
-            "Index.asi8 is deprecated and will be removed in 4.0.0. " "Use Index.astype instead.",
-            FutureWarning,
-        )
-        if isinstance(self.spark.data_type, IntegralType):
-            return self.to_numpy()
-        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
-            return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
-        else:
-            return None
 
     @property
     def has_duplicates(self) -> bool:
@@ -1061,7 +1021,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
         False
         """
-        return is_categorical_dtype(self.dtype)
+        return isinstance(self.dtype, pd.CategoricalDtype)
 
     def is_floating(self) -> bool:
         """
@@ -1094,7 +1054,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_interval()
         False
         """
-        return is_interval_dtype(self.dtype)
+        return isinstance(self.dtype, pd.IntervalDtype)
 
     def is_numeric(self) -> bool:
         """
@@ -1117,31 +1077,6 @@ class Index(IndexOpsMixin):
         True
         """
         return is_object_dtype(self.dtype)
-
-    def is_type_compatible(self, kind: str) -> bool:
-        """
-        Whether the index type is compatible with the provided type.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> psidx = ps.Index([1, 2, 3])
-        >>> psidx.is_type_compatible('integer')
-        True
-
-        >>> psidx = ps.Index([1.0, 2.0, 3.0])
-        >>> psidx.is_type_compatible('integer')
-        False
-        >>> psidx.is_type_compatible('floating')
-        True
-        """
-        warnings.warn(
-            "Index.is_type_compatible is deprecated and will be removed in 4.0.0. "
-            "Use Index.isin instead.",
-            FutureWarning,
-        )
-        return kind == self.inferred_type
 
     def dropna(self, how: str = "any") -> "Index":
         """
@@ -1917,18 +1852,12 @@ class Index(IndexOpsMixin):
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
         sdf_appended = sdf_self.union(sdf_other)
 
-        # names should be kept when MultiIndex, but Index wouldn't keep its name.
-        if isinstance(self, MultiIndex):
-            index_names = self._internal.index_names
-        else:
-            index_names = None
-
         internal = InternalFrame(
             spark_frame=sdf_appended,
             index_spark_columns=[
                 scol_for(sdf_appended, col) for col in self._internal.index_spark_column_names
             ],
-            index_names=index_names,
+            index_names=None,
             index_fields=index_fields,
         )
 

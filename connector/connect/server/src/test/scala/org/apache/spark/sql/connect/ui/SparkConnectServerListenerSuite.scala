@@ -61,7 +61,6 @@ class SparkConnectServerListenerSuite
           "userId",
           "userName",
           "dummy query",
-          None,
           Set()))
       listener.onOtherEvent(
         SparkListenerConnectOperationAnalyzed(jobTag, "operationId", System.currentTimeMillis()))
@@ -153,7 +152,6 @@ class SparkConnectServerListenerSuite
         "userId",
         "userName",
         "dummy query",
-        None,
         Set()))
     listener.onOtherEvent(
       SparkListenerConnectOperationAnalyzed(jobTag, "operationId", System.currentTimeMillis()))
@@ -199,7 +197,6 @@ class SparkConnectServerListenerSuite
         "userId",
         "userName",
         "dummy query",
-        None,
         Set()))
     listener.onOtherEvent(
       SparkListenerConnectOperationAnalyzed(

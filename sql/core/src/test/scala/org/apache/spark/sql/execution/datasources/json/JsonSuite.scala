@@ -3437,7 +3437,7 @@ abstract class JsonSuite
           if (enablePartialResults) {
             checkAnswer(
               df,
-              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
+              Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2)))
             )
           } else {
             checkAnswer(
@@ -3446,6 +3446,174 @@ abstract class JsonSuite
             )
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse the record except f1 if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": [{"f1": "", "f2": ""}], "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": [{"f1": 12, "f2": ""}], "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Seq(Row(null, "")), "id1", "XXX"),
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Seq(Row(12, "")), "id2", "YYY")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse primitive map if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"f1": "", "f2": ""}, "a3": "id1"}""",
+        """{"a1": "BBB", "a2": {"f1": 12, "f2": ""}, "a3": "id2"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = "a1 string, a2 map<string, int>, a3 string"
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        // Although the keys match the string type and some values match the integer type, because
+        // some of the values do not match the type, we mark the entire map as null.
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1"),
+            Row("BBB", null, "id2")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", null, null)
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse map of structs if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"key": {"f1": "", "f2": ""}}, "a3": "id1"}""",
+        """{"a1": "BBB", "a2": {"key": {"f1": 12, "f2": ""}}, "a3": "id2"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = "a1 string, a2 map<string, struct<f1: int, f2: string>>, a3 string"
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Map("key" -> Row(null, "")), "id1"),
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.schema(schema).json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null),
+            Row("BBB", Map("key" -> Row(12, "")), "id2")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse primitive arrays if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": {"f1": [""]}, "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": {"f1": [12]}, "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", Row(null), "id1", "XXX"),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, null, null),
+            Row("BBB", Row(Seq(12)), "id2", "YYY")
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-44940: fully parse array of arrays if partial results are enabled") {
+    withTempPath { path =>
+      Seq(
+        """{"a1": "AAA", "a2": [[12, ""], [""]], "a3": "id1", "a4": "XXX"}""",
+        """{"a1": "BBB", "a2": [[12, 34], [""]], "a3": "id2", "a4": "YYY"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      // We cannot parse `array<array<int>>` type because one of the inner arrays contains a
+      // mismatched type.
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
+      }
+
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        val df = spark.read.json(path.getAbsolutePath)
+        checkAnswer(
+          df,
+          Seq(
+            Row("AAA", null, "id1", "XXX"),
+            Row("BBB", null, "id2", "YYY")
+          )
+        )
       }
     }
   }

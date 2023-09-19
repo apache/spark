@@ -63,6 +63,10 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "random",  # namespace conflict with python built-in module
+            "uuid",  # namespace conflict with python built-in module
+            "chr",  # namespace conflict with python built-in function
+            "session_user",  # Scala only for now, needs implementation
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
@@ -1274,6 +1278,27 @@ class FunctionsTestsMixin:
         self.check_error(
             exception=pe.exception,
             error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+    def test_schema_of_xml(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.schema_of_xml(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": "int"},
+        )
+
+    def test_from_xml(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.from_xml(df.id, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 

@@ -304,7 +304,7 @@ class CartesianDeserializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
-        for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+        for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # for correctness with repeated cartesian/zip this must be returned as one batch
             yield product(key_batch, val_batch)
 
@@ -330,7 +330,7 @@ class PairDeserializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
-        for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+        for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # For double-zipped RDDs, the batches can be iterators from other PairDeserializer,
             # instead of lists. We need to convert them to lists if needed.
             key_batch = key_batch if hasattr(key_batch, "__len__") else list(key_batch)

@@ -166,4 +166,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
+
+  case class TaskThreadDump(taskId: Long) extends CoarseGrainedClusterMessage
 }

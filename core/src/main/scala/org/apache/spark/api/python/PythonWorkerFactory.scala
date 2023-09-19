@@ -36,7 +36,7 @@ import org.apache.spark.util.{RedirectThread, Utils}
 
 case class PythonWorker(channel: SocketChannel, selector: Selector, selectionKey: SelectionKey) {
   def stop(): Unit = {
-    selectionKey.cancel()
+    Option(selectionKey).foreach(_.cancel())
     selector.close()
     channel.close()
   }
@@ -412,6 +412,11 @@ private[spark] class PythonWorkerFactory(
           logWarning("Failed to close worker", e)
       }
     }
+  }
+
+  def isWorkerStopped(worker: PythonWorker): Boolean = {
+    assert(!useDaemon, "isWorkerStopped() is not supported for daemon mode")
+    simpleWorkers.get(worker).exists(!_.isAlive)
   }
 }
 

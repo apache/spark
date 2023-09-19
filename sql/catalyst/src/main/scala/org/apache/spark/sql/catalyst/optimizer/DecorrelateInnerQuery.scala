@@ -478,7 +478,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // parentOuterReferences: a set of parent outer references. As we recurse down we collect the
     // set of outer references that are part of the Domain, and use it to construct the DomainJoins
     // and join conditions.
-    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated.
+    // aggregated: a boolean flag indicating whether the result of the plan will be aggregated
+    // (or used as an input for a window function)
     // underSetOp: a boolean flag indicating whether a set operator (e.g. UNION) is a parent of the
     // inner plan.
     //
@@ -653,6 +654,58 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val referencesToAdd = missingReferences(newProjectList, joinCond)
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
+
+          case Limit(limit, input) =>
+            // LIMIT K (with potential ORDER BY) is decorrelated by computing K rows per every
+            // domain value via a row_number() window function. For example, for a subquery
+            // (SELECT T2.a FROM T2 WHERE T2.b = OuterReference(x) ORDER BY T2.c LIMIT 3)
+            // -- we need to get top 3 values of T2.a (ordering by T2.c) for every value of x.
+            // Following our general decorrelation procedure, 'x' is then replaced by T2.b, so the
+            // subquery is decorrelated as:
+            // SELECT * FROM (
+            //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
+            // WHERE rn <= 3
+            val (child, ordering) = input match {
+              case Sort(order, _, child) => (child, order)
+              case _ => (input, Seq())
+            }
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, parentOuterReferences, aggregated = true, underSetOp)
+            val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
+            // Add outer references to the PARTITION BY clause
+            val partitionFields = collectedChildOuterReferences.map(outerReferenceMap(_)).toSeq
+            val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+
+            val rowNumber = WindowExpression(RowNumber(),
+              WindowSpecDefinition(partitionFields, orderByFields,
+                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+            val rowNumberAlias = Alias(rowNumber, "rn")()
+            // Window function computes row_number() when partitioning by correlated references,
+            // and projects all the other fields from the input.
+            val window = Window(Seq(rowNumberAlias),
+              partitionFields, orderByFields, newChild)
+            val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
+            val project = Project(newChild.output, filter)
+            (project, joinCond, outerReferenceMap)
+
+          case w @ Window(projectList, partitionSpec, orderSpec, child) =>
+            val outerReferences = collectOuterReferences(w.expressions)
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
+              s"function: $w")
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
+            // For now these are no-op, as we don't allow correlated references in the window
+            // function itself.
+            val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
+            val newPartitionSpec = replaceOuterReferences(partitionSpec, outerReferenceMap)
+            val newOrderSpec = replaceOuterReferences(orderSpec, outerReferenceMap)
+            val referencesToAdd = missingReferences(newProjectList, joinCond)
+
+            val newWindow = Window(newProjectList ++ referencesToAdd,
+              partitionSpec = newPartitionSpec ++ referencesToAdd,
+              orderSpec = newOrderSpec, newChild)
+            (newWindow, joinCond, outerReferenceMap)
 
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)

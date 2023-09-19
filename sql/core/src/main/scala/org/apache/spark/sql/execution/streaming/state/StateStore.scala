@@ -713,7 +713,6 @@ object StateStore extends Logging {
             case NonFatal(e) =>
               logWarning(s"Error managing $provider, stopping management thread", e)
               threadPoolException.set(e)
-              throw e
           } finally {
             val duration = System.currentTimeMillis() - startTime
             val logMsg = s"Finished maintenance task for provider=$id" +

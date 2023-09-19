@@ -105,6 +105,10 @@ class ApplyInPandasWithStatePythonRunner(
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  }
+
   /**
    * This method sends out the additional metadata before sending out actual data.
    *

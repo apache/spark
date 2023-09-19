@@ -21,7 +21,6 @@ A wrapper for GroupedData to behave like pandas GroupBy.
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
-from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
 from typing import (
@@ -46,12 +45,7 @@ import warnings
 import pandas as pd
 from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
 
-if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
-else:
-    from pandas.core.base import SelectionMixin
-
-    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
+from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
@@ -311,7 +305,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
             if len(should_drop_index) > 0:
-                psdf = psdf.reset_index(level=should_drop_index, drop=True)
+                drop = not any(
+                    [
+                        isinstance(func_or_funcs[gkey.name], list)
+                        for gkey in self._groupkeys
+                        if gkey.name in func_or_funcs
+                    ]
+                )
+                psdf = psdf.reset_index(level=should_drop_index, drop=drop)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
 
@@ -614,9 +615,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Parameters
         ----------
-        numeric_only : bool, default False
+        numeric_only : bool, default True
             Include only float, int, boolean columns. If None, will attempt to use
-            everything, then use only numeric data.
+            everything, then use only numeric data. False is not supported.
+            This parameter is mainly for pandas compatibility.
 
             .. versionadded:: 3.4.0
 
@@ -646,11 +648,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -711,6 +708,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             raise TypeError("must be real number, not %s" % type(q).__name__)
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
+        if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
+            warnings.warn(
+                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                "and will raise in a future version, matching the Series/DataFrame behavior. "
+                "Cast to uint8 dtype before calling quantile instead.",
+                FutureWarning,
+            )
+
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
             accepted_spark_types=(NumericType, BooleanType),
@@ -861,10 +866,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                    "C": [3, 4, 3, 4], "D": ["a", "a", "b", "a"]})
 
         >>> df.groupby("A").sum().sort_index()
-           B  C
+           B  C   D
         A
-        1  1  6
-        2  1  8
+        1  1  6  ab
+        2  1  8  aa
 
         >>> df.groupby("D").sum().sort_index()
            A  B   C
@@ -904,23 +909,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             unsupported = [
                 col.name
                 for col in self._agg_columns
-                if not isinstance(col.spark.data_type, (NumericType, BooleanType))
+                if not isinstance(col.spark.data_type, (NumericType, BooleanType, StringType))
             ]
             if len(unsupported) > 0:
                 log_advice(
-                    "GroupBy.sum() can only support numeric and bool columns even if"
+                    "GroupBy.sum() can only support numeric, bool and string columns even if"
                     f"numeric_only=False, skip unsupported columns: {unsupported}"
                 )
 
         return self._reduce_for_stat_function(
             F.sum,
-            accepted_spark_types=(NumericType, BooleanType),
+            accepted_spark_types=(NumericType, BooleanType, StringType),
             bool_to_numeric=True,
             min_count=min_count,
         )
 
     # TODO: sync the doc.
-    def var(self, ddof: int = 1) -> FrameLike:
+    def var(self, ddof: int = 1, numeric_only: Optional[bool] = True) -> FrameLike:
         """
         Compute variance of groups, excluding missing values.
 
@@ -934,6 +939,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
             .. versionchanged:: 3.4.0
                Supported including arbitary integers.
+
+        numeric_only : bool, default True
+             Include only float, int, boolean columns. If None, will attempt to use
+             everything, then use only numeric data. False is not supported.
+             This parameter is mainly for pandas compatibility.
+
+             .. versionadded:: 4.0.0
 
         Examples
         --------
@@ -961,6 +973,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             var,
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
+            numeric_only=numeric_only,
         )
 
     def skew(self) -> FrameLike:
@@ -2012,7 +2025,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return_schema = StructType([field.struct_field for field in data_fields])
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
-
             if is_series_groupby:
                 pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
             else:
@@ -2296,7 +2308,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             should_resolve=True,
         )
 
-    # TODO: add axis parameter
     def idxmax(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of maximum over requested axis in group.
@@ -2379,7 +2390,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
         return self._handle_output(DataFrame(internal))
 
-    # TODO: add axis parameter
     def idxmin(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of minimum over requested axis in group.
@@ -2482,8 +2492,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Method to use for filling holes in reindexed Series pad / ffill: propagate last valid
             observation forward to next valid backfill / bfill:
             use NEXT valid observation to fill gap
+
+            .. deprecated:: 4.0.0
+
         axis : {0 or `index`}
             1 and `columns` are not supported.
+
+            .. deprecated:: 4.0.0
+                For axis=1, operate on the underlying object instead.
+                Otherwise the axis keyword is not necessary.
+
         inplace : boolean, default False
             Fill in place (do not create a new object)
         limit : int, default None
@@ -2492,6 +2510,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             consecutive NaNs, it will only be partially filled. If method is not specified,
             this is the maximum number of entries along the entire axis where NaNs will be filled.
             Must be greater than 0 if not None
+
+            .. deprecated:: 4.0.0
+
 
         Returns
         -------
@@ -2530,11 +2551,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
+        should_resolve = method is not None
+        if should_resolve:
+            warnings.warn(
+                "DataFrameGroupBy.fillna with 'method' is deprecated "
+                "and will raise in a future version. "
+                "Use DataFrameGroupBy.ffill() or DataFrameGroupBy.bfill() instead.",
+                FutureWarning,
+            )
         return self._apply_series_op(
             lambda sg: sg._psser._fillna(
                 value=value, method=method, axis=axis, limit=limit, part_cols=sg._groupkeys_scols
             ),
-            should_resolve=(method is not None),
+            should_resolve=should_resolve,
         )
 
     def bfill(self, limit: Optional[int] = None) -> FrameLike:
@@ -2696,7 +2725,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             else window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
         )
 
-        if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+        if n >= 0:
             tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
             sdf = (
                 sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
@@ -3530,7 +3559,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for label in psdf._internal.column_labels:
                 psser = psdf._psser_for(label)
                 input_scol = psser._dtype_op.nan_to_null(psser).spark.column
-                output_scol = sfun(input_scol)
+                if sfun.__name__ == "sum" and isinstance(
+                    psdf._internal.spark_type_for(label), StringType
+                ):
+                    input_scol_name = psser._internal.data_spark_column_names[0]
+                    # Sort data with natural order column to ensure order of data
+                    sorted_array = F.array_sort(
+                        F.collect_list(F.struct(NATURAL_ORDER_COLUMN_NAME, input_scol))
+                    )
+
+                    # Using transform to extract strings
+                    output_scol = F.concat_ws(
+                        "", F.transform(sorted_array, lambda x: x.getField(input_scol_name))
+                    )
+                else:
+                    output_scol = sfun(input_scol)
 
                 if min_count > 0:
                     output_scol = F.when(
@@ -3562,6 +3605,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
         if not self._as_index:
+            column_names = [column.name for column in self._agg_columns]
+            for groupkey in self._groupkeys:
+                if groupkey.name not in column_names:
+                    warnings.warn(
+                        "A grouping was used that is not in the columns of the DataFrame and so "
+                        "was excluded from the result. "
+                        "This grouping will be included in a future version. "
+                        "Add the grouping as a column of the DataFrame to silence this warning.",
+                        FutureWarning,
+                    )
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
@@ -3587,7 +3640,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             ):
                 agg_columns.append(psser)
         sdf = self._psdf._internal.spark_frame.select(
-            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+            *groupkey_scols,
+            *[psser.spark.column for psser in agg_columns],
+            NATURAL_ORDER_COLUMN_NAME,
         )
         internal = InternalFrame(
             spark_frame=sdf,
@@ -4183,7 +4238,7 @@ class SeriesGroupBy(GroupBy[Series]):
         2  1.0    1
            2.0    1
         3  3.0    2
-        Name: B, dtype: int64
+        Name: count, dtype: int64
 
         Don't include counts of NaN when dropna is False.
 
@@ -4195,7 +4250,7 @@ class SeriesGroupBy(GroupBy[Series]):
            2.0    1
         3  3.0    2
            NaN    1
-        Name: B, dtype: int64
+        Name: count, dtype: int64
         """
         warnings.warn(
             "The resulting Series will have a fixed name of 'count' from 4.0.0.",
@@ -4232,7 +4287,7 @@ class SeriesGroupBy(GroupBy[Series]):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(groupkeys, groupkey_names)
             ],
-            column_labels=[self._agg_columns[0]._column_label],
+            column_labels=[("count",)],
             data_spark_columns=[scol_for(sdf, agg_column)],
         )
         return first_series(DataFrame(internal))

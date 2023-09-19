@@ -115,13 +115,41 @@ class TableAlreadyExistsException private(
   }
 }
 
-class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map[String, String],
-                                      cause: Option[Throwable] = None)
-  extends AnalysisException(errorClass, messageParameters, cause = cause) {
+class TempTableAlreadyExistsException private(
+  message: String,
+  cause: Option[Throwable],
+  errorClass: Option[String],
+  messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Option[Throwable] = None) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause,
+      Some(errorClass),
+      messageParameters)
+  }
+
   def this(table: String) = {
-    this(errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+    this(
+      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName"
         -> quoteNameParts(AttributeNameParser.parseAttributeName(table))))
+  }
+
+  def this(message: String, cause: Option[Throwable]) = {
+    this(
+      message,
+      cause,
+      errorClass = Some("TEMP_TABLE_OR_VIEW_ALREADY_EXISTS"),
+      messageParameters = Map.empty[String, String])
   }
 }
 

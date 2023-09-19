@@ -95,12 +95,13 @@ trait ColumnResolutionHelper extends Logging {
     }
   }
 
-    // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
     (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
     (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
     ("user", () => CurrentUser(), toPrettySQL),
+    ("session_user", () => CurrentUser(), toPrettySQL),
     (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
   )
 
@@ -134,7 +135,7 @@ trait ColumnResolutionHelper extends Logging {
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
-      allowOuter: Boolean): Expression = {
+      includeLastResort: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved) return e
       val resolved = e match {
@@ -195,8 +196,11 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      val withOuterResolved = if (allowOuter) resolveOuterRef(resolved) else resolved
-      resolveVariables(withOuterResolved)
+      if (includeLastResort) {
+        resolveColsLastResort(resolved)
+      } else {
+        resolved
+      }
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -420,7 +424,7 @@ trait ColumnResolutionHelper extends Logging {
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     resolveExpression(
       expr,
       resolveColumnByName = nameParts => {
@@ -428,7 +432,7 @@ trait ColumnResolutionHelper extends Logging {
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
   }
 
   /**
@@ -442,7 +446,7 @@ trait ColumnResolutionHelper extends Logging {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      allowOuter: Boolean = false): Expression = {
+      includeLastResort: Boolean = false): Expression = {
     val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
       // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
       // expression are from Spark Connect, and need to be resolved in this way:
@@ -466,7 +470,16 @@ trait ColumnResolutionHelper extends Logging {
         q.children.head.output
       },
       throws = true,
-      allowOuter = allowOuter)
+      includeLastResort = includeLastResort)
+  }
+
+  /**
+   * The last resort to resolve columns. Currently it does two things:
+   *  - Try to resolve column names as outer references
+   *  - Try to resolve column names as SQL variable
+   */
+  protected def resolveColsLastResort(e: Expression): Expression = {
+    resolveVariables(resolveOuterRef(e))
   }
 
   def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
@@ -511,8 +524,15 @@ trait ColumnResolutionHelper extends Logging {
     }
     val plan = planOpt.get
 
+    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).isDefined
     try {
-      plan.resolve(u.nameParts, conf.resolver)
+      if (!isMetadataAccess) {
+        plan.resolve(u.nameParts, conf.resolver)
+      } else if (u.nameParts.size == 1) {
+        plan.getMetadataAttributeByNameOpt(u.nameParts.head)
+      } else {
+        None
+      }
     } catch {
       case e: AnalysisException =>
         logDebug(s"Fail to resolve $u with $plan due to $e")

@@ -202,6 +202,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val udf: TestUDF
   }
 
+  protected trait UDTFSetTest {
+    val udtfSet: TestUDTFSet
+  }
+
   /** A regular test case. */
   protected case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase {
@@ -235,6 +239,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       udf: TestUDF) extends TestCase with UDFTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       UDFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
+
+  protected case class UDTFSetTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udtfSet: TestUDTFSet) extends TestCase with UDTFSetTest {
+
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDTFSetAnalyzerTestCase(newName, inputFile, newResultFile, udtfSet)
   }
 
   /** A UDAF test case. */
@@ -285,6 +299,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected case class UDFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
+  protected case class UDTFSetAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udtfSet: TestUDTFSet)
+      extends AnalyzerTest with UDTFSetTest
   protected case class UDAFAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF)
       extends AnalyzerTest with UDFTest
@@ -488,6 +505,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     testCase match {
       case udfTestCase: UDFTest =>
         registerTestUDF(udfTestCase.udf, localSparkSession)
+      case udtfTestCase: UDTFSetTest =>
+        registerTestUDTFs(udtfTestCase.udtfSet, localSparkSession)
       case _ =>
     }
 
@@ -574,6 +593,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udtfTestCase: UDTFSetTest
+          if udtfTestCase.udtfSet.udtfs.forall(_.isInstanceOf[TestPythonUDTF]) &&
+            shouldTestPythonUDFs =>
+        s"${testCase.name}${System.lineSeparator()}Python: $pythonVer${System.lineSeparator()}"
       case _ =>
         s"${testCase.name}${System.lineSeparator()}"
     }
@@ -620,6 +643,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           UDAFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
+        Seq(TestUDTFSet(Seq(
+          TestPythonUDTF("udtf"),
+          TestPythonUDTFCountSumLast,
+          TestPythonUDTFLastString,
+          TestPythonUDTFWithSinglePartition,
+          TestPythonUDTFPartitionBy,
+          TestPythonUDTFInvalidPartitionByAndWithSinglePartition,
+          TestPythonUDTFInvalidOrderByWithoutPartitionBy
+        ))).map { udtfSet =>
+          UDTFSetTestCase(
+            s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
+        }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
@@ -661,12 +697,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
-    // Before creating test tables, deletes orphan directories in warehouse dir
-    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
-      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
-      if (f.exists()) {
-        Utils.deleteRecursively(f)
-      }
+    // Before creating test tables, deletes warehouse dir
+    val f = new File(new URI(conf.warehousePath))
+    if (f.exists()) {
+      Utils.deleteRecursively(f)
     }
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")

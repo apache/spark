@@ -58,7 +58,7 @@ trait Generator extends Expression {
 
   override def nullable: Boolean = false
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
+  protected override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
 
   /**
    * The output element schema.
@@ -181,7 +181,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "n",
+          "inputName" -> toSQLId("n"),
           "inputType" -> toSQLType(IntegerType),
           "inputExpr" -> toSQLExpr(children.head)
         )

@@ -255,14 +255,12 @@ private[spark] class BasicExecutorFeatureStep(
       case "statefulset" => "Always"
       case _ => "Never"
     }
-    val annotations = kubernetesConf.annotations.map { case (k, v) =>
-      (k, Utils.substituteAppNExecIds(v, kubernetesConf.appId, kubernetesConf.executorId))
-    }
+
     val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
-        .addToAnnotations(annotations.asJava)
+        .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()

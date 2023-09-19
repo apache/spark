@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
 import com.google.common.collect.{Lists, Maps}
@@ -44,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -262,13 +263,21 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap
+    val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
+    val posArguments = sql.getPosArgumentsList
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!args.isEmpty) {
+    if (!namedArguments.isEmpty) {
+      NameParameterizedQuery(
+        parsedPlan,
+        namedArguments.asScala.mapValues(transformExpression).toMap)
+    } else if (!posArguments.isEmpty) {
+      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+    } else if (!args.isEmpty) {
       NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toArray)
+      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
     } else {
       parsedPlan
     }
@@ -969,7 +978,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
-    val blockId = CacheId(rel.getUserId, rel.getSessionId, rel.getHash)
+    val blockId = CacheId(sessionHolder.userId, sessionHolder.sessionId, rel.getHash)
     val bytes = blockManager.getLocalBytes(blockId)
     bytes
       .map { blockData =>
@@ -993,21 +1002,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
 
-    def extractValue(expr: Expression): Any = {
-      expr match {
-        case Literal(s, StringType) if s != null =>
-          UnresolvedAttribute.quotedString(s.toString)
-        case literal: Literal => literal.value
-        case UnresolvedFunction(Seq("array"), arguments, _, _, _) =>
-          arguments.map(extractValue).toArray
-        case other =>
-          throw InvalidPlanInput(
-            s"Expression should be a Literal or CreateMap or CreateArray, " +
-              s"but got ${other.getClass} $other")
-      }
-    }
-
-    val params = rel.getParametersList.asScala.toSeq.map(transformExpression).map(extractValue)
+    val params = rel.getParametersList.asScala.toSeq.map(transformExpression)
     UnresolvedHint(rel.getName, params, transformRelation(rel.getInput))
   }
 
@@ -1357,6 +1352,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedAttribute(exp.getUnresolvedAttribute)
+      case proto.Expression.ExprTypeCase.GET_COLUMN_BY_ORDINAL =>
+        transformGetColumnByOrdinal(exp.getGetColumnByOrdinal)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformUnregisteredFunction(exp.getUnresolvedFunction)
           .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
@@ -1401,6 +1398,19 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def transformUnresolvedAttribute(
       attr: proto.Expression.UnresolvedAttribute): UnresolvedAttribute = {
     val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
+    if (attr.hasPlanId) {
+      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
+    }
+    if (attr.hasIsMetadataColumn && attr.getIsMetadataColumn) {
+      expr.setTagValue(LogicalPlan.IS_METADATA_COL, ())
+    }
+    expr
+  }
+
+  private def transformGetColumnByOrdinal(
+      attr: proto.Expression.GetColumnByOrdinal): GetColumnByOrdinal = {
+    // always set dataType field null, since it is not used in Analyzer
+    val expr = GetColumnByOrdinal(attr.getOrdinal, null)
     if (attr.hasPlanId) {
       expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
     }
@@ -1531,6 +1541,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
           case nsm: NoSuchMethodException =>
             throw new ClassNotFoundException(
               s"Failed to load class correctly due to $nsm. " +
+                "Make sure the artifact where the class is defined is installed by calling" +
+                " session.addArtifact.")
+          case cnf: ClassNotFoundException =>
+            throw new ClassNotFoundException(
+              s"Failed to load class: ${cnf.getMessage}. " +
                 "Make sure the artifact where the class is defined is installed by calling" +
                 " session.addArtifact.")
           case _ => throw t
@@ -1909,10 +1924,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val alpha = extractDouble(children(1), "alpha")
         val ignoreNA = extractBoolean(children(2), "ignoreNA")
         Some(EWM(children(0), alpha, ignoreNA))
-
-      case "last_non_null" if fun.getArgumentsCount == 1 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        Some(LastNonNull(children(0)))
 
       case "null_index" if fun.getArgumentsCount == 1 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -2452,9 +2463,21 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       executeHolder: ExecuteHolder): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
+    val namedArguments = getSqlCommand.getNamedArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
+    val posArguments = getSqlCommand.getPosArgumentsList
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
-    val df = if (!args.isEmpty) {
+    val df = if (!namedArguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        namedArguments.asScala.mapValues(e => Column(transformExpression(e))).toMap,
+        tracker)
+    } else if (!posArguments.isEmpty) {
+      session.sql(
+        getSqlCommand.getSql,
+        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
+        tracker)
+    } else if (!args.isEmpty) {
       session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
@@ -2469,35 +2492,35 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case _ => Seq.empty
     }
 
-    // Convert the results to Arrow.
-    val schema = df.schema
-    val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
-    val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-
-    // Convert the data.
-    val bytes = if (rows.isEmpty) {
-      ArrowConverters.createEmptyArrowBatch(
-        schema,
-        timeZoneId,
-        errorOnDuplicatedFieldNames = false)
-    } else {
-      val batches = ArrowConverters.toBatchWithSchemaIterator(
-        rowIter = rows.iterator,
-        schema = schema,
-        maxRecordsPerBatch = -1,
-        maxEstimatedBatchSize = maxBatchSize,
-        timeZoneId = timeZoneId,
-        errorOnDuplicatedFieldNames = false)
-      assert(batches.hasNext)
-      val bytes = batches.next()
-      assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-      bytes
-    }
-
     // To avoid explicit handling of the result on the client, we build the expected input
     // of the relation on the server. The client has to simply forward the result.
     val result = SqlCommandResult.newBuilder()
     if (isCommand) {
+      // Convert the results to Arrow.
+      val schema = df.schema
+      val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
+      val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
+
+      // Convert the data.
+      val bytes = if (rows.isEmpty) {
+        ArrowConverters.createEmptyArrowBatch(
+          schema,
+          timeZoneId,
+          errorOnDuplicatedFieldNames = false)
+      } else {
+        val batches = ArrowConverters.toBatchWithSchemaIterator(
+          rowIter = rows.iterator,
+          schema = schema,
+          maxRecordsPerBatch = -1,
+          maxEstimatedBatchSize = maxBatchSize,
+          timeZoneId = timeZoneId,
+          errorOnDuplicatedFieldNames = false)
+        assert(batches.hasNext)
+        val bytes = batches.next()
+        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+        bytes
+      }
+
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2516,10 +2539,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
             proto.SQL
               .newBuilder()
               .setQuery(getSqlCommand.getSql)
+              .putAllNamedArguments(getSqlCommand.getNamedArgumentsMap)
+              .addAllPosArguments(getSqlCommand.getPosArgumentsList)
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
     }
-    executeHolder.eventsManager.postFinished()
+    executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(
       ExecutePlanResponse
@@ -2862,11 +2887,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       }
     }
 
+    // This is filled when a foreach batch runner started for Python.
+    var foreachBatchRunnerCleaner: Option[StreamingForeachBatchHelper.RunnerCleaner] = None
+
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          val (fn, cleaner) =
+            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
           val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
@@ -2881,16 +2912,28 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       writer.foreachBatch(foreachBatchFn)
     }
 
-    val query = writeOp.getPath match {
-      case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
-      case "" => writer.start()
-      case path => writer.start(path)
-    }
+    val query =
+      try {
+        writeOp.getPath match {
+          case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
+          case "" => writer.start()
+          case path => writer.start(path)
+        }
+      } catch {
+        case NonFatal(ex) => // Failed to start the query, clean up foreach runner if any.
+          logInfo(s"Removing foreachBatch worker, query failed to start for session $sessionId.")
+          foreachBatchRunnerCleaner.foreach(_.close())
+          throw ex
+      }
 
-    // Register the new query so that the session and query references are cached.
-    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-      sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
-      query = query)
+    // Register the new query so that its reference is cached and is stopped on session timeout.
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
+    // Register the runner with the query if Python foreachBatch is enabled.
+    foreachBatchRunnerCleaner.foreach { cleaner =>
+      sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
+        query,
+        cleaner)
+    }
     executeHolder.eventsManager.postFinished()
 
     val result = WriteStreamOperationStartResult
@@ -3122,8 +3165,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val listener = if (command.getAddListener.hasPythonListenerPayload) {
           new PythonStreamingQueryListener(
             transformPythonFunction(command.getAddListener.getPythonListenerPayload),
-            sessionHolder,
-            pythonExec)
+            sessionHolder)
         } else {
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](

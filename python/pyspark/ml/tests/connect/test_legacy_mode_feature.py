@@ -22,13 +22,18 @@ import numpy as np
 import tempfile
 import unittest
 
-from pyspark.ml.connect.feature import (
-    MaxAbsScaler,
-    MaxAbsScalerModel,
-    StandardScaler,
-    StandardScalerModel,
-)
 from pyspark.sql import SparkSession
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+
+
+if should_test_connect:
+    from pyspark.ml.connect.feature import (
+        MaxAbsScaler,
+        MaxAbsScalerModel,
+        StandardScaler,
+        StandardScalerModel,
+    )
+    import pandas as pd
 
 
 class FeatureTestsMixin:
@@ -54,8 +59,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
+        local_df1_copy = local_df1.copy()
         local_transform_result = local_fit_model.transform(local_df1)
-        assert id(local_transform_result) == id(local_df1)
+        # assert that `transform` doesn't mutate the input dataframe.
+        pd.testing.assert_frame_equal(local_df1, local_df1_copy)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
@@ -107,8 +114,10 @@ class FeatureTestsMixin:
 
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
+        local_df1_copy = local_df1.copy()
         local_transform_result = local_fit_model.transform(local_df1)
-        assert id(local_transform_result) == id(local_df1)
+        # assert that `transform` doesn't mutate the input dataframe.
+        pd.testing.assert_frame_equal(local_df1, local_df1_copy)
         assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
@@ -136,6 +145,7 @@ class FeatureTestsMixin:
                 np.testing.assert_allclose(sk_result, expected_result)
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class FeatureTests(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

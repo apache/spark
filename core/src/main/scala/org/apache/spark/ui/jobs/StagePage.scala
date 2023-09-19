@@ -223,6 +223,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
+          <script>setTaskThreadDumpEnabled({parent.threadDumpEnabled})</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
@@ -469,7 +470,7 @@ private[spark] object ApiHelper {
 
   private[ui] val COLUMN_TO_INDEX = Map(
     HEADER_ID -> null.asInstanceOf[String],
-    HEADER_TASK_INDEX -> TaskIndexNames.TASK_INDEX,
+    HEADER_TASK_INDEX -> TaskIndexNames.TASK_PARTITION_ID,
     HEADER_ATTEMPT -> TaskIndexNames.ATTEMPT,
     HEADER_STATUS -> TaskIndexNames.STATUS,
     HEADER_LOCALITY -> TaskIndexNames.LOCALITY,

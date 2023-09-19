@@ -16,7 +16,6 @@
 #
 
 import datetime
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -229,20 +228,12 @@ class IndexingTest(ComparisonTestBase):
         self.assert_eq(psdf.at[9, 1], pdf.at[9, 1])
 
     def test_at_multiindex(self):
-        pdf = self.pdf.set_index("b", append=True)
         psdf = self.psdf.set_index("b", append=True)
 
-        # TODO: seems like a pandas' bug in pandas>=1.1.0
-        if LooseVersion(pd.__version__) < LooseVersion("1.1.0"):
-            self.assert_eq(psdf.at[(3, 6), "a"], pdf.at[(3, 6), "a"])
-            self.assert_eq(psdf.at[(3,), "a"], pdf.at[(3,), "a"])
-            self.assert_eq(list(psdf.at[(9, 0), "a"]), list(pdf.at[(9, 0), "a"]))
-            self.assert_eq(list(psdf.at[(9,), "a"]), list(pdf.at[(9,), "a"]))
-        else:
-            self.assert_eq(psdf.at[(3, 6), "a"], 3)
-            self.assert_eq(psdf.at[(3,), "a"], np.array([3]))
-            self.assert_eq(list(psdf.at[(9, 0), "a"]), [7, 8, 9])
-            self.assert_eq(list(psdf.at[(9,), "a"]), [7, 8, 9])
+        self.assert_eq(psdf.at[(3, 6), "a"], 3)
+        self.assert_eq(psdf.at[(3,), "a"], np.array([3]))
+        self.assert_eq(list(psdf.at[(9, 0), "a"]), [7, 8, 9])
+        self.assert_eq(list(psdf.at[(9,), "a"]), [7, 8, 9])
 
         with self.assertRaises(ValueError):
             psdf.at[3, "a"]

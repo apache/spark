@@ -2783,7 +2783,7 @@ case class ToBinary(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "fmt",
+              "inputName" -> toSQLId("fmt"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(f)
             )

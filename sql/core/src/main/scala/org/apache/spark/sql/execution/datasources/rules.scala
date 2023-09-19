@@ -404,7 +404,11 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     }
     val newQuery = try {
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
+        tblName,
+        expectedColumns,
+        query,
+        byName = hasColumnList || insert.byName,
+        conf,
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&

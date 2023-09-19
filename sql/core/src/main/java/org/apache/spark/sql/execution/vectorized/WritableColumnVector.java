@@ -53,6 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 public abstract class WritableColumnVector extends ColumnVector {
   private final byte[] byte8 = new byte[8];
 
+  protected abstract void releaseMemory();
+
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
@@ -68,6 +70,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (numNulls > 0) {
       putNotNulls(0, capacity);
       numNulls = 0;
+    }
+
+    if (hugeVectorThreshold > 0 && capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
+      releaseMemory();
+      reserveInternal(capacity);
     }
   }
 
@@ -85,6 +93,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+    releaseMemory();
   }
 
   public void reserveAdditional(int additionalCapacity) {
@@ -95,7 +104,10 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      int newCapacity =
+          hugeVectorThreshold < 0 || requiredCapacity < hugeVectorThreshold ?
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L) :
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeVectorReserveRatio);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -846,7 +858,14 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Marks this column as being constant.
    */
-  public final void setIsConstant() { isConstant = true; }
+  public final void setIsConstant() {
+    if (childColumns != null) {
+      for (WritableColumnVector c : childColumns) {
+        c.setIsConstant();
+      }
+    }
+    isConstant = true;
+  }
 
   /**
    * Marks this column only contains null values.
@@ -868,10 +887,19 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected int capacity;
 
   /**
+   * The default number of rows that can be stored in this column.
+   */
+  protected final int defaultCapacity;
+
+  /**
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  protected int hugeVectorThreshold;
+
+  protected double hugeVectorReserveRatio;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -922,6 +950,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector(int capacity, DataType dataType) {
     super(dataType);
     this.capacity = capacity;
+    this.defaultCapacity = capacity;
+    this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
+    this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
 
     if (isArray()) {
       DataType childType;

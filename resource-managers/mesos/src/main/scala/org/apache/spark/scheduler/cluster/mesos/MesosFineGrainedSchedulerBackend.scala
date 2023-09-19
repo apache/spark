@@ -35,6 +35,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.Utils
 
 /**
@@ -462,4 +463,6 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     // TODO SPARK-25074 support this method for MesosFineGrainedSchedulerBackend
     0
   }
+
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = None
 }
