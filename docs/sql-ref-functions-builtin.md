@@ -48,6 +48,16 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
+{% if static_file.name == 'generated-collection-funcs-table.html' %}
+### Collection Functions
+{% include_relative generated-collection-funcs-table.html %}
+#### Examples
+{% include_relative generated-collection-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
     {% if static_file.name == 'generated-map-funcs-table.html' %}
 ### Map Functions
 {% include_relative generated-map-funcs-table.html %}
@@ -63,16 +73,6 @@ license: |
 {% include_relative generated-datetime-funcs-table.html %}
 #### Examples
 {% include_relative generated-datetime-funcs-examples.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-json-funcs-table.html' %}
-### JSON Functions
-{% include_relative generated-json-funcs-table.html %}
-#### Examples
-{% include_relative generated-json-funcs-examples.html %}
         {% break %}
     {% endif %}
 {% endfor %}
@@ -108,6 +108,66 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
+{% if static_file.name == 'generated-hash-funcs-table.html' %}
+### Hash Functions
+{% include_relative generated-hash-funcs-table.html %}
+#### Examples
+{% include_relative generated-hash-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-lambda-funcs-table.html' %}
+### Lambda Functions
+{% include_relative generated-lambda-funcs-table.html %}
+#### Examples
+{% include_relative generated-lambda-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-csv-funcs-table.html' %}
+### CSV Functions
+{% include_relative generated-csv-funcs-table.html %}
+#### Examples
+{% include_relative generated-csv-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-json-funcs-table.html' %}
+### JSON Functions
+{% include_relative generated-json-funcs-table.html %}
+#### Examples
+{% include_relative generated-json-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-xml-funcs-table.html' %}
+### XML Functions
+{% include_relative generated-xml-funcs-table.html %}
+#### Examples
+{% include_relative generated-xml-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-url-funcs-table.html' %}
+### URL Functions
+{% include_relative generated-url-funcs-table.html %}
+#### Examples
+{% include_relative generated-url-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
     {% if static_file.name == 'generated-bitwise-funcs-table.html' %}
 ### Bitwise Functions
 {% include_relative generated-bitwise-funcs-table.html %}
@@ -138,16 +198,6 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
-    {% if static_file.name == 'generated-csv-funcs-table.html' %}
-### Csv Functions
-{% include_relative generated-csv-funcs-table.html %}
-#### Examples
-{% include_relative generated-csv-funcs-examples.html %}
-        {% break %}
-    {% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
     {% if static_file.name == 'generated-misc-funcs-table.html' %}
 ### Misc Functions
 {% include_relative generated-misc-funcs-table.html %}
@@ -165,4 +215,14 @@ license: |
 {% include_relative generated-generator-funcs-examples.html %}
         {% break %}
     {% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+{% if static_file.name == 'generated-table-funcs-table.html' %}
+### Table Functions
+{% include_relative generated-table-funcs-table.html %}
+#### Examples
+{% include_relative generated-table-funcs-examples.html %}
+{% break %}
+{% endif %}
 {% endfor %}
