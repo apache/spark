@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonException, PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -137,7 +137,7 @@ object StreamingForeachBatchHelper extends Logging {
             val obj = new Array[Byte](exLength)
             dataIn.readFully(obj)
             val msg = new String(obj, StandardCharsets.UTF_8)
-            throw new IllegalStateException(s"Found error inside foreachBatch Python process: $msg")
+            throw new PythonException(s"Found error inside foreachBatch Python process: $msg", null)
         }
       } catch {
         case eof: EOFException =>

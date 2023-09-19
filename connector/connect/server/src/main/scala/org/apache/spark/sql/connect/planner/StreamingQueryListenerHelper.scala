@@ -21,7 +21,7 @@ import java.io.EOFException
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonException, PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.streaming.StreamingQueryListener
@@ -87,8 +87,8 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
           val obj = new Array[Byte](exLength)
           dataIn.readFully(obj)
           val msg = new String(obj, StandardCharsets.UTF_8)
-          throw new IllegalStateException(s"Found error inside Streaming query listener Python " +
-            s"process for function $functionName: $msg")
+          throw new PythonException(s"Found error inside Streaming query listener Python " +
+            s"process for function $functionName: $msg", null)
       }
     } catch {
       case eof: EOFException =>
