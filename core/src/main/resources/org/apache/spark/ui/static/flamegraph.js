@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-/* d3, flamegraph */
+/* global d3, flamegraph */
 
 /* eslint-disable no-unused-vars */
 function drawFlamegraph() {
-	const chart = flamegraph().width(window.innerWidth);
-	const jsonStr = d3.select("#executor-flamegraph-data").text().trim()
-	const jsonData = JSON.parse(jsonStr);
-	d3.select("#executor-flamegraph-chart")
+  const chart = flamegraph().width(window.innerWidth);
+  const jsonStr = d3.select("#executor-flamegraph-data").text().trim()
+  const jsonData = JSON.parse(jsonStr);
+  d3.select("#executor-flamegraph-chart")
 		.datum(jsonData)
-	 	.call(chart);
-	window.onresize = () => chart.width(window.innerWidth);
+    .call(chart);
+  window.onresize = () => chart.width(window.innerWidth);
 }
+/* eslint-enable no-unused-vars */
