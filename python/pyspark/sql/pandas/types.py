@@ -246,11 +246,11 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
 
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64tz_dtype  # type: ignore[attr-defined]
+    import pandas as pd
 
     tz = timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
+    if isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert(tz).dt.tz_localize(None)
     else:
         return s
@@ -278,9 +278,9 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
+    import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
         is_datetime64_dtype,
-        is_datetime64tz_dtype,
     )
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
@@ -317,7 +317,7 @@ def _check_series_convert_timestamps_internal(
         # '2015-11-01 01:30:00-05:00'
         tz = timezone or _get_local_timezone()
         return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert("UTC")
-    elif is_datetime64tz_dtype(s.dtype):
+    elif isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert("UTC")
     else:
         return s
@@ -348,14 +348,13 @@ def _check_series_convert_timestamps_localize(
 
     import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64tz_dtype,
         is_datetime64_dtype,
     )
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
+    if isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
@@ -509,7 +508,6 @@ def _create_converter_to_pandas(
     """
     import numpy as np
     import pandas as pd
-    from pandas.core.dtypes.common import is_datetime64tz_dtype
 
     pandas_type = _to_corrected_pandas_type(data_type)
 
@@ -539,7 +537,7 @@ def _create_converter_to_pandas(
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
-                if not is_datetime64tz_dtype(pser.dtype):
+                if not isinstance(pser.dtype, pd.DatetimeTZDtype):
                     pser = pser.astype(pandas_type, copy=False)
                 return _check_series_convert_timestamps_local_tz(pser, timezone=cast(str, timezone))
 

@@ -3671,39 +3671,39 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Collect values from a single column DataFrame
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_list('age')).show()
-    +-----------------+
-    |collect_list(age)|
-    +-----------------+
-    |        [2, 5, 5]|
-    +-----------------+
-
-    Example 2: Collect values from a DataFrame with multiple columns
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_list('id')).show()
-    +----+----------------+
-    |name|collect_list(id)|
-    +----+----------------+
-    |John|          [1, 2]|
-    | Ana|             [3]|
-    +----+----------------+
-
-    Example 3: Collect values from a DataFrame and sort the result
+    Example 1: Collect values from a DataFrame and sort the result in ascending order
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
-    >>> df.select(sf.array_sort(sf.collect_list('value')).alias('sorted_list')).show()
+    >>> df.select(sf.sort_array(sf.collect_list('value')).alias('sorted_list')).show()
     +-----------+
     |sorted_list|
     +-----------+
     |  [1, 2, 2]|
     +-----------+
+
+    Example 2: Collect values from a DataFrame and sort the result in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_list('age'), asc=False).alias('sorted_list')).show()
+    +-----------+
+    |sorted_list|
+    +-----------+
+    |  [5, 5, 2]|
+    +-----------+
+
+    Example 3: Collect values from a DataFrame with multiple columns and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list')).show()
+    +----+-----------+
+    |name|sorted_list|
+    +----+-----------+
+    |John|     [1, 2]|
+    | Ana|        [3]|
+    +----+-----------+
     """
     return _invoke_function_over_columns("collect_list", col)
 
@@ -3762,39 +3762,39 @@ def collect_set(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Collect values from a single column DataFrame
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
-    >>> df.select(sf.collect_set('age')).show()
-    +----------------+
-    |collect_set(age)|
-    +----------------+
-    |          [5, 2]|
-    +----------------+
-
-    Example 2: Collect values from a DataFrame with multiple columns
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.collect_set('id')).show()
-    +----+---------------+
-    |name|collect_set(id)|
-    +----+---------------+
-    |John|         [1, 2]|
-    | Ana|            [3]|
-    +----+---------------+
-
-    Example 3: Collect values from a DataFrame and sort the result
+    Example 1: Collect values from a DataFrame and sort the result in ascending order
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,), (2,)], ('value',))
-    >>> df.select(sf.array_sort(sf.collect_set('value')).alias('sorted_set')).show()
+    >>> df.select(sf.sort_array(sf.collect_set('value')).alias('sorted_set')).show()
     +----------+
     |sorted_set|
     +----------+
     |    [1, 2]|
     +----------+
+
+    Example 2: Collect values from a DataFrame and sort the result in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_set('age'), asc=False).alias('sorted_set')).show()
+    +----------+
+    |sorted_set|
+    +----------+
+    |    [5, 2]|
+    +----------+
+
+    Example 3: Collect values from a DataFrame with multiple columns and sort the result
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
+    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set')).show()
+    +----+----------+
+    |name|sorted_set|
+    +----+----------+
+    |John|    [1, 2]|
+    | Ana|       [3]|
+    +----+----------+
     """
     return _invoke_function_over_columns("collect_set", col)
 
@@ -11686,7 +11686,8 @@ def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> 
 def array(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
-    """Creates a new array column.
+    """
+    Collection function: Creates a new array column from the input columns or column names.
 
     .. versionadded:: 1.4.0
 
@@ -11696,25 +11697,63 @@ def array(
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        column names or :class:`~pyspark.sql.Column`\\s that have
-        the same data type.
+        Column names or :class:`~pyspark.sql.Column` objects that have the same data type.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of array type.
+        A new Column of array type, where each value is an array containing the corresponding values
+        from the input columns.
 
     Examples
     --------
+    Example 1: Basic usage of array function with column names.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(array('age', 'age').alias("arr")).collect()
-    [Row(arr=[2, 2]), Row(arr=[5, 5])]
-    >>> df.select(array([df.age, df.age]).alias("arr")).collect()
-    [Row(arr=[2, 2]), Row(arr=[5, 5])]
-    >>> df.select(array('age', 'age').alias("col")).printSchema()
-    root
-     |-- col: array (nullable = false)
-     |    |-- element: long (containsNull = true)
+    >>> df.select(sf.array('name', 'age').alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 2: Usage of array function with Column objects.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array(df.name, df.age).alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 3: Single argument as list of column names.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array(['name', 'age']).alias("arr")).show()
+    +----------+
+    |       arr|
+    +----------+
+    |[Alice, 2]|
+    |  [Bob, 5]|
+    +----------+
+
+    Example 4: array function with a column containing null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("Alice", None), ("Bob", 5)], ("name", "age"))
+    >>> df.select(sf.array('name', 'age').alias("arr")).show()
+    +-------------+
+    |          arr|
+    +-------------+
+    |[Alice, NULL]|
+    |     [Bob, 5]|
+    +-------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -11724,8 +11763,9 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: returns null if the array is null, true if the array contains the
-    given value, and false otherwise.
+    Collection function: This function returns a boolean indicating whether the array
+    contains the given value, returning null if the array is null, true if the array
+    contains the given value, and false otherwise.
 
     .. versionadded:: 1.5.0
 
@@ -11735,22 +11775,68 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing array
+        The target column containing the arrays.
     value :
-        value or column to check for in array
+        The value or column to check for in the array.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of Boolean type.
+        A new Column of Boolean type, where each value indicates whether the corresponding array
+        from the input column contains the specified value.
 
     Examples
     --------
+    Example 1: Basic usage of array_contains function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
-    >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
-    >>> df.select(array_contains(df.data, lit("a"))).collect()
-    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      true|
+    |     false|
+    +----------+
+
+    Example 2: Usage of array_contains function with a column.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b", "c"], "c"),
+    ...                            (["c", "d", "e"], "d"),
+    ...                            (["e", "a", "c"], "b")], ["data", "item"])
+    >>> df.select(sf.array_contains(df.data, sf.col("item"))
+    ...   .alias("data_contains_item")).show()
+    +------------------+
+    |data_contains_item|
+    +------------------+
+    |              true|
+    |              true|
+    |             false|
+    +------------------+
+
+    Example 3: Attempt to use array_contains function with a null array.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None,), (["a", "b", "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      NULL|
+    |      true|
+    +----------+
+
+    Example 4: Usage of array_contains with an array column containing null values.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
+    +----------+
+    |contains_a|
+    +----------+
+    |      true|
+    +----------+
     """
     value = value._jc if isinstance(value, Column) else value
     return _invoke_function("array_contains", _to_java_column(col), value)
@@ -11759,25 +11845,76 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
 @_try_remote_functions
 def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     """
-    Collection function: returns true if the arrays contain any common non-null element; if not,
-    returns null if both the arrays are non-empty and any of them contains a null element; returns
-    false otherwise.
+    Collection function: This function returns a boolean column indicating if the input arrays
+    have common non-null elements, returning true if they do, null if the arrays do not contain
+    any common elements but are not empty and at least one of them contains a null element,
+    and false otherwise.
 
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    Parameters
+    ----------
+    a1, a2 : :class:`~pyspark.sql.Column` or str
+        The names of the columns that contain the input arrays.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a column of Boolean type.
+        A new Column of Boolean type, where each value indicates whether the corresponding arrays
+        from the input columns contain any common elements.
 
     Examples
     --------
+    Example 1: Basic usage of arrays_overlap function.
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
-    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
-    [Row(overlap=True), Row(overlap=False)]
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   true|
+    |  false|
+    +-------+
+
+    Example 2: Usage of arrays_overlap function with arrays containing null elements.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None], ["b", None]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   NULL|
+    |  false|
+    +-------+
+
+    Example 3: Usage of arrays_overlap function with arrays that are null.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None, ["b", "c"]), (["a"], None)], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   NULL|
+    |   NULL|
+    +-------+
+
+    Example 4: Usage of arrays_overlap on arrays with identical elements.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", "b"], ["a", "b"]), (["a"], ["a"])], ['x', 'y'])
+    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
+    +-------+
+    |overlap|
+    +-------+
+    |   true|
+    |   true|
+    +-------+
     """
     return _invoke_function_over_columns("arrays_overlap", a1, a2)
 

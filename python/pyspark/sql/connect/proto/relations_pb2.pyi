@@ -635,9 +635,32 @@ class SQL(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class NamedArgumentsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
     QUERY_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
     POS_ARGS_FIELD_NUMBER: builtins.int
+    NAMED_ARGUMENTS_FIELD_NUMBER: builtins.int
+    POS_ARGUMENTS_FIELD_NUMBER: builtins.int
     query: builtins.str
     """(Required) The SQL query."""
     @property
@@ -654,6 +677,24 @@ class SQL(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
+    @property
+    def named_arguments(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) A map of parameter names to expressions.
+        It cannot coexist with `pos_arguments`.
+        """
+    @property
+    def pos_arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) A sequence of expressions for positional parameters in the SQL query text.
+        It cannot coexist with `named_arguments`.
+        """
     def __init__(
         self,
         *,
@@ -666,11 +707,28 @@ class SQL(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        named_arguments: collections.abc.Mapping[
+            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        pos_arguments: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "args", b"args", "pos_args", b"pos_args", "query", b"query"
+            "args",
+            b"args",
+            "named_arguments",
+            b"named_arguments",
+            "pos_args",
+            b"pos_args",
+            "pos_arguments",
+            b"pos_arguments",
+            "query",
+            b"query",
         ],
     ) -> None: ...
 

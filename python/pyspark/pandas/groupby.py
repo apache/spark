@@ -305,7 +305,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
             if len(should_drop_index) > 0:
-                psdf = psdf.reset_index(level=should_drop_index, drop=True)
+                drop = not any(
+                    [
+                        isinstance(func_or_funcs[gkey.name], list)
+                        for gkey in self._groupkeys
+                        if gkey.name in func_or_funcs
+                    ]
+                )
+                psdf = psdf.reset_index(level=should_drop_index, drop=drop)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
 
@@ -701,6 +708,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             raise TypeError("must be real number, not %s" % type(q).__name__)
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
+        if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
+            warnings.warn(
+                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                "and will raise in a future version, matching the Series/DataFrame behavior. "
+                "Cast to uint8 dtype before calling quantile instead.",
+                FutureWarning,
+            )
+
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
             accepted_spark_types=(NumericType, BooleanType),
@@ -2293,7 +2308,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             should_resolve=True,
         )
 
-    # TODO: add axis parameter
     def idxmax(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of maximum over requested axis in group.
@@ -2376,7 +2390,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
         return self._handle_output(DataFrame(internal))
 
-    # TODO: add axis parameter
     def idxmin(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of minimum over requested axis in group.
@@ -2479,8 +2492,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Method to use for filling holes in reindexed Series pad / ffill: propagate last valid
             observation forward to next valid backfill / bfill:
             use NEXT valid observation to fill gap
+
+            .. deprecated:: 4.0.0
+
         axis : {0 or `index`}
             1 and `columns` are not supported.
+
+            .. deprecated:: 4.0.0
+                For axis=1, operate on the underlying object instead.
+                Otherwise the axis keyword is not necessary.
+
         inplace : boolean, default False
             Fill in place (do not create a new object)
         limit : int, default None
@@ -2489,6 +2510,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             consecutive NaNs, it will only be partially filled. If method is not specified,
             this is the maximum number of entries along the entire axis where NaNs will be filled.
             Must be greater than 0 if not None
+
+            .. deprecated:: 4.0.0
+
 
         Returns
         -------
@@ -2527,11 +2551,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
+        should_resolve = method is not None
+        if should_resolve:
+            warnings.warn(
+                "DataFrameGroupBy.fillna with 'method' is deprecated "
+                "and will raise in a future version. "
+                "Use DataFrameGroupBy.ffill() or DataFrameGroupBy.bfill() instead.",
+                FutureWarning,
+            )
         return self._apply_series_op(
             lambda sg: sg._psser._fillna(
                 value=value, method=method, axis=axis, limit=limit, part_cols=sg._groupkeys_scols
             ),
-            should_resolve=(method is not None),
+            should_resolve=should_resolve,
         )
 
     def bfill(self, limit: Optional[int] = None) -> FrameLike:
@@ -3573,6 +3605,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
         if not self._as_index:
+            column_names = [column.name for column in self._agg_columns]
+            for groupkey in self._groupkeys:
+                if groupkey.name not in column_names:
+                    warnings.warn(
+                        "A grouping was used that is not in the columns of the DataFrame and so "
+                        "was excluded from the result. "
+                        "This grouping will be included in a future version. "
+                        "Add the grouping as a column of the DataFrame to silence this warning.",
+                        FutureWarning,
+                    )
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
