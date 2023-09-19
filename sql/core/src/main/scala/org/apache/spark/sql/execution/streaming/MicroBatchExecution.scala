@@ -60,7 +60,7 @@ class MicroBatchExecution(
       case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
       case OneTimeTrigger => SingleBatchExecutor()
       case AvailableNowTrigger =>
-        // When the flag is enabled, Spark will wrap sources which does not support
+        // When the flag is enabled, Spark will wrap sources which do not support
         // Trigger.AvailableNow with wrapper implementation, so that Trigger.AvailableNow can
         // take effect.
         // When the flag is disabled, Spark will fall back to single batch execution, whenever
