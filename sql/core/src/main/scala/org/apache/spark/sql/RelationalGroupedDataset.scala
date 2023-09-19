@@ -706,7 +706,7 @@ private[sql] object RelationalGroupedDataset {
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
     case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
-    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
