@@ -33,7 +33,6 @@ from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
-    write_with_length,
     write_int,
     read_long,
     read_bool,
