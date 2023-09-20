@@ -1309,7 +1309,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val r4 = uuid()
     val r5 = shuffle(col("a"))
     df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
-      .collect.foreach { row =>
+      .collect
+      .foreach { row =>
         (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
       }
   }
