@@ -60,6 +60,10 @@ private class PushBasedFetchHelper(
   private[this] val chunksMetaMap = new mutable.HashMap[ShuffleBlockChunkId, RoaringBitmap]()
 
   /**
+   * A map for storing inflight MergedBlockMeta.
+   */
+  private[this] val inflightMergedBlocks = new mutable.HashSet[ShuffleMergedBlockId]()
+  /**
    * Returns true if the address is for a push-merged block.
    */
   def isPushMergedShuffleBlockAddress(address: BlockManagerId): Boolean = {
@@ -165,6 +169,12 @@ private class PushBasedFetchHelper(
           meta: MergedBlockMeta): Unit = {
         logDebug(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
+        if (!inflightMergedBlocks.remove(
+          ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId))) {
+          logWarning(s"Duplicate received meta of push-merged for ($shuffleId, $shuffleMergeId," +
+            s" $reduceId) from ${req.address.host}:${req.address.port}")
+          return
+        }
         try {
           iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
             reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
@@ -183,12 +193,19 @@ private class PushBasedFetchHelper(
           exception: Throwable): Unit = {
         logError(s"Failed to get the meta of push-merged block for ($shuffleId, $reduceId) " +
           s"from ${req.address.host}:${req.address.port}", exception)
-        iterator.addToResultsQueue(
-          PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
+        val mergedBlock = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
+        if (inflightMergedBlocks.remove(mergedBlock)) {
+          iterator.addToResultsQueue(
+            PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
+        } else {
+          logWarning(s"Duplicate received meta of push-merged block $mergedBlock" +
+            s" from ${req.address.host}:${req.address.port}")
+        }
       }
     }
     req.blocks.foreach { block =>
       val shuffleBlockId = block.blockId.asInstanceOf[ShuffleMergedBlockId]
+      inflightMergedBlocks += shuffleBlockId
       shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
         shuffleBlockId.shuffleMergeId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
     }

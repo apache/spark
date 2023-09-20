@@ -1215,6 +1215,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         Future {
           metaListener.onFailure(shuffleId, shuffleMergeId, reduceId,
             new RuntimeException("forced error"))
+          metaListener.onFailure(shuffleId, shuffleMergeId, reduceId,
+            new RuntimeException("forced error"))
         }
       })
     val taskContext = TaskContext.empty()
