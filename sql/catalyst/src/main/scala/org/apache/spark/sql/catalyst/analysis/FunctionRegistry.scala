@@ -591,11 +591,15 @@ object FunctionRegistry {
     expression[RegExpCount]("regexp_count"),
     expression[RegExpSubStr]("regexp_substr"),
     expression[RegExpInStr]("regexp_instr"),
+    // Unicode functions
+    expression[UnicodeEncode]("unicode_encode"),
+    expression[UnicodeDecode]("unicode_decode"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
+
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -835,6 +839,8 @@ object FunctionRegistry {
     // Xml
     expression[XmlToStructs]("from_xml"),
     expression[SchemaOfXml]("schema_of_xml")
+
+
   )
 
   val builtin: SimpleFunctionRegistry = {

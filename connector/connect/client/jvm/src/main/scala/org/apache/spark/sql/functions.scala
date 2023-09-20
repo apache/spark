@@ -8350,3 +8350,21 @@ object functions {
   }
 
 }
+
+/**
+ * Decodes a Unicode encoding format to str
+ * scheme.
+ *
+ * @group string_funcs
+ * @since 3.5.0
+ */
+def unicode_decode(str: Column): Column = Column.fn("unicode_decode", str)
+/**
+ * Translates a string into Unicode encoding format.
+ * scheme.
+ *
+ * @group string_funcs
+ * @since 3.5.0
+ */
+def unicode_encode(str: Column): Column = Column.fn("unicode_encode", str)
+

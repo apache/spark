@@ -450,6 +450,8 @@ String Functions
     upper
     url_decode
     url_encode
+    unicode_encode
+    unicode_decode
 
 
 Bitwise Functions

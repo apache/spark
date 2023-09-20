@@ -8582,4 +8582,24 @@ object functions {
   def unwrap_udt(column: Column): Column = withExpr {
     UnwrapUDT(column.expr)
   }
+
+  /**
+   * Decodes a `str` in Unicode encoding format.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def unicode_decode(str: Column): Column = withExpr {
+    UnicodeDecode(str.expr)
+  }
+
+  /**
+   * Translates a string into Unicode encoding.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def unicode_encode(str: Column): Column = withExpr {
+    UnicodeEncode(str.expr)
+  }
 }

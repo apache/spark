@@ -1225,4 +1225,24 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("unicode_decode") {
+    val df = Seq("\u0061\u0070\u0061\u0063\u0068\u0065").toDF("a")
+    checkAnswer(
+      df.selectExpr("unicode_decode(a)"),
+      Row("apache"))
+    checkAnswer(
+      df.select(unicode_decode(col("a"))),
+      Row("apache"))
+  }
+
+  test("unicode_encode") {
+    val df = Seq("apache").toDF("a")
+    checkAnswer(
+      df.selectExpr("unicode_encode(a)"),
+      Row("\u0061\u0070\u0061\u0063\u0068\u0065"))
+    checkAnswer(
+      df.select(unicode_encode(col("a"))),
+      Row("\u0061\u0070\u0061\u0063\u0068\u0065"))
+  }
 }

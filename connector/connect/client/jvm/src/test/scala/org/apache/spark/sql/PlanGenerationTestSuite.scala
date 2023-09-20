@@ -3292,4 +3292,14 @@ class PlanGenerationTestSuite
   test("to_protobuf messageClassName descFilePath") {
     binary.select(pbFn.to_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
   }
+
+
+  functionTest("unicode_decode") {
+    fn.unicode_decode(fn.col("g"))
+  }
+
+  functionTest("unicode_encode") {
+    fn.unicode_encode(fn.col("g"))
+  }
+
 }
