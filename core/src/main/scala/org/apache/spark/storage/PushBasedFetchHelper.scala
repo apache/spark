@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection
 import scala.collection.mutable
@@ -63,7 +63,7 @@ private class PushBasedFetchHelper(
    * A set for storing inflight MergedBlockMeta. it is used to guarantee that we fallback
    * at most once for those failed push-merged block requests.
    */
-  private[this] val inflightMergedBlocks = new mutable.HashSet[ShuffleMergedBlockId]()
+  private[this] val inflightMergedBlocks = ConcurrentHashMap.newKeySet[String]()
 
   /**
    * Returns true if the address is for a push-merged block.
@@ -172,7 +172,7 @@ private class PushBasedFetchHelper(
         logDebug(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
         if (!inflightMergedBlocks.remove(
-          ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId))) {
+          ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId).name)) {
           logWarning(s"Duplicate received meta of push-merged for ($shuffleId, $shuffleMergeId," +
             s" $reduceId) from ${req.address.host}:${req.address.port}")
           return
@@ -196,7 +196,7 @@ private class PushBasedFetchHelper(
         logError(s"Failed to get the meta of push-merged block for ($shuffleId, $reduceId) " +
           s"from ${req.address.host}:${req.address.port}", exception)
         val mergedBlock = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
-        if (inflightMergedBlocks.remove(mergedBlock)) {
+        if (inflightMergedBlocks.remove(mergedBlock.name)) {
           iterator.addToResultsQueue(
             PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
         } else {
@@ -207,7 +207,7 @@ private class PushBasedFetchHelper(
     }
     req.blocks.foreach { block =>
       val shuffleBlockId = block.blockId.asInstanceOf[ShuffleMergedBlockId]
-      inflightMergedBlocks += shuffleBlockId
+      inflightMergedBlocks.add(shuffleBlockId.name)
       shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
         shuffleBlockId.shuffleMergeId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
     }
