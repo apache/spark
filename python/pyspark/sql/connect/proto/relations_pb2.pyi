@@ -3553,6 +3553,7 @@ class CollectMetrics(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
+    DATAFRAME_ID_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
@@ -3565,6 +3566,8 @@ class CollectMetrics(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) The metric sequence."""
+    dataframe_id: builtins.int
+    """(Required) A unique DataFrame id."""
     def __init__(
         self,
         *,
@@ -3572,6 +3575,7 @@ class CollectMetrics(google.protobuf.message.Message):
         name: builtins.str = ...,
         metrics: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
+        dataframe_id: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -3579,7 +3583,14 @@ class CollectMetrics(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "input", b"input", "metrics", b"metrics", "name", b"name"
+            "dataframe_id",
+            b"dataframe_id",
+            "input",
+            b"input",
+            "metrics",
+            b"metrics",
+            "name",
+            b"name",
         ],
     ) -> None: ...
 
