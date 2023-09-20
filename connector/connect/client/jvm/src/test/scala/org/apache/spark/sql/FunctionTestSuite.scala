@@ -279,7 +279,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "rand")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 
   test("randn no seed") {
@@ -287,6 +287,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "randn")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 }
