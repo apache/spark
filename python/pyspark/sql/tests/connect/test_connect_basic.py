@@ -1237,8 +1237,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.index))
 
     def test_sql_with_named_args(self):
-        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
-        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+        from pyspark.sql.functions import create_map, lit
+        from pyspark.sql.connect.functions import lit as clit
+        from pyspark.sql.connect.functions import create_map as ccreate_map
+
+        df = self.connect.sql(
+            "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId",
+            args={"minId": 7, "m": ccreate_map(clit('a'), clit(1))})
+        df2 = self.spark.sql(
+            "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId",
+            args={"minId": 7, "m": create_map(lit('a'), lit(1))})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_sql_with_pos_args(self):
