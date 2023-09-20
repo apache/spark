@@ -271,6 +271,14 @@ SQLSTATE: none assigned
 Cannot up cast `<expression>` from `<sourceType>` to `<targetType>`.
 `<details>`
 
+### [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
+SQLSTATE: none assigned
+
+Error writing state store files for provider `<providerClass>`.
+
+For more details see [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
 ### CAST_INVALID_INPUT
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
