@@ -192,9 +192,14 @@ class HadoopMapReduceCommitProtocol(
     if (hasValidPath) {
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
+      val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
+      val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
       if (dynamicPartitionOverwrite) {
+        logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
+        absParentPaths.foreach(fs.delete(_, true))
+
         val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
@@ -215,15 +220,10 @@ class HadoopMapReduceCommitProtocol(
 
       committer.commitJob(jobContext)
 
-      val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
-      logDebug(s"Committing files staged for absolute locations $filesToMove")
-      val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
-      if (dynamicPartitionOverwrite) {
-        logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
-        absParentPaths.foreach(fs.delete(_, true))
-      }
       logDebug(s"Create absolute parent directories: $absParentPaths")
       absParentPaths.foreach(fs.mkdirs)
+
+      logDebug(s"Committing files staged for absolute locations $filesToMove")
       for ((src, dst) <- filesToMove) {
         if (!fs.rename(new Path(src), new Path(dst))) {
           throw new IOException(s"Failed to rename $src to $dst when committing files staged for " +
