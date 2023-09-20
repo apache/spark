@@ -181,7 +181,6 @@ def get_scala_profiles(scala_version):
         return []  # assume it's default.
 
     sbt_maven_scala_profiles = {
-        "scala2.12": ["-Pscala-2.12"],
         "scala2.13": ["-Pscala-2.13"],
     }
 
