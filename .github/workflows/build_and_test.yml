@@ -887,6 +887,7 @@ jobs:
     timeout-minutes: 300
     env:
       SPARK_LOCAL_IP: localhost
+      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
