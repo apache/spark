@@ -200,10 +200,12 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
       query.awaitTermination()
     }
 
+    assert(exception.getCause.isInstanceOf[SparkException])
+    assert(exception.getCause.getCause.isInstanceOf[SparkException])
+    assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
     assert(
       exception.getCause.getCause.getCause.getMessage
-        .contains("Exception received from Spark Connect on server java.lang.RuntimeException: " +
-          "Number 2 encountered!"))
+        .contains("java.lang.RuntimeException: Number 2 encountered!"))
   }
 
   test("foreach Row") {

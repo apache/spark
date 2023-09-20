@@ -89,9 +89,8 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
   }
 
   /**
-   * fetchEnrichedError fetches enriched errors with full exception message and optionally
-   * stacktrace by issuing an additional RPC call to fetch error details. The RPC call is
-   * best-effort at-most-once.
+   * Fetches enriched errors with full exception message and optionally stacktrace by issuing an
+   * additional RPC call to fetch error details. The RPC call is best-effort at-most-once.
    */
   private def fetchEnrichedError(
       info: ErrorInfo,
@@ -134,19 +133,25 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
       userContext: UserContext): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
+    // Extract the ErrorInfo from the StatusProto, if present.
     val errorInfoOpt = status.getDetailsList.asScala
       .find(_.is(classOf[ErrorInfo]))
       .map(_.unpack(classOf[ErrorInfo]))
 
     if (errorInfoOpt.isDefined) {
+      // If ErrorInfo is found, try to fetch enriched error details by an additional RPC.
       val enrichedErrorOpt = fetchEnrichedError(errorInfoOpt.get, sessionId, userContext)
       if (enrichedErrorOpt.isDefined) {
         return enrichedErrorOpt.get
       }
 
-      return errorInfoToThrowable(errorInfoOpt.get, StatusProto.fromThrowable(ex).getMessage)
+      // If fetching enriched error details fails, convert ErrorInfo to a Throwable.
+      // Unlike enriched errors above, the message from status may be truncated,
+      // and no cause exceptions or server-side stack traces will be reconstructed.
+      return errorInfoToThrowable(errorInfoOpt.get, status.getMessage)
     }
 
+    // If no ErrorInfo is found, create a SparkException based on the StatusRuntimeException.
     new SparkException(ex.toString, ex.getCause)
   }
 }
@@ -200,9 +205,7 @@ private object GrpcExceptionConverter {
         .flatMap(errorFactory.get)
         .headOption
         .getOrElse((message: String, cause: Option[Throwable]) =>
-          new SparkException(
-            s"Exception received from Spark Connect on server ${classHierarchy.head}: ${message}",
-            cause.orNull))
+          new SparkException(s"${classHierarchy.head}: ${message}", cause.orNull))
 
     val causeOpt =
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None

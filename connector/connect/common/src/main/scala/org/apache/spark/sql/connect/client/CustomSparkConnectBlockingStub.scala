@@ -30,7 +30,7 @@ private[connect] class CustomSparkConnectBlockingStub(
 
   private val retryHandler = new GrpcRetryHandler(retryPolicy)
 
-  // Constructing GrpcExceptionConverter with a GRPC stub for fetching error details from server.
+  // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
   private val grpcExceptionConverter = new GrpcExceptionConverter(stub)
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
