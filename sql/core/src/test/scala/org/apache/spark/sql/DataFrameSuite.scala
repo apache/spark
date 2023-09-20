@@ -348,9 +348,19 @@ class DataFrameSuite extends QueryTest
       exception = intercept[AnalysisException] {
         df.select(explode($"*"))
       },
-      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      parameters = Map("elem" -> "'*'", "prettyName" -> "expression `explode`")
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"explode(csv)\"",
+        "paramIndex" -> "1",
+        "inputSql"-> "\"csv\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
     )
+
+    val df2 = Seq(Array("1", "2"), Array("4"), Array("7", "8", "9")).toDF("csv")
+    checkAnswer(
+      df2.select(explode($"*")),
+      Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 
   test("explode on output of array-valued function") {

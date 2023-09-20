@@ -7102,7 +7102,8 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def sequence(start: Column, stop: Column): Column = sequence(start, stop, lit(1L))
+  def sequence(start: Column, stop: Column): Column =
+    Column.fn("sequence", start, stop)
 
   /**
    * Creates an array containing the left argument repeated the number of times given by the right

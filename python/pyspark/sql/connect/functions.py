@@ -1358,7 +1358,7 @@ var_samp.__doc__ = pysparkfuncs.var_samp.__doc__
 
 
 def variance(col: "ColumnOrName") -> Column:
-    return var_samp(col)
+    return _invoke_function_over_columns("variance", col)
 
 
 variance.__doc__ = pysparkfuncs.variance.__doc__
@@ -1944,7 +1944,7 @@ map_concat.__doc__ = pysparkfuncs.map_concat.__doc__
 
 
 def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
-    return array_contains(map_keys(col), lit(value))
+    return _invoke_function("map_contains_key", _to_col(col), lit(value))
 
 
 map_contains_key.__doc__ = pysparkfuncs.map_contains_key.__doc__

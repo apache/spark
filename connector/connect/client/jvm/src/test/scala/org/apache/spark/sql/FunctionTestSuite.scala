@@ -218,7 +218,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     to_json(a, Collections.emptyMap[String, String]),
     to_json(a, Map.empty[String, String]))
   testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
-  testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
   testEquals(
     "from_csv",
     from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
