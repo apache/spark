@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
@@ -1221,16 +1222,18 @@ case class Window(
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
     // child.output ++ windowExpressions.map(_.toAttribute)
 
-  override def producedAttributes: AttributeSet =
-    AttributeSet(projectList.map(_.toAttribute)) // windowOutputSet
+  // override def producedAttributes: AttributeSet =
+  //  AttributeSet(projectList.map(_.toAttribute)) // windowOutputSet
+  override def producedAttributes: AttributeSet = windowOutputSet
 
   final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
   def windowExpressions: Seq[Alias] = projectList.flatMap { e =>
     e.collect {
-      case a: Alias if a.child.isInstanceOf[WindowExpression] => a
+      case a: Alias if hasWindowExpression(a.child) => a
     }
   }
+
 
   def windowOutputSet: AttributeSet = AttributeSet(projectList
     .filter(WindowExpression.hasWindowExpression)

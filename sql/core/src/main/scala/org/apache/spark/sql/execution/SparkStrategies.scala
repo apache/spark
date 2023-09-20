@@ -633,9 +633,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Window extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalWindow(
-        WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child) =>
-        execution.window.WindowExec(
-          windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+        WindowFunctionType.SQL, projectExprs, partitionSpec, orderSpec, child) =>
+        // val windowOutputSet: AttributeSet = AttributeSet(windowExprs
+        //  .filter(WindowExpression.hasWindowExpression)
+        //  .map(_.toAttribute))
+
+        val windowExprs = projectExprs.filter(WindowExpression.hasWindowExpression)
+        val topProjectList = projectExprs.filterNot(WindowExpression.hasWindowExpression) ++
+          windowExprs.map(_.toAttribute)
+
+        execution.ProjectExec(topProjectList, window.WindowExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child))) :: Nil
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>

@@ -631,7 +631,9 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
       }
 
     // Eliminate no-op Window
-    case w: Window if w.windowExpressions.isEmpty => w.child
+    case w: Window if w.windowExpressions.isEmpty =>
+      val exprs = w.windowExpressions
+      w.child
   }
 }
 

@@ -433,7 +433,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val dfWithTS = spark.sql("SELECT timestamp'2021-10-15 01:52:00' time, 1 a, 2 b")
     // Ensure that the root of the plan is Window
     val df19 = WindowPlan(
-      Seq(Alias(dfWithTS("time").expr, "ts")()),
+      Seq(Alias(dfWithTS("time").expr, "ts")(),
+        dfWithTS("a").expr.asInstanceOf[AttributeReference],
+        dfWithTS("b").expr.asInstanceOf[AttributeReference]),
       Seq(dfWithTS("a").expr),
       Seq(SortOrder(dfWithTS("a").expr, Ascending)),
       dfWithTS.queryExecution.logical).toDF
