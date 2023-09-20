@@ -249,7 +249,9 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidxs = ps.from_pandas(pd.DatetimeIndex(["2019-12-29", "2019-12-30", "2019-12-31", "2020-01-01"]))
+        >>> psidxs = ps.from_pandas(
+        ...     pd.DatetimeIndex(["2019-12-29", "2019-12-30", "2019-12-31", "2020-01-01"])
+        ... )
         >>> psidxs.isocalendar()
                     year  week  day
         2019-12-29  2019    52    7
