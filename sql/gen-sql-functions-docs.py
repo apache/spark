@@ -45,7 +45,9 @@ def _list_grouped_function_infos(jvm):
     Sorts wrapped expression infos in each group by name and returns them.
     """
 
-    jinfos = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listBuiltinFunctionInfos()
+    py_sql_utils = jvm.org.apache.spark.sql.api.python.PythonSQLUtils
+
+    jinfos = py_sql_utils.listBuiltinFunctionInfos() + py_sql_utils.listBuiltinTableFunctionInfos()
     infos = []
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):
