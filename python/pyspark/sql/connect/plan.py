@@ -1049,7 +1049,7 @@ class SQL(LogicalPlan):
         self._query = query
         self._args = args
 
-    def to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
+    def __to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
         if isinstance(v, Column):
             return v.to_plan(session)
         else:
@@ -1062,10 +1062,10 @@ class SQL(LogicalPlan):
         if self._args is not None and len(self._args) > 0:
             if isinstance(self._args, Dict):
                 for k, v in self._args.items():
-                    plan.sql.named_arguments[k].CopyFrom(self.to_expr(session, v))
+                    plan.sql.named_arguments[k].CopyFrom(self.__to_expr(session, v))
             else:
                 for v in self._args:
-                    plan.sql.pos_arguments.append(self.to_expr(session, v))
+                    plan.sql.pos_arguments.append(self.__to_expr(session, v))
 
         return plan
 
@@ -1075,10 +1075,10 @@ class SQL(LogicalPlan):
         if self._args is not None and len(self._args) > 0:
             if isinstance(self._args, Dict):
                 for k, v in self._args.items():
-                    cmd.sql_command.named_arguments[k].CopyFrom(self.to_expr(session, v))
+                    cmd.sql_command.named_arguments[k].CopyFrom(self.__to_expr(session, v))
             else:
                 for v in self._args:
-                    cmd.sql_command.pos_arguments.append(self.to_expr(session, v))
+                    cmd.sql_command.pos_arguments.append(self.__to_expr(session, v))
 
         return cmd
 
