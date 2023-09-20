@@ -47,7 +47,12 @@ def _list_grouped_function_infos(jvm):
 
     py_sql_utils = jvm.org.apache.spark.sql.api.python.PythonSQLUtils
 
-    jinfos = py_sql_utils.listBuiltinFunctionInfos() + py_sql_utils.listBuiltinTableFunctionInfos()
+    jinfos = []
+    for jinfo in py_sql_utils.listBuiltinFunctionInfos():
+        jinfos.append(jinfo)
+    for jinfo in py_sql_utils.listBuiltinTableFunctionInfos():
+        jinfos.append(jinfo)
+
     infos = []
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):
