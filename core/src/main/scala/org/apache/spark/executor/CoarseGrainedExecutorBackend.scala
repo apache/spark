@@ -20,9 +20,9 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -73,7 +73,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    * [[ResourceInformation]] for specifics.
    * Exposed for testing only.
    */
-  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+  private[executor] val taskResources = new ConcurrentHashMap[Long, Map[String, ResourceInformation]]
 
   private var decommissioned = false
 
@@ -186,7 +186,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        taskResources(taskDesc.taskId) = taskDesc.resources
+        taskResources.put(taskDesc.taskId, taskDesc.resources)
         executor.launchTask(this, taskDesc)
       }
 
@@ -266,7 +266,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
+    val resources = taskResources.getOrDefault(taskId, Map.empty[String, ResourceInformation])
     val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
