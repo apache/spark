@@ -780,7 +780,7 @@ jobs:
         java:
           - 11
           - 17
-          - 21-ea
+          - 21
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     steps:
@@ -817,7 +817,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
