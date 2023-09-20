@@ -115,11 +115,11 @@ function preprocessGraphLayout(g) {
     });
   }
   // Curve the edges
-  var edges = g.edges();
-  for (var j = 0; j < edges.length; j++) {
-    var edge = g.edge(edges[j]);
-    edge.lineInterpolate = "basis";
-  }
+  g.edges().forEach(function (edge) {
+    g.setEdge(edge.v, edge.w, {
+      curve: d3.curveBasis
+    })
+  })
 }
 
 /*
