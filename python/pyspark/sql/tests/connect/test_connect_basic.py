@@ -1237,23 +1237,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.index))
 
     def test_sql_with_named_args(self):
-        from pyspark.sql.functions import create_map, lit
-        from pyspark.sql.connect.functions import lit as clit
-        from pyspark.sql.connect.functions import create_map as ccreate_map
-
         sqlText = "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId"
-        df = self.connect.sql(sqlText, args={"minId": 7, "m": ccreate_map(clit("a"), clit(1))})
-        df2 = self.spark.sql(sqlText, args={"minId": 7, "m": create_map(lit("a"), lit(1))})
+        df = self.connect.sql(
+            sqlText, args={"minId": 7, "m": CF.create_map(CF.lit("a"), CF.lit(1))}
+        )
+        df2 = self.spark.sql(sqlText, args={"minId": 7, "m": SF.create_map(SF.lit("a"), SF.lit(1))})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_sql_with_pos_args(self):
-        from pyspark.sql.functions import array, lit
-        from pyspark.sql.connect.functions import lit as clit
-        from pyspark.sql.connect.functions import array as carray
-
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
-        df = self.connect.sql(sqlText, args=[carray(clit(1)), 7])
-        df2 = self.spark.sql(sqlText, args=[array(lit(1)), 7])
+        df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
+        df2 = self.spark.sql(sqlText, args=[SF.array(SF.lit(1)), 7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
