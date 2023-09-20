@@ -176,36 +176,40 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
   }
 
   test("throw exception in streaming") {
-    val session = spark
-    import session.implicits._
+    // Disable spark.sql.pyspark.jvmStacktrace.enabled to avoid hitting the
+    // netty header limit.
+    withSQLConf("spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+      val session = spark
+      import session.implicits._
 
-    val checkForTwo = udf((value: Int) => {
-      if (value == 2) {
-        throw new RuntimeException("Number 2 encountered!")
+      val checkForTwo = udf((value: Int) => {
+        if (value == 2) {
+          throw new RuntimeException("Number 2 encountered!")
+        }
+        value
+      })
+
+      val query = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "1")
+        .load()
+        .select(checkForTwo($"value").as("checkedValue"))
+        .writeStream
+        .outputMode("append")
+        .format("console")
+        .start()
+
+      val exception = intercept[SparkException] {
+        query.awaitTermination()
       }
-      value
-    })
 
-    val query = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "1")
-      .load()
-      .select(checkForTwo($"value").as("checkedValue"))
-      .writeStream
-      .outputMode("append")
-      .format("console")
-      .start()
-
-    val exception = intercept[SparkException] {
-      query.awaitTermination()
+      assert(exception.getCause.isInstanceOf[SparkException])
+      assert(exception.getCause.getCause.isInstanceOf[SparkException])
+      assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
+      assert(
+        exception.getCause.getCause.getCause.getMessage
+          .contains("java.lang.RuntimeException: Number 2 encountered!"))
     }
-
-    assert(exception.getCause.isInstanceOf[SparkException])
-    assert(exception.getCause.getCause.isInstanceOf[SparkException])
-    assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
-    assert(
-      exception.getCause.getCause.getCause.getMessage
-        .contains("java.lang.RuntimeException: Number 2 encountered!"))
   }
 
   test("foreach Row") {
