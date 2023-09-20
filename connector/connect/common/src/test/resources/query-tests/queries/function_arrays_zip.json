@@ -29,10 +29,6 @@
               "literal": {
                 "integer": 20
               }
-            }, {
-              "literal": {
-                "long": "1"
-              }
             }]
           }
         }]

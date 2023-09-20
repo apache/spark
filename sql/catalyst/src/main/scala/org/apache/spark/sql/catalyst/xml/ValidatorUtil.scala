@@ -16,32 +16,43 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.nio.file.Paths
 import javax.xml.XMLConstants
+import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.{Schema, SchemaFactory}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFiles
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
 
 /**
  * Utilities for working with XSD validation.
  */
 private[sql] object ValidatorUtil {
-
   // Parsing XSDs may be slow, so cache them by path:
 
   private val cache = CacheBuilder.newBuilder().softValues().build(
     new CacheLoader[String, Schema] {
       override def load(key: String): Schema = {
-        // Handle case where file exists as specified
-        var path = Paths.get(key)
-        if (!path.toFile.exists()) {
-          // Handle case where it was added with sc.addFile
-          path = Paths.get(SparkFiles.get(key))
+        val in = try {
+          // Handle case where file exists as specified
+          val fs = Utils.getHadoopFileSystem(key, SparkHadoopUtil.get.conf)
+          fs.open(new Path(key))
+        } catch {
+          case _: Throwable =>
+            // Handle case where it was added with sc.addFile
+            val addFileUrl = SparkFiles.get(key)
+            val fs = Utils.getHadoopFileSystem(addFileUrl, SparkHadoopUtil.get.conf)
+            fs.open(new Path(addFileUrl))
         }
-        val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-        schemaFactory.newSchema(path.toFile)
+        try {
+          val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+          schemaFactory.newSchema(new StreamSource(in))
+        } finally {
+          in.close()
+        }
       }
     })
 

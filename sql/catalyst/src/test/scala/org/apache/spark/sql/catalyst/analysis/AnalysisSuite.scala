@@ -1675,4 +1675,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
   }
+
+  test("simplifyPlanForCollectedMetrics should handle non alias-only project case") {
+    val inner = Project(
+      Seq(
+        Alias(testRelation2.output(0), "a")(),
+        testRelation2.output(1),
+        Alias(testRelation2.output(2), "c")(),
+        testRelation2.output(3),
+        testRelation2.output(4)
+      ),
+      testRelation2)
+    val actualPlan = getAnalyzer.simplifyPlanForCollectedMetrics(inner.canonicalized)
+    assert(actualPlan == testRelation2.canonicalized)
+  }
 }

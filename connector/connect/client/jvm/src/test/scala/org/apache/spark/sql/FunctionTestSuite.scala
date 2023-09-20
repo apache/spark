@@ -218,7 +218,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     to_json(a, Collections.emptyMap[String, String]),
     to_json(a, Map.empty[String, String]))
   testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
-  testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
   testEquals(
     "from_csv",
     from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
@@ -229,6 +228,16 @@ class FunctionTestSuite extends ConnectFunSuite {
     schema_of_csv("x,y"),
     schema_of_csv(lit("x,y"), Collections.emptyMap()))
   testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_xml",
+    from_xml(a, schema),
+    from_xml(a, lit(schema.json)),
+    from_xml(a, schema.json, Collections.emptyMap[String, String]),
+    from_xml(a, schema.json, Map.empty[String, String].asJava),
+    from_xml(a, schema, Map.empty[String, String].asJava),
+    from_xml(a, schema, Collections.emptyMap[String, String]),
+    from_xml(a, lit(schema.json), Collections.emptyMap[String, String]))
+
   testEquals(
     "from_avro",
     avroFn.from_avro(a, """{"type": "int", "name": "id"}"""),

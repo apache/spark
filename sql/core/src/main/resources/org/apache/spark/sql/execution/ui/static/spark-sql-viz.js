@@ -15,15 +15,20 @@
  * limitations under the License.
  */
 
+/* global $, d3, dagreD3, graphlibDot */
+
 var PlanVizConstants = {
   svgMarginX: 16,
   svgMarginY: 16
 };
 
+/* eslint-disable no-unused-vars */
 function shouldRenderPlanViz() {
   return planVizContainer().selectAll("svg").empty();
 }
+/* eslint-enable no-unused-vars */
 
+/* eslint-disable no-unused-vars */
 function renderPlanViz() {
   var svg = planVizContainer().append("svg");
   var metadata = d3.select("#plan-viz-metadata");
@@ -49,6 +54,7 @@ function renderPlanViz() {
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
 }
+/* eslint-enable no-unused-vars */
 
 /* -------------------- *
  * | Helper functions | *
@@ -63,7 +69,7 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
 function setupTooltipForSparkPlanNode(nodeId) {
   var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text();
   d3.select("svg g .node_" + nodeId)
-    .each(function(d) {
+    .each(function(_ignored_d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
         title: nodeTooltip, trigger: "hover focus", container: "body", placement: "top"
@@ -99,21 +105,21 @@ function preprocessGraphLayout(g) {
       splitter = "<br>";
     }
 
-    node.label.split(splitter).forEach(function(text, i) {
+    node.label.split(splitter).forEach(function(text, _ignored_i) {
       var newTexts = text.match(stageAndTaskMetricsPattern);
       if (newTexts) {
         node.label = node.label.replace(
-            newTexts[0],
-            newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
+          newTexts[0],
+          newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
       }
     });
   }
   // Curve the edges
-  var edges = g.edges();
-  for (var j = 0; j < edges.length; j++) {
-    var edge = g.edge(edges[j]);
-    edge.lineInterpolate = "basis";
-  }
+  g.edges().forEach(function (edge) {
+    g.setEdge(edge.v, edge.w, {
+      curve: d3.curveBasis
+    })
+  })
 }
 
 /*
@@ -193,20 +199,20 @@ function postprocessForAdditionalMetrics() {
   $("g.cluster text tspan")
     .each(function() {
       var originalText = $(this).text();
-        if (originalText.indexOf(labelSeparator) > 0) {
-          var newTexts = originalText.split(labelSeparator);
-          var thisD3Node = d3.selectAll($(this));
-          thisD3Node.text(newTexts[0]);
-          thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
-          $(this).append(newTexts[2]);
-        } else {
-          return originalText;
-        }
-  });
+      if (originalText.indexOf(labelSeparator) > 0) {
+        var newTexts = originalText.split(labelSeparator);
+        var thisD3Node = d3.selectAll($(this));
+        thisD3Node.text(newTexts[0]);
+        thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
+        $(this).append(newTexts[2]);
+      } else {
+        return originalText;
+      }
+    });
 
   var checkboxNode = $("#stageId-and-taskId-checkbox");
   checkboxNode.click(function() {
-      onClickAdditionalMetricsCheckbox($(this));
+    onClickAdditionalMetricsCheckbox($(this));
   });
   var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") === "true";
   checkboxNode.prop("checked", isChecked);

@@ -3265,6 +3265,8 @@ Here are the different kinds of triggers that are supported.
                 if the last batch advances the watermark. This helps to maintain smaller and predictable
                 state size and smaller latency on the output of stateful operators.</li>
         </ul>
+        NOTE: this trigger will be deactivated when there is any source which does not support Trigger.AvailableNow.
+        Spark will perform one-time micro-batch as a fall-back. Check the above differences for a risk of fallback.
     </td>
   </tr>
   <tr>

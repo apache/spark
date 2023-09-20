@@ -246,11 +246,11 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
 
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64tz_dtype  # type: ignore[attr-defined]
+    import pandas as pd
 
     tz = timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
+    if isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert(tz).dt.tz_localize(None)
     else:
         return s
@@ -278,9 +278,9 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
+    import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
         is_datetime64_dtype,
-        is_datetime64tz_dtype,
     )
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
@@ -317,7 +317,7 @@ def _check_series_convert_timestamps_internal(
         # '2015-11-01 01:30:00-05:00'
         tz = timezone or _get_local_timezone()
         return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert("UTC")
-    elif is_datetime64tz_dtype(s.dtype):
+    elif isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert("UTC")
     else:
         return s
@@ -348,14 +348,13 @@ def _check_series_convert_timestamps_localize(
 
     import pandas as pd
     from pandas.api.types import (  # type: ignore[attr-defined]
-        is_datetime64tz_dtype,
         is_datetime64_dtype,
     )
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-    if is_datetime64tz_dtype(s.dtype):
+    if isinstance(s.dtype, pd.DatetimeTZDtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
@@ -509,7 +508,6 @@ def _create_converter_to_pandas(
     """
     import numpy as np
     import pandas as pd
-    from pandas.core.dtypes.common import is_datetime64tz_dtype
 
     pandas_type = _to_corrected_pandas_type(data_type)
 
@@ -539,7 +537,7 @@ def _create_converter_to_pandas(
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
-                if not is_datetime64tz_dtype(pser.dtype):
+                if not isinstance(pser.dtype, pd.DatetimeTZDtype):
                     pser = pser.astype(pandas_type, copy=False)
                 return _check_series_convert_timestamps_local_tz(pser, timezone=cast(str, timezone))
 
@@ -553,7 +551,6 @@ def _create_converter_to_pandas(
     def _converter(
         dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
     ) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
@@ -649,7 +646,6 @@ def _create_converter_to_pandas(
             ]
 
             if _struct_in_pandas == "row":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_row(value: Any) -> Any:
@@ -687,7 +683,6 @@ def _create_converter_to_pandas(
                 return convert_struct_as_row
 
             elif _struct_in_pandas == "dict":
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct_as_dict(value: Any) -> Any:
@@ -829,7 +824,6 @@ def _create_converter_from_pandas(
         return correct_timestamp
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
-
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType)
 
@@ -875,7 +869,6 @@ def _create_converter_from_pandas(
             _value_conv = _converter(dt.valueType)
 
             if ignore_unexpected_complex_type_values:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -901,7 +894,6 @@ def _create_converter_from_pandas(
                             return value
 
             else:
-
                 if _key_conv is None and _value_conv is None:
 
                     def convert_map(value: Any) -> Any:
@@ -923,7 +915,6 @@ def _create_converter_from_pandas(
             return convert_map
 
         elif isinstance(dt, StructType):
-
             field_names = dt.names
 
             if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
@@ -937,7 +928,6 @@ def _create_converter_from_pandas(
             field_convs = [_converter(f.dataType) for f in dt.fields]
 
             if ignore_unexpected_complex_type_values:
-
                 if all(conv is None for conv in field_convs):
 
                     def convert_struct(value: Any) -> Any:

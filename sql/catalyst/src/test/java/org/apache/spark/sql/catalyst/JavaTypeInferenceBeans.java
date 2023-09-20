@@ -17,25 +17,66 @@
 
 package org.apache.spark.sql.catalyst;
 
-class JavaBeanWithGenerics<T,A> {
+public class JavaTypeInferenceBeans {
+
+  static class JavaBeanWithGenericsA<T> {
+    public T getPropertyA() {
+      return null;
+    }
+
+    public void setPropertyA(T a) {
+
+    }
+  }
+
+  static class JavaBeanWithGenericsAB<T> extends JavaBeanWithGenericsA<String> {
+    public T getPropertyB() {
+      return null;
+    }
+
+    public void setPropertyB(T a) {
+
+    }
+  }
+
+  static class JavaBeanWithGenericsABC<T> extends JavaBeanWithGenericsAB<Long> {
+    public T getPropertyC() {
+      return null;
+    }
+
+    public void setPropertyC(T a) {
+
+    }
+  }
+
+  static class JavaBeanWithGenerics<T, A> {
     private A attribute;
 
     private T value;
 
     public A getAttribute() {
-        return attribute;
+      return attribute;
     }
 
     public void setAttribute(A attribute) {
-        this.attribute = attribute;
+      this.attribute = attribute;
     }
 
     public T getValue() {
-        return value;
+      return value;
     }
 
     public void setValue(T value) {
-        this.value = value;
+      this.value = value;
     }
+  }
+
+  static class JavaBeanWithGenericBase extends JavaBeanWithGenerics<String, String> {
+
+  }
+
+  static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
+
+  }
 }
 

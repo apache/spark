@@ -778,6 +778,60 @@ message ReleaseExecuteResponse {
   optional string operation_id = 2;
 }
 
+message FetchErrorDetailsRequest {
+
+  // (Required)
+  // The session_id specifies a Spark session for a user identified by user_context.user_id.
+  // The id should be a UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`.
+  string session_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // (Required)
+  // The id of the error.
+  string error_id = 3;
+}
+
+message FetchErrorDetailsResponse {
+
+  message StackTraceElement {
+    // The fully qualified name of the class containing the execution point.
+    string declaring_class = 1;
+
+    // The name of the method containing the execution point.
+    string method_name = 2;
+
+    // The name of the file containing the execution point.
+    string file_name = 3;
+
+    // The line number of the source line containing the execution point.
+    int32 line_number = 4;
+  }
+
+  // Error defines the schema for the representing exception.
+  message Error {
+    // The fully qualified names of the exception class and its parent classes.
+    repeated string error_type_hierarchy = 1;
+
+    // The detailed message of the exception.
+    string message = 2;
+
+    // The stackTrace of the exception. It will be set
+    // if the SQLConf spark.sql.connect.serverStacktrace.enabled is true.
+    repeated StackTraceElement stack_trace = 3;
+
+    // The index of the cause error in errors.
+    optional int32 cause_idx = 4;
+  }
+
+  // The index of the root error in errors. The field will not be set if the error is not found.
+  optional int32 root_error_idx = 1;
+
+  // A list of errors.
+  repeated Error errors = 2;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -813,5 +867,8 @@ service SparkConnectService {
   // Non reattachable executions are released automatically and immediately after the ExecutePlan
   // RPC and ReleaseExecute may not be used.
   rpc ReleaseExecute(ReleaseExecuteRequest) returns (ReleaseExecuteResponse) {}
+
+  // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
+  rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}
 }
 
