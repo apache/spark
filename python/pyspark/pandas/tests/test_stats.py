@@ -176,6 +176,7 @@ class StatsTestsMixin:
                 },
                 index=range(10, 15001, 10),
             )
+            # TODO(SPARK-45228): Update `test_axis_on_dataframe` when Pandas regression is fixed
             # There is a regression in Pandas 2.1.0,
             # so we should manually cast to float until the regression is fixed.
             # See https://github.com/pandas-dev/pandas/issues/55194.
