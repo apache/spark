@@ -2893,8 +2893,7 @@ object SQLConf {
         "level settings.")
       .version("3.0.0")
       .booleanConf
-      // show full stacktrace in tests but hide in production by default.
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(false)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")

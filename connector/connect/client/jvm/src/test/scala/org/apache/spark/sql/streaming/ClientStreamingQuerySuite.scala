@@ -27,11 +27,11 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.window
+import org.apache.spark.sql.functions.{col, udf, window}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.util.SparkFileUtils
@@ -173,6 +173,37 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         q.awaitTermination()
       }
     }
+  }
+
+  test("throw exception in streaming") {
+    val session = spark
+    import session.implicits._
+
+    val checkForTwo = udf((value: Int) => {
+      if (value == 2) {
+        throw new RuntimeException("Number 2 encountered!")
+      }
+      value
+    })
+
+    val query = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "1")
+      .load()
+      .select(checkForTwo($"value").as("checkedValue"))
+      .writeStream
+      .outputMode("append")
+      .format("console")
+      .start()
+
+    val exception = intercept[SparkException] {
+      query.awaitTermination()
+    }
+
+    assert(
+      exception.getCause.getCause.getCause.getMessage
+        .contains("Exception received from Spark Connect on server java.lang.RuntimeException: " +
+          "Number 2 encountered!"))
   }
 
   test("foreach Row") {
