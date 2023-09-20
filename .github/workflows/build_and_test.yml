@@ -207,6 +207,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_PACKAGING: true
+      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -385,6 +386,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -494,6 +496,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
       SKIP_PACKAGING: true
+      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -989,6 +992,7 @@ jobs:
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
       SKIP_PACKAGING: true
+      SCALA_PROFILE: scala2.13
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -1109,7 +1113,8 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          dev/change-scala-version.sh 2.13
+          build/sbt -Pscala-2.13 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
         uses: actions/upload-artifact@v3
