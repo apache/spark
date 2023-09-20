@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 8, Scala 2.12)"
+name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 17, Scala 2.12)"
 
 on:
   schedule:
@@ -31,7 +31,7 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 8
+      java: 17
       branch: master
       hadoop: hadoop3
       envs: >-
