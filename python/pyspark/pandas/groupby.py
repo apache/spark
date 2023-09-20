@@ -1152,11 +1152,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         else:
             sdf = sdf.select(*groupkey_names).distinct()
 
-        internal = internal.copy(
+        agg_columns = []
+        if not self._agg_columns_selected:
+            for psser in self._groupkeys:
+                agg_columns.append(psser)
+        for psser in self._agg_columns:
+            agg_columns.append(psser)
+        internal = InternalFrame(
             spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
-            data_fields=None,
+            index_spark_columns=[scol_for(sdf, col) for col in internal.index_spark_column_names],
+            index_names=internal.index_names,
+            index_fields=internal.index_fields,
+            data_spark_columns=[
+                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
+            ],
+            column_labels=[psser._column_label for psser in agg_columns],
+            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
+            column_label_names=self._psdf._internal.column_label_names,
         )
 
         agg_column_names = (
