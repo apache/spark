@@ -1131,7 +1131,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * remove extra project which only re-assign expr ids from the plan so that we can identify exact
    * duplicates metric definition.
    */
-  private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
+  def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
         val assignExprIdOnly = p.projectList.zipWithIndex.forall {
@@ -1140,6 +1140,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             // ordinal of this attribute in the child outputs. So an alias-only Project means the
             // the id of the aliased attribute is the same as its index in the project list.
             attr.exprId.id == index
+          case (left: AttributeReference, index) =>
+            left.exprId.id == index
           case _ => false
         }
         if (assignExprIdOnly) {
