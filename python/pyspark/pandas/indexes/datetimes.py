@@ -234,6 +234,36 @@ class DatetimeIndex(Index):
         return Index(self.to_series().dt.microsecond)
 
     def isocalendar(self) -> DataFrame:
+        """
+        Calculate year, week, and day according to the ISO 8601 standard.
+
+            .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        DataFrame
+            With columns year, week and day.
+
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
+
+        Examples
+        --------
+        >>> psidxs = ps.from_pandas(pd.DatetimeIndex(["2019-12-29", "2019-12-30", "2019-12-31", "2020-01-01"]))
+        >>> psidxs.isocalendar()
+                    year  week  day
+        2019-12-29  2019    52    7
+        2019-12-30  2020     1    1
+        2019-12-31  2020     1    2
+        2020-01-01  2020     1    3
+
+        >>> psidxs.isocalendar().week
+        2019-12-29    52
+        2019-12-30     1
+        2019-12-31     1
+        2020-01-01     1
+        Name: week, dtype: int64
+        """
         return self.to_series().dt.isocalendar()
 
     @property
