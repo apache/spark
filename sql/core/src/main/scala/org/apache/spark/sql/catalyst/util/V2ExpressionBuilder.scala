@@ -298,11 +298,11 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         case _ =>
           None
       }
-    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(name), Some(canonicalName)) =>
+    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
       if (argumentExpressions.length == arguments.length) {
         Some(new UserDefinedScalarFunc(
-          name, canonicalName, argumentExpressions.toArray[V2Expression]))
+          scalarFunc.name(), scalarFunc.canonicalName(), argumentExpressions.toArray[V2Expression]))
       } else {
         None
       }

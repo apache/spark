@@ -524,7 +524,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 object BinaryPredicate {
   def unapply(expr: Expression): Option[StaticInvoke] = expr match {
     case s @ StaticInvoke(
-        clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _, _, _)
+        clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
   }
