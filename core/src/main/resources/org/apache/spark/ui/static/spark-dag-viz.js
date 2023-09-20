@@ -46,9 +46,10 @@
  * the job page.
  *
  * This requires jQuery, d3, and dagre-d3. Note that we use a custom release
- * of dagre-d3 (http://github.com/andrewor14/dagre-d3) for some specific
- * functionality. For more detail, please track the changes in that project
- * since it was forked (commit 101503833a8ce5fe369547f6addf3e71172ce10b).
+ * of dagre-d3 (https://github.com/yaooqinn/dagre-d3/commits/v0.6.4-patch) for
+ * some specific functionality. For more detail, please track the changes in
+ * that project since it was forked
+ * (commit 86816ff1e5616fe83b58bfcfb6a1efe99eca2bee).
  */
 
 /* global $, appBasePath, d3, dagreD3, graphlibDot, uiRoot */
