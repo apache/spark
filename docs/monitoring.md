@@ -414,7 +414,7 @@ Security options for the Spark History Server are covered more detail in the
   </tr>
   <tr>
     <td>spark.history.store.hybridStore.diskBackend</td>
-    <td>LEVELDB</td>
+    <td>ROCKSDB</td>
     <td>
       Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.
     </td>
