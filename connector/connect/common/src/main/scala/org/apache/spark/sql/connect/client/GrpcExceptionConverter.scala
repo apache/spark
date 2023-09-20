@@ -119,7 +119,7 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
       Some(
         errorsToThrowable(
           errorDetailsResponse.getRootErrorIdx,
-          errorDetailsResponse.getErrorsList.asScala))
+          errorDetailsResponse.getErrorsList.asScala.toSeq))
     } catch {
       case e: StatusRuntimeException =>
         logWarning("Unable to fetch enriched error", e)
