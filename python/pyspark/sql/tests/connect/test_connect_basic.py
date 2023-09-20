@@ -1257,11 +1257,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         from pyspark.sql.connect.functions import array as carray
 
         df = self.connect.sql(
-            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?",
-            args=[carray(clit(1)), 7])
+            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?", args=[carray(clit(1)), 7]
+        )
         df2 = self.spark.sql(
-            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?",
-            args=[array(lit(1)), 7])
+            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?", args=[array(lit(1)), 7]
+        )
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
