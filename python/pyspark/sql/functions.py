@@ -3053,11 +3053,17 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_avgx("y", "x")).first()
-    Row(regr_avgx(y, x)=0.999)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_avgx("y", "x"), sf.avg("x")
+    ... ).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |          0.999| 0.999|
+    +---------------+------+
     """
     return _invoke_function_over_columns("regr_avgx", y, x)
 
@@ -3084,11 +3090,17 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_avgy("y", "x")).first()
-    Row(regr_avgy(y, x)=9.980732994136464)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_avgy("y", "x"), sf.avg("y")
+    ... ).show()
+    +-----------------+-----------------+
+    |  regr_avgy(y, x)|           avg(y)|
+    +-----------------+-----------------+
+    |9.980732994136...|9.980732994136...|
+    +-----------------+-----------------+
     """
     return _invoke_function_over_columns("regr_avgy", y, x)
 
@@ -3115,11 +3127,17 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_count("y", "x")).first()
-    Row(regr_count(y, x)=1000)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_count("y", "x"), sf.count(sf.lit(0))
+    ... ).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |            1000|    1000|
+    +----------------+--------+
     """
     return _invoke_function_over_columns("regr_count", y, x)
 
@@ -3147,11 +3165,17 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_intercept("y", "x")).first()
-    Row(regr_intercept(y, x)=-0.04961745990969568)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_intercept("y", "x")
+    ... ).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |-0.04961745990969568|
+    +--------------------+
     """
     return _invoke_function_over_columns("regr_intercept", y, x)
 
@@ -3178,11 +3202,17 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_r2("y", "x")).first()
-    Row(regr_r2(y, x)=0.9851908293645436)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_r2("y", "x")
+    ... ).show()
+    +------------------+
+    |     regr_r2(y, x)|
+    +------------------+
+    |0.9851908293645...|
+    +------------------+
     """
     return _invoke_function_over_columns("regr_r2", y, x)
 
@@ -3209,11 +3239,17 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_slope("y", "x")).first()
-    Row(regr_slope(y, x)=10.040390844891048)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_slope("y", "x")
+    ... ).show()
+    +------------------+
+    |  regr_slope(y, x)|
+    +------------------+
+    |10.040390844891...|
+    +------------------+
     """
     return _invoke_function_over_columns("regr_slope", y, x)
 
@@ -3240,11 +3276,17 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_sxx("y", "x")).first()
-    Row(regr_sxx(y, x)=666.9989999999996)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_sxx("y", "x")
+    ... ).show()
+    +-----------------+
+    |   regr_sxx(y, x)|
+    +-----------------+
+    |666.9989999999...|
+    +-----------------+
     """
     return _invoke_function_over_columns("regr_sxx", y, x)
 
@@ -3271,11 +3313,17 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_sxy("y", "x")).first()
-    Row(regr_sxy(y, x)=6696.93065315148)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_sxy("y", "x")
+    ... ).show()
+    +----------------+
+    |  regr_sxy(y, x)|
+    +----------------+
+    |6696.93065315...|
+    +----------------+
     """
     return _invoke_function_over_columns("regr_sxy", y, x)
 
@@ -3302,11 +3350,17 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_syy("y", "x")).first()
-    Row(regr_syy(y, x)=68250.53503811295)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_syy("y", "x")
+    ... ).show()
+    +-----------------+
+    |   regr_syy(y, x)|
+    +-----------------+
+    |68250.53503811...|
+    +-----------------+
     """
     return _invoke_function_over_columns("regr_syy", y, x)
 
