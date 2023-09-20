@@ -582,9 +582,6 @@ class StatsTestsMixin:
 
 
 class StatsTests(StatsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
-    def test_axis_on_dataframe(self):
-        super().test_axis_on_dataframe()
-
     pass
 
 
