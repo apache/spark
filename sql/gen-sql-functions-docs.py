@@ -35,7 +35,7 @@ groups = {
     "predicate_funcs", "string_funcs", "misc_funcs",
     "bitwise_funcs", "conversion_funcs", "csv_funcs",
     "xml_funcs", "lambda_funcs", "collection_funcs",
-    "url_funcs", "hash_funcs", "table_funcs",
+    "url_funcs", "hash_funcs",
 }
 
 
@@ -45,14 +45,7 @@ def _list_grouped_function_infos(jvm):
     Sorts wrapped expression infos in each group by name and returns them.
     """
 
-    py_sql_utils = jvm.org.apache.spark.sql.api.python.PythonSQLUtils
-
-    jinfos = []
-    for jinfo in py_sql_utils.listBuiltinFunctionInfos():
-        jinfos.append(jinfo)
-    for jinfo in py_sql_utils.listBuiltinTableFunctionInfos():
-        jinfos.append(jinfo)
-
+    jinfos = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listBuiltinFunctionInfos()
     infos = []
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):

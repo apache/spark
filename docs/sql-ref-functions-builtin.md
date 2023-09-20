@@ -216,13 +216,3 @@ license: |
         {% break %}
     {% endif %}
 {% endfor %}
-
-{% for static_file in site.static_files %}
-{% if static_file.name == 'generated-table-funcs-table.html' %}
-### Table Functions
-{% include_relative generated-table-funcs-table.html %}
-#### Examples
-{% include_relative generated-table-funcs-examples.html %}
-{% break %}
-{% endif %}
-{% endfor %}

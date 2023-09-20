@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -69,12 +69,6 @@ private[sql] object PythonSQLUtils extends Logging {
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
-  }
-
-  // This is needed when generating SQL documentation for built-in table functions.
-  def listBuiltinTableFunctionInfos(): Array[ExpressionInfo] = {
-    TableFunctionRegistry.functionSet.flatMap(f =>
-      TableFunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
