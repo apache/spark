@@ -1252,8 +1252,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_sql_with_pos_args(self):
-        df = self.connect.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
-        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
+        from pyspark.sql.functions import array, lit
+        from pyspark.sql.connect.functions import lit as clit
+        from pyspark.sql.connect.functions import array as carray
+
+        df = self.connect.sql(
+            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?",
+            args=[carray(clit(1)), 7])
+        df2 = self.spark.sql(
+            "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?",
+            args=[array(lit(1)), 7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
