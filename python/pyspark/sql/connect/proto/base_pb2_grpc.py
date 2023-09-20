@@ -70,6 +70,11 @@ class SparkConnectServiceStub(object):
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
         )
+        self.FetchErrorDetails = channel.unary_unary(
+            "/spark.connect.SparkConnectService/FetchErrorDetails",
+            request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -136,6 +141,12 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def FetchErrorDetails(self, request, context):
+        """FetchErrorDetails retrieves the matched exception with details based on a provided error id."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -178,6 +189,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.ReleaseExecute,
             request_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.SerializeToString,
+        ),
+        "FetchErrorDetails": grpc.unary_unary_rpc_method_handler(
+            servicer.FetchErrorDetails,
+            request_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -412,6 +428,35 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/ReleaseExecute",
             spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def FetchErrorDetails(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/FetchErrorDetails",
+            spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
             options,
             channel_credentials,
             insecure,
