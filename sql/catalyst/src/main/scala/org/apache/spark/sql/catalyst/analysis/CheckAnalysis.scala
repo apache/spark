@@ -1134,7 +1134,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperators {
       case p: Project if p.projectList.size == p.child.output.size =>
-        var assignExprIdOnly = p.projectList.zipWithIndex.forall {
+        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
           case (Alias(attr: AttributeReference, _), index) =>
             // The input plan of this method is already canonicalized. The attribute id becomes the
             // ordinal of this attribute in the child outputs. So an alias-only Project means the
