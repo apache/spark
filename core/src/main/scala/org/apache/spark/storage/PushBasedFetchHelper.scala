@@ -60,9 +60,11 @@ private class PushBasedFetchHelper(
   private[this] val chunksMetaMap = new mutable.HashMap[ShuffleBlockChunkId, RoaringBitmap]()
 
   /**
-   * A map for storing inflight MergedBlockMeta.
+   * A set for storing inflight MergedBlockMeta. it is used to guarantee that we fallback
+   * at most once for those failed push-merged block requests.
    */
   private[this] val inflightMergedBlocks = new mutable.HashSet[ShuffleMergedBlockId]()
+
   /**
    * Returns true if the address is for a push-merged block.
    */
