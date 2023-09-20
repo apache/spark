@@ -181,13 +181,9 @@ public class RetryingBlockTransferor {
         listener.getTransferType(), blockIdsToTransfer.length,
         numRetries > 0 ? "(after " + numRetries + " retries)" : ""), e);
 
-      if (shouldRetry(e)) {
-        try {
-          initiateRetry(e);
-          return;
-        } catch (Throwable t) {
-          logger.error("Exception while trying to initiate retry", t);
-        }
+      if (shouldRetry(e) && initiateRetry(e)) {
+        // successfully initiated a retry
+        return;
       }
 
       // retry is not possible, so fail remaining blocks
@@ -200,9 +196,10 @@ public class RetryingBlockTransferor {
   /**
    * Lightweight method which initiates a retry in a different thread. The retry will involve
    * calling transferAllOutstanding() after a configured wait time.
+   * Returns true if the retry was successfully initiated, false otherwise.
    */
   @VisibleForTesting
-  synchronized void initiateRetry(Throwable e) {
+  synchronized boolean initiateRetry(Throwable e) {
     if (enableSaslRetries && e instanceof SaslTimeoutException) {
       saslRetryCount += 1;
     }
@@ -213,10 +210,17 @@ public class RetryingBlockTransferor {
       listener.getTransferType(), retryCount, maxRetries, outstandingBlocksIds.size(),
       retryWaitTime);
 
-    executorService.submit(() -> {
-      Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
-      transferAllOutstanding();
-    });
+    try {
+      executorService.submit(() -> {
+        Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
+        transferAllOutstanding();
+      });
+    } catch (Throwable t) {
+      logger.error("Exception while trying to initiate retry", t);
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -287,10 +291,8 @@ public class RetryingBlockTransferor {
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           if (shouldRetry(exception)) {
-            try {
-              initiateRetry(exception);
-            } catch (Throwable t) {
-              logger.error("Exception while trying to initiate retry", t);
+            if (!initiateRetry(exception)) {
+              // failed to initiate a retry, so fail this block
               outstandingBlocksIds.remove(blockId);
               shouldForwardFailure = true;
             }

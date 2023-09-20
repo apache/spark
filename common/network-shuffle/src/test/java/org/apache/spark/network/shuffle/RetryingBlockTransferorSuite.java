@@ -386,8 +386,8 @@ public class RetryingBlockTransferorSuite {
 
     configureInteractions(interactions, listener);
     _retryingBlockTransferor = spy(_retryingBlockTransferor);
-    // Throw an OOM when initiating retries.
-    doThrow(OutOfMemoryError.class).when(_retryingBlockTransferor).initiateRetry(any());
+    // Simulate a failure to initiate a retry.
+    doReturn(false).when(_retryingBlockTransferor).initiateRetry(any());
     // Override listener, so that it delegates to the spied instance and not the original class.
     _retryingBlockTransferor.setCurrentListener(
         _retryingBlockTransferor.new RetryingBlockTransferListener());
