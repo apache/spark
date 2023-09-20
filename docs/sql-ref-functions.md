@@ -30,6 +30,7 @@ This subsection presents the usages and descriptions of these functions.
 #### Scalar Functions
  * [Array Functions](sql-ref-functions-builtin.html#array-functions)
  * [Collection Functions](sql-ref-functions-builtin.html#collection-functions)
+ * [Struct Functions](sql-ref-functions-builtin.html#struct-functions)
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
  * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
  * [Mathematical Functions](sql-ref-functions-builtin.html#mathematical-functions)

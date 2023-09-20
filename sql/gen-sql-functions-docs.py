@@ -35,7 +35,7 @@ groups = {
     "predicate_funcs", "string_funcs", "misc_funcs",
     "bitwise_funcs", "conversion_funcs", "csv_funcs",
     "xml_funcs", "lambda_funcs", "collection_funcs",
-    "url_funcs", "hash_funcs",
+    "url_funcs", "hash_funcs", "struct_funcs",
 }
 
 

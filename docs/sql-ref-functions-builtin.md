@@ -58,6 +58,16 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
+{% if static_file.name == 'generated-struct-funcs-table.html' %}
+### STRUCT Functions
+{% include_relative generated-struct-funcs-table.html %}
+#### Examples
+{% include_relative generated-struct-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
     {% if static_file.name == 'generated-map-funcs-table.html' %}
 ### Map Functions
 {% include_relative generated-map-funcs-table.html %}
