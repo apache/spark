@@ -1243,10 +1243,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         df = self.connect.sql(
             "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId",
-            args={"minId": 7, "m": ccreate_map(clit('a'), clit(1))})
+            args={"minId": 7, "m": ccreate_map(clit("a"), clit(1))},
+        )
         df2 = self.spark.sql(
             "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId",
-            args={"minId": 7, "m": create_map(lit('a'), lit(1))})
+            args={"minId": 7, "m": create_map(lit("a"), lit(1))},
+        )
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_sql_with_pos_args(self):
