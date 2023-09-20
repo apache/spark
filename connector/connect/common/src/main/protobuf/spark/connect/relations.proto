@@ -990,6 +990,9 @@ message CollectMetrics {
 
   // (Required) The metric sequence.
   repeated Expression metrics = 3;
+
+  // (Required) A unique DataFrame id.
+  int64 dataframe_id = 4;
 }
 
 message Parse {

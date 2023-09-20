@@ -1053,7 +1053,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       Column(transformExpression(expr))
     }
 
-    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput), rel.getDataframeId)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
