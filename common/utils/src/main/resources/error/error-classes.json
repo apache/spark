@@ -314,6 +314,18 @@
       "<details>"
     ]
   },
+  "CANNOT_WRITE_STATE_STORE" : {
+    "message" : [
+      "Error writing state store files for provider <providerClass>."
+    ],
+    "subClass" : {
+      "CANNOT_COMMIT" : {
+        "message" : [
+          "Cannot perform commit during state checkpoint."
+        ]
+      }
+    }
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
