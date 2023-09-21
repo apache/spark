@@ -1125,32 +1125,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   /**
-   * This method is only used for checking collected metrics. This method tries to
-   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
-   * duplicates metric definition.
-   */
-  def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperators {
-      case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
-          case (Alias(attr: AttributeReference, _), index) =>
-            // The input plan of this method is already canonicalized. The attribute id becomes the
-            // ordinal of this attribute in the child outputs. So an alias-only Project means the
-            // the id of the aliased attribute is the same as its index in the project list.
-            attr.exprId.id == index
-          case (left: AttributeReference, index) =>
-            left.exprId.id == index
-          case _ => false
-        }
-        if (assignExprIdOnly) {
-          p.child
-        } else {
-          p
-        }
-    }
-  }
-
-  /**
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
