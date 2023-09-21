@@ -1195,6 +1195,7 @@ class CollectMetrics(LogicalPlan):
         plan.collect_metrics.input.CopyFrom(self._child.plan(session))
         plan.collect_metrics.name = self._name
         plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
+        plan.collect_metrics.dataframe_id = self._child._plan_id
         return plan
 
 
