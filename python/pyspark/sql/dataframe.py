@@ -5837,8 +5837,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Example 3: Rename multiple columns
 
-        >>> df.withColumnRenamed("age", "age2") \\
-        ...     .withColumnRenamed("name", "name2").show()
+        >>> df.withColumnRenamed("age", "age2").withColumnRenamed("name", "name2").show()
         +----+-----+
         |age2|name2|
         +----+-----+
