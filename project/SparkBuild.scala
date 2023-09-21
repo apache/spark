@@ -312,7 +312,7 @@ object SparkBuild extends PomBuild {
       CachePolicy.LocalUpdateChanging,
       CachePolicy.FetchMissing,
       // then, use what's available locally
-      CachePolicy.LocalOnly,
+      CachePolicy.LocalOnlyIfValid,
       // lastly, try to download what's missing
       CachePolicy.Update
     )),
