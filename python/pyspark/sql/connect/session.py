@@ -557,7 +557,7 @@ class SparkSession:
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(SQL(sqlQuery, args), self)
+            return DataFrame.withPlan(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
