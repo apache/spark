@@ -36,6 +36,8 @@ from typing import (
     ValuesView,
     cast,
 )
+import random
+import sys
 
 import numpy as np
 
@@ -388,7 +390,7 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand")
+        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
@@ -398,7 +400,7 @@ def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn")
+        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -1358,7 +1360,7 @@ var_samp.__doc__ = pysparkfuncs.var_samp.__doc__
 
 
 def variance(col: "ColumnOrName") -> Column:
-    return var_samp(col)
+    return _invoke_function_over_columns("variance", col)
 
 
 variance.__doc__ = pysparkfuncs.variance.__doc__
@@ -1944,7 +1946,7 @@ map_concat.__doc__ = pysparkfuncs.map_concat.__doc__
 
 
 def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
-    return array_contains(map_keys(col), lit(value))
+    return _invoke_function("map_contains_key", _to_col(col), lit(value))
 
 
 map_contains_key.__doc__ = pysparkfuncs.map_contains_key.__doc__
@@ -2111,7 +2113,7 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("shuffle", col)
+    return _invoke_function("shuffle", _to_col(col), lit(random.randint(0, sys.maxsize)))
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__

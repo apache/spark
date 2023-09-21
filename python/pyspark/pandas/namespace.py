@@ -2564,6 +2564,10 @@ def concat(
         if sort:
             concat_psdf = concat_psdf.sort_index()
 
+        columns = concat_psdf.columns
+        if isinstance(columns, pd.MultiIndex):
+            concat_psdf = concat_psdf.rename_axis([None] * columns.nlevels, axis="columns")
+
         return concat_psdf
 
     # Series, Series ...

@@ -1049,6 +1049,12 @@ class SQL(LogicalPlan):
         self._query = query
         self._args = args
 
+    def _to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
+        if isinstance(v, Column):
+            return v.to_plan(session)
+        else:
+            return LiteralExpression._from_value(v).to_plan(session)
+
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
         plan.sql.query = self._query
@@ -1056,14 +1062,10 @@ class SQL(LogicalPlan):
         if self._args is not None and len(self._args) > 0:
             if isinstance(self._args, Dict):
                 for k, v in self._args.items():
-                    plan.sql.args[k].CopyFrom(
-                        LiteralExpression._from_value(v).to_plan(session).literal
-                    )
+                    plan.sql.named_arguments[k].CopyFrom(self._to_expr(session, v))
             else:
                 for v in self._args:
-                    plan.sql.pos_args.append(
-                        LiteralExpression._from_value(v).to_plan(session).literal
-                    )
+                    plan.sql.pos_arguments.append(self._to_expr(session, v))
 
         return plan
 
@@ -1073,14 +1075,10 @@ class SQL(LogicalPlan):
         if self._args is not None and len(self._args) > 0:
             if isinstance(self._args, Dict):
                 for k, v in self._args.items():
-                    cmd.sql_command.args[k].CopyFrom(
-                        LiteralExpression._from_value(v).to_plan(session).literal
-                    )
+                    cmd.sql_command.named_arguments[k].CopyFrom(self._to_expr(session, v))
             else:
                 for v in self._args:
-                    cmd.sql_command.pos_args.append(
-                        LiteralExpression._from_value(v).to_plan(session).literal
-                    )
+                    cmd.sql_command.pos_arguments.append(self._to_expr(session, v))
 
         return cmd
 

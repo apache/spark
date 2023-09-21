@@ -1296,6 +1296,24 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       assert(rc == 100)
     }
   }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

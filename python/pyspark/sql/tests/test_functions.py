@@ -1353,6 +1353,17 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 
+    # SPARK-45216: Fix non-deterministic seeded Dataset APIs
+    def test_non_deterministic_with_seed(self):
+        df = self.spark.createDataFrame([([*range(0, 10, 1)],)], ["a"])
+
+        r = F.rand()
+        r2 = F.randn()
+        r3 = F.shuffle("a")
+        res = df.select(r, r, r2, r2, r3, r3).collect()
+        for i in range(3):
+            self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
