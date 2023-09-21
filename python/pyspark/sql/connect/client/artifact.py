@@ -247,7 +247,10 @@ class ArtifactManager:
         try:
             yield from self._add_artifacts(
                 chain(
-                    *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
+                    *(
+                        self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
+                        for p in path
+                    )
                 )
             )
         except Exception as e:
