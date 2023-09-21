@@ -308,11 +308,10 @@ object SparkBuild extends PomBuild {
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.18",
     csrConfiguration := csrConfiguration.value.withCachePolicies(Vector(
-      // first, try to update changing artifacts that were previously downloaded (follows TTL)
-      CachePolicy.LocalUpdateChanging,
-      CachePolicy.FetchMissing,
-      // lastly, try to download what's missing
-      CachePolicy.Update
+      // CachePolicy.LocalUpdateChanging,
+      // CachePolicy.LocalOnly,
+      CachePolicy.Update,
+      CachePolicy.FetchMissing
     )),
 
     // Override SBT's default resolvers:
