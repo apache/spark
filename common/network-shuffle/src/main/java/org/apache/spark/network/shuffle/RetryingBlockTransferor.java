@@ -211,7 +211,7 @@ public class RetryingBlockTransferor {
       retryWaitTime);
 
     try {
-      executorService.submit(() -> {
+      executorService.execute(() -> {
         Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
         transferAllOutstanding();
       });
