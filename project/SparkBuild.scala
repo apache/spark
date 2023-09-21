@@ -37,6 +37,8 @@ import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 import sbtassembly.AssemblyPlugin.autoImport._
 
+import lmcoursier.definitions.CachePolicy
+
 import spray.revolver.RevolverPlugin._
 
 import sbtprotoc.ProtocPlugin.autoImport._
@@ -92,6 +94,7 @@ object BuildCommons {
   val protoVersion = "3.23.4"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.56.0"
+
 }
 
 object SparkBuild extends PomBuild {
@@ -304,6 +307,14 @@ object SparkBuild extends PomBuild {
       .map(file),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.18",
+    csrConfiguration := csrConfiguration.value.withCachePolicies(Vector(
+      // first, try to update changing artifacts that were previously downloaded (follows TTL)
+      CachePolicy.LocalUpdateChanging,
+      // then, use what's available locally
+      CachePolicy.LocalOnly,
+      // lastly, try to download what's missing
+      CachePolicy.Update,
+      CachePolicy.FetchMissing)),
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -311,7 +322,7 @@ object SparkBuild extends PomBuild {
       // See https://storage-download.googleapis.com/maven-central/index.html for more info.
       "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
-      // Resolver.mavenLocal,
+      Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
