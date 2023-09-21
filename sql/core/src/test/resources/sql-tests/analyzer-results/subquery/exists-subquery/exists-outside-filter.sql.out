@@ -376,7 +376,7 @@ FROM   emp
 -- !query analysis
 Project [emp_name#x, sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
 +- Project [emp_name#x, salary#x, _w1#x, sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Window [sum(salary#x) windowspecdefinition(_w1#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [_w1#x]
+   +- Window [emp_name#x, salary#x, _w1#x, sum(salary#x) windowspecdefinition(_w1#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(salary) OVER (PARTITION BY exists() ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [_w1#x]
       +- Project [emp_name#x, salary#x, exists#x [] AS _w1#x]
          :  +- Project [1 AS 1#x]
          :     +- Filter ((dept_id#x > 10) AND (dept_id#x < 30))
@@ -404,7 +404,7 @@ FROM   emp
 -- !query analysis
 Project [emp_name#x, sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
 +- Project [emp_name#x, salary#x, _w1#x, sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Window [sum(salary#x) windowspecdefinition(_w1#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [_w1#x]
+   +- Window [emp_name#x, salary#x, _w1#x, sum(salary#x) windowspecdefinition(_w1#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(salary) OVER (PARTITION BY exists(dept_id) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [_w1#x]
       +- Project [emp_name#x, salary#x, exists#x [dept_id#x] AS _w1#x]
          :  +- Project [1 AS 1#x]
          :     +- Filter (outer(dept_id#x) = dept_id#x)

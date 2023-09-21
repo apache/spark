@@ -35,7 +35,7 @@ FROM tenk1 WHERE unique1 < 10
 -- !query analysis
 Project [sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, unique1#x, four#x]
 +- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
-   +- Window [sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, -1)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [four#x ASC NULLS FIRST]
+   +- Window [unique1#x, four#x, sum(unique1#x) windowspecdefinition(four#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -2, -1)) AS sum(unique1) OVER (ORDER BY four ASC NULLS FIRST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [four#x ASC NULLS FIRST]
       +- Project [unique1#x, four#x]
          +- Filter (unique1#x < 10)
             +- SubqueryAlias spark_catalog.default.tenk1
@@ -49,7 +49,7 @@ FROM tenk1 WHERE unique1 < 10
 -- !query analysis
 Project [sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, unique1#x, four#x]
 +- Project [unique1#x, four#x, sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL, sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL]
-   +- Window [sum(unique1#x) windowspecdefinition(four#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, -2, -1)) AS sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [four#x DESC NULLS LAST]
+   +- Window [unique1#x, four#x, sum(unique1#x) windowspecdefinition(four#x DESC NULLS LAST, specifiedwindowframe(RangeFrame, -2, -1)) AS sum(unique1) OVER (ORDER BY four DESC NULLS LAST RANGE BETWEEN 2 PRECEDING AND 1 PRECEDING)#xL], [four#x DESC NULLS LAST]
       +- Project [unique1#x, four#x]
          +- Filter (unique1#x < 10)
             +- SubqueryAlias spark_catalog.default.tenk1
@@ -63,7 +63,7 @@ FROM tenk1 WHERE unique1 < 10
 -- !query analysis
 Project [sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING)#xL, unique1#x, four#x]
 +- Project [unique1#x, four#x, sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING)#xL, sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING)#xL]
-   +- Window [sum(unique1#x) windowspecdefinition(four#x, unique1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -5, 6)) AS sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING)#xL], [four#x], [unique1#x ASC NULLS FIRST]
+   +- Window [unique1#x, four#x, sum(unique1#x) windowspecdefinition(four#x, unique1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -5, 6)) AS sum(unique1) OVER (PARTITION BY four ORDER BY unique1 ASC NULLS FIRST RANGE BETWEEN 5 PRECEDING AND 6 FOLLOWING)#xL], [four#x], [unique1#x ASC NULLS FIRST]
       +- Project [unique1#x, four#x]
          +- Filter (unique1#x < 10)
             +- SubqueryAlias spark_catalog.default.tenk1
@@ -83,7 +83,7 @@ window w as
 -- !query analysis
 Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
 +- Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
-   +- Window [first(y#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
+   +- Window [id#xL, y#xL, first(y#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL, y#xL]
          +- SubqueryAlias ss
             +- Union false, false
@@ -112,7 +112,7 @@ window w as
 -- !query analysis
 Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
 +- Project [id#xL, y#xL, first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
-   +- Window [first(y#xL, false) windowspecdefinition(id#xL ASC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL ASC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL ASC NULLS LAST]
+   +- Window [id#xL, y#xL, first(y#xL, false) windowspecdefinition(id#xL ASC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL ASC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id ASC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL ASC NULLS LAST]
       +- Project [id#xL, y#xL]
          +- SubqueryAlias ss
             +- Union false, false
@@ -141,7 +141,7 @@ window w as
 -- !query analysis
 Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
 +- Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
-   +- Window [first(y#xL, false) windowspecdefinition(id#xL DESC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL DESC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL DESC NULLS FIRST]
+   +- Window [id#xL, y#xL, first(y#xL, false) windowspecdefinition(id#xL DESC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL DESC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id DESC NULLS FIRST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL DESC NULLS FIRST]
       +- Project [id#xL, y#xL]
          +- SubqueryAlias ss
             +- Union false, false
@@ -170,7 +170,7 @@ window w as
 -- !query analysis
 Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
 +- Project [id#xL, y#xL, first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL]
-   +- Window [first(y#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
+   +- Window [id#xL, y#xL, first(y#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS first(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL, last(y#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, cast(-2 as bigint), cast(2 as bigint))) AS last(y) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN (- 2) FOLLOWING AND 2 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL, y#xL]
          +- SubqueryAlias ss
             +- Union false, false
@@ -192,7 +192,7 @@ from range(32764, 32767) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450884 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450884 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147450884 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (32764, 32767, step=1, splits=None)
@@ -204,7 +204,7 @@ from range(-32766, -32765) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450885 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(2147450885 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 2147450885 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (-32766, -32765, step=1, splits=None)
@@ -216,7 +216,7 @@ from range(2147483644, 2147483647) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (2147483644, 2147483647, step=1, splits=None)
@@ -228,7 +228,7 @@ from range(-2147483646, -2147483645) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (-2147483646, -2147483645, step=1, splits=None)
@@ -240,7 +240,7 @@ from range(9223372036854775804, 9223372036854775807) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL, last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), cast(4 as bigint))) AS last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING)#xL], [id#xL ASC NULLS FIRST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (9223372036854775804, 9223372036854775807, step=1, splits=None)
@@ -252,7 +252,7 @@ from range(-9223372036854775806, -9223372036854775805) x
 -- !query analysis
 Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL]
 +- Project [id#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL, last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL]
-   +- Window [last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
+   +- Window [id#xL, last(id#xL, false) windowspecdefinition(id#xL DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(5 as bigint))) AS last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING)#xL], [id#xL DESC NULLS LAST]
       +- Project [id#xL]
          +- SubqueryAlias x
             +- Range (-9223372036854775806, -9223372036854775805, step=1, splits=None)
@@ -292,7 +292,7 @@ window w as (order by f_float4 range between
 -- !query analysis
 Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x]
 +- Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
+   +- Window [id#x, f_float4#x, first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
       +- Project [id#x, f_float4#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -306,7 +306,7 @@ window w as (order by f_float4 range between
 -- !query analysis
 Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x]
 +- Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
+   +- Window [id#x, f_float4#x, first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
       +- Project [id#x, f_float4#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -320,7 +320,7 @@ window w as (order by f_float4 range between
 -- !query analysis
 Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x]
 +- Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
+   +- Window [id#x, f_float4#x, first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
       +- Project [id#x, f_float4#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -334,7 +334,7 @@ window w as (order by f_float4 range between
 -- !query analysis
 Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x]
 +- Project [id#x, f_float4#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
+   +- Window [id#x, f_float4#x, first(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS first(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float4#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS last(id) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x], [f_float4#x ASC NULLS FIRST]
       +- Project [id#x, f_float4#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -348,7 +348,7 @@ window w as (order by f_float8 range between
 -- !query analysis
 Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x]
 +- Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
+   +- Window [id#x, f_float8#x, first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1 as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
       +- Project [id#x, f_float8#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -362,7 +362,7 @@ window w as (order by f_float8 range between
 -- !query analysis
 Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x]
 +- Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
+   +- Window [id#x, f_float8#x, first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as float), cast(1.1 as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1.1 FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
       +- Project [id#x, f_float8#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -376,7 +376,7 @@ window w as (order by f_float8 range between
 -- !query analysis
 Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x]
 +- Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
+   +- Window [id#x, f_float8#x, first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-cast(inf as double) as float), cast(inf as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- inf) FOLLOWING AND inf FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
       +- Project [id#x, f_float8#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -390,7 +390,7 @@ window w as (order by f_float8 range between
 -- !query analysis
 Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x]
 +- Project [id#x, f_float8#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
+   +- Window [id#x, f_float8#x, first(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS first(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_float8#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1.1 as float), cast(NaN as float))) AS last(id) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN (- 1.1) FOLLOWING AND NaN FOLLOWING)#x], [f_float8#x ASC NULLS FIRST]
       +- Project [id#x, f_float8#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -404,7 +404,7 @@ window w as (order by f_numeric range between
 -- !query analysis
 Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x]
 +- Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, 1)) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, 1)) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
+   +- Window [id#x, f_numeric#x, first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, 1)) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, 1)) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
       +- Project [id#x, f_numeric#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -418,7 +418,7 @@ window w as (order by f_numeric range between
 -- !query analysis
 Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x]
 +- Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
+   +- Window [id#x, f_numeric#x, first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
       +- Project [id#x, f_numeric#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet
@@ -432,7 +432,7 @@ window w as (order by f_numeric range between
 -- !query analysis
 Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x]
 +- Project [id#x, f_numeric#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x]
-   +- Window [first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
+   +- Window [id#x, f_numeric#x, first(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS first(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x, last(id#x, false) windowspecdefinition(f_numeric#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, cast(1.1 as int))) AS last(id) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1.1 FOLLOWING)#x], [f_numeric#x ASC NULLS FIRST]
       +- Project [id#x, f_numeric#x]
          +- SubqueryAlias spark_catalog.default.numerics
             +- Relation spark_catalog.default.numerics[id#x,f_float4#x,f_float8#x,f_numeric#x] parquet

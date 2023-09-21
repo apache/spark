@@ -1455,7 +1455,7 @@ Project [c1#x, c2#x, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNB
    :  +- SubqueryAlias __auto_generated_subquery_name
    :     +- Project [sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
    :        +- Project [c2#x, c1#x, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
-   :           +- Window [sum(c2#x) windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [c1#x ASC NULLS FIRST]
+   :           +- Window [c2#x, c1#x, sum(c2#x) windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [c1#x ASC NULLS FIRST]
    :              +- Project [c2#x, c1#x]
    :                 +- Filter (c1#x >= outer(c1#x))
    :                    +- SubqueryAlias spark_catalog.default.t2
@@ -2014,7 +2014,7 @@ Project [c1#x, c2#x, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNB
    :     +- Union false, false
    :        :- Project [sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
    :        :  +- Project [c2#x, c1#x, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
-   :        :     +- Window [sum(c2#x) windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [c1#x ASC NULLS FIRST]
+   :        :     +- Window [c2#x, c1#x, sum(c2#x) windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(c2) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [c1#x ASC NULLS FIRST]
    :        :        +- Project [c2#x, c1#x]
    :        :           +- Filter (c1#x >= outer(c1#x))
    :        :              +- SubqueryAlias spark_catalog.default.t2

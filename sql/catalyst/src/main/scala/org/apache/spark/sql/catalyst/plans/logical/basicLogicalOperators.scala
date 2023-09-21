@@ -1220,7 +1220,10 @@ case class Window(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-    // child.output ++ windowExpressions.map(_.toAttribute)
+  // child.output ++ windowExpressions.map(_.toAttribute)
+  // override def output: Seq[Attribute] =
+  //    child.output ++ windowExpressions.map(_.toAttribute)
+  // def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
   // override def producedAttributes: AttributeSet =
   //  AttributeSet(projectList.map(_.toAttribute)) // windowOutputSet

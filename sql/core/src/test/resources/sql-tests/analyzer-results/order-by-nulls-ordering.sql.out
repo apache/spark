@@ -23,7 +23,7 @@ from spark_10747 where col1 = 6 order by sum_col2
 Sort [sum_col2#xL ASC NULLS FIRST], true
 +- Project [col1#x, col2#x, col3#x, sum_col2#xL]
    +- Project [col1#x, col2#x, col3#x, sum_col2#xL, sum_col2#xL]
-      +- Window [sum(col2#x) windowspecdefinition(col1#x, col3#x DESC NULLS LAST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x DESC NULLS LAST, col2#x ASC NULLS FIRST]
+      +- Window [col1#x, col2#x, col3#x, sum(col2#x) windowspecdefinition(col1#x, col3#x DESC NULLS LAST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x DESC NULLS LAST, col2#x ASC NULLS FIRST]
          +- Project [col1#x, col2#x, col3#x]
             +- Filter (col1#x = 6)
                +- SubqueryAlias spark_catalog.default.spark_10747
@@ -40,7 +40,7 @@ from spark_10747 where col1 = 6 order by sum_col2
 Sort [sum_col2#xL ASC NULLS FIRST], true
 +- Project [col1#x, col2#x, col3#x, sum_col2#xL]
    +- Project [col1#x, col2#x, col3#x, sum_col2#xL, sum_col2#xL]
-      +- Window [sum(col2#x) windowspecdefinition(col1#x, col3#x DESC NULLS FIRST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x DESC NULLS FIRST, col2#x ASC NULLS FIRST]
+      +- Window [col1#x, col2#x, col3#x, sum(col2#x) windowspecdefinition(col1#x, col3#x DESC NULLS FIRST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x DESC NULLS FIRST, col2#x ASC NULLS FIRST]
          +- Project [col1#x, col2#x, col3#x]
             +- Filter (col1#x = 6)
                +- SubqueryAlias spark_catalog.default.spark_10747
@@ -57,7 +57,7 @@ from spark_10747 where col1 = 6 order by sum_col2
 Sort [sum_col2#xL ASC NULLS FIRST], true
 +- Project [col1#x, col2#x, col3#x, sum_col2#xL]
    +- Project [col1#x, col2#x, col3#x, sum_col2#xL, sum_col2#xL]
-      +- Window [sum(col2#x) windowspecdefinition(col1#x, col3#x ASC NULLS LAST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x ASC NULLS LAST, col2#x ASC NULLS FIRST]
+      +- Window [col1#x, col2#x, col3#x, sum(col2#x) windowspecdefinition(col1#x, col3#x ASC NULLS LAST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x ASC NULLS LAST, col2#x ASC NULLS FIRST]
          +- Project [col1#x, col2#x, col3#x]
             +- Filter (col1#x = 6)
                +- SubqueryAlias spark_catalog.default.spark_10747
@@ -74,7 +74,7 @@ from spark_10747 where col1 = 6 order by sum_col2
 Sort [sum_col2#xL ASC NULLS FIRST], true
 +- Project [col1#x, col2#x, col3#x, sum_col2#xL]
    +- Project [col1#x, col2#x, col3#x, sum_col2#xL, sum_col2#xL]
-      +- Window [sum(col2#x) windowspecdefinition(col1#x, col3#x ASC NULLS FIRST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x ASC NULLS FIRST, col2#x ASC NULLS FIRST]
+      +- Window [col1#x, col2#x, col3#x, sum(col2#x) windowspecdefinition(col1#x, col3#x ASC NULLS FIRST, col2#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, 2)) AS sum_col2#xL], [col1#x], [col3#x ASC NULLS FIRST, col2#x ASC NULLS FIRST]
          +- Project [col1#x, col2#x, col3#x]
             +- Filter (col1#x = 6)
                +- SubqueryAlias spark_catalog.default.spark_10747

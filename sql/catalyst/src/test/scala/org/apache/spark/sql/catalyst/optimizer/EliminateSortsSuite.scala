@@ -325,6 +325,13 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("ScalaUDF and window function") {
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, $"a" :: Nil,
+      Option(ExpressionEncoder[Int]()) :: Nil)
+    val projectPlan = testRelation.select($"a", $"b")
+
+  }
+
   test("should not remove orderBy with limit in groupBy clause") {
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc).limit(10)

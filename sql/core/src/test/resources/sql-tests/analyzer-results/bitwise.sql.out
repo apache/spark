@@ -263,7 +263,7 @@ SELECT b1, b2, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test
 -- !query analysis
 Project [b1#x, b2#x, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [b1#x, b2#x, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [bit_xor(b2#x) windowspecdefinition(b1#x, b2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [b1#x], [b2#x ASC NULLS FIRST]
+   +- Window [b1#x, b2#x, bit_xor(b2#x) windowspecdefinition(b1#x, b2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [b1#x], [b2#x ASC NULLS FIRST]
       +- Project [b1#x, b2#x]
          +- SubqueryAlias bitwise_test
             +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])

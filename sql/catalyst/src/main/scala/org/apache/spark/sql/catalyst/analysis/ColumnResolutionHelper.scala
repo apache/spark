@@ -71,6 +71,8 @@ trait ColumnResolutionHelper extends Logging {
               val newProject = Project(p.projectList ++ missingAttrs, newChild)
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
+            case w: Window =>
+              (newExprs, w.copy(projectList = w.projectList ++ missingAttrs, child = newChild))
 
             case a @ Aggregate(groupExprs, aggExprs, child) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {

@@ -893,7 +893,7 @@ Project [1 AS 1#x]
    :     +- SubqueryAlias tmp
    :        +- Project [s#xL]
    :           +- Project [t2b#x, t2c#x, t2d#xL, s#xL, s#xL]
-   :              +- Window [sum(t2b#x) windowspecdefinition(t2c#x, t2d#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [t2d#xL ASC NULLS FIRST]
+   :              +- Window [t2b#x, t2c#x, t2d#xL, sum(t2b#x) windowspecdefinition(t2c#x, t2d#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [t2d#xL ASC NULLS FIRST]
    :                 +- Project [t2b#x, t2c#x, t2d#xL]
    :                    +- Filter (t2d#xL = outer(t1d#xL))
    :                       +- SubqueryAlias t2
@@ -923,7 +923,7 @@ Project [1 AS 1#x]
    :     +- SubqueryAlias tmp
    :        +- Project [s#xL]
    :           +- Project [t2b#x, t2c#x, t2d#xL, s#xL, s#xL]
-   :              +- Window [sum(t2b#x) windowspecdefinition(t2c#x, t2d#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [t2d#xL ASC NULLS FIRST]
+   :              +- Window [t2b#x, t2c#x, t2d#xL, sum(t2b#x) windowspecdefinition(t2c#x, t2d#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [t2d#xL ASC NULLS FIRST]
    :                 +- Project [t2b#x, t2c#x, t2d#xL]
    :                    +- Filter (t2d#xL <= outer(t1d#xL))
    :                       +- SubqueryAlias t2
@@ -953,7 +953,7 @@ Project [t1b#x]
    :     +- SubqueryAlias tmp
    :        +- Project [s#x]
    :           +- Project [t3c#x, t2b#x, s#x, s#x]
-   :              +- Window [rank(t3c#x) windowspecdefinition(t3c#x, t2b#x, t3c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS s#x], [t3c#x, t2b#x], [t3c#x ASC NULLS FIRST]
+   :              +- Window [t3c#x, t2b#x, rank(t3c#x) windowspecdefinition(t3c#x, t2b#x, t3c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS s#x], [t3c#x, t2b#x], [t3c#x ASC NULLS FIRST]
    :                 +- Project [t3c#x, t2b#x]
    :                    +- Filter ((t2c#x = t3c#x) AND (t2a#x = outer(t1a#x)))
    :                       +- Join Inner
@@ -992,7 +992,7 @@ Sort [t1b#x ASC NULLS FIRST], true
       :     +- SubqueryAlias tmp
       :        +- Project [s#x]
       :           +- Project [t3c#x, t3d#xL, s#x, s#x]
-      :              +- Window [rank(t3c#x) windowspecdefinition(t3c#x, t3d#xL, t3c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS s#x], [t3c#x, t3d#xL], [t3c#x ASC NULLS FIRST]
+      :              +- Window [t3c#x, t3d#xL, rank(t3c#x) windowspecdefinition(t3c#x, t3d#xL, t3c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS s#x], [t3c#x, t3d#xL], [t3c#x ASC NULLS FIRST]
       :                 +- Project [t3c#x, t3d#xL]
       :                    +- SubqueryAlias g
       :                       +- Aggregate [t3b#x, t3c#x], [t3b#x, t3c#x, max(t3d#xL) AS t3d#xL]
@@ -1023,7 +1023,7 @@ Project [1 AS 1#x]
    :     +- SubqueryAlias tmp
    :        +- Project [s#xL]
    :           +- Project [t2c#x, _w1#xL, s#xL, s#xL]
-   :              +- Window [sum(t2c#x) windowspecdefinition(t2c#x, _w1#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [_w1#xL ASC NULLS FIRST]
+   :              +- Window [t2c#x, _w1#xL, sum(t2c#x) windowspecdefinition(t2c#x, _w1#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [t2c#x], [_w1#xL ASC NULLS FIRST]
    :                 +- Project [t2c#x, (outer(t1d#xL) + t2d#xL) AS _w1#xL]
    :                    +- SubqueryAlias t2
    :                       +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])

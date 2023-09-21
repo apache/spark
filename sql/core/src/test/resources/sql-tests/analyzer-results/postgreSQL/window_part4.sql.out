@@ -5,7 +5,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [i#x, v#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -18,7 +18,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [i#x, v#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -31,7 +31,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [i#x, v#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -44,7 +44,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [i#x, v#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, avg(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS avg(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -57,7 +57,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -70,7 +70,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -83,7 +83,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -96,7 +96,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -109,7 +109,7 @@ SELECT SUM(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 -- !query analysis
 Project [sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [n#x, i#x, sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [sum(n#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [n#x, i#x, sum(n#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS sum(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [n#x, i#x]
          +- SubqueryAlias v
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -122,7 +122,7 @@ SELECT i,COUNT(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [i#x, count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
 +- Project [i#x, v#x, count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
-   +- Window [count(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, count(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS count(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -135,7 +135,7 @@ SELECT i,COUNT(*) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [i#x, count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
 +- Project [i#x, count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL, count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL]
-   +- Window [count(1) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, count(1) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS count(1) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -148,7 +148,7 @@ SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -161,7 +161,7 @@ SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -174,7 +174,7 @@ SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -187,7 +187,7 @@ SELECT VAR_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOW
 -- !query analysis
 Project [var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -200,7 +200,7 @@ SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -213,7 +213,7 @@ SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -226,7 +226,7 @@ SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -239,7 +239,7 @@ SELECT VAR_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, var_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS var_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -252,7 +252,7 @@ SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -265,7 +265,7 @@ SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -278,7 +278,7 @@ SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -291,7 +291,7 @@ SELECT VARIANCE(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLO
 -- !query analysis
 Project [variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, variance(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS variance(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -304,7 +304,7 @@ SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOL
 -- !query analysis
 Project [stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -317,7 +317,7 @@ SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOL
 -- !query analysis
 Project [stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -330,7 +330,7 @@ SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOL
 -- !query analysis
 Project [stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -343,7 +343,7 @@ SELECT STDDEV_POP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOL
 -- !query analysis
 Project [stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_pop(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_pop(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -356,7 +356,7 @@ SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FO
 -- !query analysis
 Project [stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -369,7 +369,7 @@ SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FO
 -- !query analysis
 Project [stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -382,7 +382,7 @@ SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FO
 -- !query analysis
 Project [stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -395,7 +395,7 @@ SELECT STDDEV_SAMP(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FO
 -- !query analysis
 Project [stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev_samp(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev_samp(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -408,7 +408,7 @@ SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWI
 -- !query analysis
 Project [stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -421,7 +421,7 @@ SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWI
 -- !query analysis
 Project [stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -434,7 +434,7 @@ SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWI
 -- !query analysis
 Project [stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -447,7 +447,7 @@ SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWI
 -- !query analysis
 Project [stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
 +- Project [_w0#x, i#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x, stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x]
-   +- Window [stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
+   +- Window [_w0#x, i#x, stddev(_w0#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), unboundedfollowing$())) AS stddev(n) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)#x], [i#x ASC NULLS FIRST]
       +- Project [cast(n#x as double) AS _w0#x, i#x]
          +- SubqueryAlias r
             +- Project [col1#x AS i#x, col2#x AS n#x]
@@ -460,7 +460,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), currentrow$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), currentrow$())) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -473,7 +473,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), 1)) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, currentrow$(), 1)) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]
@@ -486,7 +486,7 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 -- !query analysis
 Project [i#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
 +- Project [i#x, v#x, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
-   +- Window [sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [i#x ASC NULLS FIRST]
+   +- Window [i#x, v#x, sum(v#x) windowspecdefinition(i#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(v) OVER (ORDER BY i ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [i#x ASC NULLS FIRST]
       +- Project [i#x, v#x]
          +- SubqueryAlias t
             +- Project [col1#x AS i#x, col2#x AS v#x]

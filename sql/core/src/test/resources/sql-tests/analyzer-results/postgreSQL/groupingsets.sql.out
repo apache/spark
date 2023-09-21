@@ -140,7 +140,7 @@ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
 Sort [rsum#xL ASC NULLS FIRST, a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
 +- Project [a#x, b#x, sum(c)#xL, rsum#xL]
    +- Project [a#x, b#x, sum(c)#xL, _w0#xL, rsum#xL, rsum#xL]
-      +- Window [sum(_w0#xL) windowspecdefinition(a#x ASC NULLS FIRST, b#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS rsum#xL], [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST]
+      +- Window [a#x, b#x, sum(c)#xL, _w0#xL, sum(_w0#xL) windowspecdefinition(a#x ASC NULLS FIRST, b#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS rsum#xL], [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST]
          +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(c#x) AS sum(c)#xL, sum(c#x) AS _w0#xL]
             +- Expand [[a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, 0], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, null, 1], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, null, null, 3]], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, spark_grouping_id#xL]
                +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x AS a#x, b#x AS b#x]
@@ -609,7 +609,7 @@ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
 Sort [rsum#xL ASC NULLS FIRST, a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
 +- Project [a#x, b#x, sum(c)#xL, rsum#xL]
    +- Project [a#x, b#x, sum(c)#xL, _w0#xL, rsum#xL, rsum#xL]
-      +- Window [sum(_w0#xL) windowspecdefinition(a#x ASC NULLS FIRST, b#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS rsum#xL], [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST]
+      +- Window [a#x, b#x, sum(c)#xL, _w0#xL, sum(_w0#xL) windowspecdefinition(a#x ASC NULLS FIRST, b#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS rsum#xL], [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST]
          +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(c#x) AS sum(c)#xL, sum(c#x) AS _w0#xL]
             +- Expand [[a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, 0], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, null, 1], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, null, b#x, 2], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, null, null, 3]], [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x, b#x, spark_grouping_id#xL]
                +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x, a#x AS a#x, b#x AS b#x]

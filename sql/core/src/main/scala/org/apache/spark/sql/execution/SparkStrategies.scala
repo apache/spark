@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -63,7 +64,7 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   }
 }
 
-abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
+abstract class SparkStrategies extends QueryPlanner[SparkPlan] with Logging {
   self: SparkPlanner =>
 
   override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
@@ -639,8 +640,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         //  .map(_.toAttribute))
 
         val windowExprs = projectExprs.filter(WindowExpression.hasWindowExpression)
-        val topProjectList = projectExprs.filterNot(WindowExpression.hasWindowExpression) ++
-          windowExprs.map(_.toAttribute)
+        // val topProjectList = projectExprs.filterNot(WindowExpression.hasWindowExpression) ++
+        //  windowExprs.map(_.toAttribute)
+        val topProjectList = projectExprs.map(_.toAttribute)
 
         execution.ProjectExec(topProjectList, window.WindowExec(
           windowExprs, partitionSpec, orderSpec, planLater(child))) :: Nil

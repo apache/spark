@@ -774,7 +774,7 @@ SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query analysis
 Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [every(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+   +- Window [k#x, v#x, every(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
             +- View (`test_agg`, [k#x,v#x])
@@ -789,7 +789,7 @@ SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query analysis
 Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [some(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+   +- Window [k#x, v#x, some(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
             +- View (`test_agg`, [k#x,v#x])
@@ -804,7 +804,7 @@ SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query analysis
 Project [k#x, v#x, any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [any(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+   +- Window [k#x, v#x, any(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
             +- View (`test_agg`, [k#x,v#x])
@@ -819,7 +819,7 @@ SELECT k, v, bool_and(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query analysis
 Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [bool_and(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+   +- Window [k#x, v#x, bool_and(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
             +- View (`test_agg`, [k#x,v#x])
@@ -834,7 +834,7 @@ SELECT k, v, bool_or(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query analysis
 Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [bool_or(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
+   +- Window [k#x, v#x, bool_or(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
             +- View (`test_agg`, [k#x,v#x])

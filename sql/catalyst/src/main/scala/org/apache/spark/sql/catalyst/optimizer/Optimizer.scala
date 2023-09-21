@@ -632,8 +632,12 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty =>
-      val exprs = w.windowExpressions
-      w.child
+      if (w.child.sameOutput(w)) {
+        w.child
+      } else {
+        Project(w.projectList, w.child)
+      }
+
   }
 }
 
