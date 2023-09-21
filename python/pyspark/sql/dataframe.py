@@ -2617,7 +2617,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
-        """Joins with another :class:`DataFrame`, using the given join expression.
+        """
+        Joins with another :class:`DataFrame`, using the given join expression.
 
         .. versionadded:: 1.3.0
 
@@ -2646,39 +2647,56 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        The following performs a full outer join between ``df1`` and ``df2``.
+        The following examples demonstrate various join types between ``df1`` and ``df2``.
 
+        >>> import pyspark.sql.functions as sf
         >>> from pyspark.sql import Row
-        >>> from pyspark.sql.functions import desc
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")]).toDF("age", "name")
-        >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
-        >>> df3 = spark.createDataFrame([Row(age=2, name="Alice"), Row(age=5, name="Bob")])
-        >>> df4 = spark.createDataFrame([
-        ...     Row(age=10, height=80, name="Alice"),
-        ...     Row(age=5, height=None, name="Bob"),
-        ...     Row(age=None, height=None, name="Tom"),
-        ...     Row(age=None, height=None, name=None),
+        >>> df = spark.createDataFrame([Row(name="Alice", age=2), Row(name="Bob", age=5)])
+        >>> df2 = spark.createDataFrame([Row(name="Tom", height=80), Row(name="Bob", height=85)])
+        >>> df3 = spark.createDataFrame([
+        ...     Row(name="Alice", age=10, height=80),
+        ...     Row(name="Bob", age=5, height=None),
+        ...     Row(name="Tom", age=None, height=None),
+        ...     Row(name=None, age=None, height=None),
         ... ])
 
         Inner join on columns (default)
 
-        >>> df.join(df2, 'name').select(df.name, df2.height).show()
-        +----+------+
-        |name|height|
-        +----+------+
-        | Bob|    85|
-        +----+------+
-        >>> df.join(df4, ['name', 'age']).select(df.name, df.age).show()
-        +----+---+
-        |name|age|
-        +----+---+
-        | Bob|  5|
-        +----+---+
+        >>> df.join(df2, "name").show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|    85|
+        +----+---+------+
 
-        Outer join for both DataFrames on the 'name' column.
+        >>> df.join(df3, ["name", "age"]).show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|  NULL|
+        +----+---+------+
 
-        >>> df.join(df2, df.name == df2.name, 'outer').select(
-        ...     df.name, df2.height).sort(desc("name")).show()
+        Outer join on a single column with an explicit join condition.
+
+        When the join condition is explicited stated: `df.name == df2.name`, this will
+        produce all records where the names match, as well as those that don't (since
+        it's an outer join). If there are names in `df2` that are not present in `df`,
+        they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
+
+        >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
+        >>> joined.show()
+        +-----+----+----+------+
+        | name| age|name|height|
+        +-----+----+----+------+
+        |  Bob|   5| Bob|    85|
+        |Alice|   2|NULL|  NULL|
+        | NULL|NULL| Tom|    80|
+        +-----+----+----+------+
+
+        To select an output column, you must specify the dataframe along with the column
+        name to avoid ambiguous column references.
+
+        >>> joined.select(df.name, df2.height).show()
         +-----+------+
         | name|height|
         +-----+------+
@@ -2686,28 +2704,97 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  NULL|
         | NULL|    80|
         +-----+------+
-        >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).show()
+
+        A better approach is to assign aliases to the dataframes, and then reference
+        the ouptut columns from the join operation using these aliases:
+
+        >>> df.alias("df").join(df2.alias("df2"), df.name == df2.name, "outer") \\
+        ...     .sort(sf.desc("df.name")).select("df.name", "df2.height")
         +-----+------+
         | name|height|
         +-----+------+
-        |  Tom|    80|
         |  Bob|    85|
         |Alice|  NULL|
+        | NULL|    80|
         +-----+------+
 
-        Outer join for both DataFrams with multiple columns.
+        Outer join on a single column with implicit join condition using column name
 
-        >>> df.join(
-        ...     df3,
-        ...     [df.name == df3.name, df.age == df3.age],
-        ...     'outer'
-        ... ).select(df.name, df3.age).show()
+        When you provide the column name directly as the join condition, Spark will treat
+        both name columns as one, and will not produce separate columns for `df.name` and
+        `df2.name`. This avoids having duplicate columns in the output.
+
+        >>> df.join(df2, "name", "outer").sort(sf.desc("name")).show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        |  Tom|NULL|    80|
+        |  Bob|   5|    85|
+        |Alice|   2|  NULL|
+        +-----+----+------+
+
+        Outer join on multiple columns
+
+        >>> df.join(df3, ["name", "age"], "outer").show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        | NULL|NULL|  NULL|
+        |Alice|   2|  NULL|
+        |Alice|  10|    80|
+        |  Bob|   5|  NULL|
+        |  Tom|NULL|  NULL|
+        +-----+----+------+
+
+        Left outer join on columns
+
+        >>> df.join(df2, "name", "left_outer").show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  2|  NULL|
+        |  Bob|  5|    85|
+        +-----+---+------+
+
+        Right outer join on columns
+
+        >>> df.join(df2, "name", "right_outer").show()
+        +----+----+------+
+        |name| age|height|
+        +----+----+------+
+        | Tom|NULL|    80|
+        | Bob|   5|    85|
+        +----+----+------+
+
+        Left semi join on columns
+
+        >>> df.join(df2, "name", "left_semi").show()
+        +----+---+
+        |name|age|
+        +----+---+
+        | Bob|  5|
+        +----+---+
+
+        Left anti join on columns
+
+        >>> df.join(df2, "name", "left_anti").show()
         +-----+---+
         | name|age|
         +-----+---+
         |Alice|  2|
-        |  Bob|  5|
         +-----+---+
+
+        Cross join
+
+        >>> df.join(df2, how="cross").show()
+        +-----+---+----+------+
+        | name|age|name|height|
+        +-----+---+----+------+
+        |Alice|  2| Tom|    80|
+        |Alice|  2| Bob|    85|
+        |  Bob|  5| Tom|    80|
+        |  Bob|  5| Bob|    85|
+        +-----+---+----+------+
         """
 
         if on is not None and not isinstance(on, list):
