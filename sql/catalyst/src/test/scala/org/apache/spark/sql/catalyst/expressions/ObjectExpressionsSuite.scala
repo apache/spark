@@ -404,11 +404,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
-      val errMsg = intercept[RuntimeException] {
-        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
-      }.getMessage()
-      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
-        "as resulting collection."))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+        },
+        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
 

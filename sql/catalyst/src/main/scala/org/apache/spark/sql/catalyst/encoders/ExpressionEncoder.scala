@@ -170,7 +170,7 @@ object ExpressionEncoder {
    * Function that deserializes an [[InternalRow]] into an object of type `T`. This class is not
    * thread-safe.
    */
-  class Deserializer[T](private val expressions: Seq[Expression])
+  class Deserializer[T](val expressions: Seq[Expression])
     extends (InternalRow => T) with Serializable {
     @transient
     private[this] var constructProjection: Projection = _
