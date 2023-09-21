@@ -36,6 +36,8 @@ from typing import (
     ValuesView,
     cast,
 )
+import random
+import sys
 
 import numpy as np
 
@@ -388,7 +390,7 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand")
+        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
@@ -398,7 +400,7 @@ def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn")
+        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -2111,7 +2113,7 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("shuffle", col)
+    return _invoke_function("shuffle", _to_col(col), lit(random.randint(0, sys.maxsize)))
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__

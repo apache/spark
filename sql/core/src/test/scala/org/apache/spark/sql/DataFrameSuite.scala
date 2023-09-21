@@ -3648,6 +3648,19 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r, r2, r2, r3, r3, r4, r4, r5, r5).collect.foreach { row =>
+      (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+    }
+  }
+
   test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
