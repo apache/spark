@@ -41,7 +41,6 @@ class PythonWorkerFactorySuite extends SparkFunSuite with Matchers with SharedSp
       "python3", "pyspark.testing.non_existing_worker_module", Map.empty
     )
 
-
     // Create the worker in a separate thread so that if there is a bug where it does not
     // return (accept() used to be blocking), the test doesn't hang for a long time.
     val createFuture = Future {
