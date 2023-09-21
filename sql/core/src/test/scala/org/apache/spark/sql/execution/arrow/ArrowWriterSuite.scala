@@ -147,6 +147,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
     check(TimestampNTZType, (0 until 10).map(_ * 4.32e10.toLong))
     DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
   }
 
   test("write multiple, over initial capacity") {
