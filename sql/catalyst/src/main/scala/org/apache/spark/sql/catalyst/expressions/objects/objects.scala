@@ -350,6 +350,14 @@ case class StaticInvoke(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(arguments = newChildren)
+
+  override protected def stringArgs: Iterator[Any] = {
+    if (scalarFunction.nonEmpty) {
+      super.stringArgs
+    } else {
+      super.stringArgs.take(8)
+    }
+  }
 }
 
 /**
