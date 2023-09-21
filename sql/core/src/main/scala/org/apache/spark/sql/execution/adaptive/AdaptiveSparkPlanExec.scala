@@ -122,10 +122,10 @@ case class AdaptiveSparkPlanExec(
     Seq(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
-      PlanSorter,
       ensureRequirements,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
+      AdjustSorters,
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
