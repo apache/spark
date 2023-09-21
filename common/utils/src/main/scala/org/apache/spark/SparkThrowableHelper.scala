@@ -52,7 +52,7 @@ private[spark] object SparkThrowableHelper {
       context: String): String = {
     val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
-    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$errorClass] "
+    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
     s"$prefix$displayMessage$displayQueryContext"
   }
 

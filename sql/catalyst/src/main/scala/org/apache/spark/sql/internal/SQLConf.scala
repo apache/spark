@@ -4432,6 +4432,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS =
+    buildConf("spark.sql.legacy.raiseErrorWithoutErrorClass")
+      .internal()
+      .doc("When set to true, restores the legacy behavior of `raise_error` and `assert_true` to " +
+        "not return the `[USER_RAISED_EXCEPTION]` prefix." +
+        "For example, `raise_error('error!')` returns `error!` instead of " +
+        "`[[USER_RAISED_EXCEPTION] Error!`.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5298,6 +5309,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNegativeIndexInArrayInsert: Boolean = {
     getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
   }
+
+  def legacyRaiseErrorWithoutErrorClass: Boolean =
+      getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 

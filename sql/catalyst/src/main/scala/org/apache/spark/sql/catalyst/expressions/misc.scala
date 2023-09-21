@@ -62,24 +62,26 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 /**
  * Throw with the result of an expression (used for debugging).
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception with `expr`.",
+  usage = "_FUNC_( expr [, errorParams ]) - Throws a USER_RAISED_EXCEPTION with `expr` as message, or a defined error class in `expr` with a parameter map.",
   examples = """
     Examples:
       > SELECT _FUNC_('custom error message');
-       java.lang.RuntimeException
        [USER_RAISED_EXCEPTION] custom error message
 
-      > SELECT _FUNC_('VIEW_NOT_FOUND', Map('relationName' -> '`V1`'))
+      > SELECT _FUNC_('VIEW_NOT_FOUND', Map('relationName' -> '`V1`'));
        [VIEW_NOT_FOUND] The view `V1` cannot be found. ...
   """,
   since = "3.1.0",
   group = "misc_funcs")
+// scalastyle:on line.size.limit
 case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: DataType)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(str: Expression) = {
-    this(Literal("USER_RAISED_EXCEPTION"), CreateMap(Seq(Literal("errorMessage"), str)), NullType)
+    this(Literal("USER_RAISED_EXCEPTION"),
+      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
   }
 
   def this(errorClass: Expression, errorParms: Expression) = {
@@ -135,11 +137,17 @@ object RaiseError {
  * A function that throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
+  usage = "_FUNC_(expr [, message]) - Throws an exception if `expr` is not true.",
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
        NULL
+
+      > SELECT _FUNC_(1 < 0);
+       [USER_RAISED_EXCEPTION] '(1 < 0)' is not true!
+
+      > SELECT _FUNC_(1 < 0, 'Failed assertion');
+       [USER_RAISED_EXCEPTION] Failed assertion
   """,
   since = "2.0.0",
   group = "misc_funcs")

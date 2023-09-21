@@ -2727,11 +2727,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def raiseError(errorClass: UTF8String,
                  errorParms: MapData): RuntimeException = {
-    val errorClassStr = errorClass.toString.toUpperCase(Locale.ROOT)
+    val errorClassStr = if (errorClass != null) {
+      errorClass.toString.toUpperCase(Locale.ROOT)
+    } else {
+      "null"
+    }
     val errorParmsMap = if (errorParms != null) {
       val errorParmsMutable = collection.mutable.Map[String, String]()
       errorParms.foreach(StringType, StringType, { case (key, value) =>
-        errorParmsMutable += (key.toString -> value.toString)
+        errorParmsMutable += (key.toString ->
+          (if (value == null) { "null" } else { value.toString } ))
       })
       errorParmsMutable.toMap
     } else {
@@ -2753,8 +2758,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           messageParameters = Map("errorClass" -> errorClassStr,
             "expectedParms" -> expectedParms.mkString(","),
             "providedParms" -> providedParms.mkString(",")))
+      } else if (errorClass == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
+        // Don't break old raise_error() if asked
+        new RuntimeException(errorParmsMap.head._2)
       } else {
-
         // All good, raise the error
         new SparkRuntimeException(
           errorClass = errorClassStr,

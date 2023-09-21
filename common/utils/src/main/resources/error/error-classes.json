@@ -2061,15 +2061,6 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_SQLSTATE_SPECIFIED" : {
-    "message" : [
-      "The sqlstate <sqlstate> is not valid.",
-      "A valid sqlstate has a length of 5 characters.",
-      "Each character must be a digit ‘0’ - ‘9’ or a letter ‘A’ - ‘Z’",
-      "The first two characters may not be ‘00’ or ‘01’"
-    ],
-    "sqlState" : "428B3"
-  },
   "INVALID_VIEW_TEXT" : {
     "message" : [
       "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
@@ -6344,5 +6335,11 @@
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
     ]
+  },
+  "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
+    "message" : [
+      "<errorMessage>"
+    ],
+    "sqlState" : "P0001"
   }
 }

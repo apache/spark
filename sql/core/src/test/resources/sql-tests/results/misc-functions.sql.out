@@ -68,8 +68,14 @@ SELECT assert_true(false)
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'false' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'false' is not true!"
+  }
+}
 
 
 -- !query
@@ -77,8 +83,14 @@ SELECT assert_true(boolean(0))
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'cast(0 as boolean)' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'cast(0 as boolean)' is not true!"
+  }
+}
 
 
 -- !query
@@ -86,8 +98,14 @@ SELECT assert_true(null)
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'null' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'null' is not true!"
+  }
+}
 
 
 -- !query
@@ -95,8 +113,14 @@ SELECT assert_true(boolean(null))
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'cast(null as boolean)' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'cast(null as boolean)' is not true!"
+  }
+}
 
 
 -- !query
@@ -104,8 +128,14 @@ SELECT assert_true(false, 'custom error message')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-custom error message
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "custom error message"
+  }
+}
 
 
 -- !query
@@ -121,8 +151,14 @@ SELECT raise_error('error message')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-error message
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "error message"
+  }
+}
 
 
 -- !query
@@ -130,5 +166,5 @@ SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-too big: 8
+java.util.concurrent.ExecutionException
+org.codehaus.commons.compiler.CompileException: File 'generated.java', Line 35, Column 1: failed to compile: org.codehaus.commons.compiler.CompileException: File 'generated.java', Line 35, Column 1: Unknown variable or type "project_value_7"
