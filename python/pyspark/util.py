@@ -26,7 +26,7 @@ import threading
 import traceback
 import typing
 from types import TracebackType
-from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
 from pyspark.errors import PySparkRuntimeError
 
@@ -380,6 +380,35 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return wrapped
     else:
         return f  # type: ignore[return-value]
+
+
+def handle_worker_exception(e: BaseException, outfile: IO) -> None:
+    """
+    Handles exception for Python worker which writes SpecialLengths.PYTHON_EXCEPTION_THROWN (-2)
+    and exception traceback info to outfile. JVM could then read from the outfile and perform
+    exception handling there.
+    """
+    from pyspark.serializers import write_int, write_with_length, SpecialLengths
+
+    try:
+        exc_info = None
+        if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
+            tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
+            if tb is not None:
+                e.__cause__ = None
+                exc_info = "".join(traceback.format_exception(type(e), e, tb))
+        if exc_info is None:
+            exc_info = traceback.format_exc()
+
+        write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
+        write_with_length(exc_info.encode("utf-8"), outfile)
+    except IOError:
+        # JVM close the socket
+        pass
+    except BaseException:
+        # Write the error to stderr if it happened while serializing
+        print("PySpark worker failed with exception:", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
 
 
 class InheritableThread(threading.Thread):

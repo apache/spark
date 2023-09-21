@@ -271,6 +271,14 @@ SQLSTATE: none assigned
 Cannot up cast `<expression>` from `<sourceType>` to `<targetType>`.
 `<details>`
 
+### [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
+SQLSTATE: none assigned
+
+Error writing state store files for provider `<providerClass>`.
+
+For more details see [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
 ### CAST_INVALID_INPUT
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -288,6 +296,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+
+SQLSTATE: none assigned
+
+`MapObjects` does not support the class `<cls>` as resulting collection.
 
 ### CODEC_NOT_AVAILABLE
 

@@ -25,7 +25,6 @@ from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
 
-import traceback
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -34,7 +33,6 @@ from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
-    write_with_length,
     write_int,
     read_long,
     read_bool,
@@ -54,7 +52,7 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback
+from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 from pyspark.worker_util import (
@@ -1324,25 +1322,7 @@ def main(infile, outfile):
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
     except BaseException as e:
-        try:
-            exc_info = None
-            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-                tb = try_simplify_traceback(sys.exc_info()[-1])
-                if tb is not None:
-                    e.__cause__ = None
-                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
-            if exc_info is None:
-                exc_info = traceback.format_exc()
-
-            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info.encode("utf-8"), outfile)
-        except IOError:
-            # JVM close the socket
-            pass
-        except BaseException:
-            # Write the error to stderr if it happened while serializing
-            print("PySpark worker failed with exception:", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
+        handle_worker_exception(e, outfile)
         sys.exit(-1)
     finally:
         if faulthandler_log_path:

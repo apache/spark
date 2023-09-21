@@ -250,7 +250,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
       uses: actions/setup-python@v4
@@ -437,7 +437,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
@@ -542,7 +542,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -656,7 +656,7 @@ jobs:
     - name: Install Java 17
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: 17
     - name: License test
       run: ./dev/check-license
@@ -782,7 +782,7 @@ jobs:
       matrix:
         java:
           - 17
-          - 21-ea
+          - 21
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     steps:
@@ -819,7 +819,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
@@ -870,7 +870,7 @@ jobs:
     - name: Install Java 17
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: 17
     - name: Build with SBT
       run: |
@@ -922,7 +922,7 @@ jobs:
     - name: Install Java 17
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: 17
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
@@ -1029,7 +1029,7 @@ jobs:
     - name: Install Java 17
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: 17
     - name: Run tests
       run: |
@@ -1088,7 +1088,7 @@ jobs:
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: ${{ inputs.java }}
       - name: start minikube
         run: |

@@ -2960,7 +2960,7 @@ def variance(col: "ColumnOrName") -> Column:
     >>> df = spark.range(6)
     >>> df.select(variance(df.id)).show()
     +------------+
-    |var_samp(id)|
+    |variance(id)|
     +------------+
     |         3.5|
     +------------+
@@ -3053,11 +3053,17 @@ def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_avgx("y", "x")).first()
-    Row(regr_avgx(y, x)=0.999)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_avgx("y", "x"), sf.avg("x")
+    ... ).show()
+    +---------------+------+
+    |regr_avgx(y, x)|avg(x)|
+    +---------------+------+
+    |          0.999| 0.999|
+    +---------------+------+
     """
     return _invoke_function_over_columns("regr_avgx", y, x)
 
@@ -3084,11 +3090,17 @@ def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_avgy("y", "x")).first()
-    Row(regr_avgy(y, x)=9.980732994136464)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_avgy("y", "x"), sf.avg("y")
+    ... ).show()
+    +-----------------+-----------------+
+    |  regr_avgy(y, x)|           avg(y)|
+    +-----------------+-----------------+
+    |9.980732994136...|9.980732994136...|
+    +-----------------+-----------------+
     """
     return _invoke_function_over_columns("regr_avgy", y, x)
 
@@ -3115,11 +3127,17 @@ def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_count("y", "x")).first()
-    Row(regr_count(y, x)=1000)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_count("y", "x"), sf.count(sf.lit(0))
+    ... ).show()
+    +----------------+--------+
+    |regr_count(y, x)|count(0)|
+    +----------------+--------+
+    |            1000|    1000|
+    +----------------+--------+
     """
     return _invoke_function_over_columns("regr_count", y, x)
 
@@ -3147,11 +3165,17 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_intercept("y", "x")).first()
-    Row(regr_intercept(y, x)=-0.04961745990969568)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_intercept("y", "x")
+    ... ).show()
+    +--------------------+
+    |regr_intercept(y, x)|
+    +--------------------+
+    |-0.04961745990969568|
+    +--------------------+
     """
     return _invoke_function_over_columns("regr_intercept", y, x)
 
@@ -3178,11 +3202,17 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_r2("y", "x")).first()
-    Row(regr_r2(y, x)=0.9851908293645436)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_r2("y", "x")
+    ... ).show()
+    +------------------+
+    |     regr_r2(y, x)|
+    +------------------+
+    |0.9851908293645...|
+    +------------------+
     """
     return _invoke_function_over_columns("regr_r2", y, x)
 
@@ -3209,11 +3239,17 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_slope("y", "x")).first()
-    Row(regr_slope(y, x)=10.040390844891048)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_slope("y", "x")
+    ... ).show()
+    +------------------+
+    |  regr_slope(y, x)|
+    +------------------+
+    |10.040390844891...|
+    +------------------+
     """
     return _invoke_function_over_columns("regr_slope", y, x)
 
@@ -3240,11 +3276,17 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_sxx("y", "x")).first()
-    Row(regr_sxx(y, x)=666.9989999999996)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_sxx("y", "x")
+    ... ).show()
+    +-----------------+
+    |   regr_sxx(y, x)|
+    +-----------------+
+    |666.9989999999...|
+    +-----------------+
     """
     return _invoke_function_over_columns("regr_sxx", y, x)
 
@@ -3271,11 +3313,17 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_sxy("y", "x")).first()
-    Row(regr_sxy(y, x)=6696.93065315148)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_sxy("y", "x")
+    ... ).show()
+    +----------------+
+    |  regr_sxy(y, x)|
+    +----------------+
+    |6696.93065315...|
+    +----------------+
     """
     return _invoke_function_over_columns("regr_sxy", y, x)
 
@@ -3302,11 +3350,17 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> x = (col("id") % 3).alias("x")
-    >>> y = (randn(42) + x * 10).alias("y")
-    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
-    >>> df.select(regr_syy("y", "x")).first()
-    Row(regr_syy(y, x)=68250.53503811295)
+    >>> from pyspark.sql import functions as sf
+    >>> x = (sf.col("id") % 3).alias("x")
+    >>> y = (sf.randn(42) + x * 10).alias("y")
+    >>> spark.range(0, 1000, 1, 1).select(x, y).select(
+    ...     sf.regr_syy("y", "x")
+    ... ).show()
+    +-----------------+
+    |   regr_syy(y, x)|
+    +-----------------+
+    |68250.53503811...|
+    +-----------------+
     """
     return _invoke_function_over_columns("regr_syy", y, x)
 
@@ -5243,16 +5297,28 @@ def rand(seed: Optional[int] = None) -> Column:
     Parameters
     ----------
     seed : int (default: None)
-        seed value for random generator.
+        Seed value for the random generator.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        random values.
+        A column of random values.
 
     Examples
     --------
+    Example 1: Generate a random column without a seed
+
     >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand()).show() # doctest: +SKIP
+    +---+-------------------+
+    | id|               rand|
+    +---+-------------------+
+    |  0|0.14879325244215424|
+    |  1| 0.4640631044275454|
+    +---+-------------------+
+
+    Example 2: Generate a random column with a specific seed
+
     >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
     +---+------------------+
     | id|              rand|
@@ -5269,8 +5335,8 @@ def rand(seed: Optional[int] = None) -> Column:
 
 @_try_remote_functions
 def randn(seed: Optional[int] = None) -> Column:
-    """Generates a column with independent and identically distributed (i.i.d.) samples from
-    the standard normal distribution.
+    """Generates a random column with independent and identically distributed (i.i.d.) samples
+    from the standard normal distribution.
 
     .. versionadded:: 1.4.0
 
@@ -5284,16 +5350,28 @@ def randn(seed: Optional[int] = None) -> Column:
     Parameters
     ----------
     seed : int (default: None)
-        seed value for random generator.
+        Seed value for the random generator.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        random values.
+        A column of random values.
 
     Examples
     --------
+    Example 1: Generate a random column without a seed
+
     >>> from pyspark.sql import functions as sf
+    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn()).show() # doctest: +SKIP
+    +---+--------------------+
+    | id|               randn|
+    +---+--------------------+
+    |  0|-0.45011372342934214|
+    |  1|  0.6567304165329736|
+    +---+--------------------+
+
+    Example 2: Generate a random column with a specific seed
+
     >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
     +---+------------------+
     | id|             randn|
@@ -12551,12 +12629,12 @@ def explode(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column to work on.
+        Target column to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        one row per array item or map key value.
+        One row per array item or map key value.
 
     See Also
     --------
@@ -12564,18 +12642,125 @@ def explode(col: "ColumnOrName") -> Column:
     :meth:`pyspark.functions.explode_outer`
     :meth:`pyspark.functions.posexplode_outer`
 
+    Notes
+    -----
+    Only one explode is allowed per SELECT clause.
+
     Examples
     --------
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> df.select(explode(df.intlist).alias("anInt")).collect()
-    [Row(anInt=1), Row(anInt=2), Row(anInt=3)]
+    Example 1: Exploding an array column
 
-    >>> df.select(explode(df.mapfield).alias("key", "value")).show()
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(id=1, values=[1, 2, 3])])
+    >>> df.select(sf.explode(df.values).alias("value")).show()
+    +-----+
+    |value|
+    +-----+
+    |    1|
+    |    2|
+    |    3|
+    +-----+
+
+    Example 2: Exploding a map column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(id=1, values={"a": "b", "c": "d"})])
+    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
     +---+-----+
     |key|value|
     +---+-----+
     |  a|    b|
+    |  c|    d|
+    +---+-----+
+
+    Example 3: Exploding an array column with multiple rows
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(id=1, values=[1, 2]), Row(id=2, values=[3, 4])])
+    >>> df.select("id", sf.explode(df.values).alias("value")).show()
+    +---+-----+
+    | id|value|
+    +---+-----+
+    |  1|    1|
+    |  1|    2|
+    |  2|    3|
+    |  2|    4|
+    +---+-----+
+
+    Example 4: Exploding a map column with multiple rows
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(id=1, values={"a": "b", "c": "d"}),
+    ...     Row(id=2, values={"e": "f", "g": "h"})
+    ... ])
+    >>> df.select("id", sf.explode(df.values).alias("key", "value")).show()
+    +---+---+-----+
+    | id|key|value|
+    +---+---+-----+
+    |  1|  a|    b|
+    |  1|  c|    d|
+    |  2|  e|    f|
+    |  2|  g|    h|
+    +---+---+-----+
+
+    Example 5: Exploding multiple array columns
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(a=1, list1=[1, 2], list2=[3, 4])])
+    >>> df.select(sf.explode(df.list1).alias("list1"), "list2") \\
+    ...     .select("list1", sf.explode(df.list2).alias("list2")).show()
+    +-----+-----+
+    |list1|list2|
+    +-----+-----+
+    |    1|    3|
+    |    1|    4|
+    |    2|    3|
+    |    2|    4|
+    +-----+-----+
+
+    Example 6: Exploding an array of struct column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [(1, [(1, 2), (3, 4)])],
+    ...     "id: int, structlist: array<struct<a:int,b:int>>")
+    >>> df = df.select(sf.explode(df.structlist).alias("struct"))
+    >>> df.select("struct.*").show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+
+    Example 7: Exploding an empty array column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([(1, [])], "id: int, values: array<int>")
+    >>> df.select(sf.explode(df.values).alias("value")).show()
+    +-----+
+    |value|
+    +-----+
+    +-----+
+
+    Example 8: Exploding an empty map column
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([(1, {})], "id: int, values: map<int,int>")
+    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
+    +---+-----+
+    |key|value|
+    +---+-----+
     +---+-----+
     """
     return _invoke_function_over_columns("explode", col)
@@ -13779,17 +13964,17 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     >>> from pyspark.sql.functions import map_contains_key
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
     >>> df.select(map_contains_key("data", 1)).show()
-    +---------------------------------+
-    |array_contains(map_keys(data), 1)|
-    +---------------------------------+
-    |                             true|
-    +---------------------------------+
+    +-------------------------+
+    |map_contains_key(data, 1)|
+    +-------------------------+
+    |                     true|
+    +-------------------------+
     >>> df.select(map_contains_key("data", -1)).show()
-    +----------------------------------+
-    |array_contains(map_keys(data), -1)|
-    +----------------------------------+
-    |                             false|
-    +----------------------------------+
+    +--------------------------+
+    |map_contains_key(data, -1)|
+    +--------------------------+
+    |                     false|
+    +--------------------------+
     """
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
