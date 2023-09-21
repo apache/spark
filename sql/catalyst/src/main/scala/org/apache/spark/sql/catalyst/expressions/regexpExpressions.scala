@@ -105,13 +105,15 @@ abstract class StringRegexExpression extends BinaryExpression
     Examples:
       > SELECT _FUNC_('Spark', '_park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ R'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ R'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
