@@ -1631,6 +1631,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.3</td>
 </tr>
 <tr>
+  <td><code>spark.ui.server.connectorIdleTimeout</code></td>
+  <td>8000</td>
+  <td>
+     Timeout in milliseconds for the spark ui server
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.timelineEnabled</code></td>
   <td>true</td>
   <td>
