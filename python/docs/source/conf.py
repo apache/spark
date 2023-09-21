@@ -16,6 +16,11 @@ import sys
 import os
 import shutil
 import errno
+import jinja2
+from distutils.version import LooseVersion
+
+if LooseVersion(jinja2.__version__) >= LooseVersion("3.0.0"):
+    raise RuntimeError("Please install jinja2<3.0.0 for building PySpark documentation.")
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the

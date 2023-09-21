@@ -11,6 +11,7 @@ mlflow>=2.3.1
 scikit-learn
 matplotlib
 memory-profiler==0.60.0
+jinja2
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -34,7 +35,9 @@ pydata_sphinx_theme
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
+# Commented this because we need the latest version of jinja2 for Pandas API on Spark.
+# Please manually install jinja2<3.0.0 when building the documentation.
+# jinja2<3.0.0
 sphinx<3.1.0
 sphinx-plotly-directive
 docutils<0.18.0
