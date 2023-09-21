@@ -146,6 +146,4 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
     // configs in client's Configuration
     assert(jobConf.get(firstKey) === "spark." + firstValue)
   }
-
-  test("Simple worker creation fails with a timeout if worker doesn't connect back") {
 }
