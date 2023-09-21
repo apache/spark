@@ -309,7 +309,7 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.18",
     csrConfiguration := csrConfiguration.value.withCachePolicies(Vector(
       // CachePolicy.LocalUpdateChanging,
-      // CachePolicy.LocalOnly,
+      CachePolicy.LocalOnly,
       CachePolicy.Update,
       CachePolicy.FetchMissing
     )),
