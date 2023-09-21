@@ -422,7 +422,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2018",
+      errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
       messageParameters = Map("cls" -> cls.getName))
   }
 
@@ -2246,6 +2246,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
       messageParameters = Map("fileToRead" -> fileToRead.toString()),
+      cause = f)
+  }
+
+  def failedToCommitStateFileError(providerClass: String, f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",
+      messageParameters = Map("providerClass" -> providerClass),
       cause = f)
   }
 
