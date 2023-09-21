@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStream}
 import java.net.{InetAddress, InetSocketAddress, SocketException}
+import java.net.SocketTimeoutException
 import java.nio.channels._
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
@@ -184,10 +185,20 @@ private[spark] class PythonWorkerFactory(
       redirectStreamsToStderr(workerProcess.getInputStream, workerProcess.getErrorStream)
 
       // Wait for it to connect to our socket, and validate the auth secret.
-      serverSocketChannel.socket().setSoTimeout(10000)
-
       try {
-        val socketChannel = serverSocketChannel.accept()
+        // Wait up to 10 seconds for client to connect.
+        import java.nio.channels.Selector
+        serverSocketChannel.configureBlocking(false)
+        val serverSelector = Selector.open()
+        serverSocketChannel.register(serverSelector, SelectionKey.OP_ACCEPT)
+        val socketChannel =
+          if (serverSelector.select(10 * 1000)> 0) { // Wait up to 10 seconds.
+            serverSocketChannel.accept()
+          } else {
+            throw new SocketTimeoutException(
+              "Timed out while waiting for the Python worker to connect back"
+            )
+          }
         authHelper.authClient(socketChannel.socket())
         // TODO: When we drop JDK 8, we can just use workerProcess.pid()
         val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
