@@ -311,8 +311,6 @@ object SparkBuild extends PomBuild {
       // first, try to update changing artifacts that were previously downloaded (follows TTL)
       CachePolicy.LocalUpdateChanging,
       CachePolicy.FetchMissing,
-      // then, use what's available locally
-      CachePolicy.LocalOnlyIfValid,
       // lastly, try to download what's missing
       CachePolicy.Update
     )),
