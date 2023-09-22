@@ -234,6 +234,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   * TODO: Look to merge this rule with RewritePredicateSubquery.
   */
 object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper {
+   private def collectOuterReferencesInPlanTree(plan: LogicalPlan): AttributeSet = {
+     AttributeSet(plan.flatMap(
+       _.expressions.flatMap(
+         _.collect { case o: OuterReference => o.toAttribute })))
+   }
+
    /**
     * Returns the correlated predicates and a updated plan that removes the outer references.
     */
@@ -283,6 +289,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           a
         }
+      case l @ Limit(_, input) =>
+        if (collectOuterReferencesInPlanTree(input).nonEmpty) {
+          throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(l)
+        }
+        l
       case p =>
         p
     }
