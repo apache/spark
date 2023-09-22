@@ -97,7 +97,7 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * {@code yarn.nodemanager.aux-services.<service>.classpath}, this file must be on the classpath
  * of the NodeManager itself. When using the {@code classpath} configuration, it can be present
  * either on the NodeManager's classpath, or specified in the classpath configuration.
- * This {@code classpath} configuration is only supported on YARN versions >= 2.9.0.
+ * This {@code classpath} configuration is only supported on YARN versions &gt;= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
   private static final Logger defaultLogger = LoggerFactory.getLogger(YarnShuffleService.class);
