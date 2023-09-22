@@ -41,6 +41,7 @@ cache:
 
 install:
   - cmd: ls "C:\Program Files\Java\jdk17\bin\"
+  - cmd: set JAVA_HOME="C:\Program Files\Java\jdk17"
   - cmd: set PATH=%JAVA_HOME%\bin;%PATH%
   - cmd: java -version
   # Install SBT and dependencies
@@ -67,7 +68,6 @@ environment:
   # "(converted from warning) unable to identify current timezone 'C':" for an unknown reason.
   # This environment variable works around to test SparkR against a higher version.
   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
-  JAVA_HOME: "C:\Program Files\Java\jdk17"
 
 test_script:
   - cmd: .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
