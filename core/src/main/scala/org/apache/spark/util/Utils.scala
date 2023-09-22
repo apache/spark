@@ -93,12 +93,12 @@ private[spark] object CallSite {
  * Various utility methods used by Spark.
  */
 private[spark] object Utils
-    extends Logging
-    with SparkClassUtils
-    with SparkErrorUtils
-    with SparkFileUtils
-    with SparkSerDeUtils
-    with SparkStreamUtils {
+  extends Logging
+  with SparkClassUtils
+  with SparkErrorUtils
+  with SparkFileUtils
+  with SparkSerDeUtils
+  with SparkStreamUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -2234,7 +2234,7 @@ private[spark] object Utils
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
-        isBindCollision(e.getCause)
+          isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }
