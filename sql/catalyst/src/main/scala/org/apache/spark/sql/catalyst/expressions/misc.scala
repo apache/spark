@@ -110,6 +110,7 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
     val parms = errorParms.genCode(ctx)
     ExprCode(
       code = code"""${error.code}
+        |${parms.code}
         |if (true) {
         |  throw QueryExecutionErrors.raiseError(
         |    ${error.value},
