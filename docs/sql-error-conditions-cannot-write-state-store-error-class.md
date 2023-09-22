@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_VIEW_OPERATION error class
-displayTitle: UNSUPPORTED_VIEW_OPERATION error class
+title: CANNOT_WRITE_STATE_STORE error class
+displayTitle: CANNOT_WRITE_STATE_STORE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,16 +21,12 @@ license: |
 
 SQLSTATE: none assigned
 
-The view `<viewName>` does not support `<operation>`.
+Error writing state store files for provider `<providerClass>`.
 
 This error class has the following derived error classes:
 
-## WITHOUT_SUGGESTION
+## CANNOT_COMMIT
 
-
-
-## WITH_SUGGESTION
-
-Please use ALTER VIEW instead.
+Cannot perform commit during state checkpoint.
 
 

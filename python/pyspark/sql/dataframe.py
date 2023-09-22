@@ -5786,7 +5786,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` by renaming an existing column.
+        """
+        Returns a new :class:`DataFrame` by renaming an existing column.
         This is a no-op if the schema doesn't contain the given column name.
 
         .. versionadded:: 1.3.0
@@ -5797,21 +5798,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         existing : str
-            string, name of the existing column to rename.
+            The name of the existing column to be renamed.
         new : str
-            string, new name of the column.
+            The new name to be assigned to the column.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame with renamed column.
+            A new DataFrame with renamed column.
+
+        See Also
+        --------
+        :meth:`withColumnsRenamed`
 
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.withColumnRenamed('age', 'age2').show()
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnRenamed("age", "age2").show()
         +----+-----+
         |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename a column that does not exist (no-op)
+
+        >>> df.withColumnRenamed("non_existing", "new_name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 3: Rename multiple columns
+
+        >>> df.withColumnRenamed("age", "age2").withColumnRenamed("name", "name2").show()
+        +----+-----+
+        |age2|name2|
         +----+-----+
         |   2|Alice|
         |   5|  Bob|
@@ -5830,7 +5858,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         colsMap : dict
-            a dict of existing column names and corresponding desired column names.
+            A dict of existing column names and corresponding desired column names.
             Currently, only a single map is supported.
 
         Returns
@@ -5842,21 +5870,49 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         :meth:`withColumnRenamed`
 
-        Notes
-        -----
-        Support Spark Connect
-
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df = df.withColumns({'age2': df.age + 2, 'age3': df.age + 3})
-        >>> df.withColumnsRenamed({'age2': 'age4', 'age3': 'age5'}).show()
-        +---+-----+----+----+
-        |age| name|age4|age5|
-        +---+-----+----+----+
-        |  2|Alice|   4|   5|
-        |  5|  Bob|   7|   8|
-        +---+-----+----+----+
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnsRenamed({"age": "age2"}).show()
+        +----+-----+
+        |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename multiple columns
+
+        >>> df.withColumnsRenamed({"age": "age2", "name": "name2"}).show()
+        +----+-----+
+        |age2|name2|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 3: Rename non-existing column (no-op)
+
+        >>> df.withColumnsRenamed({"non_existing": "new_name"}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 4: Rename with an empty dictionary (no-op)
+
+        >>> df.withColumnsRenamed({}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import java.io.EOFException
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
@@ -23,7 +25,8 @@ import java.util.concurrent.ConcurrentMap
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.api.python.{PythonRDD, SimplePythonFunction, StreamingPythonRunner}
+import org.apache.spark.SparkException
+import org.apache.spark.api.python.{PythonException, PythonRDD, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -125,8 +128,29 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.writeLong(args.batchId)
       dataOut.flush()
 
-      val ret = dataIn.readInt()
-      logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: $ret)")
+      try {
+        dataIn.readInt() match {
+          case 0 =>
+            logInfo(s"Python foreach batch for dfId ${args.dfId} completed (ret: 0)")
+          case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+            val exLength = dataIn.readInt()
+            val obj = new Array[Byte](exLength)
+            dataIn.readFully(obj)
+            val msg = new String(obj, StandardCharsets.UTF_8)
+            throw new PythonException(
+              s"Found error inside foreachBatch Python process: $msg",
+              null)
+          case otherValue =>
+            throw new IllegalStateException(
+              s"Unexpected return value $otherValue from the " +
+                s"Python worker.")
+        }
+      } catch {
+        // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid
+        // transient errors, same for StreamingQueryListenerHelper.
+        case eof: EOFException =>
+          throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+      }
     }
 
     (dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder), RunnerCleaner(runner))

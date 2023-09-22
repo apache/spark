@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
@@ -155,7 +155,10 @@ case class MemoryStream[A : Encoder](
     id: Int,
     sqlContext: SQLContext,
     numPartitions: Option[Int] = None)
-  extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
+  extends MemoryStreamBase[A](sqlContext)
+  with MicroBatchStream
+  with SupportsTriggerAvailableNow
+  with Logging {
 
   protected val output = logicalPlan.output
 
@@ -174,6 +177,9 @@ case class MemoryStream[A : Encoder](
 
   @GuardedBy("this")
   private var endOffset = new LongOffset(-1)
+
+  @GuardedBy("this")
+  private var availableNowEndOffset: OffsetV2 = _
 
   /**
    * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
@@ -201,7 +207,15 @@ case class MemoryStream[A : Encoder](
 
   override def initialOffset: OffsetV2 = LongOffset(-1)
 
+  override def prepareForTriggerAvailableNow(): Unit = synchronized {
+    availableNowEndOffset = latestOffset(initialOffset, ReadLimit.allAvailable())
+  }
+
   override def latestOffset(): OffsetV2 = {
+    throw new IllegalStateException("Should not reach here!")
+  }
+
+  override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
     if (currentOffset.offset == -1) null else currentOffset
   }
 
@@ -277,6 +291,7 @@ case class MemoryStream[A : Encoder](
     endOffset = LongOffset(-1)
     currentOffset = new LongOffset(-1)
     lastOffsetCommitted = new LongOffset(-1)
+    availableNowEndOffset = null
   }
 }
 

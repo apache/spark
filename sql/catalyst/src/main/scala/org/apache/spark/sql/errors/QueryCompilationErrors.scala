@@ -460,7 +460,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
       messageParameters = Map(
         "viewName" -> toSQLId(identifier.nameParts),
         "operation" -> "INSERT"),
@@ -481,16 +481,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def unsupportedViewOperationError(
+  def expectTableNotViewError(
       nameParts: Seq[String],
       cmd: String,
       suggestAlternative: Boolean,
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = if (suggestAlternative) {
-        "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION"
+        "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW"
       } else {
-        "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION"
+        "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE"
       },
       messageParameters = Map(
         "viewName" -> toSQLId(nameParts),
@@ -501,16 +501,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def expectViewNotTableError(
       nameParts: Seq[String],
       cmd: String,
-      hint: Boolean,
+      suggestAlternative: Boolean,
       t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = if (hint) {
-        "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION"
+      errorClass = if (suggestAlternative) {
+        "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE"
       } else {
-        "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION"
+        "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE"
       },
       messageParameters = Map(
         "tableName" -> toSQLId(nameParts),
+        "operation" -> cmd),
+      origin = t.origin)
+  }
+
+  def expectPermanentViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
+      messageParameters = Map(
+        "viewName" -> toSQLId(nameParts),
         "operation" -> cmd),
       origin = t.origin)
   }
@@ -2854,15 +2866,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
-  def tableIsNotViewError(name: TableIdentifier, replace: Boolean): Throwable = {
-    val operation = if (replace) "CREATE OR REPLACE VIEW" else "CREATE VIEW"
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(name.nameParts),
-        "operation" -> operation
+  def unsupportedCreateOrReplaceViewOnTableError(
+      name: TableIdentifier, replace: Boolean): Throwable = {
+    if (replace) {
+      new AnalysisException(
+        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+        messageParameters = Map(
+          "tableName" -> toSQLId(name.nameParts),
+          "operation" -> "CREATE OR REPLACE VIEW"
+        )
       )
-    )
+    } else {
+      new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        messageParameters = Map(
+          "relationName" -> toSQLId(name.nameParts)
+        )
+      )
+    }
   }
 
   def viewAlreadyExistsError(name: TableIdentifier): Throwable = {

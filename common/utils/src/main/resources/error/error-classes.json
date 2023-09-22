@@ -314,6 +314,18 @@
       "<details>"
     ]
   },
+  "CANNOT_WRITE_STATE_STORE" : {
+    "message" : [
+      "Error writing state store files for provider <providerClass>."
+    ],
+    "subClass" : {
+      "CANNOT_COMMIT" : {
+        "message" : [
+          "Cannot perform commit during state checkpoint."
+        ]
+      }
+    }
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -331,6 +343,11 @@
       "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
+    "message" : [
+      "`MapObjects` does not support the class <cls> as resulting collection."
+    ]
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
@@ -859,6 +876,45 @@
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
     ]
+  },
+  "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
+    "message" : [
+      "'<operation>' expects a permanent view but <viewName> is a temp view."
+    ]
+  },
+  "EXPECT_TABLE_NOT_VIEW" : {
+    "message" : [
+      "'<operation>' expects a table but <viewName> is a view."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_VIEW" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
+  },
+  "EXPECT_VIEW_NOT_TABLE" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_TABLE" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -3427,45 +3483,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_OPERATION" : {
-    "message" : [
-      "The table <tableName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER TABLE instead."
-        ]
-      }
-    }
-  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_VIEW_OPERATION" : {
-    "message" : [
-      "The view <viewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -4930,11 +4952,6 @@
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2018" : {
-    "message" : [
-      "class `<cls>` is not supported by `MapObjects` as resulting collection."
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
