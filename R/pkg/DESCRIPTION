@@ -10,7 +10,7 @@ Authors@R:
 License: Apache License (== 2.0)
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
-SystemRequirements: Java (>= 8, < 22)
+SystemRequirements: Java (>= 17, < 22)
 Depends:
     R (>= 3.5),
     methods
