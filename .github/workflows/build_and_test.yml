@@ -649,11 +649,11 @@ jobs:
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
-    - name: Install Java 17
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 17
+        java-version: ${{ inputs.java }}
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -867,11 +867,11 @@ jobs:
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
-    - name: Install Java 17
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 17
+        java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v3
@@ -973,11 +973,11 @@ jobs:
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
-    - name: Install Java 17
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 17
+        java-version: ${{ inputs.java }}
     - name: Run tests
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
