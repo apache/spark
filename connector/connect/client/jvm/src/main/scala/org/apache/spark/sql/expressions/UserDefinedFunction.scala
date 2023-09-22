@@ -17,6 +17,7 @@
 package org.apache.spark.sql.expressions
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
+
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -204,9 +206,8 @@ object ScalarUserDefinedFunction {
   }
 }
 
-object SparkConnectClosureCleaner extends ClosureCleaner {
-
-  protected override def ensureSerializable(closure: AnyRef): Unit = {
-    // we always check SparkConnect UDFs for serialization in the code above
+object SparkConnectClosureCleaner {
+  def clean(closure: AnyRef): Unit = {
+    ClosureCleaner.clean(closure, cleanTransitively = true, mutable.Map.empty)
   }
 }
