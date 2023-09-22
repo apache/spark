@@ -40,6 +40,7 @@ cache:
   - C:\Users\appveyor\.m2
 
 install:
+  - cmd: SET PATH=%JAVA_HOME%\bin;%PATH%
   # Install SBT and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests. xml2 is required to use jUnit reporter in testthat.
@@ -64,6 +65,7 @@ environment:
   # "(converted from warning) unable to identify current timezone 'C':" for an unknown reason.
   # This environment variable works around to test SparkR against a higher version.
   R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+  JAVA_HOME: C:\Program Files\Java\jdk17
 
 test_script:
   - cmd: .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
