@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 3.4 to 4.0
 
-- Since Spark 4.4, Spark will compress event logs. To restore the behavior before Spark 4.0, you can set `spark.eventLog.compress` to `false`.
+- Since Spark 4.0, Spark will compress event logs. To restore the behavior before Spark 4.0, you can set `spark.eventLog.compress` to `false`.
 
 ## Upgrading from Core 3.3 to 3.4
 
