@@ -296,9 +296,7 @@ private[spark] object JettyUtils extends Logging {
         connector.setPort(port)
         connector.setHost(hostName)
         connector.setReuseAddress(!Utils.isWindows)
-        val idleTimeout = conf.get(UI_CONNECTOR_IDLETIMEOUT)
-        logDebug(s"Using idleTimeout: $idleTimeout")
-        connector.setIdleTimeout(idleTimeout)
+        connector.setIdleTimeout(8000)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads

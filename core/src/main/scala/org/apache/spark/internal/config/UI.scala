@@ -136,12 +136,6 @@ private[spark] object UI {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
 
-  val UI_CONNECTOR_IDLETIMEOUT = ConfigBuilder("spark.ui.server.connectorIdleTimeout")
-    .doc("Value for ui server connectorIdleTimeout.")
-    .version("3.5.0")
-    .intConf
-    .createWithDefault(8000)
-
   val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
     .doc("Whether to display event timeline data on UI pages.")
     .version("3.4.0")
