@@ -2569,7 +2569,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
 
     assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage.matches("[USER_RAISED_EXCEPTION] '\\(a#\\d+ > b#\\d+\\)' is not true!"))
+    assert(e3.getCause.getMessage.matches(
+      "[USER_RAISED_EXCEPTION] '\\(a#\\d+ > b#\\d+\\)' is not true!"))
   }
 
   test("raise_error") {
