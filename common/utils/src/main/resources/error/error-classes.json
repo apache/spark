@@ -344,6 +344,11 @@
     ],
     "sqlState" : "22003"
   },
+  "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
+    "message" : [
+      "`MapObjects` does not support the class <cls> as resulting collection."
+    ]
+  },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
@@ -871,6 +876,45 @@
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
     ]
+  },
+  "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
+    "message" : [
+      "'<operation>' expects a permanent view but <viewName> is a temp view."
+    ]
+  },
+  "EXPECT_TABLE_NOT_VIEW" : {
+    "message" : [
+      "'<operation>' expects a table but <viewName> is a view."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_VIEW" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
+  },
+  "EXPECT_VIEW_NOT_TABLE" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_TABLE" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -3439,45 +3483,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_OPERATION" : {
-    "message" : [
-      "The table <tableName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER TABLE instead."
-        ]
-      }
-    }
-  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_VIEW_OPERATION" : {
-    "message" : [
-      "The view <viewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -4942,11 +4952,6 @@
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2018" : {
-    "message" : [
-      "class `<cls>` is not supported by `MapObjects` as resulting collection."
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
