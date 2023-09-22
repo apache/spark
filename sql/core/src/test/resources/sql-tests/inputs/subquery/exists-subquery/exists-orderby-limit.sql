@@ -47,6 +47,24 @@ WHERE  EXISTS (SELECT dept.dept_id
                ORDER  BY state) 
 ORDER  BY hiredate; 
 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_id
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id
+               ORDER  BY state
+               LIMIT 1)
+ORDER  BY hiredate;
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_id
+               FROM   dept
+               WHERE  emp.dept_id = dept.dept_id
+               ORDER  BY state
+               LIMIT 0)
+ORDER  BY hiredate;
+
 -- TC.01.02
 SELECT id, 
        hiredate 
@@ -67,6 +85,24 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    ORDER  BY state) 
 ORDER  BY hiredate; 
 
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT dept.dept_id
+                   FROM   dept
+                   WHERE  emp.dept_id = dept.dept_id
+                   ORDER  BY state
+                   LIMIT 1)
+ORDER  BY hiredate;
+
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT dept.dept_id
+                   FROM   dept
+                   WHERE  emp.dept_id = dept.dept_id
+                   ORDER  BY state
+                   LIMIT 0)
+ORDER  BY hiredate;
+
 -- group by + order by with not exists
 -- TC.01.04
 SELECT emp_name 
@@ -76,6 +112,17 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
                    WHERE  dept.dept_id = emp.dept_id 
                    GROUP  BY state 
                    ORDER  BY state);
+
+SELECT emp_name
+FROM   emp
+WHERE  NOT EXISTS (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   LIMIT 2
+                   OFFSET 1);
+
 -- TC.01.05
 SELECT count(*) 
 FROM   emp 
@@ -94,6 +141,13 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  dept.dept_id > 10 
                LIMIT  1); 
 
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  dept.dept_id > emp.dept_id
+               LIMIT  1);
+
 -- limit in the exists subquery block with aggregate.
 -- TC.02.02
 SELECT * 
@@ -102,6 +156,14 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                FROM   dept 
                GROUP  BY state 
                LIMIT  1); 
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               WHERE  dept.dept_id <> emp.dept_id
+               GROUP  BY state
+               LIMIT  1);
 
 -- limit in the not exists subquery block.
 -- TC.02.03
@@ -129,6 +191,14 @@ FROM   emp
 WHERE  EXISTS (SELECT dept.dept_name
                FROM   dept
                WHERE  dept.dept_id > 10
+               LIMIT  1
+               OFFSET 2);
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  dept.dept_id <> emp.dept_id
                LIMIT  1
                OFFSET 2);
 

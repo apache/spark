@@ -60,6 +60,17 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 LIMIT  2;
 
+-- correlated IN subquery
+-- LIMIT on both parent and subquery sides
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               LIMIT 10)
+LIMIT  2;
+
+
 -- TC 01.02
 SELECT *
 FROM   t1
@@ -68,6 +79,16 @@ WHERE  t1c IN (SELECT t2c
                WHERE  t2b >= 8
                LIMIT  2)
 LIMIT 4;
+
+
+SELECT *
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t2b <= t2d
+               LIMIT  2)
+LIMIT 4;
+
 
 -- TC 01.03
 SELECT Count(DISTINCT( t1a )),
@@ -81,6 +102,18 @@ GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
 LIMIT  1;
 
+SELECT Count(DISTINCT( t1a )),
+       t1b
+FROM   t1
+WHERE  t1d IN (SELECT t2d
+               FROM   t2
+               WHERE t2b <= t2d
+               ORDER  BY t2c, t2d
+               LIMIT 2)
+GROUP  BY t1b
+ORDER  BY t1b DESC NULLS FIRST
+LIMIT  1;
+
 -- LIMIT with NOT IN
 -- TC 01.04
 SELECT *
@@ -88,6 +121,13 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b > 6
+                   LIMIT  2);
+
+SELECT *
+FROM   t1
+WHERE  t1b NOT IN (SELECT t2b
+                   FROM   t2
+                   WHERE  t2b <= t2d
                    LIMIT  2);
 
 -- TC 01.05
@@ -109,6 +149,16 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2
                WHERE  t1d = t2d)
+LIMIT  2
+OFFSET 2;
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d > t2d
+               ORDER BY t2a DESC
+               LIMIT 3)
 LIMIT  2
 OFFSET 2;
 
@@ -146,12 +196,35 @@ WHERE  t1b NOT IN (SELECT t2b
                    LIMIT  2
                    OFFSET 2);
 
+-- LIMIT with NOT IN and correlations
+SELECT *
+FROM   t1
+WHERE  t1b NOT IN (SELECT t2b
+                   FROM   t2
+                   WHERE  t2b = t1b
+                   LIMIT  2
+                   OFFSET 2);
+
 -- TC 02.05
 SELECT Count(DISTINCT( t1a )),
        t1b
 FROM   t1
 WHERE  t1d NOT IN (SELECT t2d
                    FROM   t2
+                   ORDER  BY t2b DESC nulls first, t2d
+                   LIMIT 1
+                   OFFSET 1)
+GROUP  BY t1b
+ORDER BY t1b NULLS last
+LIMIT  1
+OFFSET 1;
+
+SELECT Count(DISTINCT( t1a )),
+       t1b
+FROM   t1
+WHERE  t1d NOT IN (SELECT t2d
+                   FROM   t2
+                   WHERE t2b > t1b
                    ORDER  BY t2b DESC nulls first, t2d
                    LIMIT 1
                    OFFSET 1)
@@ -169,6 +242,16 @@ WHERE  t1a IN (SELECT t2a
                WHERE  t1d = t2d)
 OFFSET 2;
 
+-- OFFSET in correlated subquery
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               ORDER BY t2a
+               OFFSET 2)
+OFFSET 2;
+
 -- TC 03.02
 SELECT *
 FROM   t1
@@ -177,6 +260,15 @@ WHERE  t1c IN (SELECT t2c
                WHERE  t2b >= 8
                OFFSET 2)
 OFFSET 4;
+
+SELECT *
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t2b < t1b
+               ORDER BY t2c
+               OFFSET 2)
+OFFSET 1;
 
 -- TC 03.03
 SELECT Count(DISTINCT( t1a )),
@@ -197,6 +289,14 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b > 6
+                   OFFSET 2);
+
+-- OFFSET with NOT IN correlated
+SELECT count(*)
+FROM   t1
+WHERE  t1b NOT IN (SELECT t2b
+                   FROM   t2
+                   WHERE  t2b < t1b
                    OFFSET 2);
 
 -- TC 03.05
