@@ -30,6 +30,7 @@ This subsection presents the usages and descriptions of these functions.
 #### Scalar Functions
  * [Array Functions](sql-ref-functions-builtin.html#array-functions)
  * [Collection Functions](sql-ref-functions-builtin.html#collection-functions)
+ * [Advanced Collection Functions](sql-ref-functions-builtin.html#advanced-collection-functions)
  * [Struct Functions](sql-ref-functions-builtin.html#struct-functions)
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
  * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
@@ -40,7 +41,6 @@ This subsection presents the usages and descriptions of these functions.
  * [Conditional Functions](sql-ref-functions-builtin.html#conditional-functions)
  * [Predicate Functions](sql-ref-functions-builtin.html#predicate-functions)
  * [Hash Functions](sql-ref-functions-builtin.html#hash-functions)
- * [Lambda Functions](sql-ref-functions-builtin.html#lambda-functions)
  * [CSV Functions](sql-ref-functions-builtin.html#csv-functions)
  * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
  * [XML Functions](sql-ref-functions-builtin.html#xml-functions)

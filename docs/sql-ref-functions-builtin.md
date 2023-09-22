@@ -58,6 +58,16 @@ license: |
 {% endfor %}
 
 {% for static_file in site.static_files %}
+{% if static_file.name == 'generated-lambda-funcs-table.html' %}
+### Advanced Collection Functions
+{% include_relative generated-lambda-funcs-table.html %}
+#### Examples
+{% include_relative generated-lambda-funcs-examples.html %}
+{% break %}
+{% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
 {% if static_file.name == 'generated-struct-funcs-table.html' %}
 ### STRUCT Functions
 {% include_relative generated-struct-funcs-table.html %}
@@ -123,16 +133,6 @@ license: |
 {% include_relative generated-hash-funcs-table.html %}
 #### Examples
 {% include_relative generated-hash-funcs-examples.html %}
-{% break %}
-{% endif %}
-{% endfor %}
-
-{% for static_file in site.static_files %}
-{% if static_file.name == 'generated-lambda-funcs-table.html' %}
-### Lambda Functions
-{% include_relative generated-lambda-funcs-table.html %}
-#### Examples
-{% include_relative generated-lambda-funcs-examples.html %}
 {% break %}
 {% endif %}
 {% endfor %}
