@@ -3647,6 +3647,25 @@
     </profile>
 
     <!--
+     SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
+     property correctly.
+    -->
+    <!--
+    <profile>
+      <id>scala-2.13</id>
+      <properties>
+        <scala.version>2.13.11</scala.version>
+      </properties>
+      <build>
+        <pluginManagement>
+          <plugins>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+    -->
+
+    <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
      during a build. It is useful when testing against nightly or RC releases of dependencies.
      It MUST NOT be used when building copies of Spark to use in production of for distribution,
