@@ -40,10 +40,6 @@ cache:
   - C:\Users\appveyor\.m2
 
 install:
-  - cmd: ls "C:\Program Files\Java\jdk17\bin\"
-  - cmd: set JAVA_HOME="C:\Program Files\Java\jdk17"
-  - cmd: set PATH=%JAVA_HOME%\bin;%PATH%
-  - cmd: java -version
   # Install SBT and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests. xml2 is required to use jUnit reporter in testthat.

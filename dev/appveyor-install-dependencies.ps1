@@ -94,9 +94,15 @@ if (!(Test-Path $tools)) {
 #
 # Pop-Location
 
-# ========================== SBT
+
 Push-Location $tools
 
+Start-FileDownload "https://cdn.azul.com/zulu/bin/zulu17.28.13-ca-jdk17.0.0-win_x64.zip" "zulu.zip"
+Invoke-Expression "7z.exe x zulu.zip -o zulu"
+
+$env:PATH = "$tools\zulu\bin;" + $env:PATH
+
+# ========================== SBT
 $sbtVer = "1.9.3"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 
