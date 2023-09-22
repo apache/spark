@@ -55,7 +55,7 @@ abstract class EventLogFileWriter(
     hadoopConf: Configuration) extends Logging {
 
   protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS) &&
-      !sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).equals("none")
+      !sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).equalsIgnoreCase("none")
   protected val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   protected val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
