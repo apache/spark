@@ -110,7 +110,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
       val planDot = findAll(cssSelector(""".dot-file""")).map(_.text).toList
       assert(planDot.head.startsWith("digraph G {"))
       val planDetails = findAll(cssSelector("""#physical-plan-details""")).map(_.text).toList
-      assert(planDetails.head.contains("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(planDetails.head.isEmpty)
     }
   }
 

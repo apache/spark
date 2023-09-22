@@ -20,8 +20,6 @@ import os
 import threading
 import time
 import unittest
-import warnings
-from distutils.version import LooseVersion
 from typing import cast
 from collections import namedtuple
 
@@ -194,46 +192,6 @@ class ArrowTestsMixin:
             + [np.array([[1, 1, 1], [2, 2, 2]]).astype(t) for t in int_dtypes]
             + [np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]).astype(t) for t in float_dtypes]
         )
-
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not fallback with pyarrow>=2.0",
-    )
-    def test_toPandas_fallback_enabled(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            schema = StructType([StructField("a", ArrayType(StructType()), True)])
-            df = self.spark.createDataFrame([([Row()],)], schema=schema)
-            with QuietTest(self.sc):
-                with self.warnings_lock:
-                    with warnings.catch_warnings(record=True) as warns:
-                        # we want the warnings to appear even if this test is run from a subclass
-                        warnings.simplefilter("always")
-                        pdf = df.toPandas()
-                        # Catch and check the last UserWarning.
-                        user_warns = [
-                            warn.message for warn in warns if isinstance(warn.message, UserWarning)
-                        ]
-                        self.assertTrue(len(user_warns) > 0)
-                        self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                        assert_frame_equal(pdf, pd.DataFrame({"a": [[Row()]]}))
-
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not fallback with pyarrow>=2.0",
-    )
-    def test_toPandas_fallback_disabled(self):
-        schema = StructType([StructField("a", ArrayType(StructType()), True)])
-        df = self.spark.createDataFrame([(None,)], schema=schema)
-        with QuietTest(self.sc):
-            with self.warnings_lock:
-                with self.assertRaises(PySparkTypeError) as pe:
-                    df.toPandas()
-
-                self.check_error(
-                    exception=pe.exception,
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                    message_parameters={"data_type": "Array of StructType"},
-                )
 
     def test_toPandas_empty_df_arrow_enabled(self):
         for arrow_enabled in [True, False]:
@@ -654,17 +612,13 @@ class ArrowTestsMixin:
         ):
             with self.subTest(schema=schema):
                 with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-                    if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                        with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                            self.spark.createDataFrame(pdf, schema=schema).collect()
-                    else:
-                        df = self.spark.createDataFrame(pdf, schema=schema)
+                    df = self.spark.createDataFrame(pdf, schema=schema)
 
-                        result = df.collect()
+                    result = df.collect()
 
-                        for row in result:
-                            i, m = row
-                            self.assertEqual(m, map_data[i])
+                    for row in result:
+                        i, m = row
+                        self.assertEqual(m, map_data[i])
 
     def test_createDataFrame_with_struct_type(self):
         for arrow_enabled in [True, False]:
@@ -732,12 +686,8 @@ class ArrowTestsMixin:
                 df = self.spark.createDataFrame(origin, schema=schema)
 
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-                if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                    with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                        df.toPandas()
-                else:
-                    pdf = df.toPandas()
-                    assert_frame_equal(origin, pdf)
+                pdf = df.toPandas()
+                assert_frame_equal(origin, pdf)
 
     def test_toPandas_with_map_type_nulls(self):
         with QuietTest(self.sc):
@@ -758,12 +708,8 @@ class ArrowTestsMixin:
                 df = self.spark.createDataFrame(origin, schema=schema)
 
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-                if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                    with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                        df.toPandas()
-                else:
-                    pdf = df.toPandas()
-                    assert_frame_equal(origin, pdf)
+                pdf = df.toPandas()
+                assert_frame_equal(origin, pdf)
 
     def test_createDataFrame_with_int_col_names(self):
         for arrow_enabled in [True, False]:
@@ -778,42 +724,6 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(pdf)
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
-
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not fallback with pyarrow>=2.0",
-    )
-    def test_createDataFrame_fallback_enabled(self):
-        with QuietTest(self.sc):
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-                with warnings.catch_warnings(record=True) as warns:
-                    # we want the warnings to appear even if this test is run from a subclass
-                    warnings.simplefilter("always")
-                    df = self.spark.createDataFrame(
-                        pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>"
-                    )
-                    # Catch and check the last UserWarning.
-                    user_warns = [
-                        warn.message for warn in warns if isinstance(warn.message, UserWarning)
-                    ]
-                    self.assertTrue(len(user_warns) > 0)
-                    self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                    self.assertEqual(df.collect(), [Row(a=[Row()])])
-
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not fallback with pyarrow>=2.0",
-    )
-    def test_createDataFrame_fallback_disabled(self):
-        with QuietTest(self.sc):
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>")
-
-            self.check_error(
-                exception=pe.exception,
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                message_parameters={"data_type": "Array of StructType"},
-            )
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):

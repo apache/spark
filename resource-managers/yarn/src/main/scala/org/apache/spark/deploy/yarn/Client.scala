@@ -77,6 +77,9 @@ private[spark] class Client(
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
+  private val statCachePreloadEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED)
+  private val statCachePreloadDirectoryCountThreshold: Int =
+    sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD)
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
 
@@ -459,6 +462,49 @@ private[spark] class Client(
   }
 
   /**
+   * For each non-local and non-glob resource, we will count its parent directory. If its
+   * frequency is larger than the threshold specified by
+   * spark.yarn.client.statCache.preloaded.perDirectoryThreshold, the corresponding file status
+   * from the directory will be preloaded.
+   *
+   * @param files : the list of files to upload
+   * @return a hashmap contains directories to be preloaded and all file names in that directory
+   */
+  private[yarn] def directoriesToBePreloaded(files: Seq[String]): HashMap[URI, HashSet[String]] = {
+    val directoryToFiles = new HashMap[URI, HashSet[String]]()
+    files.foreach { file =>
+      if (!Utils.isLocalUri(file) && !new GlobPattern(file).hasWildcard) {
+        val currentPath = new Path(Utils.resolveURI(file))
+        val parentUri = currentPath.getParent.toUri
+        directoryToFiles.getOrElseUpdate(parentUri, new HashSet[String]()) += currentPath.getName
+      }
+    }
+    directoryToFiles.filter(_._2.size >= statCachePreloadDirectoryCountThreshold)
+  }
+
+  /**
+   * Preload the statCache with file status. List all files from that directory and add them to the
+   * statCache.
+   *
+   * @param files: the list of files to upload
+   * @param fsLookup: Function for looking up an FS based on a URI; override for testing
+   * @return A preloaded statCache with fileStatus
+   */
+  private[yarn] def getPreloadedStatCache(files: Seq[String],
+      fsLookup: URI => FileSystem = FileSystem.get(_, hadoopConf)): HashMap[URI, FileStatus] = {
+    val statCache = HashMap[URI, FileStatus]()
+    directoriesToBePreloaded(files).foreach { case (dir: URI, filesInDir: HashSet[String]) =>
+      fsLookup(dir).listStatus(new Path(dir), new PathFilter() {
+        override def accept(path: Path): Boolean = filesInDir.contains(path.getName)
+      }).filter(_.isFile()).foreach { fileStatus =>
+        val uri = fileStatus.getPath.toUri
+        statCache.put(uri, fileStatus)
+      }
+    }
+    statCache
+  }
+
+  /**
    * Upload any resources to the distributed cache if needed. If a resource is intended to be
    * consumed locally, set up the appropriate config for downstream code to handle it properly.
    * This is used for setting up a container launch context for our ApplicationMaster.
@@ -485,7 +531,17 @@ private[spark] class Client(
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
-    val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    // If preload is enabled, preload the statCache with the files in the directories
+    val statCache = if (statCachePreloadEnabled) {
+      // Consider only following configurations, as they involve the distribution of multiple files
+      var files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
+        sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
+        sparkConf.get(PY_FILES) ++ pySparkArchives
+
+      getPreloadedStatCache(files)
+    } else {
+      HashMap[URI, FileStatus]()
+    }
     val symlinkCache: Map[URI, Path] = HashMap[URI, Path]()
 
     def addDistributedUri(uri: URI): Boolean = {
@@ -609,14 +665,18 @@ private[spark] class Client(
             if (!Utils.isLocalUri(jar)) {
               val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
               val pathFs = FileSystem.get(path.toUri(), hadoopConf)
-              val fss = pathFs.globStatus(path)
-              if (fss == null) {
-                throw new FileNotFoundException(s"Path ${path.toString} does not exist")
-              }
-              fss.filter(_.isFile()).foreach { entry =>
-                val uri = entry.getPath().toUri()
-                statCache.update(uri, entry)
-                distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
+              if (statCache.contains(path.toUri)) {
+                distribute(path.toUri.toString, targetDir = Some(LOCALIZED_LIB_DIR))
+              } else {
+                val fss = pathFs.globStatus(path)
+                if (fss == null) {
+                  throw new FileNotFoundException(s"Path ${path.toString} does not exist")
+                }
+                fss.filter(_.isFile()).foreach { entry =>
+                  val uri = entry.getPath().toUri()
+                  statCache.update(uri, entry)
+                  distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
+                }
               }
             } else {
               localJars += jar

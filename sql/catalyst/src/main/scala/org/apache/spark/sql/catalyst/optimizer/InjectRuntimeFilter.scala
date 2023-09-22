@@ -229,19 +229,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
-   * - The current join is a shuffle join or a broadcast join that has a shuffle below it
    * - The max filterApplicationSide scan size is greater than a configurable threshold
    */
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
-      filterCreationSideExp: Expression,
-      hint: JoinHint): Option[LogicalPlan] = {
+      filterCreationSideExp: Expression): Option[LogicalPlan] = {
     if (findExpressionAndTrackLineageDown(
       filterApplicationSideExp, filterApplicationSide).isDefined &&
-      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
-        probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
       extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp)
     } else {
@@ -326,15 +322,21 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType)) {
-              extractBeneficialFilterCreatePlan(left, right, l, r, hint).foreach {
+            // Check if the current join is a shuffle join or a broadcast join that
+            // has a shuffle below it
+            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
+            if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left))) {
+              extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
                 filterCreationSidePlan =>
                   newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
-            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType)) {
-              extractBeneficialFilterCreatePlan(right, left, r, l, hint).foreach {
+            // Check if the current join is a shuffle join or a broadcast join that
+            // has a shuffle below it
+            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
+              (hasShuffle || probablyHasShuffle(right))) {
+              extractBeneficialFilterCreatePlan(right, left, r, l).foreach {
                 filterCreationSidePlan =>
                   newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
               }

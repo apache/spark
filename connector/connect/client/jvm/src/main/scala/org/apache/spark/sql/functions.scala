@@ -26,9 +26,11 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -827,7 +829,19 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def mode(e: Column): Column = Column.fn("mode", e)
+  def mode(e: Column): Column = mode(e, deterministic = false)
+
+  /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * When multiple values have the same greatest frequency then either any of values is returned
+   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
+   * is true.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -1818,7 +1832,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def rand(): Column = Column.fn("rand")
+  def rand(): Column = Column.fn("rand", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from the
@@ -1842,7 +1856,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def randn(): Column = Column.fn("randn")
+  def randn(): Column = Column.fn("randn", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Partition ID.
@@ -3387,7 +3401,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = Column.fn("uuid")
+  def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3706,7 +3720,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(): Column = Column.fn("random")
+  def random(): Column = Column.fn("random", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns the bit position for the given input column.
@@ -7064,7 +7078,7 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e)
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7097,7 +7111,8 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def sequence(start: Column, stop: Column): Column = sequence(start, stop, lit(1L))
+  def sequence(start: Column, stop: Column): Column =
+    Column.fn("sequence", start, stop)
 
   /**
    * Creates an array containing the left argument repeated the number of times given by the right
@@ -7307,15 +7322,59 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @group collection_funcs
-   *
    * @since 4.0.0
    */
   // scalastyle:on line.size.limit
-  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column =
-    from_xml(e, lit(schema.toDDL), options.iterator)
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_xml(e, lit(schema.json), options.asScala.toIterator)
 
   // scalastyle:off line.size.limit
 
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema as a DDL-formatted string.
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the xml data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    val dataType =
+      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column): Column = {
+    from_xml(e, schema, Iterator.empty)
+  }
+
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a XML string into the data type corresponding to
    * the specified schema. Returns `null`, in the case of an unparseable string.
@@ -7350,7 +7409,7 @@ object functions {
    * @since 4.0.0
    */
   def from_xml(e: Column, schema: StructType): Column =
-    from_xml(e, schema, Map.empty[String, String])
+    from_xml(e, schema, Map.empty[String, String].asJava)
 
   private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
     fnWithOptions("from_xml", options, e, schema)

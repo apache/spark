@@ -22,8 +22,21 @@ import java.util.zip.CheckedInputStream
 
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.storage.{BlockId, ShuffleChecksumBlockId, ShuffleDataBlockId}
 
 object ShuffleChecksumUtils {
+
+  /**
+   * Return checksumFile for shuffle data block ID. Otherwise, null.
+   */
+  def getChecksumFileName(blockId: BlockId, algorithm: String): String = blockId match {
+    case ShuffleDataBlockId(shuffleId, mapId, _) =>
+      ShuffleChecksumHelper.getChecksumFileName(
+        ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name, algorithm)
+    case _ =>
+      null
+  }
 
   /**
    * Ensure that the checksum values are consistent with index file and data file.

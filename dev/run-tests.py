@@ -37,7 +37,7 @@ import sparktestsupport.modules as modules
 
 def setup_test_environ(environ):
     print("[info] Setup the following environment variables for tests: ")
-    for (k, v) in environ.items():
+    for k, v in environ.items():
         print("%s=%s" % (k, v))
         os.environ[k] = v
 
@@ -181,7 +181,6 @@ def get_scala_profiles(scala_version):
         return []  # assume it's default.
 
     sbt_maven_scala_profiles = {
-        "scala2.12": ["-Pscala-2.12"],
         "scala2.13": ["-Pscala-2.13"],
     }
 
@@ -331,7 +330,6 @@ def run_scala_tests_maven(test_profiles):
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
-
     sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:

@@ -718,28 +718,31 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
-        ) -> typing_extensions.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-            "map",
-            "struct",
-        ] | None: ...
+        ) -> (
+            typing_extensions.Literal[
+                "null",
+                "binary",
+                "boolean",
+                "byte",
+                "short",
+                "integer",
+                "long",
+                "float",
+                "double",
+                "decimal",
+                "string",
+                "date",
+                "timestamp",
+                "timestamp_ntz",
+                "calendar_interval",
+                "year_month_interval",
+                "day_time_interval",
+                "array",
+                "map",
+                "struct",
+            ]
+            | None
+        ): ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
         """An unresolved attribute that is not explicitly bound to a specific column, but the column
@@ -800,6 +803,37 @@ class Expression(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_is_metadata_column", b"_is_metadata_column"],
         ) -> typing_extensions.Literal["is_metadata_column"] | None: ...
         @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
+
+    class GetColumnByOrdinal(google.protobuf.message.Message):
+        """An unresolved attribute that is represented by its column index."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ORDINAL_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
+        ordinal: builtins.int
+        """(Required) 0-based column index."""
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
+        def __init__(
+            self,
+            *,
+            ordinal: builtins.int = ...,
+            plan_id: builtins.int | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id", b"_plan_id", "ordinal", b"ordinal", "plan_id", b"plan_id"
+            ],
+        ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
         ) -> typing_extensions.Literal["plan_id"] | None: ...
@@ -1126,6 +1160,7 @@ class Expression(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
     CALL_FUNCTION_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
+    GET_COLUMN_BY_ORDINAL_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1164,6 +1199,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def named_argument_expression(self) -> global___NamedArgumentExpression: ...
     @property
+    def get_column_by_ordinal(self) -> global___Expression.GetColumnByOrdinal: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1189,6 +1226,7 @@ class Expression(google.protobuf.message.Message):
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
+        get_column_by_ordinal: global___Expression.GetColumnByOrdinal | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1208,6 +1246,8 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
+            "get_column_by_ordinal",
+            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -1251,6 +1291,8 @@ class Expression(google.protobuf.message.Message):
             b"expression_string",
             "extension",
             b"extension",
+            "get_column_by_ordinal",
+            b"get_column_by_ordinal",
             "lambda_function",
             b"lambda_function",
             "literal",
@@ -1279,26 +1321,30 @@ class Expression(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
-    ) -> typing_extensions.Literal[
-        "literal",
-        "unresolved_attribute",
-        "unresolved_function",
-        "expression_string",
-        "unresolved_star",
-        "alias",
-        "cast",
-        "unresolved_regex",
-        "sort_order",
-        "lambda_function",
-        "window",
-        "unresolved_extract_value",
-        "update_fields",
-        "unresolved_named_lambda_variable",
-        "common_inline_user_defined_function",
-        "call_function",
-        "named_argument_expression",
-        "extension",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "literal",
+            "unresolved_attribute",
+            "unresolved_function",
+            "expression_string",
+            "unresolved_star",
+            "alias",
+            "cast",
+            "unresolved_regex",
+            "sort_order",
+            "lambda_function",
+            "window",
+            "unresolved_extract_value",
+            "update_fields",
+            "unresolved_named_lambda_variable",
+            "common_inline_user_defined_function",
+            "call_function",
+            "named_argument_expression",
+            "get_column_by_ordinal",
+            "extension",
+        ]
+        | None
+    ): ...
 
 global___Expression = Expression
 

@@ -394,7 +394,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
-  <td>(none)</td>
+  <td>client</td>
   <td>
     The deploy mode of Spark driver program, either "client" or "cluster",
     Which means to launch driver program locally ("client")
@@ -694,10 +694,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.logs.rolling.strategy</code></td>
-  <td>(none)</td>
+  <td>"" (disabled)</td>
   <td>
     Set the strategy of rolling of executor logs. By default it is disabled. It can
-    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    be set to "time" (time-based rolling) or "size" (size-based rolling) or "" (disabled). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
     For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
@@ -1311,7 +1311,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
   </td>

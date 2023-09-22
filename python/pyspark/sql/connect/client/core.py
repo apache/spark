@@ -17,7 +17,6 @@
 __all__ = [
     "ChannelBuilder",
     "SparkConnectClient",
-    "getLogLevel",
 ]
 
 from pyspark.sql.connect.utils import check_dependencies
@@ -25,7 +24,6 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import threading
-import logging
 import os
 import platform
 import random
@@ -33,6 +31,7 @@ import time
 import urllib.parse
 import uuid
 import sys
+from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -65,6 +64,7 @@ from google.rpc import error_details_pb2
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
+from pyspark.sql.connect.client.logging import logger
 from pyspark.sql.connect.client.reattach import (
     ExecutePlanResponseReattachableIterator,
     RetryException,
@@ -97,41 +97,6 @@ from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import DataTypeOrString
-
-
-def _configure_logging() -> logging.Logger:
-    """Configure logging for the Spark Connect clients."""
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter(fmt="%(asctime)s %(process)d %(levelname)s %(funcName)s %(message)s")
-    )
-    logger.addHandler(handler)
-
-    # Check the environment variables for log levels:
-    if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
-        logger.setLevel(os.environ["SPARK_CONNECT_LOG_LEVEL"].upper())
-    else:
-        logger.disabled = True
-    return logger
-
-
-# Instantiate the logger based on the environment configuration.
-logger = _configure_logging()
-
-
-def getLogLevel() -> Optional[int]:
-    """
-    This returns this log level as integer, or none (if no logging is enabled).
-
-    Spark Connect logging can be configured with environment variable 'SPARK_CONNECT_LOG_LEVEL'
-
-    .. versionadded:: 3.5.0
-    """
-
-    if not logger.disabled:
-        return logger.level
-    return None
 
 
 class ChannelBuilder:
@@ -176,7 +141,6 @@ class ChannelBuilder:
 
             # 'spark.local.connect' is set when we use the local mode in Spark Connect.
             if session is not None and session.conf.get("spark.local.connect", "0") == "1":
-
                 jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
                 return getattr(
                     getattr(
@@ -880,19 +844,30 @@ class SparkConnectClient(object):
 
         # Rename columns to avoid duplicated column names.
         renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+
+        pandas_options = {}
         if self_destruct:
             # Configure PyArrow to use as little memory as possible:
             # self_destruct - free columns as they are converted
             # split_blocks - create a separate Pandas block for each column
             # use_threads - convert one column at a time
-            pandas_options = {
-                "self_destruct": True,
-                "split_blocks": True,
-                "use_threads": False,
-            }
-            pdf = renamed_table.to_pandas(**pandas_options)
-        else:
-            pdf = renamed_table.to_pandas()
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
+        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+            # A legacy option to coerce date32, date64, duration, and timestamp
+            # time units to nanoseconds when converting to pandas.
+            # This option can only be added since 13.0.0.
+            pandas_options.update(
+                {
+                    "coerce_temporal_nanoseconds": True,
+                }
+            )
+        pdf = renamed_table.to_pandas(**pandas_options)
         pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
@@ -1005,6 +980,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
+        ExecutePlanResponseReattachableIterator.shutdown()
         self._channel.close()
         self._closed = True
 
