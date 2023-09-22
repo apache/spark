@@ -45,10 +45,7 @@
  * by Spark's UI code. This is currently used only on the stage page and on
  * the job page.
  *
- * This requires jQuery, d3, and dagre-d3. Note that we use a custom release
- * of dagre-d3 (http://github.com/andrewor14/dagre-d3) for some specific
- * functionality. For more detail, please track the changes in that project
- * since it was forked (commit 101503833a8ce5fe369547f6addf3e71172ce10b).
+ * This requires jQuery, d3, and dagre-d3.
  */
 
 /* global $, appBasePath, d3, dagreD3, graphlibDot, uiRoot */
