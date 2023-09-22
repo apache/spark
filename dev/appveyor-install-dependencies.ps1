@@ -97,8 +97,11 @@ if (!(Test-Path $tools)) {
 
 Push-Location $tools
 
-Start-FileDownload "https://cdn.azul.com/zulu/bin/zulu17.28.13-ca-jdk17.0.0-win_x64.zip" "zulu.zip"
-Invoke-Expression "7z.exe x zulu.zip -o zulu"
+$zuluFileName="zulu17.44.53-ca-jre17.0.8.1-win_x64"
+Start-FileDownload "https://cdn.azul.com/zulu/bin/$zuluFileName.zip" "zulu.zip"
+Invoke-Expression "7z.exe x zulu.zip"
+ls "$zuluFileName"
+$env:PATH = "$tools\$zuluFileName\bin;" + $env:PATH
 
 $env:PATH = "$tools\zulu\bin;" + $env:PATH
 
