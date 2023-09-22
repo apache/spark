@@ -235,12 +235,6 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   * TODO: Look to merge this rule with RewritePredicateSubquery.
   */
 object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper {
-   private def collectOuterReferencesInPlanTree(plan: LogicalPlan): AttributeSet = {
-     AttributeSet(plan.flatMap(
-       _.expressions.flatMap(
-         _.collect { case o: OuterReference => o.toAttribute })))
-   }
-
    /**
     * Returns the correlated predicates and a updated plan that removes the outer references.
     */
@@ -290,13 +284,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           a
         }
-      case l @ Limit(_, _) if (predicateMap.nonEmpty) =>
+      case l @ Limit(_, _) if predicateMap.nonEmpty =>
+        // LIMIT is not supported in correlated EXISTS/IN subqueries.
         throw new AnalysisException(
           errorClass =
             "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
           origin = l.origin,
           messageParameters = Map("treeNode" -> l.toString))
-        // throw QueryCompilationErrors.limitInCorrelatedExistsOrInSubquery(l, l.origin)
 
       case p =>
         p
