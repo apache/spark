@@ -102,8 +102,7 @@ Start-FileDownload "https://cdn.azul.com/zulu/bin/$zuluFileName.zip" "zulu.zip"
 Invoke-Expression "7z.exe x zulu.zip"
 ls "$zuluFileName"
 $env:PATH = "$tools\$zuluFileName\bin;" + $env:PATH
-
-Invoke-Expression "java -version"
+java -version
 
 # ========================== SBT
 $sbtVer = "1.9.3"
