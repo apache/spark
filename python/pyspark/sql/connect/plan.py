@@ -1192,6 +1192,7 @@ class CollectMetrics(LogicalPlan):
         assert self._child is not None
 
         plan = proto.Relation()
+        plan.common.plan_id = self._child._plan_id
         plan.collect_metrics.input.CopyFrom(self._child.plan(session))
         plan.collect_metrics.name = self._name
         plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])

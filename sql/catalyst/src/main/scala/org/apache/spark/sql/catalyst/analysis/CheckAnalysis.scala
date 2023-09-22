@@ -497,7 +497,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
-          case CollectMetrics(name, metrics, _) =>
+          case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
                 errorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
@@ -1097,17 +1097,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * are allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
-    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    val metricsMap = mutable.Map.empty[String, CollectMetrics]
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
-        case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
+        case metrics @ CollectMetrics(name, _, _, dataframeId) =>
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (simplifiedMetrics != simplifiedOther) {
+              if (dataframeId != other.dataframeId) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1124,32 +1122,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       })
     }
     check(plan)
-  }
-
-  /**
-   * This method is only used for checking collected metrics. This method tries to
-   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
-   * duplicates metric definition.
-   */
-  def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperators {
-      case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
-          case (Alias(attr: AttributeReference, _), index) =>
-            // The input plan of this method is already canonicalized. The attribute id becomes the
-            // ordinal of this attribute in the child outputs. So an alias-only Project means the
-            // the id of the aliased attribute is the same as its index in the project list.
-            attr.exprId.id == index
-          case (left: AttributeReference, index) =>
-            left.exprId.id == index
-          case _ => false
-        }
-        if (assignExprIdOnly) {
-          p.child
-        } else {
-          p
-        }
-    }
   }
 
   /**
