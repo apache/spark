@@ -78,11 +78,23 @@ WHERE  EXISTS (SELECT dept.dept_id
                LIMIT 1)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+struct<>
 -- !query output
-200	emp 2	2003-01-01	200.0	10
-100	emp 1	2005-01-01	100.0	10
-100	emp 1	2005-01-01	100.0	10
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 1\n+- LocalLimit 1\n   +- Project [dept_id#x]\n      +- Sort [state#x ASC NULLS FIRST], true\n         +- Project [dept_id#x, state#x]\n            +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n               +- Project [dept_id#x, dept_name#x, state#x]\n                  +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 147,
+    "stopIndex" : 184,
+    "fragment" : "ORDER  BY state\n               LIMIT 1"
+  } ]
+}
 
 
 -- !query
@@ -95,9 +107,23 @@ WHERE  EXISTS (SELECT dept.dept_id
                LIMIT 0)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 0\n+- LocalLimit 0\n   +- Project [dept_id#x]\n      +- Sort [state#x ASC NULLS FIRST], true\n         +- Project [dept_id#x, state#x]\n            +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n               +- Project [dept_id#x, dept_name#x, state#x]\n                  +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 147,
+    "stopIndex" : 184,
+    "fragment" : "ORDER  BY state\n               LIMIT 0"
+  } ]
+}
 
 
 -- !query
@@ -146,14 +172,23 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    LIMIT 1)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+struct<>
 -- !query output
-500	emp 5	2001-01-01	400.0	NULL
-600	emp 6 - no dept	2001-01-01	400.0	100
-300	emp 3	2002-01-01	300.0	20
-400	emp 4	2005-01-01	400.0	30
-700	emp 7	2010-01-01	400.0	100
-800	emp 8	2016-01-01	150.0	70
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 1\n+- LocalLimit 1\n   +- Project [dept_id#x]\n      +- Sort [state#x ASC NULLS FIRST], true\n         +- Project [dept_id#x, state#x]\n            +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n               +- Project [dept_id#x, dept_name#x, state#x]\n                  +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 163,
+    "stopIndex" : 204,
+    "fragment" : "ORDER  BY state\n                   LIMIT 1"
+  } ]
+}
 
 
 -- !query
@@ -166,17 +201,23 @@ WHERE  NOT EXISTS (SELECT dept.dept_id
                    LIMIT 0)
 ORDER  BY hiredate
 -- !query schema
-struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+struct<>
 -- !query output
-500	emp 5	2001-01-01	400.0	NULL
-600	emp 6 - no dept	2001-01-01	400.0	100
-300	emp 3	2002-01-01	300.0	20
-200	emp 2	2003-01-01	200.0	10
-100	emp 1	2005-01-01	100.0	10
-100	emp 1	2005-01-01	100.0	10
-400	emp 4	2005-01-01	400.0	30
-700	emp 7	2010-01-01	400.0	100
-800	emp 8	2016-01-01	150.0	70
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 0\n+- LocalLimit 0\n   +- Project [dept_id#x]\n      +- Sort [state#x ASC NULLS FIRST], true\n         +- Project [dept_id#x, state#x]\n            +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n               +- Project [dept_id#x, dept_name#x, state#x]\n                  +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 163,
+    "stopIndex" : 204,
+    "fragment" : "ORDER  BY state\n                   LIMIT 0"
+  } ]
+}
 
 
 -- !query
@@ -268,9 +309,23 @@ WHERE  EXISTS (SELECT dept.dept_name
                WHERE  dept.dept_id > emp.dept_id
                LIMIT  1)
 -- !query schema
-struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
+struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 1\n+- LocalLimit 1\n   +- Project [dept_name#x, dept_id#x]\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 149,
+    "stopIndex" : 156,
+    "fragment" : "LIMIT  1"
+  } ]
+}
 
 
 -- !query

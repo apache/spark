@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
@@ -289,11 +290,14 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           a
         }
-      case l @ Limit(_, input) =>
-        if (collectOuterReferencesInPlanTree(input).nonEmpty) {
-          throw QueryExecutionErrors.unexpectedOperatorInCorrelatedSubquery(l)
-        }
-        l
+      case l @ Limit(_, _) if (predicateMap.nonEmpty) =>
+        throw new AnalysisException(
+          errorClass =
+            "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+          origin = l.origin,
+          messageParameters = Map("treeNode" -> l.toString))
+        // throw QueryCompilationErrors.limitInCorrelatedExistsOrInSubquery(l, l.origin)
+
       case p =>
         p
     }
