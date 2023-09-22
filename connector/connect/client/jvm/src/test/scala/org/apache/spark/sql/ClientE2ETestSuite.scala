@@ -1048,6 +1048,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -1059,6 +1062,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {
@@ -1288,6 +1295,24 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       assert(filepath.startsWith(path))
       assert(rc == 100)
     }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
   }
 }
 

@@ -234,9 +234,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pyarrow.Array
         """
         import pyarrow as pa
-        from pandas.api.types import is_categorical_dtype
+        import pandas as pd
 
-        if is_categorical_dtype(series.dtype):
+        if isinstance(series.dtype, pd.CategoricalDtype):
             series = series.astype(series.dtypes.categories.dtype)
 
         if arrow_type is not None:
@@ -589,9 +589,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         pyarrow.Array
         """
         import pyarrow as pa
-        from pandas.api.types import is_categorical_dtype
+        import pandas as pd
 
-        if is_categorical_dtype(series.dtype):
+        if isinstance(series.dtype, pd.CategoricalDtype):
             series = series.astype(series.dtypes.categories.dtype)
 
         if arrow_type is not None:

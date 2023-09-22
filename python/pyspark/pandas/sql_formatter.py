@@ -108,7 +108,8 @@ def sql(
         Supported Data Types</a> for supported value types in Python.
         For example, dictionary keys: "rank", "name", "birthdate";
         dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
-        A value can be also a `Column` of literal expression, in that case it is taken as is.
+        A value can be also a `Column` of a literal or collection constructor functions such
+        as `map()`, `array()`, `struct()`, in that case it is taken as is.
 
 
         .. versionadded:: 3.4.0

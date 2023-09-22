@@ -22,7 +22,9 @@ Functions
 .. currentmodule:: pyspark.sql.functions
 
 A collections of builtin functions available for DataFrame operations.
-From Apache Spark 3.5.0, all functions support Spark Connect.
+
+.. note::
+   From Apache Spark 3.5.0, all functions support Spark Connect.
 
 Normal Functions
 ----------------
@@ -264,8 +266,6 @@ Collection Functions
     str_to_map
     to_csv
     try_element_at
-    from_xml
-    schema_of_xml
 
 
 Partition Transformation Functions
@@ -531,6 +531,8 @@ Xml Functions
 .. autosummary::
     :toctree: api/
 
+    from_xml
+    schema_of_xml
     xpath
     xpath_boolean
     xpath_double
