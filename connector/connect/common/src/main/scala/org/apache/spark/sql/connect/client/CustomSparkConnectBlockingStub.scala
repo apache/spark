@@ -34,10 +34,14 @@ private[connect] class CustomSparkConnectBlockingStub(
   private val grpcExceptionConverter = new GrpcExceptionConverter(stub)
 
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       grpcExceptionConverter.convertIterator[ExecutePlanResponse](
         request.getSessionId,
         request.getUserContext,
+        request.getClientType,
         retryHandler.RetryIterator[ExecutePlanRequest, ExecutePlanResponse](
           request,
           r => CloseableIterator(stub.executePlan(r).asScala)))
@@ -46,17 +50,24 @@ private[connect] class CustomSparkConnectBlockingStub(
 
   def executePlanReattachable(
       request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       grpcExceptionConverter.convertIterator[ExecutePlanResponse](
         request.getSessionId,
         request.getUserContext,
+        request.getClientType,
         // Don't use retryHandler - own retry handling is inside.
         new ExecutePlanResponseReattachableIterator(request, channel, retryPolicy))
     }
   }
 
   def analyzePlan(request: AnalyzePlanRequest): AnalyzePlanResponse = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
         stub.analyzePlan(request)
       }
@@ -64,7 +75,10 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def config(request: ConfigRequest): ConfigResponse = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
         stub.config(request)
       }
@@ -72,7 +86,10 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def interrupt(request: InterruptRequest): InterruptResponse = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
         stub.interrupt(request)
       }
@@ -80,7 +97,10 @@ private[connect] class CustomSparkConnectBlockingStub(
   }
 
   def artifactStatus(request: ArtifactStatusesRequest): ArtifactStatusesResponse = {
-    grpcExceptionConverter.convert(request.getSessionId, request.getUserContext) {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
       retryHandler.retry {
         stub.artifactStatus(request)
       }

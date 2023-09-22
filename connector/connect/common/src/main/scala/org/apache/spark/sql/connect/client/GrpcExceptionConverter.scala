@@ -51,37 +51,38 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
     extends Logging {
   import GrpcExceptionConverter._
 
-  def convert[T](sessionId: String, userContext: UserContext)(f: => T): T = {
+  def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toThrowable(e, sessionId, userContext)
+        throw toThrowable(e, sessionId, userContext, clientType)
     }
   }
 
   def convertIterator[T](
       sessionId: String,
       userContext: UserContext,
+      clientType: String,
       iter: CloseableIterator[T]): CloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
       override def innerIterator: Iterator[T] = iter
 
       override def hasNext: Boolean = {
-        convert(sessionId, userContext) {
+        convert(sessionId, userContext, clientType) {
           iter.hasNext
         }
       }
 
       override def next(): T = {
-        convert(sessionId, userContext) {
+        convert(sessionId, userContext, clientType) {
           iter.next()
         }
       }
 
       override def close(): Unit = {
-        convert(sessionId, userContext) {
+        convert(sessionId, userContext, clientType) {
           iter.close()
         }
       }
@@ -95,7 +96,8 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
   private def fetchEnrichedError(
       info: ErrorInfo,
       sessionId: String,
-      userContext: UserContext): Option[Throwable] = {
+      userContext: UserContext,
+      clientType: String): Option[Throwable] = {
     val errorId = info.getMetadataOrDefault("errorId", null)
     if (errorId == null) {
       logWarning("Unable to fetch enriched error since errorId is missing")
@@ -108,7 +110,8 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
           .newBuilder()
           .setSessionId(sessionId)
           .setErrorId(errorId)
-          .setUserContext(UserContext.newBuilder().setUserId(userContext.getUserId).build())
+          .setUserContext(userContext)
+          .setClientType(clientType)
           .build())
 
       if (!errorDetailsResponse.hasRootErrorIdx) {
@@ -130,7 +133,8 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
   private def toThrowable(
       ex: StatusRuntimeException,
       sessionId: String,
-      userContext: UserContext): Throwable = {
+      userContext: UserContext,
+      clientType: String): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
     // Extract the ErrorInfo from the StatusProto, if present.
@@ -140,7 +144,8 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
 
     if (errorInfoOpt.isDefined) {
       // If ErrorInfo is found, try to fetch enriched error details by an additional RPC.
-      val enrichedErrorOpt = fetchEnrichedError(errorInfoOpt.get, sessionId, userContext)
+      val enrichedErrorOpt =
+        fetchEnrichedError(errorInfoOpt.get, sessionId, userContext, clientType)
       if (enrichedErrorOpt.isDefined) {
         return enrichedErrorOpt.get
       }
