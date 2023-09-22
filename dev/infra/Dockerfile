@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config  \
     curl  \
     wget  \
-    openjdk-8-jdk  \
+    openjdk-17-jdk-headless  \
     gfortran  \
     libopenblas-dev  \
     liblapack-dev \
