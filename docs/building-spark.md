@@ -261,6 +261,7 @@ or
 
     ./build/sbt docker-integration-tests/test
 
+<!---
 ## Change Scala Version
 
 When other versions of Scala like 2.13 are supported, it will be possible to build for that version.
@@ -275,6 +276,7 @@ Enable the profile (e.g. 2.13):
 
     # For sbt
     ./build/sbt -Pscala-2.13 compile
+-->
 
 ## Running Jenkins tests with GitHub Enterprise
 

@@ -152,12 +152,10 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <!-- #if scala-2.13 -->
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    <!-- #endif scala-2.13 -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
