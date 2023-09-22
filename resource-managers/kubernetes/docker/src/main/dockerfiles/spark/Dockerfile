@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=17-jre
+ARG java_image_tag=21-jre
 
-FROM eclipse-temurin:${java_image_tag}
+FROM azul/zulu-openjdk:${java_image_tag}
 
 ARG spark_uid=185
 
