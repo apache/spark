@@ -228,7 +228,7 @@
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>13.0.0</arrow.version>
-    <ammonite.version>2.5.9</ammonite.version>
+    <ammonite.version>2.5.9-2-7633e640</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
