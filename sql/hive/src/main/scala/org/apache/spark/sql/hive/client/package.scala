@@ -131,8 +131,16 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
+    // Since HIVE-14496, Hive.java uses calcite-core
+    case object v4_0 extends HiveVersion("4.0.0",
+      extraDeps = Seq("org.apache.derby:derby:10.14.2.0"),
+      exclusions = Seq("org.apache.calcite:calcite-druid",
+        "org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
+
     val allSupportedHiveVersions =
-      Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
+      Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0)
   }
   // scalastyle:on
 

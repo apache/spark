@@ -167,7 +167,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     // test alter database location
     val tempDatabasePath2 = Utils.createTempDir().toURI
     // Hive support altering database location since HIVE-8472.
-    if (version == "3.0" || version == "3.1") {
+    if (version == "3.0" || version == "3.1" || version == "4.0") {
       client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
       val uriInCatalog = client.getDatabase("temporary").locationUri
       assert("file" === uriInCatalog.getScheme)
@@ -654,7 +654,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("sql create index and reset") {
     // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-    if (version != "3.0" && version != "3.1") {
+    if (version != "3.0" && version != "3.1" && version != "4.0") {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -663,7 +663,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("sql read hive materialized view") {
     // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-    if (version == "2.3" || version == "3.0" || version == "3.1") {
+    if (version == "2.3" || version == "3.0" || version == "3.1" || version == "4.0") {
       // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
       assume(version == "2.3" || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
       // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
