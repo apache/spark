@@ -103,7 +103,6 @@ Invoke-Expression "7z.exe x zulu.zip"
 ls "$zuluFileName"
 $env:PATH = "$tools\$zuluFileName\bin;" + $env:PATH
 
-$env:PATH = "$tools\zulu\bin;" + $env:PATH
 Invoke-Expression "java -version"
 
 # ========================== SBT
