@@ -110,14 +110,14 @@ function toggleDagViz(forJob) {
   window.localStorage.setItem(expandDagVizArrowKey(forJob), "" + status);
 }
 
-$(function () {
+$(function (){
   if ($("#stage-dag-viz").length &&
-    window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
+      window.localStorage.getItem(expandDagVizArrowKey(false)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(false), "false");
     toggleDagViz(false);
   } else if ($("#job-dag-viz").length &&
-    window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
+      window.localStorage.getItem(expandDagVizArrowKey(true)) == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem(expandDagVizArrowKey(true), "false");
     toggleDagViz(true);
@@ -145,7 +145,7 @@ function renderDagViz(forJob) {
   // If there is not a dot file to render, fail fast and report error
   var jobOrStage = forJob ? "job" : "stage";
   if (metadataContainer().empty() ||
-    metadataContainer().selectAll("div").empty()) {
+      metadataContainer().selectAll("div").empty()) {
     var message =
       "<b>No visualization information available for this " + jobOrStage + "!</b><br/>" +
       "If this is an old " + jobOrStage + ", its visualization metadata may have been " +
@@ -168,13 +168,13 @@ function renderDagViz(forJob) {
   }
 
   // Find cached RDDs and mark them as such
-  metadataContainer().selectAll(".cached-rdd").each(function (_ignored_v) {
+  metadataContainer().selectAll(".cached-rdd").each(function(_ignored_v) {
     var rddId = d3.select(this).text().trim();
     var nodeId = VizConstants.nodePrefix + rddId;
     svg.selectAll("#" + nodeId).classed("cached", true);
   });
 
-  metadataContainer().selectAll(".barrier-rdd").each(function () {
+  metadataContainer().selectAll(".barrier-rdd").each(function() {
     var opId = d3.select(this).text().trim();
     var opClusterId = VizConstants.clusterPrefix + opId;
     svg.selectAll("#" + opClusterId).classed("barrier", true)
@@ -277,7 +277,7 @@ function renderDagVizForJob(svgContainer) {
   // Each div.stage-metadata contains the information needed to generate the graph
   // for a stage. This includes the DOT file produced from the appropriate UI listener,
   // any incoming and outgoing edges, and any cached RDDs that belong to this stage.
-  metadataContainer().selectAll(".stage-metadata").each(function (d, i) {
+  metadataContainer().selectAll(".stage-metadata").each(function(d, i) {
     var metadata = d3.select(this);
     var dot = metadata.select(".dot-file").text();
     var isSkipped = metadata.attr("skipped") === "true";
@@ -355,13 +355,9 @@ function renderDot(g, container, forJob) {
  * -------------------- */
 
 // Helper d3 accessors
-function graphContainer() {
-  return d3.select("#dag-viz-graph");
-}
+function graphContainer() { return d3.select("#dag-viz-graph"); }
 
-function metadataContainer() {
-  return d3.select("#dag-viz-metadata");
-}
+function metadataContainer() { return d3.select("#dag-viz-metadata"); }
 
 function isStage(v) {
   return v.indexOf(VizConstants.graphPrefix) === 0;
@@ -409,20 +405,20 @@ function preprocessGraphLayout(g, forJob) {
 function resizeSvg(svg) {
   var allClusters = svg.selectAll("g.cluster rect").nodes();
   var startX = -VizConstants.svgMarginX +
-    toFloat(d3.min(allClusters, function (e) {
+    toFloat(d3.min(allClusters, function(e) {
       return getAbsolutePosition(d3.select(e)).x;
     }));
   var startY = -VizConstants.svgMarginY +
-    toFloat(d3.min(allClusters, function (e) {
+    toFloat(d3.min(allClusters, function(e) {
       return getAbsolutePosition(d3.select(e)).y;
     }));
   var endX = VizConstants.svgMarginX +
-    toFloat(d3.max(allClusters, function (e) {
+    toFloat(d3.max(allClusters, function(e) {
       var t = d3.select(e);
       return getAbsolutePosition(t).x + toFloat(t.attr("width"));
     }));
   var endY = VizConstants.svgMarginY +
-    toFloat(d3.max(allClusters, function (e) {
+    toFloat(d3.max(allClusters, function(e) {
       var t = d3.select(e);
       return getAbsolutePosition(t).y + toFloat(t.attr("height"));
     }));
@@ -439,7 +435,7 @@ function resizeSvg(svg) {
  * here this function is to enable line break.
  */
 function interpretLineBreak(svg) {
-  svg.selectAll("tspan").each(function () {
+  svg.selectAll("tspan").each(function() {
     var node = d3.select(this);
     var original = node.html();
     if (original.indexOf("\\n") !== -1) {
@@ -471,9 +467,7 @@ function drawCrossStageEdges(edges, svgContainer) {
   var dagreD3Marker = svgContainer.select("g.edgePaths marker");
   if (!dagreD3Marker.empty()) {
     svgContainer
-      .append(function () {
-        return dagreD3Marker.node().cloneNode(true);
-      })
+      .append(function() { return dagreD3Marker.node().cloneNode(true); })
       .attr("id", "marker-arrow");
     svgContainer.selectAll("g > path").attr("marker-end", "url(#marker-arrow)");
     svgContainer.selectAll("g.edgePaths def").remove(); // We no longer need these
@@ -505,7 +499,7 @@ function getAbsolutePosition(d3selection) {
       break;
     }
   }
-  return {x: _x, y: _y};
+  return { x: _x, y: _y };
 }
 
 /* (Job page only) Helper function to connect two RDDs with a curved edge. */
