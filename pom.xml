@@ -440,13 +440,11 @@
         <version>${project.version}</version>
         <type>test-jar</type>
       </dependency>
-      <!-- #if scala-2.13 -->
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
         <version>1.0.4</version>
       </dependency>
-      <!-- #endif scala-2.13 -->
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
@@ -3648,13 +3646,14 @@
       </properties>
     </profile>
 
+    <!--
+     SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
+     property correctly.
+    -->
+    <!--
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <!--
-         SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
-         property correctly.
-        -->
         <scala.version>2.13.11</scala.version>
       </properties>
       <build>
@@ -3664,6 +3663,7 @@
         </pluginManagement>
       </build>
     </profile>
+    -->
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
