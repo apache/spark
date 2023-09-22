@@ -340,7 +340,7 @@ object SparkBuild extends PomBuild {
     ),
 
     (Compile / scalacOptions) ++= Seq(
-      s"-target:jvm-${javaVersion.value}",
+      s"-target:${javaVersion.value}",
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
