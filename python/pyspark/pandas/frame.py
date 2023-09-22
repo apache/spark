@@ -11355,7 +11355,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if len(index_scols) == 1:
                     if len(items) <= ps.get_option("compute.isin_limit"):
                         col = index_scols[0].isin([F.lit(item) for item in items])
-                        result = DataFrame(self._internal.with_filter(col))
+                        result: DataFrame = DataFrame(self._internal.with_filter(col))
                     else:
                         item_sdf_col = verify_temp_column_name(
                             self._internal.spark_frame, "__item__"
