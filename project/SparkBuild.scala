@@ -223,74 +223,48 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  // Silencer: Scala compiler plugin for warning suppression
-  // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
-  // depends on scala version:
-  // <2.13.2 - silencer 1.7.13 and compiler settings to enable fatal warnings
-  // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
-    libraryDependencies ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.13"
-        Seq(
-          "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
-          "com.github.ghik" % "silencer-lib" % silencerVersion % Provided cross CrossVersion.full
-        )
-      } else {
-        Seq.empty
-      }
-    },
     (Compile / scalacOptions) ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        Seq(
-          "-Xfatal-warnings",
-          "-deprecation",
-          "-Ywarn-unused-import",
-          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and suppress them
-        )
-      } else {
-        Seq(
-          // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
-          // verbose warning on deprecation, error on all others
-          // see `scalac -Wconf:help` for details
-          "-Wconf:cat=deprecation:wv,any:e",
-          // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          "-Wunused:imports",
-          "-Wconf:cat=lint-multiarg-infix:wv",
-          "-Wconf:cat=other-nullary-override:wv",
-          "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
-          // SPARK-33775 Suppress compilation warnings that contain the following contents.
-          // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
-          //  fixed.
-          "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
-          "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
-          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-          "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
-          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-          // 1. `The outer reference in this type test cannot be checked at run time`
-          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
-          //    has type parameters eliminated by erasure`
-          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-          "-Wconf:cat=unchecked&msg=outer reference:s",
-          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
-          // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-          // from the corresponding files when Scala 2.12 is no longer supported.
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
-          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-          "-Wconf:msg=Implicit definition should have explicit type:s"
-        )
-      }
+      Seq(
+        // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
+        // verbose warning on deprecation, error on all others
+        // see `scalac -Wconf:help` for details
+        "-Wconf:cat=deprecation:wv,any:e",
+        // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
+        "-Wunused:imports",
+        "-Wconf:cat=lint-multiarg-infix:wv",
+        "-Wconf:cat=other-nullary-override:wv",
+        "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
+        // SPARK-33775 Suppress compilation warnings that contain the following contents.
+        // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
+        //  fixed.
+        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+        "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
+        "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
+        "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
+        "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+        // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+        "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+        // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+        // 1. `The outer reference in this type test cannot be checked at run time`
+        // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+        //    has type parameters eliminated by erasure`
+        // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+        //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+        // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+        "-Wconf:cat=unchecked&msg=outer reference:s",
+        "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+        "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
+        // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
+        // from the corresponding files when Scala 2.12 is no longer supported.
+        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
+        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
+        // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+        "-Wconf:msg=Implicit definition should have explicit type:s"
+      )
     }
   )
 

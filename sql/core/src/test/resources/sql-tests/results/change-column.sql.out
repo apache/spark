@@ -112,7 +112,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
@@ -128,7 +128,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "operation" : "ALTER COLUMN ... FIRST | ALTER",
+    "operation" : "ALTER COLUMN ... FIRST | AFTER",
     "tableName" : "`spark_catalog`.`default`.`test_change`"
   }
 }
@@ -270,7 +270,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`temp_view`"
@@ -300,7 +300,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+  "errorClass" : "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
   "messageParameters" : {
     "operation" : "ALTER TABLE ... CHANGE COLUMN",
     "viewName" : "`global_temp`.`global_temp_view`"

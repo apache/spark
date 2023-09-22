@@ -1128,10 +1128,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
             val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.unsupportedViewOperationError(
+            throw QueryCompilationErrors.expectTableNotViewError(
               nameParts, cmd, suggestAlternative, u)
           case _: ResolvedTempView =>
-            throw QueryCompilationErrors.unsupportedViewOperationError(
+            throw QueryCompilationErrors.expectTableNotViewError(
               identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
@@ -1139,7 +1139,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
-            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
+            throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
+              identifier, cmd, u)
           case t: ResolvedTable =>
             val nameParts = t.catalog.name() +: t.identifier.asMultipartIdentifier
             throw QueryCompilationErrors.expectViewNotTableError(
@@ -1150,7 +1151,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
         lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.unsupportedViewOperationError(identifier, cmd, false, u)
+            throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
+              identifier, cmd, u)
           case other => other
         }.getOrElse(u)
     }
@@ -3891,9 +3893,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
-    case CollectMetrics(name, metrics, child) =>
+    case CollectMetrics(name, metrics, child, dataframeId) =>
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
-      CollectMetrics(name, cleanedMetrics, child)
+      CollectMetrics(name, cleanedMetrics, child, dataframeId)
 
     case Unpivot(ids, values, aliases, variableColumnName, valueColumnNames, child) =>
       val cleanedIds = ids.map(_.map(trimNonTopLevelAliases))

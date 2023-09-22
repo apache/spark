@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 17, Scala 2.12)"
+name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:

@@ -2601,7 +2601,7 @@ class DataSourceV2SQLSuiteV1Filter
       sql("create global temp view v as select 1")
       checkError(
         exception = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL")),
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> "`global_temp`.`v`",
           "operation" -> "COMMENT ON TABLE"),
