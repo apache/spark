@@ -127,14 +127,27 @@ SELECT *
 FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
-               WHERE  t2b <= t2d
+               WHERE  t2b <= t1d
                LIMIT  2)
 LIMIT 4
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<>
 -- !query output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 2\n+- LocalLimit 2\n   +- Project [t2c#x, t2b#x]\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 119,
+    "stopIndex" : 126,
+    "fragment" : "LIMIT  2"
+  } ]
+}
 
 
 -- !query
@@ -160,16 +173,30 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d IN (SELECT t2d
                FROM   t2
-               WHERE t2b <= t2d
+               WHERE t2b <= t1d
                ORDER  BY t2c, t2d
                LIMIT 2)
 GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
 LIMIT  1
 -- !query schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<>
 -- !query output
-1	NULL
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 2\n+- LocalLimit 2\n   +- Project [t2d#xL, t2b#x]\n      +- Sort [t2c#x ASC NULLS FIRST, t2d#xL ASC NULLS FIRST], true\n         +- Project [t2d#xL, t2c#x, t2b#x]\n            +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n               +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n                  +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 151,
+    "stopIndex" : 191,
+    "fragment" : "ORDER  BY t2c, t2d\n               LIMIT 2"
+  } ]
+}
 
 
 -- !query
@@ -193,15 +220,26 @@ SELECT *
 FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
-                   WHERE  t2b <= t2d
+                   WHERE  t2b <= t1d
                    LIMIT  2)
 -- !query schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(4,0),t1h:timestamp,t1i:date>
+struct<>
 -- !query output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "GlobalLimit 2\n+- LocalLimit 2\n   +- Project [t2b#x]\n      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n            +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 135,
+    "stopIndex" : 142,
+    "fragment" : "LIMIT  2"
+  } ]
+}
 
 
 -- !query

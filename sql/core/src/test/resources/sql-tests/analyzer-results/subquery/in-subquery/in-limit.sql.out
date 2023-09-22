@@ -201,18 +201,18 @@ SELECT *
 FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
-               WHERE  t2b <= t2d
+               WHERE  t2b <= t1d
                LIMIT  2)
 LIMIT 4
 -- !query analysis
 GlobalLimit 4
 +- LocalLimit 4
    +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
-      +- Filter t1c#x IN (list#x [])
+      +- Filter t1c#x IN (list#x [t1d#xL])
          :  +- GlobalLimit 2
          :     +- LocalLimit 2
          :        +- Project [t2c#x]
-         :           +- Filter (cast(t2b#x as bigint) <= t2d#xL)
+         :           +- Filter (cast(t2b#x as bigint) <= outer(t1d#xL))
          :              +- SubqueryAlias t2
          :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
          :                    +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
@@ -269,7 +269,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d IN (SELECT t2d
                FROM   t2
-               WHERE t2b <= t2d
+               WHERE t2b <= t1d
                ORDER  BY t2c, t2d
                LIMIT 2)
 GROUP  BY t1b
@@ -280,13 +280,13 @@ GlobalLimit 1
 +- LocalLimit 1
    +- Sort [t1b#x DESC NULLS FIRST], true
       +- Aggregate [t1b#x], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x]
-         +- Filter t1d#xL IN (list#x [])
+         +- Filter t1d#xL IN (list#x [t1d#xL])
             :  +- GlobalLimit 2
             :     +- LocalLimit 2
             :        +- Project [t2d#xL]
             :           +- Sort [t2c#x ASC NULLS FIRST, t2d#xL ASC NULLS FIRST], true
             :              +- Project [t2d#xL, t2c#x]
-            :                 +- Filter (cast(t2b#x as bigint) <= t2d#xL)
+            :                 +- Filter (cast(t2b#x as bigint) <= outer(t1d#xL))
             :                    +- SubqueryAlias t2
             :                       +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
             :                          +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
@@ -334,15 +334,15 @@ SELECT *
 FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
-                   WHERE  t2b <= t2d
+                   WHERE  t2b <= t1d
                    LIMIT  2)
 -- !query analysis
 Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
-+- Filter NOT t1b#x IN (list#x [])
++- Filter NOT t1b#x IN (list#x [t1d#xL])
    :  +- GlobalLimit 2
    :     +- LocalLimit 2
    :        +- Project [t2b#x]
-   :           +- Filter (cast(t2b#x as bigint) <= t2d#xL)
+   :           +- Filter (cast(t2b#x as bigint) <= outer(t1d#xL))
    :              +- SubqueryAlias t2
    :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
    :                    +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]

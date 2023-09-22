@@ -85,7 +85,7 @@ SELECT *
 FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
-               WHERE  t2b <= t2d
+               WHERE  t2b <= t1d
                LIMIT  2)
 LIMIT 4;
 
@@ -107,7 +107,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d IN (SELECT t2d
                FROM   t2
-               WHERE t2b <= t2d
+               WHERE t2b <= t1d
                ORDER  BY t2c, t2d
                LIMIT 2)
 GROUP  BY t1b
@@ -127,7 +127,7 @@ SELECT *
 FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
-                   WHERE  t2b <= t2d
+                   WHERE  t2b <= t1d
                    LIMIT  2);
 
 -- TC 01.05
