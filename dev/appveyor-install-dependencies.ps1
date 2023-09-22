@@ -101,7 +101,8 @@ $zuluFileName="zulu17.44.53-ca-jdk17.0.8.1-win_x64"
 Start-FileDownload "https://cdn.azul.com/zulu/bin/$zuluFileName.zip" "zulu.zip"
 Invoke-Expression "7z.exe x zulu.zip"
 ls "$zuluFileName"
-$env:PATH = "$tools\$zuluFileName\bin;" + $env:PATH
+$env:JAVA_HOME = "$tools\$zuluFileName"
+$env:PATH = "$JAVA_HOME\bin;" + $env:PATH
 java -version
 
 # ========================== SBT
