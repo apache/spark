@@ -123,7 +123,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     val e2 = e1.getCause.asInstanceOf[SparkThrowable]
     checkError(e2,
       errorClass = "USER_RAISED_EXCEPTION",
-      parameters = Map("errorMessage" -> errorMsg))
+      parameters = Map("errorMessage" -> escape))
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       val summary = findErrorSummaryOnSQLUI()
       assert(!summary.contains("&amp;"))

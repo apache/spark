@@ -166,5 +166,11 @@ SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 -- !query schema
 struct<>
 -- !query output
-java.util.concurrent.ExecutionException
-org.codehaus.commons.compiler.CompileException: File 'generated.java', Line 35, Column 1: failed to compile: org.codehaus.commons.compiler.CompileException: File 'generated.java', Line 35, Column 1: Unknown variable or type "project_value_7"
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "too big: 8"
+  }
+}
