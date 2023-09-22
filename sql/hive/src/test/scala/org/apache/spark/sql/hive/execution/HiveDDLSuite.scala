@@ -876,7 +876,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
             "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
             "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"),
@@ -887,7 +887,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"),
@@ -898,7 +898,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
             "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
             "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"),
@@ -909,7 +909,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"),
@@ -920,7 +920,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET LOCATION ..."),
@@ -931,7 +931,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -942,7 +942,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -953,7 +953,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -964,7 +964,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"),
@@ -975,7 +975,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... RENAME TO PARTITION"),
@@ -986,7 +986,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... ADD PARTITION ..."),
@@ -997,7 +997,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... DROP PARTITION ..."),

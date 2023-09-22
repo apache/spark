@@ -46,6 +46,15 @@ case class InMemoryTableScanExec(
     }
   }
 
+  override def simpleStringWithNodeId(): String = {
+    val columnarInfo = if (relation.cacheBuilder.supportsColumnarInput || supportsColumnar) {
+      s" (columnarIn=${relation.cacheBuilder.supportsColumnarInput}, columnarOut=$supportsColumnar)"
+    } else {
+      ""
+    }
+    super.simpleStringWithNodeId() + columnarInfo
+  }
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def doCanonicalize(): SparkPlan =

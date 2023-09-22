@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_VIEW_OPERATION error class
-displayTitle: UNSUPPORTED_VIEW_OPERATION error class
+title: EXPECT_VIEW_NOT_TABLE error class
+displayTitle: EXPECT_VIEW_NOT_TABLE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,16 +21,16 @@ license: |
 
 SQLSTATE: none assigned
 
-The view `<viewName>` does not support `<operation>`.
+The table `<tableName>` does not support `<operation>`.
 
 This error class has the following derived error classes:
 
-## WITHOUT_SUGGESTION
+## NO_ALTERNATIVE
 
 
 
-## WITH_SUGGESTION
+## USE_ALTER_TABLE
 
-Please use ALTER VIEW instead.
+Please use ALTER TABLE instead.
 
 
