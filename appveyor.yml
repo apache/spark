@@ -40,7 +40,8 @@ cache:
   - C:\Users\appveyor\.m2
 
 install:
-  - cmd: set PATH=%JAVA_HOME%\bin;%PATH%
+  - cmd: ls C:\Program Files\Java\jdk17\bin\
+  - cmd: set PATH=C:\Program Files\Java\jdk17\bin;%PATH%
   - cmd: java -version
   # Install SBT and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
