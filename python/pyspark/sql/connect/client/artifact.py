@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.sql.connect.client.logging import logger
 
 check_dependencies(__name__)
 
@@ -243,11 +244,18 @@ class ArtifactManager:
         self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        return self._add_artifacts(
-            chain(
-                *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
+        try:
+            yield from self._add_artifacts(
+                chain(
+                    *(
+                        self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
+                        for p in path
+                    )
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Failed to submit addArtifacts request: {e}")
+            raise
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
