@@ -296,7 +296,7 @@ private[spark] object JettyUtils extends Logging {
         connector.setPort(port)
         connector.setHost(hostName)
         connector.setReuseAddress(!Utils.isWindows)
-        // spark-45248: set time idle timeout to prevent slow DoS
+        // spark-45248: set the idle timeout to prevent slow DoS
         connector.setIdleTimeout(8000)
 
         // Currently we only use "SelectChannelConnector"
