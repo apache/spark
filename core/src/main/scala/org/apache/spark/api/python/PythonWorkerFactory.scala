@@ -187,7 +187,6 @@ private[spark] class PythonWorkerFactory(
       // Wait for it to connect to our socket, and validate the auth secret.
       try {
         // Wait up to 10 seconds for client to connect.
-        import java.nio.channels.Selector
         serverSocketChannel.configureBlocking(false)
         val serverSelector = Selector.open()
         serverSocketChannel.register(serverSelector, SelectionKey.OP_ACCEPT)

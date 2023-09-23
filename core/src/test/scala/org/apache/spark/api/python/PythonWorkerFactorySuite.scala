@@ -45,7 +45,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with Matchers with SharedSp
     // return (accept() used to be blocking), the test doesn't hang for a long time.
     val createFuture = Future {
       val ex = intercept[SparkException] {
-        workerFactory.createSimpleWorker(blockingMode = true)
+        workerFactory.createSimpleWorker(blockingMode = true) // blockingMode doesn't matter.
         // NOTE: This takes 10 seconds (which is the accept timeout in PythonWorkerFactory).
         // That makes this a bit longish test.
       }
