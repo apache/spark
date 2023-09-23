@@ -3197,7 +3197,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Complete result stage
     complete(taskSets(4), Seq((Success, 11), (Success, 12)))
 
-    // Job successful ended.
+    // Job successfully ended
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
