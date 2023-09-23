@@ -19,7 +19,9 @@ package org.apache.spark.api.python
 
 import java.net.SocketTimeoutException
 
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
