@@ -1906,9 +1906,7 @@ private[spark] class DAGScheduler(
             // Ignore task completion for old attempt of indeterminate stage
             val ignoreIndeterminate = stage.isIndeterminate &&
               task.stageAttemptId < stage.latestInfo.attemptNumber()
-            if (ignoreIndeterminate) {
-              logInfo(s"Ignoring $smt completion from an older attempt of indeterminate stage")
-            } else {
+            if (!ignoreIndeterminate) {
               shuffleStage.pendingPartitions -= task.partitionId
               val status = event.result.asInstanceOf[MapStatus]
               val execId = status.location.executorId
@@ -1923,6 +1921,8 @@ private[spark] class DAGScheduler(
                 mapOutputTracker.registerMapOutput(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
               }
+            } else {
+              logInfo(s"Ignoring $smt completion from an older attempt of indeterminate stage")
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
