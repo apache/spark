@@ -73,6 +73,11 @@ public class LauncherServerSuite extends BaseSuite {
         public void infoChanged(SparkAppHandle handle) {
           semaphore.release();
         }
+
+        @Override
+        public void taskEnd(SparkAppHandle handle) {
+          semaphore.release();
+        }
       });
 
       client = new TestClient(s);
@@ -137,6 +142,11 @@ public class LauncherServerSuite extends BaseSuite {
           semaphore.release();
         }
         public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+
+        @Override
+        public void taskEnd(SparkAppHandle handle) {
           semaphore.release();
         }
       });

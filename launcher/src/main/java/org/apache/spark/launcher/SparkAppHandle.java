@@ -131,6 +131,16 @@ public interface SparkAppHandle {
      */
     void infoChanged(SparkAppHandle handle);
 
+    /**
+     * task end event.
+     */
+    /**
+     * Callback for end handle.
+     *
+     * @param handle The updated handle.
+     */
+    void taskEnd(SparkAppHandle handle);
+
   }
 
 }
