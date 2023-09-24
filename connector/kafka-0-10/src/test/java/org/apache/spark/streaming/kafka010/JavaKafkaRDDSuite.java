@@ -25,10 +25,10 @@ import java.util.Random;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
@@ -39,7 +39,7 @@ public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
   private transient KafkaTestUtils kafkaTestUtils = null;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
@@ -48,7 +48,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     sc = new JavaSparkContext(sparkConf);
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     if (sc != null) {
       sc.stop();
@@ -108,8 +108,8 @@ public class JavaKafkaRDDSuite implements Serializable {
     // just making sure the java user APIs work; the scala tests handle logic corner cases
     long count1 = rdd1.count();
     long count2 = rdd2.count();
-    Assert.assertTrue(count1 > 0);
-    Assert.assertEquals(count1, count2);
+    Assertions.assertTrue(count1 > 0);
+    Assertions.assertEquals(count1, count2);
   }
 
   private  String[] createTopicAndSendData(String topic) {

@@ -24,8 +24,8 @@ import scala.collection.JavaConverters;
 
 import org.apache.kafka.common.TopicPartition;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaLocationStrategySuite implements Serializable {
 
@@ -43,17 +43,17 @@ public class JavaLocationStrategySuite implements Serializable {
     // make sure constructors can be called from java
     final LocationStrategy c1 = LocationStrategies.PreferConsistent();
     final LocationStrategy c2 = LocationStrategies.PreferConsistent();
-    Assert.assertSame(c1, c2);
+    Assertions.assertSame(c1, c2);
 
     final LocationStrategy c3 = LocationStrategies.PreferBrokers();
     final LocationStrategy c4 = LocationStrategies.PreferBrokers();
-    Assert.assertSame(c3, c4);
+    Assertions.assertSame(c3, c4);
 
-    Assert.assertNotSame(c1, c3);
+    Assertions.assertNotSame(c1, c3);
 
     final LocationStrategy c5 = LocationStrategies.PreferFixed(hosts);
     final LocationStrategy c6 = LocationStrategies.PreferFixed(sHosts);
-    Assert.assertEquals(c5, c6);
+    Assertions.assertEquals(c5, c6);
   }
 
 }

@@ -24,10 +24,10 @@ import static java.util.stream.Collectors.toList;
 
 import static scala.collection.JavaConverters.mapAsScalaMap;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -44,19 +44,19 @@ public class JavaHigherOrderFunctionsSuite {
 
     private void checkAnswer(Dataset<Row> actualDS, List<Row> expected) throws Exception {
         List<Row> actual = actualDS.collectAsList();
-        Assert.assertEquals(expected.size(), actual.size());
+        Assertions.assertEquals(expected.size(), actual.size());
         for (int i = 0; i < expected.size(); i++) {
             Row expectedRow = expected.get(i);
             Row actualRow = actual.get(i);
-            Assert.assertEquals(expectedRow.size(), actualRow.size());
+            Assertions.assertEquals(expectedRow.size(), actualRow.size());
             for (int j = 0; j < expectedRow.size(); j++) {
                 Object expectedValue = expectedRow.get(j);
                 Object actualValue = actualRow.get(j);
                 if (expectedValue != null && expectedValue.getClass().isArray()) {
                     actualValue = actualValue.getClass().getMethod("array").invoke(actualValue);
-                    Assert.assertArrayEquals((Object[]) expectedValue, (Object[]) actualValue);
+                    Assertions.assertArrayEquals((Object[]) expectedValue, (Object[]) actualValue);
                 } else {
-                    Assert.assertEquals(expectedValue, actualValue);
+                    Assertions.assertEquals(expectedValue, actualValue);
                 }
             }
         }
@@ -99,14 +99,14 @@ public class JavaHigherOrderFunctionsSuite {
         mapDf = spark.createDataFrame(data, schema);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         spark = new TestSparkSession();
         setUpArrDf();
         setUpMapDf();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         spark.stop();
         spark = null;
