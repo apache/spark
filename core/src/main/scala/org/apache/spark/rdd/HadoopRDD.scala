@@ -89,6 +89,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
+ * @param ignoreCorruptFiles Whether to ignore corrupt files.
+ * @param ignoreMissingFiles Whether to ignore missing files.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
@@ -102,6 +104,7 @@ class HadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minPartitions: Int,
+    ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
@@ -125,6 +128,7 @@ class HadoopRDD[K, V](
       keyClass,
       valueClass,
       minPartitions,
+      ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
       ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES)
     )
   }
@@ -155,8 +159,6 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
-
-  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 

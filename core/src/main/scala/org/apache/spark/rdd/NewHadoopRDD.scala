@@ -64,6 +64,8 @@ private[spark] class NewHadoopPartition(
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
+ * @param ignoreCorruptFiles Whether to ignore corrupt files.
+ * @param ignoreMissingFiles Whether to ignore missing files.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
@@ -75,6 +77,7 @@ class NewHadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     @transient private val _conf: Configuration,
+    ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
@@ -90,6 +93,7 @@ class NewHadoopRDD[K, V](
       keyClass,
       valueClass,
       _conf,
+      ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
       ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES))
   }
 
@@ -106,8 +110,6 @@ class NewHadoopRDD[K, V](
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
-
-  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
