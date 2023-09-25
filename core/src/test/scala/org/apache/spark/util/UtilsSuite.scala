@@ -1018,37 +1018,35 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         signal(pid, "SIGKILL")
       }
 
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
-        // We'll make sure that forcibly terminating a process works by
-        // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
-        // older versions of java, this will *not* terminate.
-        val file = File.createTempFile("temp-file-name", ".tmp")
-        file.deleteOnExit()
-        val cmd =
-          s"""
-             |#!/usr/bin/env bash
-             |trap "" SIGTERM
-             |sleep 10
-           """.stripMargin
-        Files.write(cmd.getBytes(UTF_8), file)
-        file.getAbsoluteFile.setExecutable(true)
+      // We'll make sure that forcibly terminating a process works by
+      // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
+      // older versions of java, this will *not* terminate.
+      val file = File.createTempFile("temp-file-name", ".tmp")
+      file.deleteOnExit()
+      val cmd =
+        s"""
+           |#!/usr/bin/env bash
+           |trap "" SIGTERM
+           |sleep 10
+         """.stripMargin
+      Files.write(cmd.getBytes(UTF_8), file)
+      file.getAbsoluteFile.setExecutable(true)
 
-        val process = new ProcessBuilder(file.getAbsolutePath).start()
-        val pid = getPid(process)
-        assert(pidExists(pid))
-        try {
-          signal(pid, "SIGSTOP")
-          val startNs = System.nanoTime()
-          val terminated = Utils.terminateProcess(process, 5000)
-          assert(terminated.isDefined)
-          process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.nanoTime() - startNs
-          // add a little extra time to allow a force kill to finish
-          assert(duration < TimeUnit.SECONDS.toNanos(6))
-          assert(!pidExists(pid))
-        } finally {
-          signal(pid, "SIGKILL")
-        }
+      val process = new ProcessBuilder(file.getAbsolutePath).start()
+      val pid = getPid(process)
+      assert(pidExists(pid))
+      try {
+        signal(pid, "SIGSTOP")
+        val startNs = System.nanoTime()
+        val terminated = Utils.terminateProcess(process, 5000)
+        assert(terminated.isDefined)
+        process.waitFor(5, TimeUnit.SECONDS)
+        val duration = System.nanoTime() - startNs
+        // add a little extra time to allow a force kill to finish
+        assert(duration < TimeUnit.SECONDS.toNanos(6))
+        assert(!pidExists(pid))
+      } finally {
+        signal(pid, "SIGKILL")
       }
     }
   }
