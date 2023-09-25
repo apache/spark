@@ -139,11 +139,6 @@ class HadoopRDD[K, V](
 
   private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
-  private def ignoreMissingFiles(conf: JobConf): Boolean = {
-    val c = conf.getTrimmed(IGNORE_MISSING_FILES.key)
-    (c != null && c.toBoolean) || ignoreMissingFiles
-  }
-
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
   // Returns a JobConf that will be used on executors to obtain input splits for Hadoop reads.
@@ -236,7 +231,7 @@ class HadoopRDD[K, V](
       }
       array
     } catch {
-      case e: InvalidInputException if ignoreMissingFiles(jobConf) =>
+      case e: InvalidInputException if ignoreMissingFiles =>
         logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
             s" partitions returned from this path.", e)
         Array.empty[Partition]
@@ -292,12 +287,12 @@ class HadoopRDD[K, V](
         try {
           inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
         } catch {
-          case e: FileNotFoundException if ignoreMissingFiles(jobConf) =>
+          case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file: ${split.inputSplit}", e)
             finished = true
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-          case e: FileNotFoundException if !ignoreMissingFiles(jobConf) => throw e
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
             finished = true
@@ -318,11 +313,11 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case e: FileNotFoundException if ignoreMissingFiles(jobConf) =>
+          case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file: ${split.inputSplit}", e)
             finished = true
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-          case e: FileNotFoundException if !ignoreMissingFiles(jobConf) => throw e
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
             finished = true

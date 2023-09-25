@@ -94,11 +94,6 @@ class NewHadoopRDD[K, V](
 
   private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
-  private def ignoreMissingFiles(conf: Configuration): Boolean = {
-    val c = conf.getTrimmed(IGNORE_MISSING_FILES.key)
-    (c != null && c.toBoolean) || ignoreMissingFiles
-  }
-
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
   def getConf: Configuration = {
@@ -167,7 +162,7 @@ class NewHadoopRDD[K, V](
       }
       result
     } catch {
-      case e: InvalidInputException if ignoreMissingFiles(getConf) =>
+      case e: InvalidInputException if ignoreMissingFiles =>
         logWarning(s"${_conf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
             s" partitions returned from this path.", e)
         Array.empty[Partition]
@@ -226,12 +221,12 @@ class NewHadoopRDD[K, V](
           _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
           _reader
         } catch {
-          case e: FileNotFoundException if ignoreMissingFiles(conf) =>
+          case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
             finished = true
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-          case e: FileNotFoundException if !ignoreMissingFiles(conf) => throw e
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
@@ -255,11 +250,11 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
-            case e: FileNotFoundException if ignoreMissingFiles(conf) =>
+            case e: FileNotFoundException if ignoreMissingFiles =>
               logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-            case e: FileNotFoundException if !ignoreMissingFiles(conf) => throw e
+            case e: FileNotFoundException if !ignoreMissingFiles => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
