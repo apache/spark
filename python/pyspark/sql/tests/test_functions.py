@@ -1032,9 +1032,7 @@ class FunctionsTestsMixin:
         )
 
         with self.assertRaisesRegex(tpe, "\[USER_RAISED_EXCEPTION\] too big"):
-            df.select(F.assert_true(df.id < 2, "too big")).toDF(
-                "val"
-            ).collect()
+            df.select(F.assert_true(df.id < 2, "too big")).toDF("val").collect()
 
         with self.assertRaisesRegex(tpe, "\[USER_RAISED_EXCEPTION\] 2000000.0"):
             df.select(F.assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
