@@ -864,13 +864,6 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(getStateful(withNestedStatefulBefore) ne getStateful(withNestedStatefulAfter))
   }
 
-  object MalformedClassObject extends Serializable {
-    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
-      override protected def withNewChildInternal(newChild: Expression): Expression =
-        copy(child = newChild)
-    }
-  }
-
   test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
     case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LeafNode {
       val output: Seq[Attribute] = Nil
