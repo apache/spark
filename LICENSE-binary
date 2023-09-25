@@ -454,7 +454,6 @@ org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
 com.thoughtworks.paranamer:paranamer
-org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc
 net.sf.py4j:py4j

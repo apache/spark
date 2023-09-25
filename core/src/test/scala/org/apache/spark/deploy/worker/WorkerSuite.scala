@@ -345,12 +345,6 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testWorkDirCleanupAndRemoveMetadataWithConfig(true, DBBackend.ROCKSDB)
   }
 
-  test("WorkDirCleanup cleans app dirs and shuffle metadata when " +
-    "spark.shuffle.service.db.enabled=true, spark.shuffle.service.db.backend=LevelDB") {
-    assume(!Utils.isMacOnAppleSilicon)
-    testWorkDirCleanupAndRemoveMetadataWithConfig(true, DBBackend.LEVELDB)
-  }
-
   test("WorkDirCleanup cleans only app dirs when" +
     "spark.shuffle.service.db.enabled=false") {
     testWorkDirCleanupAndRemoveMetadataWithConfig(false)

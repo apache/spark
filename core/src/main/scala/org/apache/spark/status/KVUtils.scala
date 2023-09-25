@@ -26,7 +26,6 @@ import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.fusesource.leveldbjni.internal.NativeDB
 import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
@@ -47,9 +46,7 @@ private[spark] object KVUtils extends Logging {
 
   private def backend(conf: SparkConf, live: Boolean) = {
     if (live) {
-      // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
-      // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
-      // improvements on writes and reads.
+      // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now.
       HybridStoreDiskBackend.ROCKSDB
     } else {
       HybridStoreDiskBackend.withName(conf.get(HYBRID_STORE_DISK_BACKEND))
@@ -95,7 +92,6 @@ private[spark] object KVUtils extends Logging {
 
     val kvSerializer = serializer(conf, live)
     val db = backend(conf, live) match {
-      case LEVELDB => new LevelDB(path, kvSerializer)
       case ROCKSDB => new RocksDB(path, kvSerializer)
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)
@@ -128,7 +124,6 @@ private[spark] object KVUtils extends Logging {
       val diskBackend = backend(conf, live)
 
       val dir = diskBackend match {
-        case LEVELDB => "listing.ldb"
         case ROCKSDB => "listing.rdb"
       }
 
@@ -150,7 +145,7 @@ private[spark] object KVUtils extends Logging {
           logInfo("Detected incompatible DB versions, deleting...")
           path.listFiles().foreach(Utils.deleteRecursively)
           open(dbPath, metadata, conf, live)
-        case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
+        case dbExc: RocksDBException =>
           // Get rid of the corrupted data and re-create it.
           logWarning(s"Failed to load disk store $dbPath :", dbExc)
           Utils.deleteRecursively(dbPath)

@@ -55,7 +55,6 @@ import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.network.yarn.util.HadoopConfigProvider
-import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
 abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
@@ -1255,11 +1254,6 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2.stopApplication(new ApplicationTerminationContext(app1Id))
     s2.stop()
   }
-}
-
-@ExtendedLevelDBTest
-class YarnShuffleServiceWithLevelDBBackendSuite extends YarnShuffleServiceSuite {
-  override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
 }
 
 class YarnShuffleServiceWithRocksDBBackendSuite extends YarnShuffleServiceSuite {

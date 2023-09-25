@@ -74,6 +74,10 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
 
+    // SPARK-44223: remove LevelDB support
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.kvstore.LevelDB"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.kvstore.LevelDB$TypeAliases"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")

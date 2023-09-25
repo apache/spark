@@ -320,20 +320,6 @@ class StreamingQueryStatusListenerWithDiskStoreSuite extends StreamingQueryStatu
     }
   }
 
-  test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
-    assume(!Utils.isMacOnAppleSilicon)
-    val conf = new SparkConf()
-      .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
-    val testDir = Utils.createTempDir()
-    val kvStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
-    try {
-      testStreamingQueryData(kvStore)
-    } finally {
-      kvStore.close()
-      Utils.deleteRecursively(testDir)
-    }
-  }
-
   test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
     val conf = new SparkConf()
       .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)

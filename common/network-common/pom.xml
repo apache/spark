@@ -88,11 +88,6 @@
       <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
-      <groupId>${leveldbjni.group}</groupId>
-      <artifactId>leveldbjni-all</artifactId>
-      <version>1.8</version>
-    </dependency>
-    <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
     </dependency>

@@ -231,8 +231,6 @@
     <arrow.version>13.0.0</arrow.version>
     <ammonite.version>2.5.11</ammonite.version>
 
-    <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
-    <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>6.8.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -681,11 +679,6 @@
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
         <version>8.3.2</version>
-      </dependency>
-      <dependency>
-        <groupId>${leveldbjni.group}</groupId>
-        <artifactId>leveldbjni-all</artifactId>
-        <version>1.8</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
@@ -3759,12 +3752,8 @@
     <profile>
       <id>sparkr</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
     <profile>
       <id>aarch64</id>
-      <properties>
-        <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
-      </properties>
       <activation>
         <os>
           <family>linux</family>

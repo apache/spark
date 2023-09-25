@@ -149,7 +149,6 @@ private[history] class HybridStore extends KVStore {
           val values = Lists.newArrayList(
               inMemoryStore.view(klass).closeableIterator())
           diskStore match {
-            case db: LevelDB => db.writeAll(values)
             case db: RocksDB => db.writeAll(values)
             case _ => throw new IllegalStateException("Unknown disk-based KVStore")
           }

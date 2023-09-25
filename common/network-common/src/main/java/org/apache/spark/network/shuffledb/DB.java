@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Private;
 
 /**
  * The local KV storage used to persist the shuffle state,
- * the implementations may include LevelDB, RocksDB, etc.
+ * the implementations may include RocksDB, etc.
  */
 @Private
 public interface DB extends Closeable {
