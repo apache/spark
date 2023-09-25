@@ -990,13 +990,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       }
 
       def pidExists(pid: Int): Boolean = {
-        val p = Runtime.getRuntime.exec(s"kill -0 $pid")
+        val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
         p.exitValue() == 0
       }
 
       def signal(pid: Int, s: String): Unit = {
-        val p = Runtime.getRuntime.exec(s"kill -$s $pid")
+        val p = Runtime.getRuntime.exec(Array("kill", s"-$s", s"$pid"))
         p.waitFor()
       }
 

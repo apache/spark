@@ -1785,7 +1785,17 @@ private[spark] object Utils
   /**
    * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
+  def getIteratorSize(iterator: Iterator[_]): Long = {
+    if (iterator.knownSize >= 0) iterator.knownSize.toLong
+    else {
+      var count = 0L
+      while (iterator.hasNext) {
+        count += 1L
+        iterator.next()
+      }
+      count
+    }
+  }
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem

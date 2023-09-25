@@ -1,0 +1,56 @@
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+encode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               2934           3061         122          6.8         146.7       1.0X
+apache                                            31208          31335         126          0.6        1560.4       0.1X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+encode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               3289           3310          19          6.1         164.5       1.0X
+apache                                            32276          32431         139          0.6        1613.8       0.1X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+encode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               3811           3820          12          5.2         190.6       1.0X
+apache                                            33241          33344         137          0.6        1662.1       0.1X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+encode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               3799           3811          15          5.3         190.0       1.0X
+apache                                            34614          34687          82          0.6        1730.7       0.1X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+decode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               5027           5044          26          4.0         251.3       1.0X
+apache                                            33985          34193         187          0.6        1699.2       0.1X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+decode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               5679           5692          21          3.5         284.0       1.0X
+apache                                            35132          35227          84          0.6        1756.6       0.2X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+decode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               6880           6896          23          2.9         344.0       1.0X
+apache                                            37324          37368          48          0.5        1866.2       0.2X
+
+OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+decode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               7171           7178           6          2.8         358.6       1.0X
+apache                                            38686          38732          46          0.5        1934.3       0.2X
+
