@@ -189,8 +189,7 @@ private[spark] class PythonWorkerFactory(
       try {
         val socketChannel = serverSocketChannel.accept()
         authHelper.authClient(socketChannel.socket())
-        // TODO: When we drop JDK 8, we can just use workerProcess.pid()
-        val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
+        val pid workerProcess.toHandle.pid()
         if (pid < 0) {
           throw new IllegalStateException("Python failed to launch worker with code " + pid)
         }
