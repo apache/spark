@@ -20,8 +20,8 @@ package org.apache.spark
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 

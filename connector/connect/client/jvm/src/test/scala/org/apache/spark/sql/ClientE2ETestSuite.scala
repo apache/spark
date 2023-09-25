@@ -21,8 +21,8 @@ import java.nio.file.Files
 import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream

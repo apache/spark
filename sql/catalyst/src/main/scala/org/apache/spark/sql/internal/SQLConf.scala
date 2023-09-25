@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex

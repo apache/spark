@@ -21,8 +21,8 @@ import java.io.File
 import java.net.URI
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}

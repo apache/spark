@@ -22,8 +22,8 @@ import java.net.URL
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration

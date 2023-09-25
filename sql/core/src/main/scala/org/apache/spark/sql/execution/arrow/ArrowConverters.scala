@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.arrow
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator

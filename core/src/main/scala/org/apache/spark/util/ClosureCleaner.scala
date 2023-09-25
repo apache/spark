@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map, Set, Stack}
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}

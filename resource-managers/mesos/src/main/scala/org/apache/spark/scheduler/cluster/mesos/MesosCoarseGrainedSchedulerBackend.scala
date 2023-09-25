@@ -23,9 +23,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.Protos.{SlaveID => AgentID, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver

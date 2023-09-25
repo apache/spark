@@ -24,9 +24,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path

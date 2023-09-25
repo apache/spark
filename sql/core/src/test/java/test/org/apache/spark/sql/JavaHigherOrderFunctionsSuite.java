@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import static java.util.stream.Collectors.toList;
 
-import static scala.collection.JavaConverters.mapAsScalaMap;
+import scala.jdk.CollectionConverters;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -222,10 +222,10 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(transform_keys(col("x"), (k, v) -> k.plus(v))),
             toRows(
-                mapAsScalaMap(new HashMap<Integer, Integer>() {{
+                CollectionConverters.MapHasAsScala(new HashMap<Integer, Integer>() {{
                     put(2, 1);
                     put(4, 2);
-                }}),
+                }}).asScala(),
                 null
             )
         );
@@ -236,10 +236,10 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(transform_values(col("x"), (k, v) -> k.plus(v))),
             toRows(
-                mapAsScalaMap(new HashMap<Integer, Integer>() {{
+                CollectionConverters.MapHasAsScala(new HashMap<Integer, Integer>() {{
                     put(1, 2);
                     put(2, 4);
-                }}),
+                }}).asScala(),
                 null
             )
         );
@@ -250,7 +250,7 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(map_filter(col("x"), (k, v) -> lit(false))),
             toRows(
-                mapAsScalaMap(new HashMap<Integer, Integer>()),
+                CollectionConverters.MapHasAsScala(new HashMap<Integer, Integer>()).asScala(),
                 null
             )
         );
@@ -261,10 +261,10 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(map_zip_with(col("x"), col("x"), (k, v1, v2) -> lit(false))),
             toRows(
-                mapAsScalaMap(new HashMap<Integer, Boolean>() {{
+                CollectionConverters.MapHasAsScala(new HashMap<Integer, Boolean>() {{
                     put(1, false);
                     put(2, false);
-                }}),
+                }}).asScala(),
                 null
             )
         );

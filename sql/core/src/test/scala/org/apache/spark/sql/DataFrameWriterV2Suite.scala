@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 

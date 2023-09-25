@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}

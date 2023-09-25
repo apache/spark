@@ -20,8 +20,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat

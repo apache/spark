@@ -24,8 +24,8 @@ import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
-import scala.collection.JavaConverters;
 import scala.collection.Seq;
+import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
@@ -210,7 +210,7 @@ public class JavaDataFrameSuite {
     Seq<Integer> outputBuffer = (Seq<Integer>) first.getJavaMap(2).get("hello");
     Assert.assertArrayEquals(
       bean.getC().get("hello"),
-      Ints.toArray(JavaConverters.seqAsJavaListConverter(outputBuffer).asJava()));
+      Ints.toArray(CollectionConverters.asJava(outputBuffer)));
     Seq<String> d = first.getAs(3);
     Assert.assertEquals(bean.getD().size(), d.length());
     for (int i = 0; i < d.length(); i++) {

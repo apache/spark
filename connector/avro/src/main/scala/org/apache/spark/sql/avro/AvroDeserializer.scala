@@ -20,7 +20,7 @@ package org.apache.spark.sql.avro
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
