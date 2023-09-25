@@ -235,8 +235,6 @@
     <ammonite.version>3.0.1</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
-    <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
-    <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>7.3.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -765,11 +763,6 @@
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
         <version>9.8.4</version>
-      </dependency>
-      <dependency>
-        <groupId>${leveldbjni.group}</groupId>
-        <artifactId>leveldbjni-all</artifactId>
-        <version>1.8</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
@@ -3559,12 +3552,8 @@
     <profile>
       <id>jjwt-provided</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>
       <id>aarch64</id>
-      <properties>
-        <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
-      </properties>
       <activation>
         <os>
           <family>linux</family>
@@ -3575,7 +3564,7 @@
     <profile>
       <id>applesilicon</id>
       <properties>
-        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
       </properties>
       <activation>
         <os>

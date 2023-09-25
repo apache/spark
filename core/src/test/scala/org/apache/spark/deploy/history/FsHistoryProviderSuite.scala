@@ -53,7 +53,6 @@ import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
-import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
@@ -1888,17 +1887,6 @@ class TestGroupsMappingProvider extends GroupMappingServiceProvider {
   override def getGroups(username: String): Set[String] = {
     mappings.get(username).map(Set(_)).getOrElse(Set.empty)
   }
-}
-
-@ExtendedLevelDBTest
-class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
-  override protected def diskBackend: HybridStoreDiskBackend.Value =
-    HybridStoreDiskBackend.LEVELDB
-}
-
-@ExtendedLevelDBTest
-class LevelDBBackendWithProtobufSerializerSuite extends LevelDBBackendFsHistoryProviderSuite {
-  override protected def serializer: LocalStoreSerializer.Value = LocalStoreSerializer.PROTOBUF
 }
 
 class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {

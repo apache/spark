@@ -21,10 +21,10 @@ import java.util.Locale;
 
 /**
  * The enum `DBBackend` use to specify a disk-based store used in shuffle service local db.
- * Support the use of LevelDB and RocksDB.
+ * Support the use of RocksDB.
  */
 public enum DBBackend {
-    LEVELDB(".ldb"), ROCKSDB(".rdb");
+    ROCKSDB(".rdb");
 
     private final String fileSuffix;
 

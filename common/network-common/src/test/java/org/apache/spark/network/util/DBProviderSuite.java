@@ -36,12 +36,6 @@ public class DBProviderSuite {
     testCheckVersionFailed(DBBackend.ROCKSDB, "rocksdb");
   }
 
-  @Test
-  public void testLevelDBCheckVersionFailed() throws IOException, InterruptedException {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
-    testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
-  }
-
   private void testCheckVersionFailed(DBBackend dbBackend, String namePrefix)
       throws IOException, InterruptedException {
     String root = System.getProperty("java.io.tmpdir");

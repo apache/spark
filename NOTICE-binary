@@ -78,12 +78,6 @@ This product includes software developed by The Apache Software
 Foundation (http://www.apache.org/).
 
 The binary distribution of this product bundles binaries of
-org.iq80.leveldb:leveldb-api (https://github.com/dain/leveldb), which has the
-following notices:
-* Copyright 2011 Dain Sundstrom <dain@iq80.com>
-* Copyright 2011 FuseSource Corp. http://fusesource.com
-
-The binary distribution of this product bundles binaries of
 org.fusesource.hawtjni:hawtjni-runtime (https://github.com/fusesource/hawtjni),
 which has the following notices:
 * This product includes software developed by FuseSource Corp.

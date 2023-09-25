@@ -493,8 +493,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>ROCKSDB</td>
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based
-    store used in shuffle service state store. This supports <code>ROCKSDB</code> and <code>LEVELDB</code> (deprecated) now and <code>ROCKSDB</code> as default value.
-    The original data store in <code>RocksDB/LevelDB</code> will not be automatically convert to another kind of storage now.
+    store used in shuffle service state store. Only supported <code>ROCKSDB</code> at now.
   </td>
   <td>3.4.0</td>
 </tr>

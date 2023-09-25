@@ -35,7 +35,6 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
-import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
@@ -1973,12 +1972,6 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
 class AppStatusListenerWithInMemoryStoreSuite extends AppStatusListenerSuite {
   override def createKVStore: KVStore = new InMemoryStore()
-}
-
-@ExtendedLevelDBTest
-class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
-  override def conf: SparkConf = super.conf
-    .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
 }
 
 class AppStatusListenerWithRocksDBSuite extends AppStatusListenerSuite {

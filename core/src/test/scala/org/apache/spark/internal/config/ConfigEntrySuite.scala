@@ -21,8 +21,8 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.util.SparkConfWithEnv
 
 class ConfigEntrySuite extends SparkFunSuite {
@@ -474,21 +474,21 @@ class ConfigEntrySuite extends SparkFunSuite {
   test("SPARK-51896: Add Java enum support to ConfigBuilder") {
     val conf = new SparkConf()
     val enumConf = ConfigBuilder("spark.test.java.enum.key")
-      .enumConf(classOf[DBBackend])
-      .createWithDefault(DBBackend.LEVELDB)
-    assert(conf.get(enumConf) === DBBackend.LEVELDB)
-    conf.set(enumConf, DBBackend.ROCKSDB)
-    assert(conf.get(enumConf) === DBBackend.ROCKSDB)
+      .enumConf(classOf[StorageLevelMapper])
+      .createWithDefault(StorageLevelMapper.MEMORY_ONLY)
+    assert(conf.get(enumConf) === StorageLevelMapper.MEMORY_ONLY)
+    conf.set(enumConf, StorageLevelMapper.OFF_HEAP)
+    assert(conf.get(enumConf) === StorageLevelMapper.OFF_HEAP)
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        conf.set(enumConf.key, "ANYDB")
+        conf.set(enumConf.key, "ANY_LEVEL")
         conf.get(enumConf)
         },
       condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
       parameters = Map(
         "confName" -> enumConf.key,
-        "confValue" -> "ANYDB",
-        "confOptions" -> DBBackend.values.mkString(", "))
+        "confValue" -> "ANY_LEVEL",
+        "confOptions" -> StorageLevelMapper.values.mkString(", "))
     )
   }
 }

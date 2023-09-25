@@ -77,6 +77,10 @@ object MimaExcludes {
     // SPARK-51267: Match local Spark Connect server logic between Python and Scala
     ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
 
+    // SPARK-44223: remove LevelDB support
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.kvstore.LevelDB"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.kvstore.LevelDB$TypeAliases"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")

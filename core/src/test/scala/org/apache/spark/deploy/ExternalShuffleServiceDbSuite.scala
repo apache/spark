@@ -27,7 +27,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
 import org.apache.spark.network.shuffledb.DBBackend
-import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
 /**
@@ -146,11 +145,6 @@ abstract class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       externalShuffleService.stop()
     }
   }
-}
-
-@ExtendedLevelDBTest
-class ExternalShuffleServiceLevelDBSuite extends ExternalShuffleServiceDbSuite {
-  override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
 }
 
 class ExternalShuffleServiceRocksDBSuite extends ExternalShuffleServiceDbSuite {

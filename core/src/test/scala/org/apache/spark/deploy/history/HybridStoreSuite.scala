@@ -28,7 +28,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
-import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
@@ -79,7 +78,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     store.setMetadata(t1)
     assert(store.getMetadata(classOf[CustomType1]) === t1)
 
-    // Switch to RocksDB/LevelDB and set a new metadata
+    // Switch to RocksDB and set a new metadata
     switchHybridStore(store)
 
     val t2 = createCustomType1(2)
@@ -172,7 +171,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     failAfter(2.seconds) {
       assert(listener.waitUntilDone())
     }
-    while (!store.getStore().isInstanceOf[LevelDB] && !store.getStore().isInstanceOf[RocksDB]) {
+    while (!store.getStore().isInstanceOf[RocksDB]) {
       Thread.sleep(10)
     }
   }
@@ -203,15 +202,6 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     def waitUntilDone(): Boolean = {
       results.take()
     }
-  }
-}
-
-@ExtendedLevelDBTest
-class LevelDBHybridStoreSuite extends HybridStoreSuite {
-  before {
-    dbpath = File.createTempFile("test.", ".ldb")
-    dbpath.delete()
-    db = new LevelDB(dbpath, new KVStoreScalaSerializer())
   }
 }
 
