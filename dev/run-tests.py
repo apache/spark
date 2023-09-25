@@ -361,12 +361,13 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     if excluded_tags:
         test_profiles += ["-Dtest.exclude.tags=" + ",".join(excluded_tags)]
 
-    # set up java11 env if this is a pull request build with 'test-java11' in the title
-    if "ghprbPullTitle" in os.environ:
-        if "test-java11" in os.environ["ghprbPullTitle"].lower():
-            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
-            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
-            test_profiles += ["-Djava.version=11"]
+    # SPARK-45296: legacy code for Jenkins. If we move to Jenkins, we should
+    # revive this logic with a different combination of JDK.
+    # if "ghprbPullTitle" in os.environ:
+    #     if "test-java11" in os.environ["ghprbPullTitle"].lower():
+    #         os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+    #         os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+    #         test_profiles += ["-Djava.version=11"]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
