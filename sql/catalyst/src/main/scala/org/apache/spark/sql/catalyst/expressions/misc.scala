@@ -143,12 +143,6 @@ object RaiseError {
     Examples:
       > SELECT _FUNC_(0 < 1);
        NULL
-
-      > SELECT _FUNC_(1 < 0);
-       [USER_RAISED_EXCEPTION] '(1 < 0)' is not true!
-
-      > SELECT _FUNC_(1 < 0, 'Failed assertion');
-       [USER_RAISED_EXCEPTION] Failed assertion
   """,
   since = "2.0.0",
   group = "misc_funcs")
