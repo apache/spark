@@ -30,6 +30,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -1831,7 +1832,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def rand(): Column = Column.fn("rand")
+  def rand(): Column = Column.fn("rand", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from the
@@ -1855,7 +1856,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def randn(): Column = Column.fn("randn")
+  def randn(): Column = Column.fn("randn", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Partition ID.
@@ -3392,7 +3393,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = Column.fn("uuid")
+  def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3711,7 +3712,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(): Column = Column.fn("random")
+  def random(): Column = Column.fn("random", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns the bit position for the given input column.
@@ -7069,7 +7070,7 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e)
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7102,7 +7103,8 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def sequence(start: Column, stop: Column): Column = sequence(start, stop, lit(1L))
+  def sequence(start: Column, stop: Column): Column =
+    Column.fn("sequence", start, stop)
 
   /**
    * Creates an array containing the left argument repeated the number of times given by the right

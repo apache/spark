@@ -43,7 +43,6 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
-    is_datetime64tz_dtype,
     is_list_like,
 )
 from pandas.tseries.offsets import DateOffset
@@ -1197,7 +1196,7 @@ def read_excel(
                 reset_index = pdf.reset_index()
                 for name, col in reset_index.items():
                     dt = col.dtype
-                    if is_datetime64_dtype(dt) or is_datetime64tz_dtype(dt):
+                    if is_datetime64_dtype(dt) or isinstance(dt, pd.DatetimeTZDtype):
                         continue
                     reset_index[name] = col.replace({np.nan: None})
                 pdf = reset_index
@@ -1248,6 +1247,10 @@ def read_html(
         A URL, a file-like object, or a raw string containing HTML. Note that
         lxml only accepts the http, FTP and file URL protocols. If you have a
         URL that starts with ``'https'`` you might try removing the ``'s'``.
+
+        .. deprecated:: 4.0.0
+            Passing html literal strings is deprecated.
+            Wrap literal string/bytes input in io.StringIO/io.BytesIO instead.
 
     match : str or compiled regular expression, optional
         The set of tables containing text matching this regex or string will be
@@ -1921,6 +1924,10 @@ def to_timedelta(
         * 'ns' / 'nanoseconds' / 'nano' / 'nanos' / 'nanosecond' / 'N'
 
         Must not be specified when `arg` context strings and ``errors="raise"``.
+
+        .. deprecated:: 4.0.0
+            Units 'T' and 'L' are deprecated and will be removed in a future version.
+
     errors : {'ignore', 'raise', 'coerce'}, default 'raise'
         - If 'raise', then invalid parsing will raise an exception.
         - If 'coerce', then invalid parsing will be set as NaT.
@@ -2472,6 +2479,16 @@ def concat(
     if join not in ["inner", "outer"]:
         raise ValueError("Only can inner (intersect) or outer (union) join the other axis.")
 
+    if all([obj.empty for obj in objs]):
+        warnings.warn(
+            "The behavior of array concatenation with empty entries is "
+            "deprecated. In a future version, this will no longer exclude "
+            "empty items when determining the result dtype. "
+            "To retain the old behavior, exclude the empty entries before "
+            "the concat operation.",
+            FutureWarning,
+        )
+
     axis = validate_axis(axis)
     psdf: DataFrame
     if axis == 1:
@@ -2546,6 +2563,10 @@ def concat(
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
+
+        columns = concat_psdf.columns
+        if isinstance(columns, pd.MultiIndex):
+            concat_psdf = concat_psdf.rename_axis([None] * columns.nlevels, axis="columns")
 
         return concat_psdf
 

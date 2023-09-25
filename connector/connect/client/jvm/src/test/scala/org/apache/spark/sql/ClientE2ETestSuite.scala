@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.time.DateTimeException
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -29,7 +30,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
@@ -43,6 +44,62 @@ import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  for (enrichErrorEnabled <- Seq(false, true)) {
+    test(s"cause exception - ${enrichErrorEnabled}") {
+      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+        val ex = intercept[SparkUpgradeException] {
+          spark
+            .sql("""
+                |select from_json(
+                |  '{"d": "02-29"}',
+                |  'd date',
+                |  map('dateFormat', 'MM-dd'))
+                |""".stripMargin)
+            .collect()
+        }
+        if (enrichErrorEnabled) {
+          assert(ex.getCause.isInstanceOf[DateTimeException])
+        } else {
+          assert(ex.getCause == null)
+        }
+      }
+    }
+  }
+
+  test(s"throw SparkException with large cause exception") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => throw new SparkException("test" * 10000))
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getMessage.contains("test" * 10000))
+    }
+  }
+
+  for (isServerStackTraceEnabled <- Seq(false, true)) {
+    test(s"server-side stack trace is set in exceptions - ${isServerStackTraceEnabled}") {
+      withSQLConf(
+        "spark.sql.connect.serverStacktrace.enabled" -> isServerStackTraceEnabled.toString,
+        "spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+        val ex = intercept[AnalysisException] {
+          spark.sql("select x").collect()
+        }
+        assert(
+          ex.getStackTrace
+            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
+            .isDefined
+            == isServerStackTraceEnabled)
+      }
+    }
+  }
 
   test("throw SparkArithmeticException") {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
@@ -1048,6 +1105,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -1059,6 +1119,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {
@@ -1288,6 +1352,24 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       assert(filepath.startsWith(path))
       assert(rc == 100)
     }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
   }
 }
 

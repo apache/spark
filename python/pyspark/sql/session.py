@@ -1518,7 +1518,8 @@ class SparkSession(SparkConversionMixin):
             Supported Data Types</a> for supported value types in Python.
             For example, dictionary keys: "rank", "name", "birthdate";
             dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
-            A value can be also a `Column` of literal expression, in that case it is taken as is.
+            A value can be also a `Column` of a literal or collection constructor functions such
+            as `map()`, `array()`, `struct()`, in that case it is taken as is.
 
             .. versionadded:: 3.4.0
 
@@ -1598,23 +1599,27 @@ class SparkSession(SparkConversionMixin):
 
         And substitude named parameters with the `:` prefix by SQL literals.
 
-        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : 5}, df=mydf).show()
-        +---+---+
-        |  A|  B|
-        +---+---+
-        |  3|  6|
-        +---+---+
+        >>> from pyspark.sql.functions import create_map
+        >>> spark.sql(
+        ...   "SELECT *, element_at(:m, 'a') AS C FROM {df} WHERE {df[B]} > :minB",
+        ...   {"minB" : 5, "m" : create_map(lit('a'), lit(1))}, df=mydf).show()
+        +---+---+---+
+        |  A|  B|  C|
+        +---+---+---+
+        |  3|  6|  1|
+        +---+---+---+
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
 
+        >>> from pyspark.sql.functions import array
         >>> spark.sql(
-        ...   "SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
-        ...   args=[5, 2], df=mydf).show()
-        +---+---+
-        |  A|  B|
-        +---+---+
-        |  3|  6|
-        +---+---+
+        ...   "SELECT *, element_at(?, 1) AS C FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
+        ...   args=[array(lit(1), lit(2), lit(3)), 5, 2], df=mydf).show()
+        +---+---+---+
+        |  A|  B|  C|
+        +---+---+---+
+        |  3|  6|  1|
+        +---+---+---+
         """
 
         formatter = SQLStringFormatter(self)

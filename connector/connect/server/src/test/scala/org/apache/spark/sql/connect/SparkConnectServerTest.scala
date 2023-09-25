@@ -16,14 +16,19 @@
  */
 package org.apache.spark.sql.connect
 
-import java.util.UUID
+import java.util.{TimeZone, UUID}
 
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.arrow.memory.RootAllocator
 import org.scalatest.concurrent.{Eventually, TimeLimits}
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, GrpcRetryHandler, SparkConnectClient, WrappedCloseableIterator}
+import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -43,6 +48,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   val eventuallyTimeout = 30.seconds
 
+  val allocator = new RootAllocator()
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     // Other suites using mocks leave a mess in the global executionManager,
@@ -60,6 +67,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   override def afterAll(): Unit = {
     SparkConnectService.stop()
+    allocator.close()
     super.afterAll()
   }
 
@@ -127,6 +135,19 @@ trait SparkConnectServerTest extends SharedSparkSession {
     proto.Plan.newBuilder().setRoot(dsl.sql(query)).build()
   }
 
+  protected def buildLocalRelation[A <: Product: TypeTag](data: Seq[A]) = {
+    val encoder = ScalaReflection.encoderFor[A]
+    val arrowData =
+      ArrowSerializer.serialize(data.iterator, encoder, allocator, TimeZone.getDefault.getID)
+    val localRelation = proto.LocalRelation
+      .newBuilder()
+      .setData(arrowData)
+      .setSchema(encoder.schema.json)
+      .build()
+    val relation = proto.Relation.newBuilder().setLocalRelation(localRelation).build()
+    proto.Plan.newBuilder().setRoot(relation).build()
+  }
+
   protected def getReattachableIterator(
       stubIterator: CloseableIterator[proto.ExecutePlanResponse]) = {
     // This depends on the wrapping in CustomSparkConnectBlockingStub.executePlanReattachable:
@@ -186,6 +207,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
     val executions = SparkConnectService.executionManager.listExecuteHolders
     assert(executions.length == 1)
     executions.head
+  }
+
+  protected def eventuallyGetExecutionHolder: ExecuteHolder = {
+    Eventually.eventually(timeout(eventuallyTimeout)) {
+      getExecutionHolder
+    }
   }
 
   protected def withClient(f: SparkConnectClient => Unit): Unit = {

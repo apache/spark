@@ -135,17 +135,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
-      verify(state == UPDATING, "Cannot commit after already committed or aborted")
-
       try {
+        verify(state == UPDATING, "Cannot commit after already committed or aborted")
         commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
       } catch {
-        case NonFatal(e) =>
-          throw new IllegalStateException(
-            s"Error committing version $newVersion into $this", e)
+        case e: Throwable =>
+          throw QueryExecutionErrors.failedToCommitStateFileError(this.toString(), e)
       }
     }
 

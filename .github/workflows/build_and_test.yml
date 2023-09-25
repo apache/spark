@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 8
+        default: 17
       branch:
         description: Branch to run the build against
         required: false
@@ -86,7 +86,7 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build', 'scala-213', and 'java-other-versions' are always true for now.
+          # 'build' and 'java-other-versions' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -95,7 +95,6 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-213\": \"true\",
               \"java-other-versions\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
@@ -249,7 +248,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
       uses: actions/setup-python@v4
@@ -372,6 +371,8 @@ jobs:
             pyspark-pandas-connect-part1
           - >-
             pyspark-pandas-connect-part2
+          - >-
+            pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -433,7 +434,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
@@ -537,7 +538,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -648,11 +649,11 @@ jobs:
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
-        java-version: 8
+        distribution: zulu
+        java-version: ${{ inputs.java }}
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -678,8 +679,15 @@ jobs:
         # Should delete this section after SPARK 3.4 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
+    - name: Install Python linter dependencies for branch-3.5
+      if: inputs.branch == 'branch-3.5'
+      run: |
+        # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
+        # Should delete this section after SPARK 3.5 EOL.
+        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
+        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python linter dependencies
-      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4'
+      if: inputs.branch != 'branch-3.3' && inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
@@ -769,9 +777,8 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 11
           - 17
-          - 21-ea
+          - 21
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     steps:
@@ -808,7 +815,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
+        distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
@@ -818,53 +825,6 @@ jobs:
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
-
-  scala-213:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
-    name: Scala 2.13 build with SBT
-    runs-on: ubuntu-22.04
-    timeout-minutes: 300
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v3
-      with:
-        path: |
-          build/apache-maven-*
-          build/scala-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          scala-213-coursier-
-    - name: Install Java 8
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 8
-    - name: Build with SBT
-      run: |
-        ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile Test/compile
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
@@ -907,11 +867,11 @@ jobs:
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
-        java-version: 8
+        distribution: zulu
+        java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v3
@@ -1013,11 +973,11 @@ jobs:
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
-        distribution: temurin
-        java-version: 8
+        distribution: zulu
+        java-version: ${{ inputs.java }}
     - name: Run tests
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
@@ -1075,7 +1035,7 @@ jobs:
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: ${{ inputs.java }}
       - name: start minikube
         run: |
@@ -1099,7 +1059,7 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
+          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.0/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
           build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files

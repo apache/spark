@@ -217,6 +217,11 @@ case class CachedRDDBuilder(
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
 
+  val supportsColumnarInput: Boolean = {
+    cachedPlan.supportsColumnar &&
+      serializer.supportsColumnarInput(cachedPlan.output)
+  }
+
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
       synchronized {
@@ -264,8 +269,7 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (cachedPlan.supportsColumnar &&
-        serializer.supportsColumnarInput(cachedPlan.output)) {
+    val cb = if (supportsColumnarInput) {
       serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,
