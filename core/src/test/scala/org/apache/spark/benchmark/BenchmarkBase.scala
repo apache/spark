@@ -51,7 +51,7 @@ abstract class BenchmarkBase {
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
       val version = System.getProperty("java.version").split("\\D+")(0).toInt
-      val jdkString = if (version > 8) s"-jdk$version" else ""
+      val jdkString = if (version > 17) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
       val prefix = Benchmarks.currentProjectRoot.map(_ + "/").getOrElse("")
