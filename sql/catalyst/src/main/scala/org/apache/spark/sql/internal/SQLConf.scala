@@ -3416,6 +3416,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_EXISTS_AND_IN_SUBQUERIES =
+    buildConf("spark.sql.optimizer.decorrelateExistsIn.enabled")
+      .internal()
+      .doc("Decorrelate EXISTS and IN subqueries.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled")
       .internal()
