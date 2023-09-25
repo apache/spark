@@ -998,7 +998,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       // less time and the process is no longer there.
       val startTimeNs = System.nanoTime()
       val process = new ProcessBuilder("sleep", "10").start()
-      val pid = process.toHandle.pid()
+      var pid = process.toHandle.pid()
       try {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
@@ -1027,7 +1027,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       file.getAbsoluteFile.setExecutable(true)
 
       val process = new ProcessBuilder(file.getAbsolutePath).start()
-      process.toHandle.pid()
+      pid = process.toHandle.pid()
       try {
         signal(pid, "SIGSTOP")
         val startNs = System.nanoTime()
