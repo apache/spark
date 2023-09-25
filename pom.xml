@@ -112,7 +112,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <java.version>1.8</java.version>
+    <java.version>17</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
     <maven.version>3.9.4</maven.version>
@@ -2932,7 +2932,7 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-target:jvm-1.8</arg>
+              <arg>-target:17</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
               <!--

@@ -115,10 +115,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       request: HttpServletRequest,
       metrics: Map[Long, String],
       graph: SparkPlanGraph): Seq[Node] = {
-    val metadata = graph.allNodes.flatMap { node =>
-      val nodeId = s"plan-meta-data-${node.id}"
-      <div id={nodeId}>{node.desc}</div>
-    }
 
     <div>
       <div id="plan-viz-graph"></div>
@@ -126,8 +122,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
         </div>
-        <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
-        {metadata}
       </div>
       {planVisualizationResources(request)}
       <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>

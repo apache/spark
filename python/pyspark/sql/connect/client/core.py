@@ -96,6 +96,7 @@ from pyspark.errors import PySparkValueError
 
 
 if TYPE_CHECKING:
+    from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
 
 
@@ -1483,6 +1484,23 @@ class SparkConnectClient(object):
                 ) from None
         raise error
 
+    def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
+        if "errorId" not in info.metadata:
+            return None
+
+        req = pb2.FetchErrorDetailsRequest(
+            session_id=self._session_id,
+            client_type=self._builder.userAgent,
+            error_id=info.metadata["errorId"],
+        )
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+
+        try:
+            return self._stub.FetchErrorDetails(req)
+        except grpc.RpcError:
+            return None
+
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1511,7 +1529,10 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    raise convert_exception(info, status.message) from None
+
+                    raise convert_exception(
+                        info, status.message, self._fetch_enriched_error(info)
+                    ) from None
 
             raise SparkConnectGrpcException(status.message) from None
         else:

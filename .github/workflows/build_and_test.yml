@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 8
+        default: 17
       branch:
         description: Branch to run the build against
         required: false
@@ -649,11 +649,11 @@ jobs:
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 8
+        java-version: ${{ inputs.java }}
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -777,7 +777,6 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 11
           - 17
           - 21
     runs-on: ubuntu-22.04
@@ -868,11 +867,11 @@ jobs:
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 8
+        java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v3
@@ -974,11 +973,11 @@ jobs:
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
-    - name: Install Java 8
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: zulu
-        java-version: 8
+        java-version: ${{ inputs.java }}
     - name: Run tests
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
