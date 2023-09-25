@@ -136,7 +136,6 @@ package object client {
       extraDeps = Seq("org.apache.derby:derby:10.14.2.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
     val allSupportedHiveVersions =
