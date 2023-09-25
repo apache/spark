@@ -313,8 +313,7 @@ Datetime Properties
    Series.dt.minute
    Series.dt.second
    Series.dt.microsecond
-   Series.dt.week
-   Series.dt.weekofyear
+   Series.dt.isocalendar
    Series.dt.dayofweek
    Series.dt.weekday
    Series.dt.dayofyear
