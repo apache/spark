@@ -2566,7 +2566,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
     assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage == "'('a > 'b)' is not true!")
+    assert(e3.getCause.getMessage.matches("'\\(a#\\d+ > b#\\d+\\)' is not true!"))
   }
 
   test("raise_error") {

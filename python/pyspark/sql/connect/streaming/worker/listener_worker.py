@@ -31,6 +31,7 @@ from pyspark.serializers import (
 )
 from pyspark import worker
 from pyspark.sql import SparkSession
+from pyspark.util import handle_worker_exception
 from typing import IO
 
 from pyspark.sql.streaming.listener import (
@@ -59,7 +60,6 @@ def main(infile: IO, outfile: IO) -> None:
     spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
     spark_connect_session._client._session_id = session_id  # type: ignore[attr-defined]
 
-    # TODO(SPARK-44460): Pass credentials.
     # TODO(SPARK-44461): Enable Process Isolation
 
     listener = worker.read_command(pickle_ser, infile)
@@ -84,7 +84,13 @@ def main(infile: IO, outfile: IO) -> None:
     while True:
         event = utf8_deserializer.loads(infile)
         event_type = read_int(infile)
-        process(event, int(event_type))  # TODO(SPARK-44463): Propagate error to the user.
+        # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
+        # traceback string if error occurs.
+        try:
+            process(event, int(event_type))
+            write_int(0, outfile)
+        except BaseException as e:
+            handle_worker_exception(e, outfile)
         outfile.flush()
 
 

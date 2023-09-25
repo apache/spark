@@ -58,12 +58,10 @@ class GroupbyStatMixin:
                 check_exact=check_exact,
             )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43554): Enable GroupByTests.test_basic_stat_funcs for pandas 2.0.0.",
-    )
     def test_basic_stat_funcs(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.var(), check_exact=False)
+        self._test_stat_func(
+            lambda groupby_obj: groupby_obj.var(numeric_only=True), check_exact=False
+        )
 
         pdf, psdf = self.pdf, self.psdf
 
@@ -102,12 +100,12 @@ class GroupbyStatMixin:
 
         self.assert_eq(
             psdf.groupby("A").std().sort_index(),
-            pdf.groupby("A").std().sort_index(),
+            pdf.groupby("A").std(numeric_only=True).sort_index(),
             check_exact=False,
         )
         self.assert_eq(
             psdf.groupby("A").sem().sort_index(),
-            pdf.groupby("A").sem().sort_index(),
+            pdf.groupby("A").sem(numeric_only=True).sort_index(),
             check_exact=False,
         )
 
@@ -119,13 +117,7 @@ class GroupbyStatMixin:
             check_exact=False,
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43706): Enable GroupByTests.test_mean " "for pandas 2.0.0.",
-    )
     def test_mean(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
         psdf = self.psdf
         with self.assertRaises(TypeError):
@@ -252,10 +244,6 @@ class GroupbyStatMixin:
             psdf.groupby("A").last(min_count=2).sort_index(),
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43552): Enable GroupByTests.test_nth for pandas 2.0.0.",
-    )
     def test_nth(self):
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
@@ -267,10 +255,6 @@ class GroupbyStatMixin:
         with self.assertRaisesRegex(TypeError, "Invalid index"):
             self.psdf.groupby("B").nth("x")
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43551): Enable GroupByTests.test_prod for pandas 2.0.0.",
-    )
     def test_prod(self):
         pdf = pd.DataFrame(
             {
@@ -287,18 +271,11 @@ class GroupbyStatMixin:
 
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(
-                lambda groupby_obj: groupby_obj.prod(min_count=n), check_exact=False
-            )
-            self._test_stat_func(
-                lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n),
-                check_exact=False,
-            )
-            self._test_stat_func(
                 lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n),
                 check_exact=False,
             )
             self.assert_eq(
-                pdf.groupby("A").prod(min_count=n).sort_index(),
+                pdf.groupby("A").prod(min_count=n, numeric_only=True).sort_index(),
                 psdf.groupby("A").prod(min_count=n).sort_index(),
                 almost=True,
             )

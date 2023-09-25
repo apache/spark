@@ -283,6 +283,14 @@ SQLSTATE: none assigned
 Cannot up cast `<expression>` from `<sourceType>` to `<targetType>`.
 `<details>`
 
+### [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
+SQLSTATE: none assigned
+
+Error writing state store files for provider `<providerClass>`.
+
+For more details see [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
 ### CAST_INVALID_INPUT
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -300,6 +308,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+
+SQLSTATE: none assigned
+
+`MapObjects` does not support the class `<cls>` as resulting collection.
 
 ### CODEC_NOT_AVAILABLE
 
@@ -521,6 +535,28 @@ SQLSTATE: none assigned
 
 Exceeds char/varchar type length limitation: `<limit>`.
 
+### EXPECT_PERMANENT_VIEW_NOT_TEMP
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a permanent view but `<viewName>` is a temp view.
+
+### [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a table but `<viewName>` is a view.
+
+For more details see [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+### [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
+
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
 SQLSTATE: none assigned
@@ -586,6 +622,12 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 SQLSTATE: none assigned
 
 A column cannot have both a default value and a generation expression but column `<colName>` has default value: (`<defaultValue>`) and generation expression: (`<genExpr>`).
+
+### GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION
+
+SQLSTATE: none assigned
+
+Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
 
 ### GRAPHITE_SINK_INVALID_PROTOCOL
 
@@ -977,7 +1019,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 SQLSTATE: none assigned
 
-Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -1119,7 +1161,7 @@ Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include 
 
 SQLSTATE: none assigned
 
-The argument `<name>` of `sql()` is invalid. Consider to replace it by a SQL literal.
+The argument `<name>` of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
 
@@ -1310,6 +1352,12 @@ Cannot call function `<functionName>` because named argument references are not 
 [SQLSTATE: 42607](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
+
+### NON_FOLDABLE_ARGUMENT
+
+[SQLSTATE: 22024](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The function `<funcName>` requires the parameter `<paramName>` to be a foldable expression of the type `<paramType>`, but the actual argument is a non-foldable.
 
 ### NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION
 
@@ -1764,6 +1812,18 @@ SQLSTATE: none assigned
 
 Failed to analyze the Python user defined table function: `<msg>`
 
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata `<requestedMetadata>`, but the function call `<invalidFunctionCallProperty>`.
+
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata was invalid; `<reason>`.
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1823,7 +1883,7 @@ Unable to infer schema for `<format>`. It must be specified manually.
 
 [SQLSTATE: 42P02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to a SQL literal.
+Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### UNCLOSED_BRACKETED_COMMENT
 
@@ -2080,35 +2140,11 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
-### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The table `<tableName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
-
-### [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The temp view `<tempViewName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_TEMP_VIEW_OPERATION](sql-error-conditions-unsupported-temp-view-operation-error-class.html)
-
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
-
-### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The view `<viewName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2186,3 +2222,5 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+

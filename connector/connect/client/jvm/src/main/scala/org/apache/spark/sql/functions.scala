@@ -26,9 +26,11 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -827,7 +829,19 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def mode(e: Column): Column = Column.fn("mode", e)
+  def mode(e: Column): Column = mode(e, deterministic = false)
+
+  /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * When multiple values have the same greatest frequency then either any of values is returned
+   * if deterministic is false or is not defined, or the lowest value is returned if deterministic
+   * is true.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -987,7 +1001,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def std(e: Column): Column = stddev(e)
+  def std(e: Column): Column = Column.fn("std", e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1818,7 +1832,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def rand(): Column = Column.fn("rand")
+  def rand(): Column = Column.fn("rand", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Generate a column with independent and identically distributed (i.i.d.) samples from the
@@ -1842,7 +1856,7 @@ object functions {
    * @group normal_funcs
    * @since 3.4.0
    */
-  def randn(): Column = Column.fn("randn")
+  def randn(): Column = Column.fn("randn", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Partition ID.
@@ -2337,7 +2351,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+  def ceiling(e: Column, scale: Column): Column = Column.fn("ceiling", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2345,7 +2359,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ceiling(e: Column): Column = ceil(e)
+  def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
   /**
    * Convert a number in a string column from one base to another.
@@ -2624,7 +2638,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def ln(e: Column): Column = log(e)
+  def ln(e: Column): Column = Column.fn("ln", e)
 
   /**
    * Computes the natural logarithm of the given value.
@@ -2632,7 +2646,7 @@ object functions {
    * @group math_funcs
    * @since 3.4.0
    */
-  def log(e: Column): Column = Column.fn("log", e)
+  def log(e: Column): Column = ln(e)
 
   /**
    * Computes the natural logarithm of the given column.
@@ -2800,7 +2814,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def power(l: Column, r: Column): Column = pow(l, r)
+  def power(l: Column, r: Column): Column = Column.fn("power", l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2846,6 +2860,15 @@ object functions {
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
   /**
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
+
+  /**
    * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
    *
    * @group math_funcs
@@ -2861,6 +2884,15 @@ object functions {
    * @since 3.4.0
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode if `scale` is
+   * greater than or equal to 0 or at integral part when `scale` is less than 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
    * @param e
@@ -2937,7 +2969,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def sign(e: Column): Column = signum(e)
+  def sign(e: Column): Column = Column.fn("sign", e)
 
   /**
    * Computes the signum of the given value.
@@ -3347,13 +3379,21 @@ object functions {
   def user(): Column = Column.fn("user")
 
   /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def session_user(): Column = Column.fn("session_user")
+
+  /**
    * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
    * UUID 36-character string.
    *
    * @group misc_funcs
    * @since 3.5.0
    */
-  def uuid(): Column = Column.fn("uuid")
+  def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
@@ -3477,7 +3517,7 @@ object functions {
       mode: Column,
       padding: Column,
       aad: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding, aad)
+    Column.fn("aes_decrypt", input, key, mode, padding, aad)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3489,7 +3529,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode, padding)
+    Column.fn("aes_decrypt", input, key, mode, padding)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3501,7 +3541,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column, mode: Column): Column =
-    Column.fn("aes_encrypt", input, key, mode)
+    Column.fn("aes_decrypt", input, key, mode)
 
   /**
    * Returns a decrypted value of `input`.
@@ -3513,7 +3553,7 @@ object functions {
    * @since 3.5.0
    */
   def aes_decrypt(input: Column, key: Column): Column =
-    Column.fn("aes_encrypt", input, key)
+    Column.fn("aes_decrypt", input, key)
 
   /**
    * This is a special version of `aes_decrypt` that performs the same operation, but returns a
@@ -3622,6 +3662,15 @@ object functions {
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
 
   /**
+   * This is a special version of `reflect` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the invoke method thrown exception.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
+
+  /**
    * Returns the Spark version. The string contains 2 fields, the first being a release version
    * and the second being a git revision.
    *
@@ -3663,7 +3712,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def random(): Column = Column.fn("random")
+  def random(): Column = Column.fn("random", lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns the bit position for the given input column.
@@ -4084,6 +4133,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
   /**
+   * Repeats a string column n times, and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
+
+  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
@@ -4255,6 +4312,7 @@ object functions {
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4275,13 +4333,20 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
 
+  // scalastyle:off line.size.limit
   /**
    * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
    *
@@ -4302,11 +4367,17 @@ object functions {
    *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
    *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
    *   end of the format string; specifies that the result string will be wrapped by angle
-   *   brackets if the input value is negative.</li> </ul>
+   *   brackets if the input value is negative.</li> </ul> If `e` is a datetime, `format` shall be
+   *   a valid datetime pattern, see <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a>. If `e` is a binary, it is converted to a string in one of the formats: <ul>
+   *   <li>'base64': a base 64 string.</li> <li>'hex': a string in the hexadecimal format.</li>
+   *   <li>'utf-8': the input binary is decoded to UTF-8 string.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
+  // scalastyle:on line.size.limit
   def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
 
   /**
@@ -4420,7 +4491,7 @@ object functions {
    * @since 3.5.0
    */
   def printf(format: Column, arguments: Column*): Column =
-    Column.fn("format_string", lit(format) +: arguments: _*)
+    Column.fn("printf", (format +: arguments): _*)
 
   /**
    * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
@@ -6999,7 +7070,7 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def shuffle(e: Column): Column = Column.fn("shuffle", e)
+  def shuffle(e: Column): Column = Column.fn("shuffle", e, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a reversed string or an array with reverse order of elements.
@@ -7032,7 +7103,8 @@ object functions {
    * @group collection_funcs
    * @since 3.4.0
    */
-  def sequence(start: Column, stop: Column): Column = sequence(start, stop, lit(1L))
+  def sequence(start: Column, stop: Column): Column =
+    Column.fn("sequence", start, stop)
 
   /**
    * Creates an array containing the left argument repeated the number of times given by the right
@@ -7226,6 +7298,156 @@ object functions {
    * @since 3.4.0
    */
   def to_csv(e: Column): Column = to_csv(e, Collections.emptyMap())
+
+  // scalastyle:off line.size.limit
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified
+   * schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_xml(e, lit(schema.json), options.asScala.toIterator)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema as a DDL-formatted string.
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the xml data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    val dataType =
+      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into a `StructType` with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column): Column = {
+    from_xml(e, schema, Iterator.empty)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into the data type corresponding to
+   * the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @param options
+   *   options to control how the XML is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @group collection_funcs
+   *
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
+    from_xml(e, schema, options.asScala.iterator)
+
+  /**
+   * Parses a column containing a XML string into the data type corresponding to the specified
+   * schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e
+   *   a string column containing XML data.
+   * @param schema
+   *   the schema to use when parsing the XML string
+   * @group collection_funcs
+   *
+   * @since 4.0.0
+   */
+  def from_xml(e: Column, schema: StructType): Column =
+    from_xml(e, schema, Map.empty[String, String].asJava)
+
+  private def from_xml(e: Column, schema: Column, options: Iterator[(String, String)]): Column = {
+    fnWithOptions("from_xml", options, e, schema)
+  }
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml
+   *   a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
+
+  /**
+   * Parses a XML string and infers its schema in DDL format.
+   *
+   * @param xml
+   *   a foldable string column containing a XML string.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
+
+  // scalastyle:off line.size.limit
+
+  /**
+   * Parses a XML string and infers its schema in DDL format using options.
+   *
+   * @param xml
+   *   a foldable string column containing XML data.
+   * @param options
+   *   options to control how the xml is parsed. accepts the same options and the XML data source.
+   *   See <a href=
+   *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
+   *   Source Option</a> in the version you use.
+   * @return
+   *   a column with string literal containing schema in DDL format.
+   * @group collection_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_xml(xml: Column, options: java.util.Map[String, String]): Column = {
+    fnWithOptions("schema_of_xml", options.asScala.iterator, xml)
+  }
 
   /**
    * Returns the total number of elements in the array. The function returns null for null input.

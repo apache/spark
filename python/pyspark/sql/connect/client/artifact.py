@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.sql.connect.client.logging import logger
 
 check_dependencies(__name__)
 
@@ -25,7 +26,7 @@ import sys
 import os
 import zlib
 from itertools import chain
-from typing import List, Iterable, BinaryIO, Iterator, Optional
+from typing import List, Iterable, BinaryIO, Iterator, Optional, Tuple
 import abc
 from pathlib import Path
 from urllib.parse import urlparse
@@ -162,12 +163,19 @@ class ArtifactManager:
     # https://github.com/grpc/grpc.github.io/issues/371.
     CHUNK_SIZE: int = 32 * 1024
 
-    def __init__(self, user_id: Optional[str], session_id: str, channel: grpc.Channel):
+    def __init__(
+        self,
+        user_id: Optional[str],
+        session_id: str,
+        channel: grpc.Channel,
+        metadata: Iterable[Tuple[str, str]],
+    ):
         self._user_context = proto.UserContext()
         if user_id is not None:
             self._user_context.user_id = user_id
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
+        self._metadata = metadata
 
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
@@ -236,17 +244,24 @@ class ArtifactManager:
         self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        return self._add_artifacts(
-            chain(
-                *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
+        try:
+            yield from self._add_artifacts(
+                chain(
+                    *(
+                        self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
+                        for p in path
+                    )
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Failed to submit addArtifacts request: {e}")
+            raise
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
     ) -> proto.AddArtifactsResponse:
         """Separated for the testing purpose."""
-        return self._stub.AddArtifacts(requests)
+        return self._stub.AddArtifacts(requests, metadata=self._metadata)
 
     def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
@@ -382,7 +397,9 @@ class ArtifactManager:
         request = proto.ArtifactStatusesRequest(
             user_context=self._user_context, session_id=self._session_id, names=[artifactName]
         )
-        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
+        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
+            request, metadata=self._metadata
+        )
         status = resp.statuses.get(artifactName)
         return status.exists if status is not None else False
 

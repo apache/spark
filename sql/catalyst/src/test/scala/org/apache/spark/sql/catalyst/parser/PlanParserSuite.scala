@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -1892,5 +1893,16 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SELECT * FROM a LIMIT ?"),
       table("a").select(star()).limit(PosParameter(22)))
+  }
+
+  test("SPARK-45189: Creating UnresolvedRelation from TableIdentifier should include the" +
+    " catalog field") {
+    val tableId = TableIdentifier("t", Some("db"), Some("cat"))
+    val unresolvedRelation = UnresolvedRelation(tableId)
+    assert(unresolvedRelation.multipartIdentifier == Seq("cat", "db", "t"))
+    val unresolvedRelation2 = UnresolvedRelation(tableId, CaseInsensitiveStringMap.empty, true)
+    assert(unresolvedRelation2.multipartIdentifier == Seq("cat", "db", "t"))
+    assert(unresolvedRelation2.options == CaseInsensitiveStringMap.empty)
+    assert(unresolvedRelation2.isStreaming)
   }
 }

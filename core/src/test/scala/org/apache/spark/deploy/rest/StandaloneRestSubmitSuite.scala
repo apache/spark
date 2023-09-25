@@ -413,6 +413,18 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1"))
   }
 
+  test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map.empty[String, String]
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.javaOpts.exists(_.startsWith("--add-opens")))
+  }
+
   /* --------------------- *
    |     Helper methods    |
    * --------------------- */

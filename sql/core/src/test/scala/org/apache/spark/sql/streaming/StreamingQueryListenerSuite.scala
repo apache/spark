@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Waiters.Waiter
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, Row, SparkSession}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -314,9 +314,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       try {
         var numTriggers = 0
         val input = new MemoryStream[Int](0, sqlContext) {
-          override def latestOffset(): OffsetV2 = {
+          override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
             numTriggers += 1
-            super.latestOffset()
+            super.latestOffset(startOffset, limit)
           }
         }
         val clock = new StreamManualClock()
@@ -331,9 +331,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
-        // `recentProgress` should not receive any events
+        // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.isEmpty
+          q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
         testStream(input.toDS)(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
@@ -524,7 +524,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
-          // checkProgressEvent(1),
           AdvanceManualClock(10),
           checkProgressEvent(1),
           AdvanceManualClock(90),

@@ -2894,6 +2894,8 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOr
               # treated as struct or element type of array in order to make it more
               # R-friendly.
               if (class(schema) == "Column") {
+                df <- createDataFrame(list(list(0)))
+                jschema <- collect(select(df, schema))[[1]][[1]]
                 jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                        "createArrayType",
                                        jschema)

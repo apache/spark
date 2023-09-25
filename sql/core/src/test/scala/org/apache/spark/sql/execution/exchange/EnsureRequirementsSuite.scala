@@ -18,15 +18,17 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
+import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, _}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
@@ -1104,6 +1106,32 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.partitionings.length == 2)
           assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
+        case other => fail(other.toString)
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle right side when" +
+    " spark.sql.sources.v2.bucketing.shuffle.enabled is true") {
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+
+      val a1 = AttributeReference("a1", IntegerType)()
+
+      val partitionValue = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
+      val plan1 = DummySparkPlan(outputPartitioning = KeyGroupedPartitioning(
+          identity(a1) :: Nil, 4, partitionValue))
+      val plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+
+      val smjExec = ShuffledHashJoinExec(
+        a1 :: Nil, a1 :: Nil, Inner, BuildRight, None, plan1, plan2)
+      EnsureRequirements.apply(smjExec) match {
+        case ShuffledHashJoinExec(_, _, _, _, _,
+        DummySparkPlan(_, _, left: KeyGroupedPartitioning, _, _),
+        ShuffleExchangeExec(KeyGroupedPartitioning(attrs, 4, pv, _),
+        DummySparkPlan(_, _, SinglePartition, _, _), _, _), _) =>
+          assert(left.expressions == a1 :: Nil)
+          assert(attrs == a1 :: Nil)
+          assert(partitionValue == pv)
         case other => fail(other.toString)
       }
     }

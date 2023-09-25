@@ -364,6 +364,9 @@ class IncrementalExecution(
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
+  /** no need to try-catch again as this is already done once */
+  override def assertAnalyzed(): Unit = analyzed
+
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
 

@@ -37,7 +37,7 @@ import sparktestsupport.modules as modules
 
 def setup_test_environ(environ):
     print("[info] Setup the following environment variables for tests: ")
-    for (k, v) in environ.items():
+    for k, v in environ.items():
         print("%s=%s" % (k, v))
         os.environ[k] = v
 
@@ -181,7 +181,6 @@ def get_scala_profiles(scala_version):
         return []  # assume it's default.
 
     sbt_maven_scala_profiles = {
-        "scala2.12": ["-Pscala-2.12"],
         "scala2.13": ["-Pscala-2.13"],
     }
 
@@ -331,7 +330,6 @@ def run_scala_tests_maven(test_profiles):
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
-
     sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
@@ -363,12 +361,13 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     if excluded_tags:
         test_profiles += ["-Dtest.exclude.tags=" + ",".join(excluded_tags)]
 
-    # set up java11 env if this is a pull request build with 'test-java11' in the title
-    if "ghprbPullTitle" in os.environ:
-        if "test-java11" in os.environ["ghprbPullTitle"].lower():
-            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
-            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
-            test_profiles += ["-Djava.version=11"]
+    # SPARK-45296: legacy code for Jenkins. If we move to Jenkins, we should
+    # revive this logic with a different combination of JDK.
+    # if "ghprbPullTitle" in os.environ:
+    #     if "test-java11" in os.environ["ghprbPullTitle"].lower():
+    #         os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+    #         os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+    #         test_profiles += ["-Djava.version=11"]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)

@@ -2099,7 +2099,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
@@ -2118,12 +2118,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
         val cast = Cast(expression(ctx.expression), dataType)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
 
       case SqlBaseParser.TRY_CAST =>
         val cast = Cast(expression(ctx.expression), dataType, evalMode = EvalMode.TRY)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
     }
   }
@@ -2812,8 +2812,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   private def createUnresolvedTable(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      hint: Boolean = false): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTable(_, commandName, hint))
+      suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedTable(_, commandName, suggestAlternative))
   }
 
   /**
@@ -2823,8 +2823,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx: IdentifierReferenceContext,
       commandName: String,
       allowTemp: Boolean = true,
-      hint: Boolean = false): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, hint))
+      suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, suggestAlternative))
   }
 
   /**
@@ -4359,7 +4359,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
-          hint = true),
+          suggestAlternative = true),
         cleanedTableProperties)
     } else {
       SetTableProperties(
@@ -4392,7 +4392,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
-          hint = true),
+          suggestAlternative = true),
         cleanedProperties,
         ifExists)
     } else {
@@ -4418,8 +4418,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     SetTableLocation(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... SET LOCATION ...",
-        true),
+        "ALTER TABLE ... SET LOCATION ..."),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
@@ -4715,8 +4714,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     RecoverPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... RECOVER PARTITIONS",
-        true))
+        "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
   /**
@@ -4745,8 +4743,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     AddPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... ADD PARTITION ...",
-        true),
+        "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -4764,8 +4761,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     RenamePartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... RENAME TO PARTITION",
-        true),
+        "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.to)))
   }
@@ -4793,8 +4789,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     DropPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... DROP PARTITION ...",
-        true),
+        "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null)

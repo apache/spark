@@ -324,6 +324,18 @@
       "<details>"
     ]
   },
+  "CANNOT_WRITE_STATE_STORE" : {
+    "message" : [
+      "Error writing state store files for provider <providerClass>."
+    ],
+    "subClass" : {
+      "CANNOT_COMMIT" : {
+        "message" : [
+          "Cannot perform commit during state checkpoint."
+        ]
+      }
+    }
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -341,6 +353,11 @@
       "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
+    "message" : [
+      "`MapObjects` does not support the class <cls> as resulting collection."
+    ]
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
@@ -587,6 +604,11 @@
       "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
         "message" : [
           "<errors>"
+        ]
+      },
+      "INVALID_XML_MAP_KEY_TYPE" : {
+        "message" : [
+          "Input schema <schema> can only contain STRING as a key type for a MAP."
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -865,6 +887,45 @@
       "Exceeds char/varchar type length limitation: <limit>."
     ]
   },
+  "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
+    "message" : [
+      "'<operation>' expects a permanent view but <viewName> is a temp view."
+    ]
+  },
+  "EXPECT_TABLE_NOT_VIEW" : {
+    "message" : [
+      "'<operation>' expects a table but <viewName> is a view."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_VIEW" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
+  },
+  "EXPECT_VIEW_NOT_TABLE" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_TABLE" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -924,6 +985,11 @@
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
+    ]
+  },
+  "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
+    "message" : [
+      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
     ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
@@ -1033,6 +1099,11 @@
       "CANNOT_SAFELY_CAST" : {
         "message" : [
           "Cannot safely cast <colName> <srcType> to <targetType>."
+        ]
+      },
+      "EXTRA_COLUMNS" : {
+        "message" : [
+          "Cannot write extra columns <extraColumns>."
         ]
       },
       "EXTRA_STRUCT_FIELDS" : {
@@ -1582,7 +1653,7 @@
   },
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
     ]
   },
   "INVALID_IDENTIFIER" : {
@@ -1793,9 +1864,19 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "BINARY_FORMAT" : {
+        "message" : [
+          "expects one of binary formats 'base64', 'hex', 'utf-8', but got <invalidFormat>."
+        ]
+      },
       "DATETIME_UNIT" : {
         "message" : [
           "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "expects a non-NULL value."
         ]
       },
       "PATTERN" : {
@@ -1877,7 +1958,7 @@
   },
   "INVALID_SQL_ARG" : {
     "message" : [
-      "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
+      "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ]
   },
   "INVALID_SQL_SYNTAX" : {
@@ -2209,6 +2290,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NON_FOLDABLE_ARGUMENT" : {
+    "message" : [
+      "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
+    ],
+    "sqlState" : "22024"
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
@@ -2682,6 +2769,18 @@
       "Failed to analyze the Python user defined table function: <msg>"
     ]
   },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata <requestedMetadata>, but the function call <invalidFunctionCallProperty>."
+    ],
+    "sqlState" : "22023"
+  },
+  "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID" : {
+    "message" : [
+      "Failed to evaluate the table function <functionName> because its table metadata was invalid; <reason>."
+    ],
+    "sqlState" : "22023"
+  },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
       "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
@@ -2735,7 +2834,7 @@
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
-      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to a SQL literal."
+      "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42P02"
   },
@@ -3394,62 +3493,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_OPERATION" : {
-    "message" : [
-      "The table <tableName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER TABLE instead."
-        ]
-      }
-    }
-  },
-  "UNSUPPORTED_TEMP_VIEW_OPERATION" : {
-    "message" : [
-      "The temp view <tempViewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
-  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_VIEW_OPERATION" : {
-    "message" : [
-      "The view <viewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -4022,11 +4070,6 @@
   "_LEGACY_ERROR_TEMP_1099" : {
     "message" : [
       "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1100" : {
-    "message" : [
-      "The '<argName>' parameter of function '<funcName>' needs to be a <requiredType> literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -4916,24 +4959,9 @@
       "Negative values found in <frequencyExpression>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2015" : {
-    "message" : [
-      "Cannot generate <codeType> code for incomparable type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2016" : {
-    "message" : [
-      "Can not interpolate <arg> into code block."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2018" : {
-    "message" : [
-      "class `<cls>` is not supported by `MapObjects` as resulting collection."
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
@@ -5647,11 +5675,6 @@
   "_LEGACY_ERROR_TEMP_2187" : {
     "message" : [
       "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2189" : {
-    "message" : [
-      "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
     ]
   },
   "_LEGACY_ERROR_TEMP_2190" : {

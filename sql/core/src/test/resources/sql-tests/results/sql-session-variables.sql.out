@@ -545,6 +545,23 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SET VARIABLE title = 'Test variable in aggregate'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title)
+-- !query schema
+struct<scalarsubquery(title):bigint>
+-- !query output
+0
+1
+
+
+-- !query
 SET VARIABLE title = 'Test qualifiers - fail'
 -- !query schema
 struct<>
@@ -2058,7 +2075,7 @@ SELECT c1 AS `2` FROM VALUES(2) AS T(var1), LATERAL(SELECT var1) AS TT(c1)
 -- !query schema
 struct<2:int>
 -- !query output
-1
+2
 
 
 -- !query

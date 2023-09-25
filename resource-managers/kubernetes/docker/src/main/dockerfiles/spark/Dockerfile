@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=17-jre
+ARG java_image_tag=21-jre
 
-FROM eclipse-temurin:${java_image_tag}
+FROM azul/zulu-openjdk:${java_image_tag}
 
 ARG spark_uid=185
 
@@ -42,6 +42,8 @@ RUN set -ex && \
     rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
+# Copy RELEASE file if exists
+COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/

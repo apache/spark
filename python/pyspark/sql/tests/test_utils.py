@@ -273,8 +273,8 @@ class UtilsTestsMixin:
         )
 
         # cast to DecimalType
-        df1 = df1.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
-        df2 = df2.withColumn("col_1", F.col("grade").cast("decimal(4,3)"))
+        df1 = df1.withColumn("col_1", F.col("grade").cast("decimal(5,3)"))
+        df2 = df2.withColumn("col_1", F.col("grade").cast("decimal(5,3)"))
 
         assertDataFrameEqual(df1, df2, rtol=1e-1)
 
