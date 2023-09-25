@@ -133,38 +133,18 @@ private[sql] class AvroDeserializer(
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
-      case (LONG, dt: TimestampType)
-        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
-
-      case (LONG, dt: TimestampNTZType)
-        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
-
-      case (LONG, dt: DateType)
-        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
-
-      case (INT, dt: TimestampType)
-        if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
-
-      case (INT, dt: TimestampNTZType)
-        if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
-
-      case (INT, dt: DateType)
+      case (INT, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
         throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
           toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
+
+      case (LONG, dt: DatetimeType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
