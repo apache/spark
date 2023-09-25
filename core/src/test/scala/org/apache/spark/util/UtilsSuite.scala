@@ -983,12 +983,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
     if (SystemUtils.IS_OS_UNIX) {
-      def getPid(p: Process): Int = {
-        val f = p.getClass().getDeclaredField("pid")
-        f.setAccessible(true)
-        f.get(p).asInstanceOf[Int]
-      }
-
       def pidExists(pid: Int): Boolean = {
         val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
@@ -1004,7 +998,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       // less time and the process is no longer there.
       val startTimeNs = System.nanoTime()
       val process = new ProcessBuilder("sleep", "10").start()
-      val pid = getPid(process)
+      val pid = process.toHandle.pid()
       try {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
