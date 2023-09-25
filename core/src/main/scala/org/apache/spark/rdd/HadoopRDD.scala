@@ -101,11 +101,32 @@ class HadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
     sparkContext.clean(initLocalJobConfFuncOpt.get)
+  }
+
+  def this(
+      sc: SparkContext,
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      initLocalJobConfFuncOpt: Option[JobConf => Unit],
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int) = {
+    this(
+      sc,
+      broadcastedConf,
+      initLocalJobConfFuncOpt,
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minPartitions,
+      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES)
+    )
   }
 
   def this(
@@ -136,8 +157,6 @@ class HadoopRDD[K, V](
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
-
-  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
