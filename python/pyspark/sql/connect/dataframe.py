@@ -145,16 +145,15 @@ class DataFrame:
             "spark.sql.repl.eagerEval.truncate",
         )
         if repl_eager_eval_enabled == "true":
-            pdf = DataFrame.withPlan(
+            table, _ = DataFrame.withPlan(
                 plan.HtmlString(
                     child=self._plan,
                     num_rows=int(cast(str, repl_eager_eval_max_num_rows)),
                     truncate=int(cast(str, repl_eager_eval_truncate)),
                 ),
                 session=self._session,
-            ).toPandas()
-            assert pdf is not None
-            return pdf["html_string"][0]
+            )._to_table()
+            return table[0][0].as_py()
         else:
             return None
 
@@ -252,8 +251,8 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
-        return pdd.iloc[0, 0]
+        table, _ = self.agg(_invoke_function("count", lit(1)))._to_table()
+        return table[0][0].as_py()
 
     count.__doc__ = PySparkDataFrame.count.__doc__
 
@@ -790,12 +789,16 @@ class DataFrame:
                     },
                 )
 
-        pdf = DataFrame.withPlan(
-            plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
+        table, _ = DataFrame.withPlan(
+            plan.ShowString(
+                child=self._plan,
+                num_rows=n,
+                truncate=_truncate,
+                vertical=vertical,
+            ),
             session=self._session,
-        ).toPandas()
-        assert pdf is not None
-        return pdf["show_string"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
         if not isinstance(colsMap, dict):
@@ -1425,13 +1428,11 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "col2", "arg_type": type(col2).__name__},
             )
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatCov(child=self._plan, col1=col1, col2=col2),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        return pdf["cov"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     cov.__doc__ = PySparkDataFrame.cov.__doc__
 
@@ -1453,13 +1454,11 @@ class DataFrame:
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        return pdf["corr"][0]
+        )._to_table()
+        return table[0][0].as_py()
 
     corr.__doc__ = PySparkDataFrame.corr.__doc__
 
@@ -1526,7 +1525,7 @@ class DataFrame:
                 },
             )
         relativeError = float(relativeError)
-        pdf = DataFrame.withPlan(
+        table, _ = DataFrame.withPlan(
             plan.StatApproxQuantile(
                 child=self._plan,
                 cols=list(col),
@@ -1534,10 +1533,8 @@ class DataFrame:
                 relativeError=relativeError,
             ),
             session=self._session,
-        ).toPandas()
-
-        assert pdf is not None
-        jaq = pdf["approx_quantile"][0]
+        )._to_table()
+        jaq = [q.as_py() for q in table[0][0]]
         jaq_list = [list(j) for j in jaq]
         return jaq_list[0] if isStr else jaq_list
 
@@ -1702,12 +1699,7 @@ class DataFrame:
         return ""
 
     def collect(self) -> List[Row]:
-        if self._plan is None:
-            raise Exception("Cannot collect on empty plan.")
-        if self._session is None:
-            raise Exception("Cannot collect on empty session.")
-        query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query)
+        table, schema = self._to_table()
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
@@ -1716,6 +1708,16 @@ class DataFrame:
         return ArrowTableToRowsConversion.convert(table, schema)
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
+
+    def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+        table, schema = self._session.client.to_table(query)
+        assert table is not None
+        return (table, schema)
 
     def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
