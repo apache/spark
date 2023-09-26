@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.arrow.memory.RootAllocator
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.connect.client.SparkConnectClient
