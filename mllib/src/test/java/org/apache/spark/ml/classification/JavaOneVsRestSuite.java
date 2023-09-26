@@ -51,9 +51,8 @@ public class JavaOneVsRestSuite extends SharedSparkSession {
 
     double[] xMean = {5.843, 3.057, 3.758, 1.199};
     double[] xVariance = {0.6856, 0.1899, 3.116, 0.581};
-    List<LabeledPoint> points =
-        CollectionConverters.asJava(generateMultinomialLogisticInput(coefficients, xMean,
-            xVariance, true, nPoints, 42));
+    List<LabeledPoint> points = CollectionConverters.asJava(generateMultinomialLogisticInput(
+      coefficients, xMean, xVariance, true, nPoints, 42));
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
   }
