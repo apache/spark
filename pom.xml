@@ -414,6 +414,12 @@
     <dependency>
       <groupId>org.scalatestplus</groupId>
       <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -714,6 +720,12 @@
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>htmlunit-driver</artifactId>
         <version>${htmlunit-driver.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
@@ -1154,6 +1166,12 @@
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
         <version>3.2.17.0</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
