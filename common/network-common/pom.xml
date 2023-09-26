@@ -35,12 +35,6 @@
   </properties>
 
   <dependencies>
-    <!-- SPARK-28932 This is required in JDK11 -->
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
-    </dependency>
-
     <!-- Core dependencies -->
     <!-- Netty Begin -->
     <dependency>
