@@ -5280,6 +5280,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
+  def decorrelateInnerQueryEnabledForExistsIn: Boolean =
+    getConf(SQLConf.DECORRELATE_EXISTS_AND_IN_SUBQUERIES)
+
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)

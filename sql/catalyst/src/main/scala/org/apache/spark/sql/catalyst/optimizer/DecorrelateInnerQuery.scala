@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -710,6 +710,12 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
+            // Find all the aggregate expressions that are subject to the "COUNT bug",
+            // i.e. those that have non-None default result.
+            val countBugSusceptibleAggs = aggregateExpressions.flatMap(_.collect {
+              case a@AggregateExpression(function, _, _, _, _)
+                if function.defaultResult.nonEmpty => a
+            }).nonEmpty
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
@@ -772,7 +778,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // | 0 | 2    | true       | 2                              |
             // | 0 | null | null       | 0                              |  <--- correct result
             // +---+------+------------+--------------------------------+
-            if (groupingExpressions.isEmpty && handleCountBug) {
+            // TODO(a.gubichev): retire the 'handleCountBug' parameter.
+            if (countBugSusceptibleAggs && groupingExpressions.isEmpty && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()

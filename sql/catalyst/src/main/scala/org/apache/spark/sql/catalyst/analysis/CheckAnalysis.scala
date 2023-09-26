@@ -1134,8 +1134,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       isLateral: Boolean = false): Unit = {
     // Some query shapes are only supported with the DecorrelateInnerQuery framework.
     // Currently we only use this new framework for scalar and lateral subqueries.
+    // Support for Exists and IN subqueries is subject to a separate config flag
+    // 'decorrelateInnerQueryEnabledForExistsIn'.
     val usingDecorrelateInnerQueryFramework =
-      (isScalar || isLateral) && SQLConf.get.decorrelateInnerQueryEnabled
+      (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn || isScalar || isLateral) &&
+        SQLConf.get.decorrelateInnerQueryEnabled
 
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
