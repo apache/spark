@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.VectorSchemaRoot
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -134,6 +137,75 @@ class ArrowWriterSuite extends SparkFunSuite {
       }
       assert(values === data)
 
+      writer.root.close()
+    }
+    check(BooleanType, Seq(true, false))
+    check(ByteType, (0 until 10).map(_.toByte))
+    check(ShortType, (0 until 10).map(_.toShort))
+    check(IntegerType, (0 until 10))
+    check(LongType, (0 until 10).map(_.toLong))
+    check(FloatType, (0 until 10).map(_.toFloat))
+    check(DoubleType, (0 until 10).map(_.toDouble))
+    check(DateType, (0 until 10))
+    check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
+    check(TimestampNTZType, (0 until 10).map(_ * 4.32e10.toLong))
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
+  }
+
+  test("write multiple, over initial capacity") {
+    def createArrowWriter(
+        schema: StructType,
+        timeZoneId: String): (ArrowWriter, Int) = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      val vector = root.getFieldVectors.get(0)
+      vector.allocateNew()
+      val cap = vector.getValueCapacity
+      val writer = new ArrowWriter(root, Array(ArrowWriter.createFieldWriter(vector)))
+      (writer, cap)
+    }
+    def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
+      val dataType = dt match {
+        case _: DayTimeIntervalType => DayTimeIntervalType()
+        case _: YearMonthIntervalType => YearMonthIntervalType()
+        case tpe => tpe
+      }
+      val schema = new StructType().add("value", dataType, nullable = false)
+      val (writer, initialCapacity) = createArrowWriter(schema, timeZoneId)
+
+      assert(writer.schema === schema)
+
+      // Write more values than the initial capacity of the vector
+      val iterations = (initialCapacity / data.length) + 1
+      (0 until iterations).foreach { _ =>
+        data.foreach { datum =>
+          writer.write(InternalRow(datum))
+        }
+      }
+      writer.finish()
+
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
+      (0 until iterations)
+        .map(i => i * data.size)
+        .foreach { offset =>
+        val values = dt match {
+          case BooleanType => reader.getBooleans(offset, data.size)
+          case ByteType => reader.getBytes(offset, data.size)
+          case ShortType => reader.getShorts(offset, data.size)
+          case IntegerType => reader.getInts(offset, data.size)
+          case LongType => reader.getLongs(offset, data.size)
+          case FloatType => reader.getFloats(offset, data.size)
+          case DoubleType => reader.getDoubles(offset, data.size)
+          case DateType => reader.getInts(offset, data.size)
+          case TimestampType => reader.getLongs(offset, data.size)
+          case TimestampNTZType => reader.getLongs(offset, data.size)
+          case _: YearMonthIntervalType => reader.getInts(offset, data.size)
+          case _: DayTimeIntervalType => reader.getLongs(offset, data.size)
+        }
+        assert(values === data)
+      }
       writer.root.close()
     }
     check(BooleanType, Seq(true, false))

@@ -26,7 +26,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -49,9 +49,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
-// TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 @SlowHiveTest
-class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
+class HiveDDLSuite
+  extends DDLSuite with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
+  import testImplicits._
+  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
+
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
@@ -133,6 +136,21 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       // View texts are checked separately
       viewText = None
     )
+  }
+
+  // check if the directory for recording the data of the table exists.
+  private def tableDirectoryExists(
+      tableIdentifier: TableIdentifier,
+      dbPath: Option[String] = None): Boolean = {
+    val expectedTablePath =
+      if (dbPath.isEmpty) {
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
+      } else {
+        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
+      }
+    val filesystemPath = new Path(expectedTablePath.toString)
+    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.exists(filesystemPath)
   }
 
   test("alter table: set properties") {
@@ -371,36 +389,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     } finally {
       catalog.reset()
     }
-  }
-}
-
-@SlowHiveTest
-class HiveDDLSuite
-  extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import testImplicits._
-  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
-
-  override def afterEach(): Unit = {
-    try {
-      // drop all databases, tables and functions after each test
-      spark.sessionState.catalog.reset()
-    } finally {
-      super.afterEach()
-    }
-  }
-  // check if the directory for recording the data of the table exists.
-  private def tableDirectoryExists(
-      tableIdentifier: TableIdentifier,
-      dbPath: Option[String] = None): Boolean = {
-    val expectedTablePath =
-      if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
-      } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
-      }
-    val filesystemPath = new Path(expectedTablePath.toString)
-    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
-    fs.exists(filesystemPath)
   }
 
   test("drop tables") {
@@ -888,7 +876,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
             "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
             "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"),
@@ -899,7 +887,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"),
@@ -910,7 +898,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "UNSUPPORTED_TABLE_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
           parameters = Map(
             "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tabName`",
             "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"),
@@ -921,7 +909,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"),
@@ -932,7 +920,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET LOCATION ..."),
@@ -943,7 +931,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -954,7 +942,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -965,7 +953,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
@@ -976,7 +964,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"),
@@ -987,7 +975,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... RENAME TO PARTITION"),
@@ -998,7 +986,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... ADD PARTITION ..."),
@@ -1009,7 +997,7 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$oldViewName`",
             "operation" -> "ALTER TABLE ... DROP PARTITION ..."),

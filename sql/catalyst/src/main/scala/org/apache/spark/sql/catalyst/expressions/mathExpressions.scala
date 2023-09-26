@@ -1271,7 +1271,7 @@ case class Pow(left: Expression, right: Expression)
        4
   """,
   since = "1.5.0",
-  group = "math_funcs")
+  group = "bitwise_funcs")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 

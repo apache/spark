@@ -17,7 +17,6 @@
 __all__ = [
     "ChannelBuilder",
     "SparkConnectClient",
-    "getLogLevel",
 ]
 
 from pyspark.sql.connect.utils import check_dependencies
@@ -25,7 +24,6 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import threading
-import logging
 import os
 import platform
 import random
@@ -66,6 +64,7 @@ from google.rpc import error_details_pb2
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.client.artifact import ArtifactManager
+from pyspark.sql.connect.client.logging import logger
 from pyspark.sql.connect.client.reattach import (
     ExecutePlanResponseReattachableIterator,
     RetryException,
@@ -97,42 +96,8 @@ from pyspark.errors import PySparkValueError
 
 
 if TYPE_CHECKING:
+    from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
-
-
-def _configure_logging() -> logging.Logger:
-    """Configure logging for the Spark Connect clients."""
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter(fmt="%(asctime)s %(process)d %(levelname)s %(funcName)s %(message)s")
-    )
-    logger.addHandler(handler)
-
-    # Check the environment variables for log levels:
-    if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
-        logger.setLevel(os.environ["SPARK_CONNECT_LOG_LEVEL"].upper())
-    else:
-        logger.disabled = True
-    return logger
-
-
-# Instantiate the logger based on the environment configuration.
-logger = _configure_logging()
-
-
-def getLogLevel() -> Optional[int]:
-    """
-    This returns this log level as integer, or none (if no logging is enabled).
-
-    Spark Connect logging can be configured with environment variable 'SPARK_CONNECT_LOG_LEVEL'
-
-    .. versionadded:: 3.5.0
-    """
-
-    if not logger.disabled:
-        return logger.level
-    return None
 
 
 class ChannelBuilder:
@@ -1519,6 +1484,23 @@ class SparkConnectClient(object):
                 ) from None
         raise error
 
+    def _fetch_enriched_error(self, info: "ErrorInfo") -> Optional[pb2.FetchErrorDetailsResponse]:
+        if "errorId" not in info.metadata:
+            return None
+
+        req = pb2.FetchErrorDetailsRequest(
+            session_id=self._session_id,
+            client_type=self._builder.userAgent,
+            error_id=info.metadata["errorId"],
+        )
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+
+        try:
+            return self._stub.FetchErrorDetails(req)
+        except grpc.RpcError:
+            return None
+
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
@@ -1547,7 +1529,10 @@ class SparkConnectClient(object):
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
-                    raise convert_exception(info, status.message) from None
+
+                    raise convert_exception(
+                        info, status.message, self._fetch_enriched_error(info)
+                    ) from None
 
             raise SparkConnectGrpcException(status.message) from None
         else:

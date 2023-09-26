@@ -22,6 +22,9 @@ Pandas API on Spark
 
 This page gives an overview of all public pandas API on Spark.
 
+.. note::
+   pandas API on Spark follows the API specifications of latest pandas release.
+
 .. toctree::
    :maxdepth: 2
 

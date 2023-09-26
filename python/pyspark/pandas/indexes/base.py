@@ -2007,7 +2007,7 @@ class Index(IndexOpsMixin):
 
         if isinstance(self, MultiIndex) and level is not None:
             self_names = self.names
-            self_names[level] = names  # type: ignore[index]
+            self_names[level] = names
             names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2077,7 +2077,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
+                other = MultiIndex.from_tuples(other)
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 

@@ -27,8 +27,8 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.4 and Java 8/11/17.
-Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.9.4 and Java 17/21.
+Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -261,6 +261,7 @@ or
 
     ./build/sbt docker-integration-tests/test
 
+<!---
 ## Change Scala Version
 
 When other versions of Scala like 2.13 are supported, it will be possible to build for that version.
@@ -275,6 +276,7 @@ Enable the profile (e.g. 2.13):
 
     # For sbt
     ./build/sbt -Pscala-2.13 compile
+-->
 
 ## Running Jenkins tests with GitHub Enterprise
 

@@ -1311,7 +1311,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
   </td>

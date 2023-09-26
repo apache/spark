@@ -248,7 +248,7 @@ class Dataset[T] private[sql](
   private[sql] def resolve(colName: String): NamedExpression = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     queryExecution.analyzed.resolveQuoted(colName, resolver)
-      .getOrElse(throw QueryCompilationErrors.resolveException(colName, schema.fieldNames))
+      .getOrElse(throw QueryCompilationErrors.unresolvedColumnError(colName, schema.fieldNames))
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -2218,7 +2218,7 @@ class Dataset[T] private[sql](
   */
   @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
-    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
+    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
   /**

@@ -2180,6 +2180,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED =
+    buildConf("spark.sql.streaming.triggerAvailableNowWrapper.enabled")
+      .internal()
+      .doc("Whether to use the wrapper implementation of Trigger.AvailableNow if the source " +
+        "does not support Trigger.AvailableNow. Enabling this allows the benefits of " +
+        "Trigger.AvailableNow with sources which don't support it, but some sources " +
+        "may show unexpected behavior including duplication, data loss, etc. So use with " +
+        "extreme care! The ideal direction is to persuade developers of source(s) to " +
+        "support Trigger.AvailableNow.")
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -4350,6 +4361,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  // Default is false (new, correct behavior) when ANSI is on, true (legacy, incorrect behavior)
+  // when ANSI is off. See legacyNullInEmptyBehavior.
   val LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR =
     buildConf("spark.sql.legacy.nullInEmptyListBehavior")
       .internal()
@@ -4359,7 +4372,7 @@ object SQLConf {
         "incorrectly evaluates to null in the legacy behavior.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createOptional
 
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
@@ -5172,6 +5185,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacySizeOfNull: Boolean = {
     // size(null) should return null under ansi mode.
     getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
+
+  def legacyNullInEmptyBehavior: Boolean = {
+    getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR).getOrElse(!ansiEnabled)
   }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
