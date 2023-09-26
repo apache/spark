@@ -385,7 +385,7 @@ private[spark] class PythonWorkerFactory(
           daemonWorkers.get(worker).foreach { pid =>
             // tell daemon to kill worker by pid
             val output = new DataOutputStream(daemon.getOutputStream)
-            output.writeInt(pid)
+            output.writeLong(pid)
             output.flush()
             daemon.getOutputStream.flush()
           }
