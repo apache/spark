@@ -177,7 +177,7 @@ fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
-BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
+BASE_PROFILES="-Pyarn -Pkubernetes"
 
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"

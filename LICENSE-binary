@@ -348,8 +348,7 @@ org.apache.directory.server:apacheds-i18n
 org.apache.directory.server:apacheds-kerberos-codec
 org.apache.htrace:htrace-core
 org.apache.ivy:ivy
-org.apache.mesos:mesos
-org.apache.parquet:parquet-column
+=org.apache.parquet:parquet-column
 org.apache.parquet:parquet-common
 org.apache.parquet:parquet-encoding
 org.apache.parquet:parquet-format

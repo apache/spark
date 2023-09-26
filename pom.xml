@@ -3599,13 +3599,6 @@
     </profile>
 
     <profile>
-      <id>mesos</id>
-      <modules>
-        <module>resource-managers/mesos</module>
-      </modules>
-    </profile>
-
-    <profile>
       <id>kubernetes</id>
       <modules>
         <module>resource-managers/kubernetes/core</module>
