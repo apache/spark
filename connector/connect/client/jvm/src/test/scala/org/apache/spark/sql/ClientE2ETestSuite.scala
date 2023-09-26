@@ -45,6 +45,34 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test(s"throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
+
   for (enrichErrorEnabled <- Seq(false, true)) {
     test(s"cause exception - ${enrichErrorEnabled}") {
       withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {

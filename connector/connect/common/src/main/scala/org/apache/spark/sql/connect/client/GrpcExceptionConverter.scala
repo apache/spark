@@ -222,7 +222,7 @@ private object GrpcExceptionConverter {
         new StackTraceElement(
           stackTraceElement.getDeclaringClass,
           stackTraceElement.getMethodName,
-          stackTraceElement.getFileName,
+          if (stackTraceElement.hasFileName) stackTraceElement.getFileName else null,
           stackTraceElement.getLineNumber)
       })
     }

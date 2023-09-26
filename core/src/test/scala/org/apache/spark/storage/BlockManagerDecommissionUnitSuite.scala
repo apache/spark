@@ -231,6 +231,46 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       numShuffles = Option(1))
   }
 
+  test("SPARK-44126: block decom manager handles BlockSavedOnDecommissionedBlockManagerException") {
+    // Set up the mocks so we return one shuffle block
+    val conf = sparkConf
+      .clone
+      .set(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK, 1)
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    val exe1 = BlockManagerId("exec1", "host1", 12345)
+    val exe2 = BlockManagerId("exec2", "host2", 12345)
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(exe1), Seq(exe1), Seq(exe2))
+
+    val blockTransferService = mock(classOf[BlockTransferService])
+    // Simulate BlockSavedOnDecommissionedBlockManagerException
+    when(blockTransferService.uploadBlock(
+      mc.any(), mc.any(), mc.eq(exe1.executorId), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      .thenReturn(
+        Future.failed(new RuntimeException("BlockSavedOnDecommissionedBlockManagerException"))
+      )
+    when(blockTransferService.uploadBlockSync(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      .thenCallRealMethod()
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+
+    // Verify the decom manager handles this correctly
+    val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
+    validateDecommissionTimestampsOnManager(bmDecomManager)
+    verify(blockTransferService, times(1))
+      .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
+        mc.any(), mc.any(), mc.any(), mc.isNull())
+    verify(blockTransferService, times(1))
+      .uploadBlock(mc.any(), mc.any(), mc.eq(exe2.executorId),
+        mc.any(), mc.any(), mc.any(), mc.isNull())
+  }
+
   test("block decom manager handles IO failures") {
     // Set up the mocks so we return one shuffle block
     val bm = mock(classOf[BlockManager])
