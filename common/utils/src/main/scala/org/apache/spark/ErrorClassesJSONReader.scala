@@ -93,7 +93,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .orNull
   }
 
-  def validateErrorClass(errorClass: String): Boolean = {
+  def isValidErrorClass(errorClass: String): Boolean = {
     val errorClasses = errorClass.split("\\.")
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)

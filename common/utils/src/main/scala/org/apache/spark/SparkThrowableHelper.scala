@@ -60,8 +60,8 @@ private[spark] object SparkThrowableHelper {
     errorReader.getSqlState(errorClass)
   }
 
-  def validateErrorClass(errorClass: String): Boolean = {
-    errorReader.validateErrorClass(errorClass)
+  def isValidErrorClass(errorClass: String): Boolean = {
+    errorReader.isValidErrorClass(errorClass)
   }
 
   def getMessageParameters(errorClass: String): Seq[String] = {

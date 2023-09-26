@@ -80,7 +80,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(str: Expression) = {
-    this(Literal("USER_RAISED_EXCEPTION"),
+    this(Literal(
+      if (SQLConf.get.getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)) {
+        "_LEGACY_ERROR_USER_RAISED_EXCEPTION"
+      } else {
+        "USER_RAISED_EXCEPTION"
+      }),
       CreateMap(Seq(Literal("errorMessage"), str)), NullType)
   }
 

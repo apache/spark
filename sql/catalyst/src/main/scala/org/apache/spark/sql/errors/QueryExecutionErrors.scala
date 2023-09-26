@@ -2749,7 +2749,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     }
 
     // Is the error class a known error class? If not raise an error
-    if (!SparkThrowableHelper.validateErrorClass(errorClassStr)) {
+    if (!SparkThrowableHelper.isValidErrorClass(errorClassStr)) {
       new SparkRuntimeException(
         errorClass = "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
         messageParameters = Map("errorClass" -> toSQLValue(errorClassStr)))
@@ -2763,7 +2763,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           messageParameters = Map("errorClass" -> errorClassStr,
             "expectedParms" -> expectedParms.mkString(","),
             "providedParms" -> providedParms.mkString(",")))
-      } else if (errorClass == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
+      } else if (errorClassStr == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
         // Don't break old raise_error() if asked
         new RuntimeException(errorParmsMap.head._2)
       } else {
