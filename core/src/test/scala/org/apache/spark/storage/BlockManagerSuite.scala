@@ -311,7 +311,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   Seq(true, false).foreach { shuffleServiceEnabled =>
-    test(s"SPARK-45310: report shuffle block status should respect " +
+    test("SPARK-45310: report shuffle block status should respect " +
       s"external shuffle service (enabled=$shuffleServiceEnabled)") {
       val conf = new SparkConf().set(config.SHUFFLE_SERVICE_ENABLED, shuffleServiceEnabled)
       val bm = makeBlockManager(1000, "executor", testConf = Some(conf))
