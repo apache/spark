@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.arrow.memory.RootAllocator
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -146,13 +146,12 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(BigDecimal(decimal))
     testImplicit(Date.valueOf(LocalDate.now()))
     testImplicit(LocalDate.now())
-    // SPARK-42770: Run `LocalDateTime.now()` and `Instant.now()` with Java 8 & 11 always
-    // get microseconds on both Linux and MacOS, but there are some differences when
-    // using Java 17, it will get accurate nanoseconds on Linux, but still get the microseconds
-    // on MacOS. At present, Spark always converts them to microseconds, this will cause the
+    // SPARK-42770: `LocalDateTime.now()` and `Instant.now()` it will get accurate
+    // nanoseconds on Linux, but get the microseconds on MacOS. At present,
+    // Spark always converts them to microseconds, this will cause the
     // test fail when using Java 17 on Linux, so add `truncatedTo(ChronoUnit.MICROS)` when
     // testing on Linux using Java 17 to ensure the accuracy of input data is microseconds.
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) && SystemUtils.IS_OS_LINUX) {
+    if (SystemUtils.IS_OS_LINUX) {
       testImplicit(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS))
       testImplicit(Instant.now().truncatedTo(ChronoUnit.MICROS))
       testImplicit(Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
