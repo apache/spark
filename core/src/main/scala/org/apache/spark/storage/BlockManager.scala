@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -527,9 +527,7 @@ private[spark] class BlockManager(
       logInfo(s"external shuffle service port = $externalShuffleServicePort")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
-      // Do not try to register with the external shuffle server under testing since none of
-      // test modes (local, local-cluster) enables shuffle service.
-      if (!isDriver && !Utils.isTesting) {
+      if (!isDriver && !(Utils.isTesting && conf.get(Tests.TEST_SKIP_ESS_REGISTER))) {
         registerWithExternalShuffleServer()
       }
     }
