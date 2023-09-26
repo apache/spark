@@ -1761,9 +1761,16 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = F.lit(na_sentinel_code)
         else:
-            map_scol = F.create_map(*kvs)
             null_scol = F.when(self.isnull().spark.column, F.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol[self.spark.column])
+            mapped_scol = None
+            for i in range(0, len(kvs), 2):
+                key = kvs[i]
+                value = kvs[i + 1]
+                if mapped_scol is None:
+                    mapped_scol = F.when(self.spark.column == key, value)
+                else:
+                    mapped_scol = mapped_scol.when(self.spark.column == key, value)
+            new_scol = null_scol.otherwise(mapped_scol)
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 
