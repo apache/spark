@@ -217,15 +217,16 @@ class DataFrame:
     alias.__doc__ = PySparkDataFrame.alias.__doc__
 
     def colRegex(self, colName: str) -> Column:
+        if self._plan is None:
+            raise SparkConnectException("Cannot colRegex on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot analyze without SparkSession.")
         if not isinstance(colName, str):
             raise PySparkTypeError(
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
-        if self._plan is not None:
-            return Column(UnresolvedRegex(colName, self._plan._plan_id))
-        else:
-            return Column(UnresolvedRegex(colName))
+        return Column(UnresolvedRegex(colName, self._plan._plan_id))
 
     colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
 
@@ -237,9 +238,6 @@ class DataFrame:
 
     @property
     def columns(self) -> List[str]:
-        if self._plan is None:
-            return []
-
         return self.schema.names
 
     columns.__doc__ = PySparkDataFrame.columns.__doc__
@@ -1860,6 +1858,11 @@ class DataFrame:
     def _explain_string(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> str:
+        if self._plan is None:
+            raise SparkConnectException("Cannot explain on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot analyze without SparkSession.")
+
         if extended is not None and mode is not None:
             raise PySparkValueError(
                 error_class="CANNOT_SET_TOGETHER",
@@ -1902,13 +1905,8 @@ class DataFrame:
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
 
-        if self._plan is not None:
-            if self._session is None:
-                raise Exception("Cannot analyze without SparkSession.")
-            query = self._plan.to_proto(self._session.client)
-            return self._session.client.explain_string(query, explain_mode)
-        else:
-            return ""
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.explain_string(query, explain_mode)
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
