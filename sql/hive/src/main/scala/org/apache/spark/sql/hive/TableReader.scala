@@ -327,7 +327,9 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD)
+      _minSplitsPerRDD,
+      ignoreCorruptFiles = conf.ignoreCorruptFiles,
+      ignoreMissingFiles = conf.ignoreMissingFiles)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
@@ -361,8 +363,9 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      jobConf
-    )
+      jobConf,
+      ignoreCorruptFiles = conf.ignoreCorruptFiles,
+      ignoreMissingFiles = conf.ignoreMissingFiles)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)

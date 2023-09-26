@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -65,9 +65,10 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
     }
   }
 
-  test("Replace spark.sql.hive.verifyPartitionPath by spark.files.ignoreMissingFiles") {
-    sparkContext.conf.set(IGNORE_MISSING_FILES.key, "true")
-    queryWhenPathNotExist()
+  test("Replace spark.sql.hive.verifyPartitionPath by spark.sql.files.ignoreMissingFiles") {
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+      queryWhenPathNotExist()
+    }
   }
 
   test("SPARK-21739: Cast expression should initialize timezoneId") {

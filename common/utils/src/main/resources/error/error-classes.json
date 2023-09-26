@@ -4097,11 +4097,6 @@
       "DESCRIBE does not support partition for v2 tables."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1113" : {
-    "message" : [
-      "Table <table> does not support <cmd>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1114" : {
     "message" : [
       "The streaming sources in a query do not have a common supported execution mode.",
