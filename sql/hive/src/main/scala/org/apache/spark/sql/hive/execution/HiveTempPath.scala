@@ -33,7 +33,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.client.HiveVersion
 
 class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: Path)
   extends Logging {
@@ -53,14 +52,14 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
 
     if (allSupportedHiveVersions.contains(hiveVersion)) {
-      newVersionExternalTempPath(path, stagingDir)
+      externalTempPath(path, stagingDir)
     } else {
       throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
     }
   }
 
   // Mostly copied from Context.java#getExternalTmpPath of Hive 1.2
-  private def newVersionExternalTempPath(path: Path, stagingDir: String): Path = {
+  private def externalTempPath(path: Path, stagingDir: String): Path = {
     val extURI: URI = path.toUri
     if (extURI.getScheme == "viewfs") {
       val qualifiedStagingDir = getStagingDir(path, stagingDir)
