@@ -32,7 +32,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -983,13 +983,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
     if (SystemUtils.IS_OS_UNIX) {
-      def pidExists(pid: Int): Boolean = {
+      def pidExists(pid: Long): Boolean = {
         val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
         p.exitValue() == 0
       }
 
-      def signal(pid: Int, s: String): Unit = {
+      def signal(pid: Long, s: String): Unit = {
         val p = Runtime.getRuntime.exec(Array("kill", s"-$s", s"$pid"))
         p.waitFor()
       }
