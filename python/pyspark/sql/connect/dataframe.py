@@ -595,6 +595,47 @@ class DataFrame:
 
     join.__doc__ = PySparkDataFrame.join.__doc__
 
+    def _joinAsOf(
+        self,
+        other: "DataFrame",
+        leftAsOfColumn: Union[str, Column],
+        rightAsOfColumn: Union[str, Column],
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        how: Optional[str] = None,
+        *,
+        tolerance: Optional[Column] = None,
+        allowExactMatches: bool = True,
+        direction: str = "backward",
+    ) -> "DataFrame":
+        if self._plan is None:
+            raise Exception("Cannot join when self._plan is empty.")
+        if other._plan is None:
+            raise Exception("Cannot join when other._plan is empty.")
+
+        if how is None:
+            how = "inner"
+        assert isinstance(how, str), "how should be a string"
+
+        if tolerance is not None:
+            assert isinstance(tolerance, Column), "tolerance should be Column"
+
+        return DataFrame.withPlan(
+            plan.AsOfJoin(
+                left=self._plan,
+                right=other._plan,
+                left_as_of=leftAsOfColumn,
+                right_as_of=rightAsOfColumn,
+                on=on,
+                how=how,
+                tolerance=tolerance,
+                allow_exact_matches=allowExactMatches,
+                direction=direction,
+            ),
+            session=self._session,
+        )
+
+    _joinAsOf.__doc__ = PySparkDataFrame._joinAsOf.__doc__
+
     def limit(self, n: int) -> "DataFrame":
         return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
