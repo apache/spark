@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import scala.collection.immutable.IndexedSeq
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 private[client] trait HiveClientVersions {
   private val testVersions = sys.env.get("SPARK_TEST_HIVE_CLIENT_VERSIONS")
   protected val versions = if (testVersions.nonEmpty) {

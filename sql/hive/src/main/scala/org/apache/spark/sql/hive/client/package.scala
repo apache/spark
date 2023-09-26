@@ -89,7 +89,7 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
-    val allSupportedHiveVersions =
+    val allSupportedHiveVersions: Set[HiveVersion] =
       Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
   }
   // scalastyle:on
