@@ -304,8 +304,6 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
@@ -388,8 +386,6 @@ case class AesEncrypt(
 
 /**
  * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
