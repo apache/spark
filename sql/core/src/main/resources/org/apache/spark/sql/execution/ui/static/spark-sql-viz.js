@@ -51,6 +51,18 @@ function renderPlanViz() {
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
 }
+
+function togglePlanViz() {
+  const arrow = d3.select("#plan-viz-graph-arrow");
+  arrow.each(function () {
+    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  });
+  if (arrow.classed("arrow-open")) {
+    planVizContainer().style("display", "block");
+  } else {
+    planVizContainer().style("display", "none");
+  }
+}
 /* eslint-enable no-unused-vars */
 
 /* -------------------- *
@@ -256,16 +268,4 @@ function onClickAdditionalMetricsCheckbox(checkboxNode) {
     additionalMetrics.hide();
   }
   window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
-}
-
-function togglePlanViz() {
-  const arrow = d3.select("#plan-viz-graph-arrow");
-  arrow.each(function () {
-    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
-  });
-  if (arrow.classed("arrow-open")) {
-    planVizContainer().style("display", "block");
-  } else {
-    planVizContainer().style("display", "none");
-  }
 }
