@@ -327,6 +327,7 @@ Collection Functions
     array_sort
     cardinality
     concat
+    element_at
     exists
     filter
     forall
@@ -338,6 +339,7 @@ Collection Functions
     transform
     transform_keys
     transform_values
+    try_element_at
     zip_with
 
 
@@ -388,7 +390,6 @@ Map Functions
     :toctree: api/
 
     create_map
-    element_at
     map_concat
     map_contains_key
     map_entries
@@ -397,7 +398,6 @@ Map Functions
     map_keys
     map_values
     str_to_map
-    try_element_at
 
 
 Aggregate Functions
