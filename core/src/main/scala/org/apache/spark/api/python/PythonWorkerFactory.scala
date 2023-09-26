@@ -189,7 +189,7 @@ private[spark] class PythonWorkerFactory(
       try {
         val socketChannel = serverSocketChannel.accept()
         authHelper.authClient(socketChannel.socket())
-        val pid workerProcess.toHandle.pid()
+        val pid = workerProcess.toHandle.pid()
         if (pid < 0) {
           throw new IllegalStateException("Python failed to launch worker with code " + pid)
         }
