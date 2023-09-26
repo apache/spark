@@ -444,7 +444,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
+      logInfo(s"executor-${arguments.executorId} ask driver for retrieve spark app config")
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId,
+        arguments.executorId))
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 
@@ -472,6 +474,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
       )
       val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile)
+      logInfo(s"Executor-${arguments.executorId} finished construct rpcendpoint backend")
       env.rpcEnv.setupEndpoint("Executor", backend)
       arguments.workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher",

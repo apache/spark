@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{HashMap, HashSet}
@@ -108,6 +108,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
+
+  // Last time of send up to date delegation tokens to executors.
+  private val driverLastUpdateTokensTimestamp = new AtomicLong(0L)
+  // DriverEndPoint is not thread-safety
+  private val executorLastGetTokenTimestampMap = new ConcurrentHashMap[String, Long]
 
   // The token manager used to create security tokens.
   private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
@@ -261,12 +266,39 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
+          var registeredTime = -1L
           CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap.put(executorId, data)
+            registeredTime = System.currentTimeMillis()
             if (currentExecutorIdCounter < executorId.toInt) {
               currentExecutorIdCounter = executorId.toInt
             }
           }
+          // Check whether the token held by the newly registered executor has expired
+          if (UserGroupInformation.isSecurityEnabled) {
+            logInfo(s"Check whether the token held by the newly registered " +
+              s"executor:$executorId has expired, " +
+              s"the timeline is: \n" +
+              s"Time of executor first get token: ${
+                executorLastGetTokenTimestampMap
+                  .getOrDefault(executorId, 0)
+              }\n" +
+              s"Time of driver last update token: ${driverLastUpdateTokensTimestamp.get()}\n" +
+              s"Time of new executor registered : $registeredTime\n")
+            val shouldForceUpdateToken =
+              executorLastGetTokenTimestampMap.getOrDefault(executorId, 0) <
+                driverLastUpdateTokensTimestamp.get() &&
+                driverLastUpdateTokensTimestamp.get() < registeredTime
+            if (shouldForceUpdateToken) {
+              logInfo(s"The delegationToken obtained by executor-$executorId " +
+                s"has expired and needs to be forcibly updated")
+              data.executorEndpoint.send(UpdateDelegationTokens(delegationTokens.get()))
+            } else {
+              logInfo(s"executor-$executorId's token is already up to date, " +
+                s"doesn't need to update the token")
+            }
+          }
+
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
           // Note: some tests expect the reply to come after we put the executor in the map
@@ -298,13 +330,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             adjustTargetNumExecutors = false,
             triggeredByExecutor = true))
 
-      case RetrieveSparkAppConfig(resourceProfileId) =>
+      case RetrieveSparkAppConfig(resourceProfileId, executorId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
           rp)
+        executorLastGetTokenTimestampMap.put(executorId, System.currentTimeMillis())
         context.reply(reply)
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
@@ -425,6 +458,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               reason
             }
           }
+          executorLastGetTokenTimestampMap.remove(executorId)
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, lossReason)
@@ -545,6 +579,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def start(): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
+      logInfo("Driver Starting create delegationTokenManager")
       delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>
         val ugi = UserGroupInformation.getCurrentUser()
@@ -933,8 +968,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
     delegationTokens.set(tokens)
     executorDataMap.values.foreach { ed =>
+      logInfo(s"Driver starting send updateDelegationTokens msg to ${ed.executorAddress} ")
       ed.executorEndpoint.send(UpdateDelegationTokens(tokens))
     }
+    logInfo(s"Driver finished send new token to ${executorDataMap.size} executors " +
+      s"at ${System.currentTimeMillis()}")
+    driverLastUpdateTokensTimestamp.set(System.currentTimeMillis())
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
