@@ -715,7 +715,7 @@ package object config {
       .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
-    ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
+    ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7447)
 
   private[spark] val SHUFFLE_SERVICE_NAME =
     ConfigBuilder("spark.shuffle.service.name")
