@@ -258,7 +258,7 @@ This file is divided into 3 sections:
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
-  <!-- As of TODO JavaConverters should be replaced with CollectionConverters -->
+  <!-- As of SPARK-45338 JavaConverters should be replaced with CollectionConverters -->
   <check customId="javaconverters" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConverters</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConverters._, import
