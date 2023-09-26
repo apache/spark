@@ -135,16 +135,16 @@ private[sql] class AvroDeserializer(
 
       case (INT, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
+        throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
 
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
 
       case (LONG, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
-          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
+        throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
 
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
@@ -224,7 +224,7 @@ private[sql] class AvroDeserializer(
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
           throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
-            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
+            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
         (updater, ordinal, value) =>
           val bigDecimal =
@@ -237,7 +237,7 @@ private[sql] class AvroDeserializer(
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
           throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
-            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
+            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
         (updater, ordinal, value) =>
           val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)

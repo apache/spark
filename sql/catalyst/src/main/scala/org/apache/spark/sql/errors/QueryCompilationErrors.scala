@@ -3741,32 +3741,34 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def avroIncorrectTypeError(
-      avroPath: String, sqlPath: String, avroType: String,
-      sqlType: String, key: String): Throwable = {
+  def avroIncompatibleReadError(
+      avroPath: String,
+      sqlPath: String,
+      avroType: String,
+      sqlType: String): Throwable = {
     new AnalysisException(
-      errorClass = "AVRO_INCORRECT_TYPE",
+      errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
       messageParameters = Map(
         "avroPath" -> avroPath,
         "sqlPath" -> sqlPath,
         "avroType" -> avroType,
-        "sqlType" -> toSQLType(sqlType),
-        "key" -> key
+        "sqlType" -> toSQLType(sqlType)
       )
     )
   }
 
   def avroLowerPrecisionError(
-      avroPath: String, sqlPath: String, avroType: String,
-      sqlType: String, key: String): Throwable = {
+      avroPath: String,
+      sqlPath: String,
+      avroType: String,
+      sqlType: String): Throwable = {
     new AnalysisException(
       errorClass = "AVRO_LOWER_PRECISION",
       messageParameters = Map(
         "avroPath" -> avroPath,
         "sqlPath" -> sqlPath,
         "avroType" -> avroType,
-        "sqlType" -> toSQLType(sqlType),
-        "key" -> key
+        "sqlType" -> toSQLType(sqlType)
       )
     )
   }

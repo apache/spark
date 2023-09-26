@@ -880,7 +880,7 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
@@ -923,7 +923,7 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
