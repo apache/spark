@@ -223,7 +223,7 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
+          throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
             toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
         (updater, ordinal, value) =>
@@ -236,7 +236,7 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
+          throw QueryCompilationErrors.avroIncompatibleReadError(toFieldStr(avroPath),
             toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString)
         }
         (updater, ordinal, value) =>

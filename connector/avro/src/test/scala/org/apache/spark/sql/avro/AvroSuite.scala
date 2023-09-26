@@ -829,7 +829,7 @@ abstract class AvroSuite
           case ex: AnalysisException =>
             checkError(
               exception = ex,
-              errorClass = "AVRO_LOWER_PRECISION",
+              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",

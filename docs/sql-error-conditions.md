@@ -97,13 +97,7 @@ For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.ht
 
 SQLSTATE: none assigned
 
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `spark.sql.legacy.avro.allowIncompatibleSchema`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `spark.sql.legacy.avro.allowIncompatibleSchema`.
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: "spark.sql.legacy.avro.allowIncompatibleSchema".
 
 ### BATCH_METADATA_NOT_FOUND
 
