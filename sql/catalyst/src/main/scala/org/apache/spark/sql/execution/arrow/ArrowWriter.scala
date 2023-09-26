@@ -463,7 +463,7 @@ private[arrow] class DurationWriter(val valueVector: DurationVector)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueVector.set(count, input.getLong(ordinal))
+    valueVector.setSafe(count, input.getLong(ordinal))
   }
 }
 
