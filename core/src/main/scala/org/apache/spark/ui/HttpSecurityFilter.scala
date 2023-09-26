@@ -74,6 +74,23 @@ private class HttpSecurityFilter(
       return
     }
 
+    def checkBlankList(hostAccessArray: Array[String], host: String): Boolean = {
+      var isAllow = false
+      if (host == null) isAllow = true
+      if (hostAccessArray.contains(host)) {
+        isAllow = true
+      }
+      isAllow
+    }
+
+    val hostAccessArray = conf.get(UI_ACCESS_HOST).split(",")
+    val host = hres.getHeader("host");
+    if (!checkBlankList(hostAccessArray, host)) {
+      hres.sendError(HttpServletResponse.SC_FORBIDDEN,
+        s"Host $host is not authorized to access this page.")
+      return
+    }
+
     // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
     // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
     // same origin, but allow framing for a specific named URI.

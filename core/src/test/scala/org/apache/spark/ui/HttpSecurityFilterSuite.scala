@@ -156,6 +156,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     // have permissions to process the request.
     when(req.getParameter("doAs")).thenReturn("proxy")
     when(req.getRemoteUser()).thenReturn("bob")
+    when(req.getHeader("host")).thenReturn(null)
     filter.doFilter(req, res, chain)
     verify(res, times(1)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
 
@@ -173,6 +174,26 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     when(req.getParameter("doAs")).thenReturn("alice")
     filter.doFilter(req, res, chain)
     verify(res, times(2)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+  }
+
+  test("host impersonation") {
+    val conf = new SparkConf(false)
+
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+    val filter = new HttpSecurityFilter(conf, secMgr)
+
+    when(req.getParameter("doAs")).thenReturn("proxy")
+    when(req.getRemoteUser()).thenReturn("admin")
+    filter.doFilter(req, res, chain)
+    verify(chain, times(1)).doFilter(any(), any())
+
+    // Impersonating a host without view permissions should cause an error.
+    when(req.getHeader("host")).thenReturn("100.120.17.19")
+    filter.doFilter(req, res, chain)
+    verify(res, times(1)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
   }
 
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {
