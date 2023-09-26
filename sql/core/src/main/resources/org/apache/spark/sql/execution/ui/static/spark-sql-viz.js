@@ -258,7 +258,7 @@ function onClickAdditionalMetricsCheckbox(checkboxNode) {
   window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
 }
 
-function togglePlanViz() {
+function togglePlanViz() { // eslint-disable-line no-unused-vars
   const arrow = d3.select("#plan-viz-graph-arrow");
   arrow.each(function () {
     $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
