@@ -323,10 +323,22 @@ Collection Functions
 .. autosummary::
     :toctree: api/
 
+    aggregate
+    array_sort
     cardinality
     concat
+    exists
+    filter
+    forall
+    map_filter
+    map_zip_with
+    reduce
     reverse
     size
+    transform
+    transform_keys
+    transform_values
+    zip_with
 
 
 Array Functions
@@ -386,25 +398,6 @@ Map Functions
     map_values
     str_to_map
     try_element_at
-
-
-Lambda Functions
-----------------
-.. autosummary::
-    :toctree: api/
-
-    aggregate
-    array_sort
-    exists
-    filter
-    forall
-    map_filter
-    map_zip_with
-    reduce
-    transform
-    transform_keys
-    transform_values
-    zip_with
 
 
 Aggregate Functions
