@@ -1261,14 +1261,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
-    .doc("When true, check all the partition paths under the table\'s root directory " +
-         "when reading data stored in HDFS. This configuration will be deprecated in the future " +
-         s"releases and replaced by ${SPARK_IGNORE_MISSING_FILES.key}.")
-    .version("1.4.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val HIVE_METASTORE_DROP_PARTITION_BY_NAME =
     buildConf("spark.sql.hive.dropPartitionByName.enabled")
       .doc("When true, Spark will get partition name rather than partition object " +
@@ -4472,8 +4464,6 @@ object SQLConf {
         PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
         "The config allows to switch to the behaviour before Spark 2.4 " +
           "and will be removed in the future releases."),
-      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0",
-        s"This config is replaced by '${SPARK_IGNORE_MISSING_FILES.key}'."),
       DeprecatedConfig(ARROW_EXECUTION_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
@@ -4552,7 +4542,9 @@ object SQLConf {
       RemovedConfig("spark.sql.ansi.strictIndexOperator", "3.4.0", "true",
         "This was an internal configuration. It is not needed anymore since Spark SQL always " +
           "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
-          "for more details.")
+          "for more details."),
+      RemovedConfig("spark.sql.hive.verifyPartitionPath", "4.0.0", "false",
+        s"This config was replaced by '${SPARK_IGNORE_MISSING_FILES.key}'.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4765,8 +4757,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
-
-  def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastoreDropPartitionsByName: Boolean = getConf(HIVE_METASTORE_DROP_PARTITION_BY_NAME)
 
