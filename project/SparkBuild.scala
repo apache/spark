@@ -365,10 +365,6 @@ object SparkBuild extends PomBuild {
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
 
-    // To prevent intermittent compilation failures, see also SPARK-33297
-    // Apparently we can remove this when we use JDK 11.
-    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
-
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
     PB.protocVersion := protoVersion,
