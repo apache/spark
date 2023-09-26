@@ -469,7 +469,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
   private val legacyNullInEmptyBehavior =
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+    SQLConf.get.legacyNullInEmptyBehavior
 
   override lazy val canonicalized: Expression = {
     val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
@@ -626,7 +626,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INSET)
   private val legacyNullInEmptyBehavior =
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+    SQLConf.get.legacyNullInEmptyBehavior
 
   override def eval(input: InternalRow): Any = {
     if (hset.isEmpty && !legacyNullInEmptyBehavior) {

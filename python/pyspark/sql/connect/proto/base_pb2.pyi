@@ -2816,12 +2816,20 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             *,
             declaring_class: builtins.str = ...,
             method_name: builtins.str = ...,
-            file_name: builtins.str = ...,
+            file_name: builtins.str | None = ...,
             line_number: builtins.int = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_file_name", b"_file_name", "file_name", b"file_name"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_file_name",
+                b"_file_name",
                 "declaring_class",
                 b"declaring_class",
                 "file_name",
@@ -2832,6 +2840,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"method_name",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
+        ) -> typing_extensions.Literal["file_name"] | None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

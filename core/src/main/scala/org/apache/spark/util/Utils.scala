@@ -1785,7 +1785,17 @@ private[spark] object Utils
   /**
    * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
+  def getIteratorSize(iterator: Iterator[_]): Long = {
+    if (iterator.knownSize >= 0) iterator.knownSize.toLong
+    else {
+      var count = 0L
+      while (iterator.hasNext) {
+        count += 1L
+        iterator.next()
+      }
+      count
+    }
+  }
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
@@ -2139,8 +2149,7 @@ private[spark] object Utils
 
   /** Return a heap dump. Used to capture dumps for the web UI */
   def getHeapHistogram(): Array[String] = {
-    // From Java 9+, we can use 'ProcessHandle.current().pid()'
-    val pid = getProcessName().split("@").head
+    val pid = String.valueOf(ProcessHandle.current().pid())
     val jmap = System.getProperty("java.home") + "/bin/jmap"
     val builder = new ProcessBuilder(jmap, "-histo:live", pid)
     val p = builder.start()
