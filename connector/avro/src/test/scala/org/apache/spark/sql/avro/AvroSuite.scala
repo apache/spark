@@ -833,8 +833,7 @@ abstract class AvroSuite
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> "\"DECIMAL\\(4,3\\)\"",
-                "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
               matchPVals = true
             )
           case other =>
@@ -884,8 +883,7 @@ abstract class AvroSuite
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>
@@ -927,8 +925,7 @@ abstract class AvroSuite
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>
