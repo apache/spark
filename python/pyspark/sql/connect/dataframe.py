@@ -1730,9 +1730,9 @@ class DataFrame:
     @property
     def schema(self) -> StructType:
         if self._plan is not None:
-            query = self._plan.to_proto(self._session.client)
             if self._session is None:
                 raise Exception("Cannot analyze without SparkSession.")
+            query = self._plan.to_proto(self._session.client)
             return self._session.client.schema(query)
         else:
             raise Exception("Empty plan.")
@@ -1860,9 +1860,9 @@ class DataFrame:
             explain_mode = cast(str, extended)
 
         if self._plan is not None:
-            query = self._plan.to_proto(self._session.client)
             if self._session is None:
                 raise Exception("Cannot analyze without SparkSession.")
+            query = self._plan.to_proto(self._session.client)
             return self._session.client.explain_string(query, explain_mode)
         else:
             return ""
