@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -73,8 +72,9 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
   }
 
   test("Replace spark.sql.hive.verifyPartitionPath by spark.files.ignoreMissingFiles") {
-    withSQLConf(SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "false") {
-      sparkContext.conf.set(IGNORE_MISSING_FILES.key, "true")
+    withSQLConf(
+      SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "false",
+      SQLConf.IGNORE_MISSING_FILES.key -> "true") {
       queryWhenPathNotExist()
     }
   }
