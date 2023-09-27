@@ -2761,7 +2761,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       if (expectedParms != providedParms) {
         new SparkRuntimeException(
           errorClass = "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
-          messageParameters = Map("errorClass" -> errorClassStr,
+          messageParameters = Map("errorClass" -> toSQLvalue(errorClassStr),
             "expectedParms" -> expectedParms.mkString(","),
             "providedParms" -> providedParms.mkString(",")))
       } else if (errorClassStr == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
