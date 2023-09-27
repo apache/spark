@@ -2207,7 +2207,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         Project(aliases, u.child)
 
       case q: LogicalPlan =>
-        q.transformExpressionsWithPruning(
+        q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
