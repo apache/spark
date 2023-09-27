@@ -69,8 +69,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
       if ((notRunningUnitTests || testExceptionThrown) && !supportTaskResourceProfile) {
-        throw new SparkException("TaskResourceProfiles are only supported for Standalone " +
-          "cluster for now when dynamic allocation is disabled.")
+        throw new SparkException("TaskResourceProfiles are only supported for Standalone and " +
+          "Yarn cluster for now when dynamic allocation is disabled.")
       }
     } else {
       val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
