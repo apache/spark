@@ -24,8 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class CategoricalIndexParityTests(
     CategoricalIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    def test_factorize(self):
-        super().test_factorize()
+    pass
 
 
 if __name__ == "__main__":

@@ -29,9 +29,6 @@ class CategoricalParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    def test_factorize(self):
-        super().test_factorize()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_categorical import *  # noqa: F401
