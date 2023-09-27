@@ -735,7 +735,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield row
                 self._udtf = self._create_udtf()
             if self._udtf.eval is not None:
-                result = self._udtf.eval(*args, **kwargs)
+                # Filter the non-keyword arguments to exclude projected PARTITION BY values added
+                # internally by Catalyst.
+                filtered_args: list = [
+                    arg for (index, arg) in enumerate(args)
+                    if index not in self._partition_child_indexes]
+                result = self._udtf.eval(filtered_args, **kwargs)
                 if result is not None:
                     for row in result:
                         yield row
@@ -752,7 +757,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 prev_table_arg = self._get_table_arg(self._prev_arguments)
                 cur_partitions_args = []
                 prev_partitions_args = []
-                for i in partition_child_indexes:
+                for i in self._partition_child_indexes:
                     cur_partitions_args.append(cur_table_arg[i])
                     prev_partitions_args.append(prev_table_arg[i])
                 self._prev_arguments = arguments
