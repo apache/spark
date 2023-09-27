@@ -2009,7 +2009,7 @@ class BaseUDTFTestsMixin:
                 self._partition_col = None
 
             def eval(self, row: Row):
-                # Make sure that the PARTITION BY and ORDER BY expressions were projected out.
+                # Make sure that the PARTITION BY expressions were projected out.
                 assert(len(row.asDict().items()) == 2)
                 self._sum += row["input"]
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
