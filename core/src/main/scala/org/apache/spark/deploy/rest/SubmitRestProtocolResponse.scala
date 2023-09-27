@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.rest
 
-import java.lang.Boolean
+import java.lang.{Boolean => JBoolean}
 
 /**
  * An abstract response sent from the server in the REST application submission protocol.
  */
 private[rest] abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   var serverSparkVersion: String = null
-  var success: Boolean = null
+  var success: JBoolean = null
   var unknownFields: Array[String] = null
   protected override def doValidate(): Unit = {
     super.doValidate()

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.rest
 
-import java.lang.Boolean
+import java.lang.{Boolean => JBoolean}
 
 import scala.util.Properties.versionNumberString
 
@@ -347,7 +347,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
 
 private class DummyResponse extends SubmitRestProtocolResponse
 private class DummyRequest extends SubmitRestProtocolRequest {
-  var active: Boolean = null
+  var active: JBoolean = null
   var age: Integer = null
   var name: String = null
   protected override def doValidate(): Unit = {
