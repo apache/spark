@@ -1115,7 +1115,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   test("create remote block push resolver instance") {
     val mockConf = mock(classOf[TransportConf])
-    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name()))
+    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.ROCKSDB.name()))
       .thenReturn(shuffleDBBackend().name())
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")

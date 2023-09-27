@@ -1280,7 +1280,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
+  <td>ROCKSDB</td>
   <td>
     Specifies a disk-based store used in shuffle service local db. Setting as LEVELDB or ROCKSDB.
   </td>
