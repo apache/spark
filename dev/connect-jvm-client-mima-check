@@ -36,7 +36,6 @@ rm -f .connect-mima-check-result
 
 echo "Download maven's corrupted file"
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=geny_2.13 -Dversion=0.7.1 -Dtransitive=false --no-transfer-progress
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=org.slf4j -DartifactId=slf4j-api -Dversion=1.7.5 -Dtransitive=false --no-transfer-progress
 
 echo "Build required modules..."
 build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
