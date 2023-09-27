@@ -51,6 +51,20 @@ A string literal is used to specify a character string value.
 
     Case insensitive, indicates `RAW`. If a string literal starts with `r` prefix, neither special characters nor unicode characters are escaped by `\`.
 
+The following escape sequences are recognized in regular string literals (without the `r` prefix), and replaced according to the following rules:
+- `\0` -> `\u0000`, unicode character with the code 0;
+- `\'` -> `'`, skip the slash before `'`;
+- `\"` -> `"`, skip the slash before `"`;
+- `\b` -> `\u0008`, backspace;
+- `\n` -> `\u000a`, linefeed;
+- `\r` -> `\u000d`, carriage return;
+- `\t` -> `\u0009`, horizontal tab;
+- `\Z` -> `\u001A`, substitute;
+- `\\` -> `\ `, skip one slash;
+- `\%` -> `\%`;
+- `\_` -> `\_`;
+- `\<other char>` -> `<other char>`, skip the slash and leave the character as is.
+
 #### Examples
 
 ```sql
