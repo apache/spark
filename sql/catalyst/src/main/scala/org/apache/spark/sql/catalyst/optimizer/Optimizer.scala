@@ -1263,7 +1263,7 @@ object EliminateWindowPartitions extends Rule[LogicalPlan] {
     }
 
   def removeWindowExpressionPartitions(plan: LogicalPlan): LogicalPlan =
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(WINDOW_EXPRESSION), ruleId) {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case we @ WindowExpression(_, ws @ WindowSpecDefinition(ps, _, _)) if ps.exists(_.foldable) =>
         we.copy(windowSpec = ws.copy(partitionSpec = ps.filter(!_.foldable)))
     }
