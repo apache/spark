@@ -814,6 +814,15 @@ message FetchErrorDetailsResponse {
     int32 line_number = 4;
   }
 
+  // SparkThrowable defines the schema for SparkThrowable exceptions.
+  message SparkThrowable {
+    // Succinct, human-readable, unique, and consistent representation of the error category.
+    optional string error_class = 1;
+
+    // message parameters for the error framework.
+    map<string, string> message_parameters = 2;
+  }
+
   // Error defines the schema for the representing exception.
   message Error {
     // The fully qualified names of the exception class and its parent classes.
@@ -828,6 +837,9 @@ message FetchErrorDetailsResponse {
 
     // The index of the cause error in errors.
     optional int32 cause_idx = 4;
+
+    // The structured data of a SparkThrowable exception.
+    optional SparkThrowable spark_throwable = 5;
   }
 
   // The index of the root error in errors. The field will not be set if the error is not found.

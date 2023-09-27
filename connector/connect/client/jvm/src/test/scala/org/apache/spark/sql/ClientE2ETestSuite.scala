@@ -106,8 +106,14 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
       }
 
+      assert(ex.getErrorClass != null)
+      assert(!ex.getMessageParameters.isEmpty)
       assert(ex.getCause.isInstanceOf[SparkException])
-      assert(ex.getCause.getMessage.contains("test" * 10000))
+
+      val cause = ex.getCause.asInstanceOf[SparkException]
+      assert(cause.getErrorClass == null)
+      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getMessage.contains("test" * 10000))
     }
   }
 
@@ -119,6 +125,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         val ex = intercept[AnalysisException] {
           spark.sql("select x").collect()
         }
+        assert(ex.getErrorClass != null)
+        assert(!ex.messageParameters.isEmpty)
+        assert(ex.getSqlState != null)
+        assert(!ex.isInternalError)
         assert(
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
@@ -137,23 +147,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("throw NoSuchDatabaseException") {
-    intercept[NoSuchDatabaseException] {
+    val ex = intercept[NoSuchDatabaseException] {
       spark.sql("use database123")
     }
+    assert(ex.getErrorClass != null)
   }
 
   test("throw NoSuchTableException") {
-    intercept[NoSuchTableException] {
+    val ex = intercept[NoSuchTableException] {
       spark.catalog.getTable("test_table")
     }
+    assert(ex.getErrorClass != null)
   }
 
   test("throw NamespaceAlreadyExistsException") {
     try {
       spark.sql("create database test_db")
-      intercept[NamespaceAlreadyExistsException] {
+      val ex = intercept[NamespaceAlreadyExistsException] {
         spark.sql("create database test_db")
       }
+      assert(ex.getErrorClass != null)
     } finally {
       spark.sql("drop database test_db")
     }
@@ -162,9 +175,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("throw TempTableAlreadyExistsException") {
     try {
       spark.sql("create temporary view test_view as select 1")
-      intercept[TempTableAlreadyExistsException] {
+      val ex = intercept[TempTableAlreadyExistsException] {
         spark.sql("create temporary view test_view as select 1")
       }
+      assert(ex.getErrorClass != null)
     } finally {
       spark.sql("drop view test_view")
     }
@@ -173,16 +187,21 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("throw TableAlreadyExistsException") {
     withTable("testcat.test_table") {
       spark.sql(s"create table testcat.test_table (id int)")
-      intercept[TableAlreadyExistsException] {
+      val ex = intercept[TableAlreadyExistsException] {
         spark.sql(s"create table testcat.test_table (id int)")
       }
+      assert(ex.getErrorClass != null)
     }
   }
 
   test("throw ParseException") {
-    intercept[ParseException] {
+    val ex = intercept[ParseException] {
       spark.sql("selet 1").collect()
     }
+    assert(ex.getErrorClass != null)
+    assert(!ex.messageParameters.isEmpty)
+    assert(ex.getSqlState != null)
+    assert(!ex.isInternalError)
   }
 
   test("spark deep recursion") {
