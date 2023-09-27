@@ -87,6 +87,12 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
+### AVRO_INCOMPATIBLE_READ_TYPE
+
+SQLSTATE: none assigned
+
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: "spark.sql.legacy.avro.allowIncompatibleSchema".
+
 ### BATCH_METADATA_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
