@@ -277,6 +277,8 @@ case class ScalarSubquery(
     }
     plan.schema.fields.head.dataType
   }
+  override lazy val resolved: Boolean =
+    childrenResolved && plan.resolved & plan.schema.fields.length == 1
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
