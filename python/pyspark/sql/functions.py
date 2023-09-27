@@ -11685,7 +11685,7 @@ def create_map(
     *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """
-    Collection function: Creates a new map column from an even number of input columns or
+    Map function: Creates a new map column from an even number of input columns or
     column references. The input columns are grouped into key-value pairs to form a map.
     For instance, the input (key1, value1, key2, value2, ...) would produce a map that
     associates key1 with value1, key2 with value2, and so on. The function supports
@@ -12045,7 +12045,7 @@ def slice(
     x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     """
-    Collection function: Returns a new array column by slicing the input array column from
+    Array function: Returns a new array column by slicing the input array column from
     a start index to a specific length. The indices start at 1, and can be negative to index
     from the end of the array. The length specifies the number of elements in the resulting array.
 
@@ -12119,7 +12119,7 @@ def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
     """
-    Collection function: Returns a string column by concatenating the elements of the input
+    Array function: Returns a string column by concatenating the elements of the input
     array column using the delimiter. Null values within the array can be replaced with
     a specified string through the null_replacement argument. If null_replacement is
     not set, null values are ignored.
