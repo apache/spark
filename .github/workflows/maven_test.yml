@@ -182,7 +182,7 @@ jobs:
           export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
           # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
           set -e
-          export MAVEN_OPTS="-Xss64m -Xmx5g -Xms5g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+          export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
