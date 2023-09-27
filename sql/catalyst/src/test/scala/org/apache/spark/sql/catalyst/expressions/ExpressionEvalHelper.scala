@@ -211,6 +211,10 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         }.getMessage
         if (errMsg == null) {
           if (expectedErrMsg != null) {
+            fail(s"Expected `$expectedErrMsg` but null error message found")
+          }
+        } else if (expectedErrMsg == null) {
+          if (errMsg != null) {
             fail(s"Expected null error message, but `$errMsg` found")
           }
         } else if (!errMsg.contains(expectedErrMsg)) {
