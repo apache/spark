@@ -3256,9 +3256,7 @@ object functions {
    * @group misc_funcs
    * @since 4.0.0
    */
-  def raise_error(c: Column, e: Column): Column = withExpr {
-    RaiseError(c.expr, e.expr)
-  }
+  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
 
   /**
    * Returns the estimated number of unique values given the binary representation

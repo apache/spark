@@ -216,9 +216,9 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorClass" : "VIEW_NOT_FOUND",
-    "expectedParms" : "relationName",
-    "providedParms" : "relationNAME"
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
+    "providedParms" : "'relationNAME'"
   }
 }
 
@@ -233,8 +233,8 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorClass" : "VIEW_NOT_FOUND",
-    "expectedParms" : "relationName",
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
     "providedParms" : ""
   }
 }
@@ -250,9 +250,9 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
   "sqlState" : "P0001",
   "messageParameters" : {
-    "errorClass" : "VIEW_NOT_FOUND",
-    "expectedParms" : "relationName",
-    "providedParms" : "relationName,totallymadeup"
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
+    "providedParms" : "'relationName','totallymadeup'"
   }
 }
 

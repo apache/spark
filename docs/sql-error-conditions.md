@@ -2231,10 +2231,4 @@ The `<functionName>` requires `<expectedNum>` parameters but the actual number i
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
 
-### _LEGACY_ERROR_USER_RAISED_EXCEPTION
-
-SQLSTATE: P0001
-
-`<errorMessage>`
-
 
