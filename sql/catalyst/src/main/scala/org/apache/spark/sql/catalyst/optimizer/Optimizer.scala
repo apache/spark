@@ -96,7 +96,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
-        OptimizeWindowPartitions,
+        EliminateWindowPartitions,
         TransposeWindow,
         NullPropagation,
         // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
@@ -1255,16 +1255,16 @@ object OptimizeRepartition extends Rule[LogicalPlan] {
 /**
  * Remove window partition if partition expressions are foldable
  */
-object OptimizeWindowPartitions extends Rule[LogicalPlan] {
+object EliminateWindowPartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = removeWindowExpressionPartitions(plan)
     .transformWithPruning(_.containsPattern(WINDOW), ruleId) {
-      case w @ Window(_, ps, _, _) =>
+      case w @ Window(_, ps, _, _) if ps.exists(_.foldable) =>
         w.copy(partitionSpec = ps.filter(!_.foldable))
     }
 
   def removeWindowExpressionPartitions(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(WINDOW_EXPRESSION), ruleId) {
-      case we @ WindowExpression(_, ws @ WindowSpecDefinition(ps, _, _)) =>
+      case we @ WindowExpression(_, ws @ WindowSpecDefinition(ps, _, _)) if ps.exists(_.foldable) =>
         we.copy(windowSpec = ws.copy(partitionSpec = ps.filter(!_.foldable)))
     }
 }

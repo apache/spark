@@ -137,7 +137,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.OptimizeOneRowPlan" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
-      "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowPartitions" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields"::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
