@@ -277,7 +277,6 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
-        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
       }
     }
   }
