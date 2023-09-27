@@ -933,14 +933,14 @@ class AsOfJoin(LogicalPlan):
             plan.as_of_join.left_as_of.CopyFrom(self.left_as_of.to_plan(session))
         else:
             plan.as_of_join.left_as_of.CopyFrom(
-                ColumnReference(self.left_as_of, self.left._plan_id)
+                ColumnReference(self.left_as_of, self.left._plan_id).to_plan(session)
             )
 
         if isinstance(self.right_as_of, Column):
             plan.as_of_join.right_as_of.CopyFrom(self.right_as_of.to_plan(session))
         else:
             plan.as_of_join.right_as_of.CopyFrom(
-                ColumnReference(self.right_as_of, self.right._plan_id)
+                ColumnReference(self.right_as_of, self.right._plan_id).to_plan(session)
             )
 
         if self.on is not None:
