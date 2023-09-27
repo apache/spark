@@ -258,10 +258,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=unchecked&msg=outer reference:s",
         "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
         "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
-        // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-        // from the corresponding files when Scala 2.12 is no longer supported.
-        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
         "-Wconf:msg=Implicit definition should have explicit type:s"
       )
