@@ -4349,7 +4349,7 @@ object SQLConf {
         "reject reading the data type in the format to avoid returning incorrect results. " +
         "When set to true, it restores the legacy behavior of allow reading the data in the" +
         " format, which may return incorrect results.")
-      .version("3.5.0")
+      .version("3.5.1")
       .booleanConf
       .createWithDefault(false)
 
