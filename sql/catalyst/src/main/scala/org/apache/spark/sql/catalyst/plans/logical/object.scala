@@ -727,16 +727,20 @@ object JoinWith {
           if a.sameRef(b) =>
           catalyst.expressions.EqualTo(
             plan.left.resolveQuoted(a.name, resolver).getOrElse(
-              throw QueryCompilationErrors.resolveException(a.name, plan.left.schema.fieldNames)),
+              throw QueryCompilationErrors.unresolvedColumnError(
+                a.name, plan.left.schema.fieldNames)),
             plan.right.resolveQuoted(b.name, resolver).getOrElse(
-              throw QueryCompilationErrors.resolveException(b.name, plan.right.schema.fieldNames)))
+              throw QueryCompilationErrors.unresolvedColumnError(
+                b.name, plan.right.schema.fieldNames)))
         case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
           catalyst.expressions.EqualNullSafe(
             plan.left.resolveQuoted(a.name, resolver).getOrElse(
-              throw QueryCompilationErrors.resolveException(a.name, plan.left.schema.fieldNames)),
+              throw QueryCompilationErrors.unresolvedColumnError(
+                a.name, plan.left.schema.fieldNames)),
             plan.right.resolveQuoted(b.name, resolver).getOrElse(
-              throw QueryCompilationErrors.resolveException(b.name, plan.right.schema.fieldNames)))
+              throw QueryCompilationErrors.unresolvedColumnError(
+                b.name, plan.right.schema.fieldNames)))
       }
     }
     plan.copy(condition = cond)
