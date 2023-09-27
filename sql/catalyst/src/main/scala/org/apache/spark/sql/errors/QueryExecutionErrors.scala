@@ -1344,7 +1344,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "EXPRESSION_DECODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)

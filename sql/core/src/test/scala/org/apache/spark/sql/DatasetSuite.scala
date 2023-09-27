@@ -2594,7 +2594,6 @@ class DatasetSuite extends QueryTest
         exception = exception,
         errorClass = "EXPRESSION_DECODING_FAILED",
         parameters = Map(
-          "e" -> exception.getCause.toString(),
           "expressions" -> expressions.map(
             _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
       )

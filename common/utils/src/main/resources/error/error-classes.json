@@ -923,8 +923,7 @@
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
-      "Error while decoding: <e>",
-      "<expressions>."
+      "Error while decoding: <expressions>."
     ]
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {

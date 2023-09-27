@@ -555,8 +555,7 @@ For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-no
 
 SQLSTATE: none assigned
 
-Error while decoding: `<e>`
-`<expressions>`.
+Error while decoding: `<expressions>`.
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
