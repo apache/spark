@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.grpc.{ManagedChannel, StatusRuntimeException}

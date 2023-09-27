@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.{NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}

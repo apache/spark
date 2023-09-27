@@ -21,12 +21,11 @@ import java.nio.file.Files
 import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
@@ -44,6 +43,34 @@ import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test(s"throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
 
   for (enrichErrorEnabled <- Seq(false, true)) {
     test(s"cause exception - ${enrichErrorEnabled}") {
@@ -382,18 +409,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("write jdbc") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "t1"
-      try {
-        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
-        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
-        assert(result.length == 10)
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[SparkException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
   }

@@ -19,8 +19,8 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.databind.JsonNode

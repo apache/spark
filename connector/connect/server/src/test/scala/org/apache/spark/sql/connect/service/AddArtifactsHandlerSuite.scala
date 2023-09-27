@@ -20,10 +20,10 @@ import java.io.InputStream
 import java.nio.file.{Files, Path}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver

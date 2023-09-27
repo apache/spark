@@ -20,7 +20,7 @@ import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}

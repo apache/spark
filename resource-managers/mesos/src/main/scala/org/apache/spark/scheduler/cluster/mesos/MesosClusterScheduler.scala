@@ -20,10 +20,10 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{Collections, Date, List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.{Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}

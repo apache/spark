@@ -25,6 +25,7 @@ from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
+from pyspark.pandas import DataFrame
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
 from pyspark.pandas.series import Series, first_series
@@ -232,28 +233,40 @@ class DatetimeIndex(Index):
         )
         return Index(self.to_series().dt.microsecond)
 
-    @property
-    def week(self) -> Index:
+    def isocalendar(self) -> DataFrame:
         """
-        The week ordinal of the year.
+        Calculate year, week, and day according to the ISO 8601 standard.
 
-        .. deprecated:: 3.5.0
+            .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        DataFrame
+            With columns year, week and day.
+
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
+
+        Examples
+        --------
+        >>> psidxs = ps.from_pandas(
+        ...     pd.DatetimeIndex(["2019-12-29", "2019-12-30", "2019-12-31", "2020-01-01"])
+        ... )
+        >>> psidxs.isocalendar()
+                    year  week  day
+        2019-12-29  2019    52    7
+        2019-12-30  2020     1    1
+        2019-12-31  2020     1    2
+        2020-01-01  2020     1    3
+
+        >>> psidxs.isocalendar().week
+        2019-12-29    52
+        2019-12-30     1
+        2019-12-31     1
+        2020-01-01     1
+        Name: week, dtype: int64
         """
-        warnings.warn(
-            "`week` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.week)
-
-    @property
-    def weekofyear(self) -> Index:
-        warnings.warn(
-            "`weekofyear` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.weekofyear)
-
-    weekofyear.__doc__ = week.__doc__
+        return self.to_series().dt.isocalendar()
 
     @property
     def dayofweek(self) -> Index:

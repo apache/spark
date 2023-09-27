@@ -24,7 +24,6 @@ import java.sql.Timestamp
 
 import scala.util.Try
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
@@ -1640,12 +1639,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("udf_radians") {
     withSQLConf("hive.fetch.task.conversion" -> "more") {
       val result = sql("select radians(57.2958) FROM src tablesample (1 rows)").collect()
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-        assertResult(Array(Row(1.0000003575641672))) (result)
-      } else {
-        assertResult(Array(Row(1.000000357564167))) (result)
-      }
-
+      assertResult(Array(Row(1.0000003575641672))) (result)
       assertResult(Array(Row(2.4999991485811655))) {
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }
