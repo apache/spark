@@ -4449,7 +4449,7 @@ object SQLConf {
       .doc("When set to true, restores the legacy behavior of `raise_error` and `assert_true` to " +
         "not return the `[USER_RAISED_EXCEPTION]` prefix." +
         "For example, `raise_error('error!')` returns `error!` instead of " +
-        "`[[USER_RAISED_EXCEPTION] Error!`.")
+        "`[USER_RAISED_EXCEPTION] Error!`.")
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
