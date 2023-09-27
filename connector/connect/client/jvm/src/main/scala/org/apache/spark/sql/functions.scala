@@ -3309,7 +3309,7 @@ object functions {
    * Throws an exception with the provided error message.
    *
    * @group misc_funcs
-   * @since 3.5.0
+   * @since 4.0.0
    */
   def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
 
