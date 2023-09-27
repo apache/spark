@@ -157,7 +157,7 @@ jobs:
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python 3.8
         uses: actions/setup-python@v4
