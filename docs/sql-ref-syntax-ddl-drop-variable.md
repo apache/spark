@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `DROP TEMPORARY` statement drops a temporary variable. An exception will
+The `DROP TEMPORARY VARIABLE` statement drops a temporary variable. An exception will
 be thrown if the variable does not exist. 
 
 ### Syntax
