@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import scala.collection.{mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -476,8 +478,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
    *    thrown.
    */
-  private[sql] def merge(that: StructType): StructType =
-    StructType.merge(this, that).asInstanceOf[StructType]
+  private[sql] def merge(that: StructType, caseSensitive: Boolean = true): StructType =
+    StructType.merge(this, that, caseSensitive).asInstanceOf[StructType]
 
   override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
@@ -561,16 +563,20 @@ object StructType extends AbstractDataType {
       StructType(newFields)
     })
 
-  private[sql] def merge(left: DataType, right: DataType): DataType =
+  private[sql] def merge(left: DataType, right: DataType, caseSensitive: Boolean = true): DataType =
     mergeInternal(left, right, (s1: StructType, s2: StructType) => {
       val leftFields = s1.fields
       val rightFields = s2.fields
       val newFields = mutable.ArrayBuffer.empty[StructField]
 
-      val rightMapped = fieldsMap(rightFields)
+      def normalize(name: String): String = {
+        if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+      }
+
+      val rightMapped = fieldsMap(rightFields, caseSensitive)
       leftFields.foreach {
         case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-          rightMapped.get(leftName)
+          rightMapped.get(normalize(leftName))
             .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
               try {
                 leftField.copy(
@@ -588,9 +594,9 @@ object StructType extends AbstractDataType {
             .foreach(newFields += _)
       }
 
-      val leftMapped = fieldsMap(leftFields)
+      val leftMapped = fieldsMap(leftFields, caseSensitive)
       rightFields
-        .filterNot(f => leftMapped.get(f.name).nonEmpty)
+        .filterNot(f => leftMapped.contains(normalize(f.name)))
         .foreach { f =>
           newFields += f
         }
@@ -643,11 +649,15 @@ object StructType extends AbstractDataType {
         throw DataTypeErrors.cannotMergeIncompatibleDataTypesError(left, right)
     }
 
-  private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
+  private[sql] def fieldsMap(
+      fields: Array[StructField],
+      caseSensitive: Boolean = true): Map[String, StructField] = {
     // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
     val map = mutable.Map[String, StructField]()
     map.sizeHint(fields.length)
-    fields.foreach(s => map.put(s.name, s))
+    fields.foreach { s =>
+      if (caseSensitive) map.put(s.name, s) else map.put(s.name.toLowerCase(Locale.ROOT), s)
+    }
     map
   }
 
