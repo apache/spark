@@ -75,6 +75,11 @@
       }
     }
   },
+  "AVRO_INCOMPATIBLE_READ_TYPE" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ]
+  },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."

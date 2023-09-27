@@ -212,7 +212,7 @@
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
-    <antlr4.version>4.9.3</antlr4.version>
+    <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.12.1</selenium.version>
     <htmlunit-driver.version>4.12.0</htmlunit-driver.version>
@@ -2970,12 +2970,6 @@
               <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
               <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
               <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
-              <!--
-                TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-                from the corresponding files when Scala 2.12 is no longer supported.
-              -->
-              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
-              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
               <!--
                 SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
               -->
