@@ -64,7 +64,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_( expr [, errorParams ]) - Throws a USER_RAISED_EXCEPTION with `expr` as message, or a defined error class in `expr` with a parameter map.",
+  usage = "_FUNC_( expr [, errorParams ]) - Throws a USER_RAISED_EXCEPTION with `expr` as message, or a defined error class in `expr` with a parameter map. A `null` errorParms is equivalent to an empty map.",
   examples = """
     Examples:
       > SELECT _FUNC_('custom error message');
