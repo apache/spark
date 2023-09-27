@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Observation, 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -1068,6 +1068,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(connectAnalyzed, sparkPlan, false)
+    (connectAnalyzed, sparkPlan) match {
+      case (l: CollectMetrics, r: CollectMetrics) =>
+        comparePlans(l.copy(dataframeId = 0), r.copy(dataframeId = 0), false)
+      case (l, r) => comparePlans(l, r, false)
+    }
   }
 }
