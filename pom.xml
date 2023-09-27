@@ -188,7 +188,7 @@
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
-    <snappy.version>1.1.10.3</snappy.version>
+    <snappy.version>1.1.10.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.24.0</commons-compress.version>
@@ -212,7 +212,7 @@
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
-    <antlr4.version>4.9.3</antlr4.version>
+    <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.12.1</selenium.version>
     <htmlunit-driver.version>4.12.0</htmlunit-driver.version>

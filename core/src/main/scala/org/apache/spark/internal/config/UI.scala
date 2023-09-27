@@ -20,8 +20,6 @@ package org.apache.spark.internal.config
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.network.util.ByteUnit
 
 private[spark] object UI {
@@ -102,7 +100,7 @@ private[spark] object UI {
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
     .version("3.5.0")
     .booleanConf
-    .createWithDefault(SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_11))
+    .createWithDefault(true)
 
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
