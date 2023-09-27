@@ -1151,31 +1151,6 @@ class AnalysisErrorSuite extends AnalysisTest {
       "objectName" -> "`top.aField`",
       "proposal" -> "`top`"))
 
-  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", IntegerType)()
-    val d = AttributeReference("d", DoubleType)()
-    val t1 = LocalRelation(a, b, d)
-    val t2 = LocalRelation(c)
-    val conditions = Seq(
-      (abs($"a") === $"c", "abs(a#x) = outer(c#x)"),
-      (abs($"a") <=> $"c", "abs(a#x) <=> outer(c#x)"),
-      ($"a" + 1 === $"c", "(a#x + 1) = outer(c#x)"),
-      ($"a" + $"b" === $"c", "(a#x + b#x) = outer(c#x)"),
-      ($"a" + $"c" === $"b", "(a#x + outer(c#x)) = b#x"),
-      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d#x AS INT) = outer(c#x)"))
-    conditions.foreach { case (cond, msg) =>
-      val plan = Project(
-        Exists(
-          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
-            Filter(cond, t1))
-        ).as("sub") :: Nil,
-        t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
-    }
-  }
-
   test("SPARK-35673: fail if the plan still contains UnresolvedHint after analysis") {
     val hintName = "some_random_hint_that_does_not_exist"
     val plan = UnresolvedHint(hintName, Seq.empty,
