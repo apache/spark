@@ -2010,7 +2010,9 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row):
                 # Make sure that the PARTITION BY expressions were projected out.
-                assert(len(row.asDict().items()) == 2)
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 self._sum += row["input"]
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
                     # Make sure that all values of the partitioning column are the same
@@ -2095,7 +2097,9 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row, partition_col: str):
                 # Make sure that the PARTITION BY and ORDER BY expressions were projected out.
-                assert(len(row.asDict().items()) == 2)
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 # Make sure that all values of the partitioning column are the same
                 # for each row consumed by this method for this instance of the class.
                 if self._partition_col is not None and self._partition_col != row[partition_col]:
@@ -2252,7 +2256,9 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row):
                 # Make sure that the PARTITION BY and ORDER BY expressions were projected out.
-                assert(len(row.asDict().items()) == 2)
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 # Make sure that all values of the partitioning column are the same
                 # for each row consumed by this method for this instance of the class.
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
