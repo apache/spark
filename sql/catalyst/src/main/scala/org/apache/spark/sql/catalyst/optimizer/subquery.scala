@@ -365,19 +365,15 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           hint, Some(mayHaveCountBug))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
-          logError(s"Decorrelating ${sub}")
           decorrelate(sub, plan, handleCountBug = true)
         } else {
-          logError(s"Old way ${sub}")
           pullOutCorrelatedPredicates(sub, plan)
         }
         Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
       case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
-          logError(s"Decorrelating ${sub}")
           decorrelate(sub, plan, handleCountBug = true)
         } else {
-          logError(s"Old way ${sub}")
           pullOutCorrelatedPredicates(sub, plan)
         }
         val joinCond = getJoinCondition(newCond, conditions)
