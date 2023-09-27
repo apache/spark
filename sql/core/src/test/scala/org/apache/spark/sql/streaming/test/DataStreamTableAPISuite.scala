@@ -113,9 +113,16 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
     spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
 
-    intercept[AnalysisException] {
-      spark.readStream.table(tableIdentifier)
-    }.message.contains("does not support either micro-batch or continuous scan")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.table(tableIdentifier)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "operation" -> "either micro-batch or continuous scan"
+      )
+    )
   }
 
   test("read: read table with custom catalog") {
