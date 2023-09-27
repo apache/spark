@@ -20,8 +20,8 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, SlaveID => AgentID,
   TaskInfo => MesosTaskInfo, _}

@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import org.apache.mesos.Protos.{FrameworkInfo, Resource, Value}

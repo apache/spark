@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.Assertions
 

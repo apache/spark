@@ -22,7 +22,7 @@ import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 import java.util.ConcurrentModificationException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class SparkException(
     message: String,

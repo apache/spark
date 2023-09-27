@@ -23,10 +23,10 @@ import java.util.Collection
 import java.util.Collections
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._

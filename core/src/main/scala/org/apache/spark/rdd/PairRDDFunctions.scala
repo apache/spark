@@ -21,8 +21,8 @@ import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.{mutable, Map}
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus

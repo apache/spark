@@ -1908,7 +1908,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listFiles()
             )
         )
@@ -2036,7 +2036,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listArchives()
             )
         )

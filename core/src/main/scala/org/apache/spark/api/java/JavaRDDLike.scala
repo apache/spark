@@ -21,7 +21,7 @@ import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
 import java.util.{Comparator, Iterator => JIterator, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -367,7 +367,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The iterator will consume as much memory as the largest partition in this RDD.
    */
   def toLocalIterator(): JIterator[T] =
-     asJavaIteratorConverter(rdd.toLocalIterator).asJava
+     rdd.toLocalIterator.asJava
 
   /**
    * Return an array that contains all of the elements in a specific partition of this RDD.

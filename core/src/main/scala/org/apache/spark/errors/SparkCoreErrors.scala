@@ -20,7 +20,7 @@ package org.apache.spark.errors
 import java.io.{File, IOException}
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 

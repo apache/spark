@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.{Collection, Collections, Date}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}

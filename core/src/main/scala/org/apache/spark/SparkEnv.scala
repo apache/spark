@@ -20,9 +20,9 @@ package org.apache.spark
 import java.io.File
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.google.common.cache.CacheBuilder

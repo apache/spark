@@ -21,10 +21,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}

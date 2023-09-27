@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.ui
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.DurationInt
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils.escapeJava
 import org.apache.commons.text.translate.EntityArrays._
