@@ -735,12 +735,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield row
                 self._udtf = self._create_udtf()
             if self._udtf.eval is not None:
-                # Filter the non-keyword arguments to exclude projected PARTITION BY values added
-                # internally by Catalyst.
-                filtered_args: list = [
-                    arg for (index, arg) in enumerate(args)
-                    if index not in self._partition_child_indexes]
-                result = self._udtf.eval(filtered_args, **kwargs)
+                # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
+                filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
+                filtered_kwargs = dict([
+                    (key, self._remove_partition_by_exprs(value))
+                    for (key, value) in kwargs.items()])
+                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
                     for row in result:
                         yield row
@@ -760,13 +760,24 @@ def read_udtf(pickleSer, infile, eval_type):
                 for i in self._partition_child_indexes:
                     cur_partitions_args.append(cur_table_arg[i])
                     prev_partitions_args.append(prev_table_arg[i])
-                self._prev_arguments = arguments
                 result = any(k != v for k, v in zip(cur_partitions_args, prev_partitions_args))
             self._prev_arguments = arguments
             return result
 
         def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
+
+        def _remove_partition_by_exprs(self, arg: Any) -> Any:
+            if type(arg) is Row:
+                new_row_keys = []
+                new_row_values = []
+                for (i, (key, value)) in enumerate(arg.asDict().items()):
+                    if i not in self._partition_child_indexes:
+                        new_row_keys.append(key)
+                        new_row_values.append(value)
+                return Row(*new_row_keys)(*new_row_values)
+            else:
+                return arg
 
     # Instantiate the UDTF class.
     try:
