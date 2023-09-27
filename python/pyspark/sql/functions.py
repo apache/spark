@@ -11714,35 +11714,35 @@ def create_map(
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.create_map('name', 'age').alias("map")).show()
-    +------------+
-    |         map|
-    +------------+
-    |{Alice -> 2}|
-    |  {Bob -> 5}|
-    +------------+
+    >>> df.select(sf.create_map('name', 'age')).show()
+    +--------------+
+    |map(name, age)|
+    +--------------+
+    |  {Alice -> 2}|
+    |    {Bob -> 5}|
+    +--------------+
 
     Example 2: Usage of create_map function with a list of columns.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.create_map([df.name, df.age]).alias("map")).show()
-    +------------+
-    |         map|
-    +------------+
-    |{Alice -> 2}|
-    |  {Bob -> 5}|
-    +------------+
+    >>> df.select(sf.create_map([df.name, df.age])).show()
+    +--------------+
+    |map(name, age)|
+    +--------------+
+    |  {Alice -> 2}|
+    |    {Bob -> 5}|
+    +--------------+
 
     Example 3: Usage of create_map function with more than one key-value pair.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2, "female"),
     ...                             ("Bob", 5, "male")], ("name", "age", "gender"))
-    >>> df.select(sf.create_map(sf.lit('name'), df['name'], sf.lit('age'), df['age'])
-    ...   .alias("map")).show(truncate=False)
+    >>> df.select(sf.create_map(sf.lit('name'), df['name'],
+    ...                         sf.lit('age'), df['age'])).show(truncate=False)
     +-------------------------+
-    |map                      |
+    |map(name, name, age, age)|
     +-------------------------+
     |{name -> Alice, age -> 2}|
     |{name -> Bob, age -> 5}  |
@@ -12076,37 +12076,37 @@ def slice(
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
-    >>> df.select(sf.slice(df.x, 2, 2).alias("sliced")).show()
-    +------+
-    |sliced|
-    +------+
-    |[2, 3]|
-    |   [5]|
-    +------+
+    >>> df.select(sf.slice(df.x, 2, 2)).show()
+    +--------------+
+    |slice(x, 2, 2)|
+    +--------------+
+    |        [2, 3]|
+    |           [5]|
+    +--------------+
 
     Example 2: Slicing with negative start index.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
-    >>> df.select(sf.slice(df.x, -1, 1).alias("sliced")).show()
-    +------+
-    |sliced|
-    +------+
-    |   [3]|
-    |   [5]|
-    +------+
+    >>> df.select(sf.slice(df.x, -1, 1)).show()
+    +---------------+
+    |slice(x, -1, 1)|
+    +---------------+
+    |            [3]|
+    |            [5]|
+    +---------------+
 
     Example 3: Slice function with column inputs for start and length.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([([1, 2, 3], 2, 2), ([4, 5], 1, 3)], ['x', 'start', 'length'])
-    >>> df.select(sf.slice(df.x, df.start, df.length).alias("sliced")).show()
-    +------+
-    |sliced|
-    +------+
-    |[2, 3]|
-    |[4, 5]|
-    +------+
+    >>> df.select(sf.slice(df.x, df.start, df.length)).show()
+    +-----------------------+
+    |slice(x, start, length)|
+    +-----------------------+
+    |                 [2, 3]|
+    |                 [4, 5]|
+    +-----------------------+
     """
     start = lit(start) if isinstance(start, int) else start
     length = lit(length) if isinstance(length, int) else length
@@ -12150,50 +12150,61 @@ def array_join(
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", "b"],)], ['data'])
-    >>> df.select(sf.array_join(df.data, ",").alias("joined")).show()
-    +------+
-    |joined|
-    +------+
-    | a,b,c|
-    |   a,b|
-    +------+
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |              a,b,c|
+    |                a,b|
+    +-------------------+
 
     Example 2: Usage of array_join function with null_replacement argument.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
-    >>> df.select(sf.array_join(df.data, ",", "NULL").alias("joined")).show()
-    +--------+
-    |  joined|
-    +--------+
-    |a,NULL,c|
-    +--------+
+    >>> df.select(sf.array_join(df.data, ",", "NULL")).show()
+    +-------------------------+
+    |array_join(data, ,, NULL)|
+    +-------------------------+
+    |                 a,NULL,c|
+    +-------------------------+
 
-    Example 3: Usage of array_join function with an array that is null.
+    Example 3: Usage of array_join function without null_replacement argument.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |                a,c|
+    +-------------------+
+
+    Example 4: Usage of array_join function with an array that is null.
 
     >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql.types import StructType, StructField, ArrayType, StringType
     >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
     >>> df = spark.createDataFrame([(None,)], schema)
-    >>> df.select(sf.array_join(df.data, ",").alias("joined")).show()
-    +------+
-    |joined|
-    +------+
-    |  NULL|
-    +------+
+    >>> df.select(sf.array_join(df.data, ",")).show()
+    +-------------------+
+    |array_join(data, ,)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
 
-    Example 4: Usage of array_join function with an array containing only null values.
+    Example 5: Usage of array_join function with an array containing only null values.
 
     >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql.types import StructType, StructField, ArrayType, StringType
     >>> schema = StructType([StructField("data", ArrayType(StringType()), True)])
     >>> df = spark.createDataFrame([([None, None],)], schema)
-    >>> df.select(sf.array_join(df.data, ",", "NULL").alias("joined")).show()
-    +---------+
-    |   joined|
-    +---------+
-    |NULL,NULL|
-    +---------+
+    >>> df.select(sf.array_join(df.data, ",", "NULL")).show()
+    +-------------------------+
+    |array_join(data, ,, NULL)|
+    +-------------------------+
+    |                NULL,NULL|
+    +-------------------------+
     """
     _get_active_spark_context()
     if null_replacement is None:
