@@ -4450,7 +4450,7 @@ object SQLConf {
         "not return the `[USER_RAISED_EXCEPTION]` prefix." +
         "For example, `raise_error('error!')` returns `error!` instead of " +
         "`[USER_RAISED_EXCEPTION] Error!`.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
