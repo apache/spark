@@ -2730,8 +2730,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def raiseError(errorClass: UTF8String,
-                 errorParms: MapData): RuntimeException = {
+  def raiseError(
+      errorClass: UTF8String,
+      errorParms: MapData): RuntimeException = {
     val errorClassStr = if (errorClass != null) {
       errorClass.toString.toUpperCase(Locale.ROOT)
     } else {
