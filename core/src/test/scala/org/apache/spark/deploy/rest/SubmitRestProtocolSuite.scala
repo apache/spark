@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.rest
 
+import java.lang.Boolean
+
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
