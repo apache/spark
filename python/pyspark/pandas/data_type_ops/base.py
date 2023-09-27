@@ -130,10 +130,25 @@ def _as_categorical_type(
             scol = F.lit(-1)
         else:
             scol = F.lit(-1)
-            stringified_column = F.format_string("%s", index_ops.spark.column)
+            if isinstance(
+                index_ops._internal.spark_type_for(index_ops._internal.column_labels[0]), BinaryType
+            ):
+                from pyspark.sql.functions import base64
 
-            for code, category in enumerate(categories):
-                scol = F.when(stringified_column == F.lit(category), F.lit(code)).otherwise(scol)
+                stringified_column = base64(index_ops.spark.column)
+                for code, category in enumerate(categories):
+                    # Convert each category to base64 before comparison
+                    base64_category = F.base64(F.lit(category))
+                    scol = F.when(stringified_column == base64_category, F.lit(code)).otherwise(
+                        scol
+                    )
+            else:
+                stringified_column = F.format_string("%s", index_ops.spark.column)
+
+                for code, category in enumerate(categories):
+                    scol = F.when(stringified_column == F.lit(category), F.lit(code)).otherwise(
+                        scol
+                    )
 
         return index_ops._with_new_scol(
             scol.cast(spark_type),

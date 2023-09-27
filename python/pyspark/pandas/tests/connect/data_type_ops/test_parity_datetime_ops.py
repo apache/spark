@@ -30,9 +30,6 @@ class DatetimeOpsParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    def test_astype(self):
-        super().test_astype()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_datetime_ops import *  # noqa: F401
