@@ -278,7 +278,4 @@ private[spark] object MetricsSystemInstances {
 
   // The Spark ApplicationMaster when running on YARN
   val APPLICATION_MASTER = "applicationMaster"
-
-  // The Spark cluster scheduler when running on Mesos
-  val MESOS_CLUSTER = "mesos_cluster"
 }
