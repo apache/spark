@@ -21,7 +21,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
@@ -52,11 +52,46 @@ class MicroBatchExecution(
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
-  protected val triggerExecutor: TriggerExecutor = trigger match {
-    case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
-    case OneTimeTrigger => SingleBatchExecutor()
-    case AvailableNowTrigger => MultiBatchExecutor()
-    case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
+  @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
+
+  protected def getTrigger(): TriggerExecutor = {
+    assert(sources.nonEmpty, "sources should have been retrieved from the plan!")
+    trigger match {
+      case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
+      case OneTimeTrigger => SingleBatchExecutor()
+      case AvailableNowTrigger =>
+        // When the flag is enabled, Spark will wrap sources which do not support
+        // Trigger.AvailableNow with wrapper implementation, so that Trigger.AvailableNow can
+        // take effect.
+        // When the flag is disabled, Spark will fall back to single batch execution, whenever
+        // it figures out any source does not support Trigger.AvailableNow.
+        // See SPARK-45178 for more details.
+        if (sparkSession.sqlContext.conf.getConf(
+            SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)) {
+          logInfo("Configured to use the wrapper of Trigger.AvailableNow for query " +
+            s"$prettyIdString.")
+          MultiBatchExecutor()
+        } else {
+          val supportsTriggerAvailableNow = sources.distinct.forall { src =>
+            val supports = src.isInstanceOf[SupportsTriggerAvailableNow]
+            if (!supports) {
+              logWarning(s"source [$src] does not support Trigger.AvailableNow. Falling back to " +
+                "single batch execution. Note that this may not guarantee processing new data if " +
+                "there is an uncommitted batch. Please consult with data source developer to " +
+                "support Trigger.AvailableNow.")
+            }
+
+            supports
+          }
+
+          if (supportsTriggerAvailableNow) {
+            MultiBatchExecutor()
+          } else {
+            SingleBatchExecutor()
+          }
+        }
+      case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
+    }
   }
 
   protected var watermarkTracker: WatermarkTracker = _
@@ -130,6 +165,11 @@ class MicroBatchExecution(
       // v2 source
       case r: StreamingDataSourceV2Relation => r.stream
     }
+
+    // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
+    // sources.
+    triggerExecutor = getTrigger()
+
     uniqueSources = triggerExecutor match {
       case _: SingleBatchExecutor =>
         sources.distinct.map {
@@ -211,6 +251,8 @@ class MicroBatchExecution(
     }
     logInfo(s"Query $prettyIdString was stopped")
   }
+
+  private val watermarkPropagator = WatermarkPropagator(sparkSession.sessionState.conf)
 
   override def cleanup(): Unit = {
     super.cleanup()
@@ -713,14 +755,15 @@ class MicroBatchExecution(
         runId,
         currentBatchId,
         offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
-        offsetSeqMetadata)
+        offsetSeqMetadata,
+        watermarkPropagator)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
     markMicroBatchExecutionStart()
 
     val nextBatch =
-      new Dataset(lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(lastExecution, ExpressionEncoder(lastExecution.analyzed.schema))
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] = reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(lastExecution) {
@@ -757,9 +800,11 @@ class MicroBatchExecution(
    * checkpointing to offset log and any microbatch startup tasks.
    */
   protected def markMicroBatchStart(): Unit = {
-    assert(offsetLog.add(currentBatchId,
-      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata)),
-      s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
+    if (!offsetLog.add(currentBatchId,
+      availableOffsets.toOffsetSeq(sources, offsetSeqMetadata))) {
+      throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
+    }
+
     logInfo(s"Committed offsets for batch $currentBatchId. " +
       s"Metadata ${offsetSeqMetadata.toString}")
   }
@@ -777,9 +822,9 @@ class MicroBatchExecution(
   protected def markMicroBatchEnd(): Unit = {
     watermarkTracker.updateWatermark(lastExecution.executedPlan)
     reportTimeTaken("commitOffsets") {
-      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-          s"$currentBatchId")
+      if (!commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))) {
+        throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
+      }
     }
     committedOffsets ++= availableOffsets
   }
@@ -789,6 +834,9 @@ class MicroBatchExecution(
       val prevBatchOff = offsetLog.get(currentBatchId - 1)
       if (prevBatchOff.isDefined) {
         commitSources(prevBatchOff.get)
+        // The watermark for each batch is given as (prev. watermark, curr. watermark), hence
+        // we can't purge the previous version of watermark.
+        watermarkPropagator.purge(currentBatchId - 2)
       } else {
         throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
       }

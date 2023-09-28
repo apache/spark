@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
@@ -61,7 +61,7 @@ private[sql] object AvroUtils extends Logging {
           new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(avroSchema).dataType match {
+    SchemaConverters.toSqlType(avroSchema, options).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
@@ -336,4 +336,9 @@ private[sql] object AvroUtils extends Logging {
   private[avro] def isNullable(avroField: Schema.Field): Boolean =
     avroField.schema().getType == Schema.Type.UNION &&
       avroField.schema().getTypes.asScala.exists(_.getType == Schema.Type.NULL)
+
+  /** Collect all non null branches of a union in order. */
+  private[avro] def nonNullUnionBranches(avroType: Schema): Seq[Schema] = {
+    avroType.getTypes.asScala.filter(_.getType != Schema.Type.NULL).toSeq
+  }
 }

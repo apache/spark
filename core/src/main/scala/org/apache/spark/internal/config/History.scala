@@ -248,5 +248,5 @@ private[spark] object History {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HybridStoreDiskBackend.values.map(_.toString))
-    .createWithDefault(HybridStoreDiskBackend.LEVELDB.toString)
+    .createWithDefault(HybridStoreDiskBackend.ROCKSDB.toString)
 }

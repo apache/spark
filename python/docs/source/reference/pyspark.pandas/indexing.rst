@@ -166,16 +166,6 @@ Selecting
    Index.asof
    Index.isin
 
-.. _api.numeric:
-
-Numeric Index
--------------
-.. autosummary::
-   :toctree: api/
-
-   Int64Index
-   Float64Index
-
 .. _api.categorical:
 
 CategoricalIndex
@@ -348,8 +338,7 @@ Time/date components
    DatetimeIndex.minute
    DatetimeIndex.second
    DatetimeIndex.microsecond
-   DatetimeIndex.week
-   DatetimeIndex.weekofyear
+   DatetimeIndex.isocalendar
    DatetimeIndex.dayofweek
    DatetimeIndex.day_of_week
    DatetimeIndex.weekday

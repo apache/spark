@@ -18,10 +18,11 @@
 package org.apache.spark.metrics.source
 
 import java.lang.management.ManagementFactory
+import javax.management.{MBeanServer, ObjectName}
+
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
-import javax.management.{MBeanServer, ObjectName}
-import scala.util.control.NonFatal
 
 private[spark] class JVMCPUSource extends Source {
 

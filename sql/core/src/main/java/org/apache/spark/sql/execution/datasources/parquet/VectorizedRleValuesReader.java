@@ -673,12 +673,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           break;
         case PACKED:
+          int totalSkipNum = 0;
           for (int i = 0; i < num; ++i) {
             // Same as above, only skip non-null values from `valuesReader`
             if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
-              updater.skipValues(1, valuesReader);
+              ++totalSkipNum;
             }
           }
+          updater.skipValues(totalSkipNum, valuesReader);
           break;
       }
       currentCount -= num;

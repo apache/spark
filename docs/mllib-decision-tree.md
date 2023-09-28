@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -51,7 +51,7 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
 implementation provides two impurity measures for classification (Gini impurity and entropy) and one
 impurity measure for regression (variance).
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
   </thead>
@@ -206,6 +206,12 @@ maximum tree depth of 5. The test error is calculated to measure the algorithm a
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
+
+{% include_example python/mllib/decision_tree_classification_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
@@ -216,12 +222,6 @@ Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/D
 Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaDecisionTreeClassificationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
-
-{% include_example python/mllib/decision_tree_classification_example.py %}
 </div>
 
 </div>
@@ -237,6 +237,12 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
+
+{% include_example python/mllib/decision_tree_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
@@ -247,12 +253,6 @@ Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/D
 Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaDecisionTreeRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
-
-{% include_example python/mllib/decision_tree_regression_example.py %}
 </div>
 
 </div>

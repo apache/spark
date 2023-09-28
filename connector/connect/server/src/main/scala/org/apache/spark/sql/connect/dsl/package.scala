@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.connect.proto
@@ -24,9 +24,10 @@ import org.apache.spark.connect.proto._
 import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
-import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.connect.planner.DataTypeProtoConverter
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.{Observation, SaveMode}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -140,6 +141,20 @@ package object dsl {
           Expression.UnresolvedFunction.newBuilder().setFunctionName("min").addArguments(e))
         .build()
 
+    def proto_max(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("max").addArguments(e))
+        .build()
+
+    def proto_sum(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("sum").addArguments(e))
+        .build()
+
     def proto_explode(e: Expression): Expression =
       Expression
         .newBuilder()
@@ -199,6 +214,7 @@ package object dsl {
           format: Option[String] = None,
           path: Option[String] = None,
           tableName: Option[String] = None,
+          tableSaveMethod: Option[String] = None,
           mode: Option[String] = None,
           sortByColumns: Seq[String] = Seq.empty,
           partitionByCols: Seq[String] = Seq.empty,
@@ -209,11 +225,17 @@ package object dsl {
 
         mode
           .map(SaveMode.valueOf(_))
-          .map(DataTypeProtoConverter.toSaveModeProto(_))
+          .map(SaveModeConverter.toSaveModeProto)
           .foreach(writeOp.setMode(_))
 
         if (tableName.nonEmpty) {
-          tableName.foreach(writeOp.setTableName(_))
+          tableName.foreach { tn =>
+            val saveTable = WriteOperation.SaveTable.newBuilder().setTableName(tn)
+            tableSaveMethod
+              .map(TableSaveMethodConverter.toTableSaveMethodProto(_))
+              .foreach(saveTable.setSaveMethod(_))
+            writeOp.setTable(saveTable.build())
+          }
         } else {
           path.foreach(writeOp.setPath(_))
         }
@@ -241,6 +263,44 @@ package object dsl {
               .setReplace(replace)
               .setInput(logicalPlan))
           .build()
+      }
+
+      def writeV2(
+          tableName: Option[String] = None,
+          provider: Option[String] = None,
+          options: Map[String, String] = Map.empty,
+          tableProperties: Map[String, String] = Map.empty,
+          partitionByCols: Seq[Expression] = Seq.empty,
+          mode: Option[String] = None,
+          overwriteCondition: Option[Expression] = None): Command = {
+        val writeOp = WriteOperationV2.newBuilder()
+        writeOp.setInput(logicalPlan)
+        tableName.foreach(writeOp.setTableName)
+        provider.foreach(writeOp.setProvider)
+        partitionByCols.foreach(writeOp.addPartitioningColumns)
+        options.foreach { case (k, v) =>
+          writeOp.putOptions(k, v)
+        }
+        tableProperties.foreach { case (k, v) =>
+          writeOp.putTableProperties(k, v)
+        }
+        mode.foreach { m =>
+          if (m == "MODE_CREATE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE)
+          } else if (m == "MODE_OVERWRITE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE)
+            overwriteCondition.foreach(writeOp.setOverwriteCondition)
+          } else if (m == "MODE_OVERWRITE_PARTITIONS") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS)
+          } else if (m == "MODE_APPEND") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_APPEND)
+          } else if (m == "MODE_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_REPLACE)
+          } else if (m == "MODE_CREATE_OR_REPLACE") {
+            writeOp.setMode(WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE)
+          }
+        }
+        Command.newBuilder().setWriteOperationV2(writeOp.build()).build()
       }
     }
   }
@@ -282,7 +342,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
+              .addAllValues(Seq(toLiteralProto(value)).asJava)
               .build())
           .build()
       }
@@ -295,13 +355,13 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllCols(cols.asJava)
-              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
+              .addAllValues(Seq(toLiteralProto(value)).asJava)
               .build())
           .build()
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.mapValues(toConnectProtoValue).toSeq.unzip
+        val (cols, values) = valueMap.mapValues(toLiteralProto).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(
@@ -362,8 +422,8 @@ package object dsl {
           replace.addReplacements(
             proto.NAReplace.Replacement
               .newBuilder()
-              .setOldValue(toConnectProtoValue(oldValue))
-              .setNewValue(toConnectProtoValue(newValue)))
+              .setOldValue(toLiteralProto(oldValue))
+              .setNewValue(toLiteralProto(newValue)))
         }
 
         Relation
@@ -536,6 +596,17 @@ package object dsl {
               .addAllColumnNames(colNames.asJava))
           .build()
 
+      def deduplicateWithinWatermark(colNames: Seq[String]): Relation =
+        Relation
+          .newBuilder()
+          .setDeduplicate(
+            Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava)
+              .setWithinWatermark(true))
+          .build()
+
       def distinct(): Relation =
         Relation
           .newBuilder()
@@ -657,21 +728,13 @@ package object dsl {
       def drop(columns: String*): Relation = {
         assert(columns.nonEmpty)
 
-        val cols = columns.map(col =>
-          Expression.newBuilder
-            .setUnresolvedAttribute(
-              Expression.UnresolvedAttribute.newBuilder
-                .setUnparsedIdentifier(col)
-                .build())
-            .build())
-
         Relation
           .newBuilder()
           .setDrop(
             Drop
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.asJava)
+              .addAllColumnNames(columns.toSeq.asJava)
               .build())
           .build()
       }
@@ -926,7 +989,7 @@ package object dsl {
 
       def hint(name: String, parameters: Any*): Relation = {
         val expressions = parameters.map { parameter =>
-          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+          proto.Expression.newBuilder().setLiteral(toLiteralProto(parameter)).build()
         }
 
         Relation
@@ -952,7 +1015,10 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllIds(ids.asJava)
-              .addAllValues(values.asJava)
+              .setValues(Unpivot.Values
+                .newBuilder()
+                .addAllValues(values.asJava)
+                .build())
               .setVariableColumnName(variableColumnName)
               .setValueColumnName(valueColumnName))
           .build()
@@ -990,7 +1056,7 @@ package object dsl {
       def randomSplit(weights: Array[Double], seed: Long): Array[Relation] = {
         require(
           weights.forall(_ >= 0),
-          s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+          s"Weights must be non-negative, but got ${weights.mkString("[", ",", "]")}")
         require(
           weights.sum > 0,
           s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
@@ -1019,6 +1085,30 @@ package object dsl {
 
       def randomSplit(weights: Array[Double]): Array[Relation] =
         randomSplit(weights, Utils.random.nextLong)
+
+      def observe(name: String, expr: Expression, exprs: Expression*): Relation = {
+        Relation
+          .newBuilder()
+          .setCollectMetrics(
+            CollectMetrics
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(name)
+              .addAllMetrics((expr +: exprs).asJava))
+          .build()
+      }
+
+      def observe(observation: Observation, expr: Expression, exprs: Expression*): Relation = {
+        Relation
+          .newBuilder()
+          .setCollectMetrics(
+            CollectMetrics
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(observation.name)
+              .addAllMetrics((expr +: exprs).asJava))
+          .build()
+      }
 
       private def createSetOperation(
           left: Relation,

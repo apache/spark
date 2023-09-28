@@ -77,18 +77,21 @@ case class CommandResultExec(
 
   override def executeCollect(): Array[InternalRow] = {
     longMetric("numOutputRows").add(unsafeRows.size)
+    sendDriverMetrics()
     unsafeRows
   }
 
   override def executeTake(limit: Int): Array[InternalRow] = {
     val taken = unsafeRows.take(limit)
     longMetric("numOutputRows").add(taken.size)
+    sendDriverMetrics()
     taken
   }
 
   override def executeTail(limit: Int): Array[InternalRow] = {
     val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
     longMetric("numOutputRows").add(taken.size)
+    sendDriverMetrics()
     taken.toArray
   }
 
@@ -96,4 +99,9 @@ case class CommandResultExec(
   override protected val createUnsafeProjection: Boolean = false
 
   override def inputRDD: RDD[InternalRow] = rdd
+
+  private def sendDriverMetrics(): Unit = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+  }
 }

@@ -94,16 +94,17 @@ SELECT array(1), udf(2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "array<int>",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"ARRAY<INT>\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "INTERSECT ALL",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -122,7 +123,7 @@ SELECT udf(k), udf(v) FROM tab2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",

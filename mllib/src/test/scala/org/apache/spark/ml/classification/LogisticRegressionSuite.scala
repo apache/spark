@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -2993,6 +2993,27 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
     val expected = "LogisticRegressionModel: uid=logReg, numClasses=2, numFeatures=3"
     assert(model.toString === expected)
+  }
+
+  test("test internal thresholds") {
+    val df = Seq(
+      (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+      (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+      (0.0, 4.0, Vectors.dense(3.0, 3.0))
+    ).toDF("label", "weight", "features")
+
+    val lor = new LogisticRegression().setWeightCol("weight")
+    val model = lor.fit(df)
+    val vec = Vectors.dense(0.0, 5.0)
+
+    val p0 = model.predict(vec)
+    model.setThreshold(0.05)
+    val p1 = model.set(model.threshold, 0.5).predict(vec)
+    val p2 = model.clear(model.threshold).predict(vec)
+
+    assert(p0 === p1)
+    assert(p0 === p2)
   }
 }
 

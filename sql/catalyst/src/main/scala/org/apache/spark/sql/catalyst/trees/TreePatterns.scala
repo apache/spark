@@ -46,6 +46,7 @@ object TreePattern extends Enumeration  {
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTRACT_VALUE: Value = Value
+  val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATE: Value = Value
   val GENERATOR: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
@@ -73,6 +74,7 @@ object TreePattern extends Enumeration  {
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
+  val PARAMETERIZED_QUERY: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -96,6 +98,7 @@ object TreePattern extends Enumeration  {
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
+  val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
@@ -103,6 +106,8 @@ object TreePattern extends Enumeration  {
   val COMMAND: Value = Value
   val CTE: Value = Value
   val DISTINCT_LIKE: Value = Value
+  val EVAL_PYTHON_UDF: Value = Value
+  val EVAL_PYTHON_UDTF: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val FILTER: Value = Value
@@ -125,12 +130,15 @@ object TreePattern extends Enumeration  {
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value
+  val WINDOW_GROUP_LIMIT: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
+  val UNRESOLVED_HAVING: Value = Value
+  val UNRESOLVED_IDENTIFIER: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value

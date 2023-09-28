@@ -23,6 +23,7 @@ import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
@@ -48,7 +49,7 @@ import org.apache.spark.tags.DockerTest
  * 4. Start docker: sudo service docker start
  *    - Optionally, docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 5. Run Spark integration tests for Oracle with: ./build/sbt -Pdocker-integration-tests
- *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * A sequence of commands to build the Oracle XE database container image:
  *  $ git clone https://github.com/oracle/docker-images.git
@@ -172,7 +173,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
+  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -286,11 +288,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      val e = intercept[java.sql.SQLException] {
-        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-        dfRead.collect()
-      }.getMessage
-      assert(e.contains("Unrecognized SQL type -101"))
+      checkError(
+        exception = intercept[SparkSQLException] {
+          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
+        },
+        errorClass = "UNRECOGNIZED_SQL_TYPE",
+        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
     }
   }
 
@@ -517,5 +520,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(0).equals("class java.lang.String"))
     assert(!rows(0).getString(0).isEmpty)
+  }
+
+  test("SPARK-44885: query row with ROWID type containing NULL value") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      // Rename column to `row_id` to prevent the following SQL error:
+      //   ORA-01446: cannot select ROWID from view with DISTINCT, GROUP BY, etc.
+      // See also https://stackoverflow.com/a/42632686/13300239
+      .option("query", "SELECT rowid as row_id from datetime where d = {d '1991-11-09'}\n" +
+        "union all\n" +
+        "select null from dual")
+      .load()
+      .collect()
+    assert(rows(0).getString(0).nonEmpty)
+    assert(rows(1).getString(0) == null)
   }
 }

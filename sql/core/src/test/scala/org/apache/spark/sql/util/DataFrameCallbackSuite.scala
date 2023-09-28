@@ -96,6 +96,34 @@ class DataFrameCallbackSuite extends QueryTest
     spark.listenerManager.unregister(listener)
   }
 
+  test("execute callback functions when a DataSet trigger foreach action finished") {
+    val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
+    val listener = new QueryExecutionListener {
+      // Only test successful case here, so no need to implement `onFailure`
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metrics += ((funcName, qe, duration))
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    def f(): Unit = {}
+
+    val df = Seq(1).toDF("i")
+
+    df.foreach(r => f)
+    df.reduce((x, y) => x)
+
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(metrics.length == 2)
+
+    assert(metrics(0)._1 == "foreach")
+    assert(metrics(1)._1 == "reduce")
+
+    spark.listenerManager.unregister(listener)
+  }
+
   test("get numRows metrics by callback") {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {

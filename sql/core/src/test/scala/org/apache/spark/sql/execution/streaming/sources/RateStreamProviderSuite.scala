@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.Row

@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - Path file:.*already exists")
+                 "Error in save : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -1472,6 +1472,8 @@ test_that("column functions", {
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
   c31 <- sec(c1) + csc(c1) + cot(c1)
+  c32 <- ln(c1) + positive(c2) + negative(c3)
+  c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -2806,6 +2808,12 @@ test_that("test hint", {
     explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
   )
   expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+
+  a <- column("id")
+  rebalance_plan_hint <- capture.output(
+      explain(hint(df, "rebalance", as.integer(2), a), TRUE)
+  )
+  expect_true(any(grepl("RebalancePartitions", rebalance_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
@@ -3990,13 +3998,13 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
                      "Expected exactly one path to be specified"))
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - Path file:.*already exists")
+              "Error in json : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - Path file:.*already exists")
+              "Error in text : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - Path file:.*already exists")
+              "Error in orc : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - Path file:.*already exists")
+              "Error in parquet : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
@@ -4014,8 +4022,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in load : analysis error - Unable to infer schema for JSON.",
-                     "It must be specified manually"))
+               "Error in load : analysis error - \\[UNABLE_TO_INFER_SCHEMA\\].*")
   expect_error(read.df("arbitrary_path"),
                "Error in load : analysis error - \\[PATH_NOT_FOUND\\].*")
   expect_error(read.json("arbitrary_path"),
@@ -4192,8 +4199,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
-                     "'recoverPartitions()' expects a table"), fixed = TRUE)
+               "[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE]*`cars`*")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

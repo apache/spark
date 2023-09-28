@@ -19,7 +19,6 @@ import sys
 import unittest
 import datetime
 import decimal
-from distutils.version import LooseVersion
 from typing import List
 
 import pandas
@@ -55,7 +54,7 @@ from pyspark.pandas.typedef import (
 from pyspark import pandas as ps
 
 
-class TypeHintTests(unittest.TestCase):
+class TypeHintTestsMixin:
     def test_infer_schema_with_no_return(self):
         def try_infer_return_type():
             def f():
@@ -321,20 +320,16 @@ class TypeHintTests(unittest.TestCase):
             np.int16: (np.int16, ShortType()),
             np.int32: (np.int32, IntegerType()),
             np.int64: (np.int64, LongType()),
-            np.int: (np.int64, LongType()),
             int: (np.int64, LongType()),
             # floating
             np.float32: (np.float32, FloatType()),
-            np.float: (np.float64, DoubleType()),
             np.float64: (np.float64, DoubleType()),
             float: (np.float64, DoubleType()),
             # string
-            np.str: (np.unicode_, StringType()),
             np.unicode_: (np.unicode_, StringType()),
             str: (np.unicode_, StringType()),
             # bool
-            np.bool: (np.bool, BooleanType()),
-            bool: (np.bool, BooleanType()),
+            bool: (np.bool_, BooleanType()),
             # datetime
             np.datetime64: (np.datetime64, TimestampType()),
             datetime.datetime: (np.dtype("datetime64[ns]"), TimestampType()),
@@ -366,7 +361,7 @@ class TypeHintTests(unittest.TestCase):
             )
 
             # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-            if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+            if sys.version_info >= (3, 8):
                 import numpy.typing as ntp
 
                 self.assertEqual(
@@ -433,6 +428,10 @@ class TypeHintTests(unittest.TestCase):
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
+
+
+class TypeHintTests(TypeHintTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

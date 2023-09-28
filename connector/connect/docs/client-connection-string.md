@@ -58,7 +58,8 @@ sc://hostname:port/;param1=value;param2=value
     <td>token</td>
     <td>String</td>
     <td>When this param is set in the URL, it will enable standard
-    bearer token authentication using GRPC. By default this value is not set.</td>
+    bearer token authentication using GRPC. By default this value is not set.
+    Setting this value enables SSL.</td>
     <td><pre>token=ABCDEFGH</pre></td>
   </tr>
   <tr>
@@ -80,6 +81,26 @@ sc://hostname:port/;param1=value;param2=value
     <td>
     <pre>user_id=Martin</pre>
     </td>
+  </tr>
+  <tr>
+    <td>user_agent</td>
+    <td>String</td>
+    <td>The user agent acting on behalf of the user, typically applications
+    that use Spark Connect to implement its functionality and execute Spark
+    requests on behalf of the user.<br/>
+    <i>Default: </i><pre>_SPARK_CONNECT_PYTHON</pre> in the Python client</td>
+    <td><pre>user_agent=my_data_query_app</pre></td>
+  </tr>
+  <tr>
+    <td>session_id</td>
+    <td>String</td>
+    <td>In addition to the user ID, the cache of Spark Sessions in the Spark Connect
+    server uses a session ID as the cache key. This option in the connection string
+    allows to provide this session ID to allow sharing Spark Sessions for the same users
+    for example across multiple languages. The value must be provided in a valid UUID 
+    string format.<br/>
+    <i>Default: A UUID generated randomly.</td>
+    <td><pre>session_id=550e8400-e29b-41d4-a716-446655440000</pre></td>
   </tr>
 </table>
 

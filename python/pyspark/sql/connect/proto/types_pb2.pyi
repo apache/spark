@@ -637,6 +637,100 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class UDT(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TYPE_FIELD_NUMBER: builtins.int
+        JVM_CLASS_FIELD_NUMBER: builtins.int
+        PYTHON_CLASS_FIELD_NUMBER: builtins.int
+        SERIALIZED_PYTHON_CLASS_FIELD_NUMBER: builtins.int
+        SQL_TYPE_FIELD_NUMBER: builtins.int
+        type: builtins.str
+        jvm_class: builtins.str
+        python_class: builtins.str
+        serialized_python_class: builtins.str
+        @property
+        def sql_type(self) -> global___DataType: ...
+        def __init__(
+            self,
+            *,
+            type: builtins.str = ...,
+            jvm_class: builtins.str | None = ...,
+            python_class: builtins.str | None = ...,
+            serialized_python_class: builtins.str | None = ...,
+            sql_type: global___DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_jvm_class",
+                b"_jvm_class",
+                "_python_class",
+                b"_python_class",
+                "_serialized_python_class",
+                b"_serialized_python_class",
+                "jvm_class",
+                b"jvm_class",
+                "python_class",
+                b"python_class",
+                "serialized_python_class",
+                b"serialized_python_class",
+                "sql_type",
+                b"sql_type",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_jvm_class",
+                b"_jvm_class",
+                "_python_class",
+                b"_python_class",
+                "_serialized_python_class",
+                b"_serialized_python_class",
+                "jvm_class",
+                b"jvm_class",
+                "python_class",
+                b"python_class",
+                "serialized_python_class",
+                b"serialized_python_class",
+                "sql_type",
+                b"sql_type",
+                "type",
+                b"type",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_jvm_class", b"_jvm_class"]
+        ) -> typing_extensions.Literal["jvm_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_python_class", b"_python_class"]
+        ) -> typing_extensions.Literal["python_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal[
+                "_serialized_python_class", b"_serialized_python_class"
+            ],
+        ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
+
+    class Unparsed(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATA_TYPE_STRING_FIELD_NUMBER: builtins.int
+        data_type_string: builtins.str
+        """(Required) The unparsed data type string"""
+        def __init__(
+            self,
+            *,
+            data_type_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["data_type_string", b"data_type_string"]
+        ) -> None: ...
+
     NULL_FIELD_NUMBER: builtins.int
     BINARY_FIELD_NUMBER: builtins.int
     BOOLEAN_FIELD_NUMBER: builtins.int
@@ -659,6 +753,8 @@ class DataType(google.protobuf.message.Message):
     ARRAY_FIELD_NUMBER: builtins.int
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
+    UDT_FIELD_NUMBER: builtins.int
+    UNPARSED_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -708,6 +804,12 @@ class DataType(google.protobuf.message.Message):
     def struct(self) -> global___DataType.Struct: ...
     @property
     def map(self) -> global___DataType.Map: ...
+    @property
+    def udt(self) -> global___DataType.UDT:
+        """UserDefinedType"""
+    @property
+    def unparsed(self) -> global___DataType.Unparsed:
+        """UnparsedDataType"""
     def __init__(
         self,
         *,
@@ -733,6 +835,8 @@ class DataType(google.protobuf.message.Message):
         array: global___DataType.Array | None = ...,
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
+        udt: global___DataType.UDT | None = ...,
+        unparsed: global___DataType.Unparsed | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -779,6 +883,10 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
+            "udt",
+            b"udt",
+            "unparsed",
+            b"unparsed",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -830,6 +938,10 @@ class DataType(google.protobuf.message.Message):
             b"timestamp",
             "timestamp_ntz",
             b"timestamp_ntz",
+            "udt",
+            b"udt",
+            "unparsed",
+            b"unparsed",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -838,29 +950,34 @@ class DataType(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-    ) -> typing_extensions.Literal[
-        "null",
-        "binary",
-        "boolean",
-        "byte",
-        "short",
-        "integer",
-        "long",
-        "float",
-        "double",
-        "decimal",
-        "string",
-        "char",
-        "var_char",
-        "date",
-        "timestamp",
-        "timestamp_ntz",
-        "calendar_interval",
-        "year_month_interval",
-        "day_time_interval",
-        "array",
-        "struct",
-        "map",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "null",
+            "binary",
+            "boolean",
+            "byte",
+            "short",
+            "integer",
+            "long",
+            "float",
+            "double",
+            "decimal",
+            "string",
+            "char",
+            "var_char",
+            "date",
+            "timestamp",
+            "timestamp_ntz",
+            "calendar_interval",
+            "year_month_interval",
+            "day_time_interval",
+            "array",
+            "struct",
+            "map",
+            "udt",
+            "unparsed",
+        ]
+        | None
+    ): ...
 
 global___DataType = DataType

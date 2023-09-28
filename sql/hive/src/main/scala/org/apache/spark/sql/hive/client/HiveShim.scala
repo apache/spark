@@ -23,7 +23,7 @@ import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, Type
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -255,7 +255,7 @@ private[client] sealed abstract class Shim {
   }
 }
 
-private[client] class Shim_v0_12 extends Shim with Logging {
+private class Shim_v0_12 extends Shim with Logging {
   // See HIVE-12224, HOLD_DDLTIME was broken as soon as it landed
   protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
@@ -698,7 +698,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 }
 
-private[client] class Shim_v0_13 extends Shim_v0_12 {
+private class Shim_v0_13 extends Shim_v0_12 {
 
   private lazy val setCurrentSessionStateMethod =
     findStaticMethod(
@@ -880,7 +880,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
         case Literal(value, _: DateType) =>
-          Some(dateFormatter.format(value.asInstanceOf[Int]))
+          Some(quoteStringLiteral(dateFormatter.format(value.asInstanceOf[Int])))
         case _ => None
       }
     }
@@ -933,7 +933,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableDateValues {
       private lazy val valueToLiteralString: PartialFunction[Any, String] = {
-        case value: Int => dateFormatter.format(value)
+        case value: Int => quoteStringLiteral(dateFormatter.format(value))
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
@@ -987,7 +987,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ IntegralType(), dt: IntegralType, _, _)
+          case Cast(child @ IntegralTypeExpression(), dt: IntegralType, _, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -1180,6 +1180,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           })
         }
 
+        recordHiveCall()
         val allPartitionNames = hive.getPartitionNames(
           table.getDbName, table.getTableName, -1).asScala
         val partNames = allPartitionNames.filter { p =>
@@ -1221,7 +1222,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 }
 
-private[client] class Shim_v0_14 extends Shim_v0_13 {
+private class Shim_v0_14 extends Shim_v0_13 {
 
   // true if this is an ACID operation
   protected lazy val isAcid = JBoolean.FALSE
@@ -1340,9 +1341,9 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
 
 }
 
-private[client] class Shim_v1_0 extends Shim_v0_14
+private class Shim_v1_0 extends Shim_v0_14
 
-private[client] class Shim_v1_1 extends Shim_v1_0 {
+private class Shim_v1_1 extends Shim_v1_0 {
 
   // throws an exception if the index does not exist
   protected lazy val throwExceptionInDropIndex = JBoolean.TRUE
@@ -1365,7 +1366,7 @@ private[client] class Shim_v1_1 extends Shim_v1_0 {
 
 }
 
-private[client] class Shim_v1_2 extends Shim_v1_1 {
+private class Shim_v1_2 extends Shim_v1_1 {
 
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L
@@ -1633,8 +1634,23 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
       pattern: String,
       tableType: TableType): Seq[String] = {
     recordHiveCall()
-    getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
-      .asInstanceOf[JList[String]].asScala.toSeq
+    try {
+      getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
+        .asInstanceOf[JList[String]].asScala.toSeq
+    } catch {
+      case ex: InvocationTargetException if ex.getCause.isInstanceOf[HiveException] =>
+        val cause = ex.getCause.getCause
+        if (cause != null && cause.isInstanceOf[MetaException] &&
+          cause.getMessage != null &&
+          cause.getMessage.contains("Invalid method name: 'get_tables_by_type'")) {
+          // SparkUnsupportedOperationException (inherited from UnsupportedOperationException)
+          // is thrown when the Shim_v2_3#getTablesByType call returns no get_tables_by_type method.
+          // HiveClientImpl#listTablesByType will have fallback processing.
+          throw QueryExecutionErrors.getTablesByTypeUnsupportedByHiveVersionError()
+        } else {
+          throw ex
+        }
+    }
   }
 }
 

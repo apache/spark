@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
   test("Replace _FUNC_ in ExpressionInfo") {
@@ -188,9 +190,11 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      "org.apache.spark.sql.catalyst.expressions.TryReflect",
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
       "org.apache.spark.sql.catalyst.expressions.RaiseError",
+      "org.apache.spark.sql.catalyst.expressions.AssertTrue",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)

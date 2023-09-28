@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -204,13 +205,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       DataTypeMismatch(
@@ -375,9 +371,10 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _) => Seq(e, u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
+      case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
     })
   }
@@ -460,13 +457,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)

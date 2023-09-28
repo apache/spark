@@ -24,10 +24,10 @@ import java.util.OptionalLong
 
 import scala.collection.mutable
 
-import org.scalatest.Assertions._
+import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
@@ -54,7 +54,9 @@ abstract class InMemoryBaseTable(
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
     val numPartitions: Option[Int] = None,
-    val isDistributionStrictlyRequired: Boolean = true)
+    val advisoryPartitionSize: Option[Long] = None,
+    val isDistributionStrictlyRequired: Boolean = true,
+    val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
   protected object PartitionKeyColumn extends MetadataColumn {
@@ -71,7 +73,11 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private lazy val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private val metadataColumnNames = metadataColumns.map(_.name).toSet
+
+  // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
+  override val canRenameConflictingMetadataColumns: Boolean = true
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -89,12 +95,12 @@ abstract class InMemoryBaseTable(
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
 
-  // The key `Seq[Any]` is the partition values.
-  val dataMap: mutable.Map[Seq[Any], BufferedRows] = mutable.Map.empty
+  // The key `Seq[Any]` is the partition values, value is a set of splits, each with a set of rows.
+  val dataMap: mutable.Map[Seq[Any], Seq[BufferedRows]] = mutable.Map.empty
 
-  def data: Array[BufferedRows] = dataMap.values.toArray
+  def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
-  def rows: Seq[InternalRow] = dataMap.values.flatMap(_.rows).toSeq
+  def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
 
   val partCols: Array[Array[String]] = partitioning.flatMap(_.references).map { ref =>
     schema.findNestedField(ref.fieldNames(), includeCollections = false) match {
@@ -195,18 +201,21 @@ abstract class InMemoryBaseTable(
       partitionSchema: StructType,
       from: Seq[Any],
       to: Seq[Any]): Boolean = {
-    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from))
-    val newRows = new BufferedRows(to)
-    rows.rows.foreach { r =>
-      val newRow = new GenericInternalRow(r.numFields)
-      for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
-      for (i <- 0 until partitionSchema.length) {
-        val j = schema.fieldIndex(partitionSchema(i).name)
-        newRow.update(j, to(i))
+    val splits = dataMap.remove(from).getOrElse(Seq(new BufferedRows(from)))
+    val newSplits = splits.map { rows =>
+      val newRows = new BufferedRows(to)
+      rows.rows.foreach { r =>
+        val newRow = new GenericInternalRow(r.numFields)
+        for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+        for (i <- 0 until partitionSchema.length) {
+          val j = schema.fieldIndex(partitionSchema(i).name)
+          newRow.update(j, to(i))
+        }
+        newRows.withRow(newRow)
       }
-      newRows.withRow(newRow)
+      newRows
     }
-    dataMap.put(to, newRows).foreach { _ =>
+    dataMap.put(to, newSplits).foreach { _ =>
       throw new IllegalStateException(
         s"The ${to.mkString("[", ", ", "]")} partition exists already")
     }
@@ -223,21 +232,24 @@ abstract class InMemoryBaseTable(
       val rows = if (key.length == schema.length) {
         emptyRows.withRow(InternalRow.fromSeq(key))
       } else emptyRows
-      dataMap.put(key, rows)
+      dataMap.put(key, Seq(rows))
     }
   }
 
   protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
     assert(dataMap.contains(key))
-    dataMap(key).clear()
+    dataMap.update(key, Seq(new BufferedRows(key)))
   }
 
   def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
     data.foreach { p =>
-      dataMap ++= dataMap.map { case (key, currentRows) =>
-        val newRows = new BufferedRows(currentRows.key)
-        newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
-        key -> newRows
+      dataMap ++= dataMap.map { case (key, currentSplits) =>
+        val newSplits = currentSplits.map { currentRows =>
+          val newRows = new BufferedRows(currentRows.key)
+          newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+          newRows
+        }
+        key -> newSplits
       }
     }
     this
@@ -253,8 +265,16 @@ abstract class InMemoryBaseTable(
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
-        .map(key -> _.withRow(row))
-        .getOrElse(key -> new BufferedRows(key).withRow(row))
+          .map { splits =>
+            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+              splits :+ new BufferedRows(key)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
+          }
+          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
       addPartitionKey(key)
     })
     this
@@ -272,17 +292,52 @@ abstract class InMemoryBaseTable(
     new InMemoryScanBuilder(schema)
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns {
-    private var schema: StructType = tableSchema
+  private def canEvaluate(filter: Filter): Boolean = {
+    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+      filter match {
+        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case _ => false
+      }
+    } else {
+      false
+    }
+  }
 
-    override def build: Scan =
-      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
+      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+    private var schema: StructType = tableSchema
+    private var postScanFilters: Array[Filter] = Array.empty
+    private var evaluableFilters: Array[Filter] = Array.empty
+    private var _pushedFilters: Array[Filter] = Array.empty
+
+    override def build: Scan = {
+      val scan = InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      if (evaluableFilters.nonEmpty) {
+        scan.filter(evaluableFilters)
+      }
+      scan
+    }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
-      val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
-      schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
+      // The required schema could contain conflict-renamed metadata columns, so we need to match
+      // them by their logical (original) names, not their current names.
+      val schemaNames = tableSchema.map(_.name).toSet
+      val prunedFields = requiredSchema.filter {
+        case MetadataStructFieldWithLogicalName(f, name) => metadataColumnNames.contains(name)
+        case f => schemaNames.contains(f.name)
+      }
+      schema = StructType(prunedFields)
     }
+
+    override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+      val (evaluableFilters, postScanFilters) = filters.partition(canEvaluate)
+      this.evaluableFilters = evaluableFilters
+      this.postScanFilters = postScanFilters
+      this._pushedFilters = filters
+      postScanFilters
+    }
+
+    override def pushedFilters(): Array[Filter] = this._pushedFilters
   }
 
   case class InMemoryStats(
@@ -366,9 +421,14 @@ abstract class InMemoryBaseTable(
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
-      val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
-      val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
-      new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
+      val metadataColumns = new mutable.ArrayBuffer[String]()
+      val nonMetadataColumns = readSchema.filter {
+        case MetadataStructFieldWithLogicalName(_, name) =>
+          metadataColumns += name
+          false
+        case _ => true
+      }
+      new BufferedRowsReaderFactory(metadataColumns.toSeq, nonMetadataColumns, tableSchema)
     }
   }
 
@@ -389,10 +449,16 @@ abstract class InMemoryBaseTable(
         val ref = partitioning.head.references().head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
-            val matchingKeys = values.map(_.toString).toSet
+            val matchingKeys = values.map { value =>
+              if (value != null) value.toString else null
+            }.toSet
             data = data.filter(partition => {
-              val key = partition.asInstanceOf[BufferedRows].keyString
-              matchingKeys.contains(key)
+              val rows = partition.asInstanceOf[BufferedRows]
+              rows.key match {
+                // null partitions are represented as Seq(null)
+                case Seq(null) => matchingKeys.contains(null)
+                case _ => matchingKeys.contains(rows.keyString())
+              }
             })
 
           case _ => // skip
@@ -408,7 +474,9 @@ abstract class InMemoryBaseTable(
     protected var streamingWriter: StreamingWrite = StreamingAppend
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      assert(writer == Append)
+      if (writer != Append) {
+        throw new IllegalArgumentException(s"Unsupported writer type: $writer")
+      }
       writer = DynamicOverwrite
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this
@@ -423,6 +491,10 @@ abstract class InMemoryBaseTable(
 
       override def requiredNumPartitions(): Int = {
         numPartitions.getOrElse(0)
+      }
+
+      override def advisoryPartitionSizeInBytes(): Long = {
+        advisoryPartitionSize.getOrElse(0)
       }
 
       override def toBatch: BatchWrite = writer
@@ -541,11 +613,29 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
 
   def keyString(): String = key.toArray.mkString("/")
 
-  override def partitionKey(): InternalRow = {
-    InternalRow.fromSeq(key)
-  }
+  override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
 
   def clear(): Unit = rows.clear()
+}
+
+/**
+ * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
+ * does not need to implement equal and hashcode methods.
+ * But [[GenericInternalRow]] implements equals and hashcode methods already. Here we override it
+ * to simulate that it has not been implemented to verify codes correctness.
+ */
+case class PartitionInternalRow(keys: Array[Any])
+  extends GenericInternalRow(keys) {
+  override def equals(other: Any): Boolean = {
+    if (!other.isInstanceOf[PartitionInternalRow]) {
+      return false
+    }
+    // Just compare by reference, not by value
+    this.keys == other.asInstanceOf[PartitionInternalRow].keys
+  }
+  override def hashCode: Int = {
+    Objects.hashCode(keys)
+  }
 }
 
 private class BufferedRowsReaderFactory(

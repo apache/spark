@@ -145,7 +145,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |  def builder(e: Seq[Expression]) = if (e.length == $x) {
         |    finalUdf.createScalaUDF(e)
         |  } else {
-        |    throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "$x", e.length)
+        |    throw QueryCompilationErrors.wrongNumArgsError(name, "$x", e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
         |  finalUdf
@@ -170,7 +170,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         |  def builder(e: Seq[Expression]) = if (e.length == $i) {
         |    ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
         |  } else {
-        |    throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "$i", e.length)
+        |    throw QueryCompilationErrors.wrongNumArgsError(name, "$i", e.length)
         |  }
         |  functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
         |}""".stripMargin)
@@ -191,7 +191,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 0) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "0", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "0", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -211,7 +211,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 1) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "1", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -231,7 +231,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 2) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "2", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "2", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -251,7 +251,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 3) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "3", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "3", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -271,7 +271,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 4) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "4", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "4", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -291,7 +291,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 5) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "5", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "5", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -311,7 +311,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 6) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "6", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "6", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -331,7 +331,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 7) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "7", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "7", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -351,7 +351,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 8) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "8", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "8", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -371,7 +371,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 9) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "9", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "9", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -391,7 +391,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 10) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "10", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "10", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -411,7 +411,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 11) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "11", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "11", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -431,7 +431,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 12) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "12", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "12", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -451,7 +451,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 13) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "13", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "13", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -471,7 +471,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 14) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "14", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "14", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -491,7 +491,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 15) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "15", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "15", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -511,7 +511,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 16) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "16", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "16", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -531,7 +531,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 17) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "17", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "17", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -551,7 +551,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 18) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "18", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "18", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -571,7 +571,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 19) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "19", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "19", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -591,7 +591,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 20) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "20", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "20", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -611,7 +611,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 21) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "21", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "21", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -631,7 +631,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 22) {
       finalUdf.createScalaUDF(e)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "22", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "22", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "scala_udf")
     finalUdf
@@ -738,7 +738,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 0) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "0", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "0", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -753,7 +753,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 1) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "1", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "1", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -768,7 +768,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 2) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "2", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "2", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -783,7 +783,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 3) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "3", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "3", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -798,7 +798,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 4) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "4", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "4", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -813,7 +813,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 5) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "5", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "5", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -828,7 +828,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 6) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "6", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "6", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -843,7 +843,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 7) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "7", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "7", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -858,7 +858,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 8) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "8", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "8", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -873,7 +873,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 9) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "9", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "9", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -888,7 +888,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 10) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "10", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "10", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -903,7 +903,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 11) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "11", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "11", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -918,7 +918,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 12) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "12", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "12", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -933,7 +933,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 13) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "13", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "13", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -948,7 +948,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 14) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "14", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "14", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -963,7 +963,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 15) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "15", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "15", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -978,7 +978,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 16) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "16", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "16", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -993,7 +993,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 17) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "17", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "17", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -1008,7 +1008,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 18) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "18", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "18", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -1023,7 +1023,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 19) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "19", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "19", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -1038,7 +1038,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 20) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "20", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "20", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -1053,7 +1053,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 21) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "21", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "21", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }
@@ -1068,7 +1068,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     def builder(e: Seq[Expression]) = if (e.length == 22) {
       ScalaUDF(func, replaced, e, Nil, udfName = Some(name))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(name, "22", e.length)
+      throw QueryCompilationErrors.wrongNumArgsError(name, "22", e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder, "java_udf")
   }

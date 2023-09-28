@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.netty
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}

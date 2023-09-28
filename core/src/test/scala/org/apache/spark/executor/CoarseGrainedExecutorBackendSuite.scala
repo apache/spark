@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.duration._
 
 import org.json4s.{DefaultFormats, Extraction}
@@ -307,7 +306,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
-        1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
+        1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
         Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
@@ -408,7 +407,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val executor = backend.executor
       // Mock the executor.
       when(executor.threadPool).thenReturn(threadPool)
-      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
+        new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
       when(executor.conf).thenReturn(conf)
 
@@ -422,7 +422,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
+          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
       assert(taskDescriptions.length == numTasks)
@@ -496,7 +496,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val executor = backend.executor
       // Mock the executor.
       when(executor.threadPool).thenReturn(threadPool)
-      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
+        new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
       when(executor.conf).thenReturn(conf)
 
@@ -510,7 +511,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
-          1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
+          1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
           Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       }
       assert(taskDescriptions.length == numTasks)

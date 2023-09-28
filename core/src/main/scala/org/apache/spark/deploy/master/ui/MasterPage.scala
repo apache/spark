@@ -147,7 +147,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.activeApps.length} <a href="#running-app">Running</a>,
                 {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
               <li><strong>Drivers:</strong>
-                {state.activeDrivers.length} Running,
+                {state.activeDrivers.length} Running
+                ({state.activeDrivers.count(_.state == DriverState.SUBMITTED)} Waiting),
                 {state.completedDrivers.length} Completed </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>

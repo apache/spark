@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -52,6 +52,9 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+
+# For supporting Spark Connect
+from pyspark.sql.utils import get_column_class
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -214,6 +217,15 @@ def _is_boolean_type(right: Any) -> bool:
     return isinstance(right, bool) or (
         isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType)
     )
+
+
+def _is_extension_dtypes(object: Any) -> bool:
+    """
+    Check whether the type of given object is extension dtype or not.
+    Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
+    StringDtype, Float32Dtype and Float64Dtype.
+    """
+    return isinstance(getattr(object, "dtype", None), extension_dtypes)
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -470,6 +482,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
+            Column = get_column_class()
             return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -477,6 +490,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         _sanitize_list_like(right)
 
+        Column = get_column_class()
         return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

@@ -53,13 +53,17 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
+  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`, skipping null values.",
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
       > SELECT _FUNC_('s');
 
+      > SELECT _FUNC_('/', 'foo', null, 'bar');
+        foo/bar
+      > SELECT _FUNC_(null, 'Spark', 'SQL');
+        NULL
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -82,13 +86,8 @@ case class ConcatWs(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 0",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
       )
     } else {
       super.checkInputDataTypes()
@@ -288,13 +287,8 @@ case class Elt(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
       )
     } else {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
@@ -520,7 +514,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
         createStringPredicate(expressions(0), expressions(1))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 
@@ -1518,7 +1512,7 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
         createStringPad(expressions(0), expressions(1), expressions(2))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
     }
   }
 
@@ -1689,13 +1683,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 0",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+          toSQLId(prettyName), Seq("> 0"), children.length
       )
     } else {
       super.checkInputDataTypes()
@@ -2148,31 +2137,147 @@ case class OctetLength(child: Expression)
 /**
  * A function that return the Levenshtein distance between the two given strings.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.",
+  usage = """
+    _FUNC_(str1, str2[, threshold]) - Returns the Levenshtein distance between the two given strings. If threshold is set and distance more than it, return -1.""",
   examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
        3
+      > SELECT _FUNC_('kitten', 'sitting', 2);
+       -1
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes with NullIntolerant {
+// scalastyle:on line.size.limit
+case class Levenshtein(
+    left: Expression,
+    right: Expression,
+    threshold: Option[Expression] = None)
+  extends Expression
+  with ImplicitCastInputTypes
+  with NullIntolerant{
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  def this(left: Expression, right: Expression, threshold: Expression) =
+    this(left, right, Option(threshold))
 
-  override def dataType: DataType = IntegerType
-  protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
-    leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
+  def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (left, right) =>
-      s"${ev.value} = $left.levenshteinDistance($right);")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length > 3 || children.length < 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq(2, 3), children.length)
+    } else {
+      super.checkInputDataTypes()
+    }
   }
 
+  override def inputTypes: Seq[AbstractDataType] = threshold match {
+    case Some(_) => Seq(StringType, StringType, IntegerType)
+    case _ => Seq(StringType, StringType)
+  }
+
+  override def children: Seq[Expression] = threshold match {
+    case Some(value) => Seq(left, right, value)
+    case _ => Seq(left, right)
+  }
+
+  override def dataType: DataType = IntegerType
+
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
+      newChildren: IndexedSeq[Expression]): Expression = {
+    threshold match {
+      case Some(_) => copy(left = newChildren(0), right = newChildren(1),
+        threshold = Some(newChildren(2)))
+      case _ => copy(left = newChildren(0), right = newChildren(1))
+    }
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val leftEval = left.eval(input)
+    if (leftEval == null) return null
+    val rightEval = right.eval(input)
+    if (rightEval == null) return null
+    val thresholdEval = threshold.map(_.eval(input))
+    thresholdEval match {
+      case Some(v) =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
+          v.asInstanceOf[Int])
+      case _ =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    threshold match {
+      case Some(_) => genCodeWithThreshold(ctx, ev, children(2))
+      case _ => genCodeWithoutThreshold(ctx, ev)
+    }
+  }
+
+  private def genCodeWithThreshold(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      thresholdExpr: Expression): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val thresholdGen = thresholdExpr.genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
+      s"${rightGen.value}, ${thresholdGen.value});"
+    if (nullable) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+             """
+          }
+        }
+      }
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = leftGen.code + rightGen.code + thresholdGen.code
+      ev.copy(code = code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+
+  private def genCodeWithoutThreshold(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
+    if (nullable) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          s"""
+            ${ev.isNull} = false;
+            $resultCode
+           """
+        }
+      }
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = leftGen.code + rightGen.code
+      ev.copy(code = code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
 }
 
 /**
@@ -2371,14 +2476,13 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, child => {
       val maybeValidateInputCode = if (failOnError) {
         val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (!$unbase64.isValidBase64($child)) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $child,
-           |    $format,
+           |    UTF8String.fromString("BASE64"),
            |    "try_to_binary");
            |}
        """.stripMargin
@@ -2451,7 +2555,7 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
+        throw QueryCompilationErrors.wrongNumArgsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head
@@ -2679,7 +2783,7 @@ case class ToBinary(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "fmt",
+              "inputName" -> toSQLId("fmt"),
               "inputType" -> toSQLType(StringType),
               "inputExpr" -> toSQLExpr(f)
             )
@@ -3038,4 +3142,68 @@ case class SplitPart (
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
       partNum = newChildren.apply(2))
   }
+}
+
+/**
+ * A internal function that converts the empty string to null for partition values.
+ * This function should be only used in V1Writes.
+ */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  override def nullable: Boolean = true
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      s"""if ($c.numBytes() == 0) {
+         |  ${ev.isNull} = true;
+         |  ${ev.value} = null;
+         |} else {
+         |  ${ev.value} = $c;
+         |}""".stripMargin
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+    copy(child = newChild)
+}
+
+/**
+ * Function to check if a given number string is a valid Luhn number. Returns true, if the number
+ * string is a valid Luhn number, false otherwise.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str ) - Checks that a string of digits is valid according to the Luhn algorithm.
+    This checksum function is widely applied on credit card numbers and government identification
+    numbers to distinguish valid numbers from mistyped, incorrect numbers.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('8112189876');
+       true
+      > SELECT _FUNC_('79927398713');
+       true
+      > SELECT _FUNC_('79927398714');
+       false
+  """,
+  since = "3.5.0",
+  group = "string_funcs")
+case class Luhncheck(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BooleanType,
+    "isLuhnNumber",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def prettyName: String = "luhn_check"
+
+  override def children: Seq[Expression] = Seq(input)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(newChildren(0))
 }

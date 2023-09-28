@@ -15,17 +15,28 @@
 # limitations under the License.
 #
 import numpy as np
-import pandas as pd
 import unittest
 
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField
+from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
 from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
 class PredictBatchUDFTests(SparkSessionTestCase):
     def setUp(self):
+        import pandas as pd
+
         super(PredictBatchUDFTests, self).setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
@@ -71,6 +82,11 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # multiple column input, single input => ERROR
         with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
             preds = self.df.withColumn("preds", identity("a", "b")).toPandas()
+
+        # batch_size 1
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=1)
+        preds = self.df.withColumn("preds", identity("a")).toPandas()
+        self.assertTrue(preds["a"].equals(preds["preds"]))
 
     def test_identity_multi(self):
         # single input model
@@ -487,6 +503,28 @@ class PredictBatchUDFTests(SparkSessionTestCase):
                 .select("a", "preds.*")
                 .toPandas()
             )
+
+    def test_single_value_in_batch(self):
+        # SPARK-42250: batches consisting of single float value should work
+        df = self.spark.createDataFrame(
+            [[[0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0]]], schema=["t1", "t2"]
+        )
+
+        def make_multi_sum_fn():
+            def predict(x1: np.ndarray, x2: np.ndarray) -> np.ndarray:
+                return np.sum(x1, axis=1) + np.sum(x2, axis=1)
+
+            return predict
+
+        multi_sum_udf = predict_batch_udf(
+            make_multi_sum_fn,
+            return_type=FloatType(),
+            batch_size=1,
+            input_tensor_shapes=[[4], [3]],
+        )
+
+        [value] = df.select(multi_sum_udf("t1", "t2")).first()
+        self.assertEqual(value, 9.0)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -70,7 +70,4 @@ class MsSqlServerNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNa
   override val supportsSchemaComment: Boolean = false
 
   override val supportsDropSchemaCascade: Boolean = false
-
-  testListNamespaces()
-  testDropNamespaces()
 }

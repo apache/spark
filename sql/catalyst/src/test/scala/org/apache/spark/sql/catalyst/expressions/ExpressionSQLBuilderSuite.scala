@@ -95,7 +95,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
 
   test("attributes") {
     checkSQL($"a".int, "a")
-    checkSQL(Symbol("foo bar").int, "`foo bar`")
+    checkSQL(Symbol("`foo bar`").int, "`foo bar`")
     // Keyword
     checkSQL($"int".int, "int")
   }

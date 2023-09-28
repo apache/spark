@@ -42,7 +42,7 @@ AND    t2b = (SELECT max(avg)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -69,11 +69,13 @@ WHERE  t1a IN (SELECT   min(t2a)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2432",
+  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
   "messageParameters" : {
-    "msg" : "Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x])."
+    "input" : "\"min(t2a)\", \"t2c\"",
+    "missingAttributes" : "\"t2b\"",
+    "operator" : "!Filter t2c#x IN (list#x [t2b#x])"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -152,7 +154,7 @@ WHERE  t1a IN (SELECT t2a
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
   "sqlState" : "0A000",
@@ -187,13 +189,13 @@ ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1a`",
-    "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
+    "proposal" : "`t2a`, `t2b`, `t2c`"
   },
   "queryContext" : [ {
     "objectType" : "",

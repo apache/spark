@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
+import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -146,11 +147,16 @@ class HiveUDAFSuite extends QueryTest
       withUserDefinedFunction("testUDAFPercentile" -> true) {
         // non-deterministic children of Hive UDAF
         sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
-        val e1 = intercept[AnalysisException] {
-          sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
-        }.getMessage
-        assert(Seq("nondeterministic expression",
-          "should not appear in the arguments of an aggregate function").forall(e1.contains))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
+          },
+          errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+          parameters = Map("sqlExpr" -> "\"testUDAFPercentile( x, rand())\""),
+          context = ExpectedContext(
+            fragment = "rand()",
+            start = 29,
+            stop = 34))
       }
     }
   }
@@ -175,11 +181,12 @@ class HiveUDAFSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sql(s"SELECT $functionName(100)")
         },
-        errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",
-          "actualNum" -> "1"),
+          "actualNum" -> "1",
+          "docroot" -> SPARK_DOC_ROOT),
         context = ExpectedContext(
           fragment = "longProductSum(100)",
           start = 7,

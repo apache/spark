@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
@@ -71,6 +71,38 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val invoke = Invoke(inputObject, "_2", IntegerType)
     checkEvaluationWithMutableProjection(invoke, null, inputRow)
+  }
+
+  test("SPARK-44525: Invoke could not find method") {
+    val inputRow = InternalRow(new Object)
+    val inputObject = BoundReference(0, ObjectType(classOf[Object]), nullable = false)
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method zeroArgNotExistMethod with arguments " +
+          "() on class java.lang.Object.")
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(
+          inputObject,
+          "oneArgNotExistMethod",
+          IntegerType,
+          Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
+          Seq(StringType)).eval(inputRow)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method oneArgNotExistMethod with arguments " +
+          "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
+      )
+    )
   }
 
   test("MapObjects should make copies of unsafe-backed data") {
@@ -372,11 +404,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
-      val errMsg = intercept[RuntimeException] {
-        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
-      }.getMessage()
-      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
-        "as resulting collection."))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+        },
+        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
 
@@ -451,7 +484,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTypes.foreach { dt =>
       genSchema(dt).map { schema =>
         val row = RandomDataGenerator.randomRow(random, schema)
-        val toRow = RowEncoder(schema).createSerializer()
+        val toRow = ExpressionEncoder(schema).createSerializer()
         val internalRow = toRow(row)
         val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
@@ -500,7 +533,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         dt,
-        ScalaReflection.lenientExternalDataTypeFor(enc))
+        EncoderUtils.lenientExternalDataTypeFor(enc))
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
@@ -560,10 +593,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     ExternalMapToCatalyst(
       inputObject,
-      ScalaReflection.externalDataTypeFor(keyEnc),
+      EncoderUtils.externalDataTypeFor(keyEnc),
       kvSerializerFor(keyEnc),
       keyNullable = keyEnc.nullable,
-      ScalaReflection.externalDataTypeFor(valueEnc),
+      EncoderUtils.externalDataTypeFor(valueEnc),
       kvSerializerFor(valueEnc),
       valueNullable = valueEnc.nullable
     )

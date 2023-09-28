@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -55,7 +55,4 @@ class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNames
 
   override def builtinNamespaces: Array[Array[String]] =
     Array(Array("information_schema"), Array("pg_catalog"), Array("public"))
-
-  testListNamespaces()
-  testDropNamespaces()
 }

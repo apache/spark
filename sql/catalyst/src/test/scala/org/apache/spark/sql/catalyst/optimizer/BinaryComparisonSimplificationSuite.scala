@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest {
 
@@ -217,5 +217,47 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     checkCondition(boolRelation, TrueLiteral <=> And($"a", $"b"), TrueLiteral <=> And($"a", $"b"))
     checkCondition(boolRelation, And($"a", $"b") <=> FalseLiteral, And($"a", $"b") <=> FalseLiteral)
     checkCondition(boolRelation, FalseLiteral <=> And($"a", $"b"), FalseLiteral <=> And($"a", $"b"))
+  }
+
+  test("Simplify binary comparison when literal is null") {
+    val nullLit = Literal.create(null, IntegerType)
+    Seq($"a" > nullLit, $"a" >= nullLit, $"a" === nullLit, $"a" < nullLit, $"a" <= nullLit)
+      .foreach { be =>
+        checkCondition(nullableRelation, be, Literal.create(null, BooleanType) && $"a".isNotNull)
+      }
+
+    checkCondition(nullableRelation, $"a" <=> nullLit, $"a".isNull)
+  }
+
+  test("SPARK-43413: IN subquery nullability") {
+    // The following cases are pairs of (relation, expression)
+    // Cases we should not optimize because the IN subquery is nullable
+    Seq(
+      // IN subquery right-hand-side (ListQuery) is nullable
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral),
+      // Left-hand-side of the IN is nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral),
+      // Both sides of the IN are nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral)
+    ).foreach {
+      case (relation, expr) =>
+      checkCondition(relation, expr, expr)
+    }
+
+    // Should optimize, since the IN is non-nullable
+    val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr <=> FalseLiteral, Not(inExpr))
+
+    val inExpr2 = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr2 <=> TrueLiteral, inExpr2)
   }
 }

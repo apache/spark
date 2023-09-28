@@ -590,10 +590,13 @@ abstract class OrcQueryTest extends OrcTest {
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
       testIgnoreCorruptFilesWithoutSchemaInfer()
-      val m1 = intercept[AnalysisException] {
-        testAllCorruptFiles()
-      }.getMessage
-      assert(m1.contains("Unable to infer schema for ORC"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testAllCorruptFiles()
+        },
+        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "ORC")
+      )
       testAllCorruptFilesWithoutSchemaInfer()
     }
 
@@ -606,10 +609,14 @@ abstract class OrcQueryTest extends OrcTest {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
       assert(e2.getMessage.contains("Malformed ORC file"))
-      val e3 = intercept[SparkException] {
-        testAllCorruptFiles()
-      }
-      assert(e3.getMessage.contains("Could not read footer for file"))
+      checkError(
+        exception = intercept[SparkException] {
+          testAllCorruptFiles()
+        },
+        errorClass = "CANNOT_READ_FILE_FOOTER",
+        parameters = Map("file" -> "file:.*"),
+        matchPVals = true
+      )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }

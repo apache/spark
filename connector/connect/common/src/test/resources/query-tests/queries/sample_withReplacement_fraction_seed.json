@@ -1,0 +1,18 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "sample": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "upperBound": 0.23,
+    "withReplacement": true,
+    "seed": "898"
+  }
+}

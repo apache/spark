@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.math.abs
 import scala.util.Random
 

@@ -17,18 +17,24 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -40,12 +46,20 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
+  class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
+    override def onNext(value: ExecutePlanResponse): Unit = {}
+    override def onError(t: Throwable): Unit = {}
+    override def onCompleted(): Unit = {}
+  }
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark).transformRelation(rel)
+    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd)
+    val executeHolder = buildExecutePlanHolder(cmd)
+    new SparkConnectPlanner(executeHolder.sessionHolder)
+      .process(cmd, new MockObserver(), executeHolder)
   }
 
   def readRel: proto.Relation =
@@ -57,6 +71,20 @@ trait SparkConnectPlanTest extends SharedSparkSession {
           .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
           .build())
       .build()
+
+  /**
+   * Creates a local relation for testing purposes. The local relation is mapped to it's
+   * equivalent in Catalyst and can be easily used for planner testing.
+   *
+   * @param schema
+   *   the schema of LocalRelation
+   * @param data
+   *   the data of LocalRelation
+   * @return
+   */
+  def createLocalRelationProto(schema: StructType, data: Seq[InternalRow]): proto.Relation = {
+    createLocalRelationProto(DataTypeUtils.toAttributes(schema), data)
+  }
 
   /**
    * Creates a local relation for testing purposes. The local relation is mapped to it's
@@ -76,14 +104,38 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     val bytes = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
-        StructType.fromAttributes(attrs.map(_.toAttribute)),
+        DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  def buildExecutePlanHolder(command: proto.Command): ExecuteHolder = {
+    val sessionHolder = SessionHolder.forTesting(spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionHolder.userId)
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(command)
+      .build()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setSessionId(sessionHolder.sessionId)
+      .setUserContext(context)
+      .build()
+    val executeHolder = SparkConnectService.executionManager.createExecuteHolder(request)
+    executeHolder.eventsManager.status_(ExecuteStatus.Started)
+    executeHolder
   }
 }
 
@@ -125,6 +177,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
+  }
+
+  test("Simple Table with options") {
+    val read = proto.Read.newBuilder().build()
+    // Invalid read without Table name.
+    intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
+    val readWithTable = read.toBuilder
+      .setNamedTable(
+        proto.Read.NamedTable.newBuilder
+          .setUnparsedIdentifier("name")
+          .putOptions("p1", "v1")
+          .build())
+      .build()
+    val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
+    res match {
+      case e: UnresolvedRelation => assert(e.options.get("p1") == "v1")
+      case _ => assert(false, "Do not have expected options")
+    }
   }
 
   test("Simple Project") {
@@ -190,7 +260,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Simple Union") {
-    intercept[AssertionError](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
     val union = proto.Relation.newBuilder
       .setSetOp(
@@ -331,18 +401,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(res.nodeName == "Aggregate")
   }
 
-  test("Invalid DataSource") {
-    val dataSource = proto.Read.DataSource.newBuilder()
-
-    val e = intercept[InvalidPlanInput](
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setRead(proto.Read.newBuilder().setDataSource(dataSource))
-          .build()))
-    assert(e.getMessage.contains("DataSource requires a format"))
-  }
-
   test("Test invalid deduplicate") {
     val deduplicate = proto.Deduplicate
       .newBuilder()
@@ -361,6 +419,36 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setInput(readRel)
     val e2 = intercept[InvalidPlanInput] {
       transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
+    }
+    assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
+  }
+
+  test("Test invalid deduplicateWithinWatermark") {
+    val deduplicateWithinWatermark = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setAllColumnsAsKeys(true)
+      .addColumnNames("test")
+      .setWithinWatermark(true)
+
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark)
+          .build())
+    }
+    assert(
+      e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
+
+    val deduplicateWithinWatermark2 = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setWithinWatermark(true)
+    val e2 = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark2)
+          .build())
     }
     assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
   }
@@ -404,7 +492,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
     val df = Dataset.ofRows(spark, transform(localRelation))
     val array = df.collect()
     assertResult(10)(array.length)
@@ -418,7 +506,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(
@@ -543,7 +631,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proj(row).copy()
     }
 
-    val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
+    val localRelation = createLocalRelationProto(schema, inputRows)
 
     val project =
       proto.Project
@@ -605,13 +693,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -651,13 +737,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -674,13 +758,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }

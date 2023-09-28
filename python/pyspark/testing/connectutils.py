@@ -16,10 +16,12 @@
 #
 import shutil
 import tempfile
+import types
 import typing
 import os
 import functools
 import unittest
+import uuid
 
 from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -65,14 +67,16 @@ connect_requirement_message = (
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
-    from pyspark.sql.connect import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
 
 
 class MockRemoteSession:
     def __init__(self):
         self.hooks = {}
+        self.session_id = str(uuid.uuid4())
+        self.is_mock_session = True
 
     def set_hook(self, name, hook):
         self.hooks[name] = hook
@@ -86,15 +90,32 @@ class MockRemoteSession:
         return functools.partial(self.hooks[item])
 
 
+class MockDF(DataFrame):
+    """Helper class that must only be used for the mock plan tests."""
+
+    def __init__(self, session: SparkSession, plan: LogicalPlan):
+        super().__init__(session)
+        self._plan = plan
+
+    def __getattr__(self, name):
+        """All attributes are resolved to columns, because none really exist in the
+        mocked DataFrame."""
+        return self[name]
+
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class PlanOnlyTestFixture(unittest.TestCase):
+class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
     @classmethod
     def _read_table(cls, table_name):
-        return DataFrame.withPlan(Read(table_name), cls.connect)
+        return cls._df_mock(Read(table_name))
 
     @classmethod
     def _udf_mock(cls, *args, **kwargs):
         return "internal_name"
+
+    @classmethod
+    def _df_mock(cls, plan: LogicalPlan) -> MockDF:
+        return MockDF(cls.connect, plan)
 
     @classmethod
     def _session_range(
@@ -104,17 +125,17 @@ class PlanOnlyTestFixture(unittest.TestCase):
         step=1,
         num_partitions=None,
     ):
-        return DataFrame.withPlan(Range(start, end, step, num_partitions), cls.connect)
+        return cls._df_mock(Range(start, end, step, num_partitions))
 
     @classmethod
     def _session_sql(cls, query):
-        return DataFrame.withPlan(SQL(query), cls.connect)
+        return cls._df_mock(SQL(query))
 
     if have_pandas:
 
         @classmethod
         def _with_plan(cls, plan):
-            return DataFrame.withPlan(plan, cls.connect)
+            return cls._df_mock(plan)
 
     @classmethod
     def setUpClass(cls):
@@ -122,7 +143,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
-        cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
@@ -130,7 +150,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
@@ -148,14 +167,26 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         """
         Override this in subclasses to supply a more specific conf
         """
-        return SparkConf(loadDefaults=False)
+        conf = SparkConf(loadDefaults=False)
+        # Disable JVM stack trace in Spark Connect tests to prevent the
+        # HTTP header size from exceeding the maximum allowed size.
+        conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
+        # Make the server terminate reattachable streams every 1 second and 123 bytes,
+        # to make the tests exercise reattach.
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "123")
+        return conf
+
+    @classmethod
+    def master(cls):
+        return "local[4]"
 
     @classmethod
     def setUpClass(cls):
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)
-            .remote("local[4]")
+            .remote(cls.master())
             .getOrCreate()
         )
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)

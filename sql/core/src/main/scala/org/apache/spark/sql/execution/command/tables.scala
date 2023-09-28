@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -289,8 +289,11 @@ case class AlterTableAddColumnsCommand(
       sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
     colsToAdd.map { col: StructField =>
       if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+        val schema = StructType(Array(col))
+        ResolveDefaultColumns.validateTableProviderForDefaultValue(
+          schema, tableProvider, "ALTER TABLE ADD COLUMNS", true)
         val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          StructType(Array(col)), tableProvider, "ALTER TABLE ADD COLUMNS", true)
+          schema, "ALTER TABLE ADD COLUMNS")
         foldedStructType.fields(0)
       } else {
         col
@@ -648,13 +651,8 @@ case class DescribeTableCommand(
       }
 
       // If any columns have default values, append them to the result.
-      if (metadata.schema.fields.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
-        append(result, "", "", "")
-        append(result, "# Column Default Values", "", "")
-        metadata.schema.foreach { column =>
-          column.getCurrentDefaultValue().map(
-            append(result, column.name, column.dataType.simpleString, _))
-        }
+      ResolveDefaultColumns.getDescribeMetadata(metadata.schema).foreach { row =>
+        append(result, row._1, row._2, row._3)
       }
     }
 
@@ -737,7 +735,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase {
+  extends DescribeCommandBase with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -748,6 +746,10 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 

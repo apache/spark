@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -1958,6 +1958,102 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             IntegerType, tsType)
         }
       }
+    }
+  }
+
+  test("SPARK-42635: timestampadd near daylight saving transition") {
+    // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
+    // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
+    val skippedTime = 1300010400000000L
+    // In America/Los_Angeles timezone, both timestamp range `[repeatedTime - MICROS_PER_HOUR,
+    // repeatedTime)` and `[repeatedTime, repeatedTime + MICROS_PER_HOUR)` map to
+    // [2011-11-06 01:00:00, 2011-11-06 02:00:00).
+    // The next second of 2011-11-06 01:59:59 (pre-transition) jumps back to 2011-11-06 01:00:00.
+    val repeatedTime = 1320570000000000L
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
+      // Adding one day is **not** equivalent to adding <unit>_PER_DAY time units, because not every
+      // day has 24 hours: 2011-03-13 has 23 hours, 2011-11-06 has 25 hours.
+
+      // timestampadd(DAY, 1, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1), Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime)
+      // timestampadd(HOUR, 24, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(24),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR)
+      // timestampadd(HOUR, 23, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(23),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime)
+      // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
+      checkEvaluation(
+        TimestampAdd(
+          "SECOND", Literal(SECONDS_PER_DAY.toInt),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR)
+      // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 03:59:59
+      checkEvaluation(
+        TimestampAdd(
+          "SECOND", Literal(SECONDS_PER_DAY.toInt - 1),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR - MICROS_PER_SECOND)
+
+      // timestampadd(DAY, 1, 2011-11-05 02:00:00) = 2011-11-06 02:00:00
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime + MICROS_PER_HOUR)
+      // timestampadd(DAY, 1, 2011-11-05 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1),
+          Literal(repeatedTime - 25 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(DAY, -1, 2011-11-07 01:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(-1),
+          Literal(repeatedTime + 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime)
+      // timestampadd(MONTH, 1, 2011-10-06 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd(
+          "MONTH", Literal(1),
+          Literal(repeatedTime - MICROS_PER_HOUR - 31 * MICROS_PER_DAY, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(MONTH, -1, 2011-12-06 01:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd(
+          "MONTH", Literal(-1),
+          Literal(repeatedTime + 30 * MICROS_PER_DAY, TimestampType)),
+        repeatedTime)
+      // timestampadd(HOUR, 23, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(23),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(HOUR, 24, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(24),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime)
+    }
+  }
+
+  test("SPARK-42635: timestampadd unit conversion overflow") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("DAY",
+        Literal(106751992),
+        Literal(0L, TimestampType)),
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 106751992 DAY to TIMESTAMP '1970-01-01 00:00:00'"))
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
+        Literal(1431655764),
+        Literal(0L, TimestampType)),
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          "add 1431655764 QUARTER to TIMESTAMP '1970-01-01 00:00:00'"))
     }
   }
 

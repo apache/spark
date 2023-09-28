@@ -162,7 +162,8 @@ private[spark] object Config extends Logging {
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(1572864) // 1.5 MiB
+      .checkValue(_ <= 1048576, "Must have at most 1048576 bytes")
+      .createWithDefault(1048576) // 1.0 MiB
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
@@ -469,16 +470,6 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
       .createWithDefaultString("600s")
-
-  val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
-    ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
-      .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
-        "before it is assumed that the executor failed.")
-      .version("2.3.0")
-      .intConf
-      .checkValue(value => value > 0, "Maximum attempts of checks of executor lost reason " +
-        "must be a positive integer")
-      .createWithDefault(10)
 
   val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")

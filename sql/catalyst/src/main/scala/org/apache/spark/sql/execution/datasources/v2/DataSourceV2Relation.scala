@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,15 +55,8 @@ case class DataSourceV2Relation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
-      val resolve = conf.resolver
-      val outputNames = outputSet.map(_.name)
-      def isOutputColumn(col: MetadataColumn): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
-      }
-      // filter out metadata columns that have names conflicting with output columns. if the table
-      // has a column "line" and the table can produce a metadata column called "line", then the
-      // data column should be returned, not the metadata column.
-      hasMeta.metadataColumns.filterNot(isOutputColumn).toAttributes
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }
@@ -103,8 +97,9 @@ case class DataSourceV2Relation(
   }
 
   def withMetadataColumns(): DataSourceV2Relation = {
-    if (metadataOutput.nonEmpty) {
-      DataSourceV2Relation(table, output ++ metadataOutput, catalog, identifier, options)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
     } else {
       this
     }
@@ -196,10 +191,11 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
-    DataSourceV2Relation(table, schema.toAttributes, catalog, identifier, options)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
   }
 
   def create(

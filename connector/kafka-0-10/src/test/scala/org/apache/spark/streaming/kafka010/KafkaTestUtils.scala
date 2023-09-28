@@ -24,7 +24,7 @@ import java.util.{Map => JMap, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import kafka.api.Request
@@ -240,9 +240,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", localHostNameForURI)
-    props.put("advertised.host.name", localHostNameForURI)
-    props.put("port", brokerPort.toString)
+    props.put("listeners", s"PLAINTEXT://$localHostNameForURI:$brokerPort")
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")

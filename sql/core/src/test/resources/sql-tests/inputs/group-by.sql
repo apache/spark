@@ -34,6 +34,9 @@ SELECT a + b, COUNT(b) FROM testData GROUP BY a + b;
 SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1;
 SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1;
 
+-- struct() in group by
+SELECT count(1) FROM testData GROUP BY struct(a + 0.1 AS aa);
+
 -- Aggregate with nulls.
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData;
@@ -248,3 +251,27 @@ GROUP BY a;
 
 SELECT mode(a), mode(b) FROM testData;
 SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a;
+
+
+-- SPARK-44846: PushFoldableIntoBranches in complex grouping expressions cause bindReference error
+SELECT c * 2 AS d
+FROM (
+         SELECT if(b > 1, 1, b) AS c
+         FROM (
+                  SELECT if(a < 0, 0, a) AS b
+                  FROM VALUES (-1), (1), (2) AS t1(a)
+              ) t2
+         GROUP BY b
+     ) t3
+GROUP BY c;
+
+-- SPARK-45034: Support deterministic mode function
+SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col);
+SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b);
+SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col);
+SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col);
+SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col);

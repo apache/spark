@@ -296,10 +296,13 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
-  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
+  override def cancelTasks(
+      stageId: Int,
+      interruptThread: Boolean,
+      reason: String): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
     // Kill all running tasks for the stage.
-    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled")
+    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled: " + reason)
     // Cancel all attempts for the stage.
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
@@ -1056,7 +1059,7 @@ private[spark] class TaskSchedulerImpl(
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
             // one may be triggered by a dropped connection from the worker while another may be a
-            // report of executor termination from Mesos. We produce log messages for both so we
+            // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
             logError(s"Lost an executor $executorId (already removed): $reason")
         }
@@ -1083,9 +1086,17 @@ private[spark] class TaskSchedulerImpl(
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
     case _: ExecutorDecommission =>
-      logInfo(s"Executor $executorId on $hostPort is decommissioned.")
+      logInfo(s"Executor $executorId on $hostPort is decommissioned" +
+        s"${getDecommissionDuration(executorId)}.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
+  }
+
+  // return decommission duration in string or "" if decommission startTime not exists
+  private def getDecommissionDuration(executorId: String): String = {
+    executorsPendingDecommission.get(executorId)
+      .map(s => s" after ${Utils.msDurationToString(clock.getTimeMillis() - s.startTime)}")
+      .getOrElse("")
   }
 
   /**

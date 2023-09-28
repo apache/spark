@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
@@ -39,6 +39,8 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     case class DummyLeafNode() extends LeafNode {
       override def output: Seq[Attribute] =
         attributesToFindConstraintFor ++ attributesWithWatermark
+      // override computeStats to avoid UnsupportedOperationException.
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
     }
 
     def watermarkFrom(

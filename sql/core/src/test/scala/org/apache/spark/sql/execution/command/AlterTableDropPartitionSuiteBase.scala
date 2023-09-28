@@ -284,4 +284,22 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       }
     }
   }
+
+  test("SPARK-42480: drop partition when dropPartitionByName enabled") {
+    withSQLConf(SQLConf.HIVE_METASTORE_DROP_PARTITION_BY_NAME.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (region STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION (region='=reg1') LOCATION 'loc1'")
+        checkPartitions(t, Map("region" -> "=reg1"))
+        sql(s"ALTER TABLE $t PARTITION (region='=reg1') RENAME TO PARTITION (region='=%reg1')")
+        checkPartitions(t, Map("region" -> "=%reg1"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='=%reg1')")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION (region='reg?2') LOCATION 'loc2'")
+        checkPartitions(t, Map("region" -> "reg?2"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='reg?2')")
+        checkPartitions(t)
+      }
+    }
+  }
 }

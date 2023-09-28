@@ -24,11 +24,10 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -40,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -826,9 +826,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
         checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
         val ret2 = cast(
-          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          Literal.create(Map("1" -> null, "2" -> "a".getBytes, "3" -> null, "4" -> "c".getBytes)),
           StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val nullStr = if (legacyCast) "" else " null"
+        checkEvaluation(ret2, s"${lb}1 ->$nullStr, 2 -> a, 3 ->$nullStr, 4 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),
@@ -1392,29 +1393,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(expr.toString == cast.toString)
   }
 
-  test("SPARK-41991: CheckOverflowInTableInsert child must be Cast or ExpressionProxy of Cast") {
-    val runtime = new SubExprEvaluationRuntime(1)
-    val cast = Cast(Literal(1.0), IntegerType)
-    val expr = CheckOverflowInTableInsert(cast, "column_1")
-    val proxy = ExpressionProxy(Literal(1.0), 0, runtime)
-    checkError(
-      exception = intercept[SparkException] {
-        expr.withNewChildrenInternal(IndexedSeq(proxy))
-      },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> "Child is not Cast or ExpressionProxy of Cast"
-      )
-    )
-
-    checkError(
-      exception = intercept[SparkException] {
-        expr.withNewChildrenInternal(IndexedSeq(Literal(1)))
-      },
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map(
-        "message" -> "Child is not Cast or ExpressionProxy of Cast"
-      )
-    )
+  test("SPARK-43336: Casting between Timestamp and TimestampNTZ requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
+    assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
 }

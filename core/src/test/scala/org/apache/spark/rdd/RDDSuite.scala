@@ -21,9 +21,9 @@ import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
@@ -498,7 +498,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
-    import collection.mutable
+    import scala.collection.mutable
     val partitions = 10000
     val numMachines = 50
     val machines = mutable.ListBuffer[String]()
@@ -539,7 +539,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("coalesced RDDs with partial locality, large scale (10K partitions)") {
     // large scale experiment
-    import collection.mutable
+    import scala.collection.mutable
     val halfpartitions = 5000
     val partitions = 10000
     val numMachines = 50

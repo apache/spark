@@ -473,6 +473,32 @@ object JsonBenchmark extends SqlBasedBenchmark {
         ds.noop()
       }
 
+      def errorTimestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map { i =>
+            s"""{"timestamp":"data${i % 200}"}"""
+          }
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with default format",
+        numIters) { _ =>
+        spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
+        numIters) { _ =>
+        spark.read.option("inferTimestamp", true).option("timestampFormat",
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").json(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
+        numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+          spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
+        }
+      }
+
       readBench.run()
     }
   }
@@ -516,6 +542,33 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def partialResultBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("Partial JSON results", rowsNum, output = output)
+    val colsNum = 1000
+
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+    val schema = StructType(fields)
+
+    def data: Dataset[String] = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map { i =>
+          (0 until colsNum).map { j =>
+            // Only the last column has an integer value.
+            if (j < colsNum - 1) s""""col${i}":"foo_${j}"""" else s""""col${i}":${j}"""
+          }.mkString("{", ", ", "}")
+        }
+      }.select($"value").as[String]
+    }
+
+    benchmark.addCase("parse invalid JSON", numIters) { _ =>
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+        spark.read.schema(schema).json(data).noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
@@ -532,6 +585,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       // Benchmark pushdown filters that refer to top-level columns.
       // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
+      partialResultBenchmark(rowsNum = 10000, numIters)
     }
   }
 }

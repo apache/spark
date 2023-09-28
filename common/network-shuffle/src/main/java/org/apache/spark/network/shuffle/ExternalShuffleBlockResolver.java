@@ -151,7 +151,7 @@ public class ExternalShuffleBlockResolver {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
     try {
-      if (db != null) {
+      if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
         byte[] key = dbAppExecKey(fullId);
         byte[] value = mapper.writeValueAsString(executorInfo).getBytes(StandardCharsets.UTF_8);
         db.put(key, value);
@@ -224,7 +224,7 @@ public class ExternalShuffleBlockResolver {
       // Only touch executors associated with the appId that was removed.
       if (appId.equals(fullId.appId)) {
         it.remove();
-        if (db != null) {
+        if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(fullId.appId)) {
           try {
             db.delete(dbAppExecKey(fullId));
           } catch (IOException e) {

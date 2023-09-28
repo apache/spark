@@ -1,0 +1,2 @@
+Project [least(a#0, d#0.a) AS least(a, d.a)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

@@ -139,4 +139,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(sample.maxRows === Some(200))
     assert(sample.maxRowsPerPartition === Some(68))
   }
+
+  test("SPARK-44523: Filter's maxRows/maxRowsPerPartition is 0 if condition is FalseLiteral") {
+    val query = Range(0, 100, 1, 10)
+    assert(query.where(Literal.FalseLiteral).maxRows.contains(0))
+    assert(query.where(Literal.FalseLiteral).maxRowsPerPartition.contains(0))
+  }
 }

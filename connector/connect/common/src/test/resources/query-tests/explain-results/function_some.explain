@@ -1,0 +1,2 @@
+Aggregate [max(flag#0) AS some(flag)#0]
++- LocalRelation <empty>, [id#0L, flag#0]

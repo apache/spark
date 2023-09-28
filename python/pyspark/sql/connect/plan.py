@@ -14,35 +14,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
 
-from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+check_dependencies(__name__)
+
+from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
 import json
-import pyarrow as pa
+import pickle
+from threading import Lock
 from inspect import signature, isclass
 
+import pyarrow as pa
+
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import SortOrder, ColumnReference, LiteralExpression
-from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.sql.connect.expressions import (
+    Expression,
+    SortOrder,
+    ColumnReference,
+    LiteralExpression,
+)
+from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    IllegalArgumentException,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
-class InputValidationError(Exception):
-    pass
-
-
-class LogicalPlan(object):
+class LogicalPlan:
+    _lock: Lock = Lock()
+    _nextPlanId: int = 0
 
     INDENT = 2
 
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
+
+        plan_id: Optional[int] = None
+        with LogicalPlan._lock:
+            plan_id = LogicalPlan._nextPlanId
+            LogicalPlan._nextPlanId += 1
+
+        assert plan_id is not None
+        self._plan_id = plan_id
+
+    def _create_proto_relation(self) -> proto.Relation:
+        plan = proto.Relation()
+        plan.common.plan_id = self._plan_id
+        return plan
 
     def unresolved_attr(self, colName: str) -> proto.Expression:
         """Creates an unresolved attribute from a column name."""
@@ -229,15 +261,16 @@ class DataSource(LogicalPlan):
 
     def __init__(
         self,
-        format: str,
+        format: Optional[str] = None,
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
+        predicates: Optional[List[str]] = None,
+        is_streaming: Optional[bool] = None,
     ) -> None:
         super().__init__(None)
 
-        assert isinstance(format, str) and format != ""
-
+        assert format is None or isinstance(format, str)
         assert schema is None or isinstance(schema, str)
 
         if options is not None:
@@ -249,14 +282,21 @@ class DataSource(LogicalPlan):
             assert isinstance(paths, list)
             assert all(isinstance(path, str) for path in paths)
 
+        if predicates is not None:
+            assert isinstance(predicates, list)
+            assert all(isinstance(predicate, str) for predicate in predicates)
+
         self._format = format
         self._schema = schema
         self._options = options
         self._paths = paths
+        self._predicates = predicates
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-        plan.read.data_source.format = self._format
+        plan = self._create_proto_relation()
+        if self._format is not None:
+            plan.read.data_source.format = self._format
         if self._schema is not None:
             plan.read.data_source.schema = self._schema
         if self._options is not None and len(self._options) > 0:
@@ -264,17 +304,32 @@ class DataSource(LogicalPlan):
                 plan.read.data_source.options[k] = v
         if self._paths is not None and len(self._paths) > 0:
             plan.read.data_source.paths.extend(self._paths)
+        if self._predicates is not None and len(self._predicates) > 0:
+            plan.read.data_source.predicates.extend(self._predicates)
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
         return plan
 
 
 class Read(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
+    def __init__(
+        self,
+        table_name: str,
+        options: Optional[Dict[str, str]] = None,
+        is_streaming: Optional[bool] = None,
+    ) -> None:
         super().__init__(None)
         self.table_name = table_name
+        self.options = options or {}
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.read.named_table.unparsed_identifier = self.table_name
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
+        for k, v in self.options.items():
+            plan.read.named_table.options[k] = v
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -303,8 +358,7 @@ class LocalRelation(LogicalPlan):
         self._schema = schema
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
-
+        plan = self._create_proto_relation()
         if self._table is not None:
             sink = pa.BufferOutputStream()
             with pa.ipc.new_stream(sink, self._table.schema) as writer:
@@ -316,6 +370,10 @@ class LocalRelation(LogicalPlan):
             plan.local_relation.schema = self._schema
         return plan
 
+    def serialize(self, session: "SparkConnectClient") -> bytes:
+        p = self.plan(session)
+        return bytes(p.local_relation.SerializeToString())
+
     def print(self, indent: int = 0) -> str:
         return f"{' ' * indent}<LocalRelation>\n"
 
@@ -323,6 +381,33 @@ class LocalRelation(LogicalPlan):
         return """
         <ul>
             <li><b>LocalRelation</b></li>
+        </ul>
+        """
+
+
+class CachedLocalRelation(LogicalPlan):
+    """Creates a CachedLocalRelation plan object based on a hash of a LocalRelation."""
+
+    def __init__(self, hash: str) -> None:
+        super().__init__(None)
+
+        self._hash = hash
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        clr = plan.cached_local_relation
+
+        clr.hash = self._hash
+
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<CachedLocalRelation>\n"
+
+    def _repr_html_(self) -> str:
+        return """
+        <ul>
+            <li><b>CachedLocalRelation</b></li>
         </ul>
         """
 
@@ -338,11 +423,26 @@ class ShowString(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.show_string.input.CopyFrom(self._child.plan(session))
         plan.show_string.num_rows = self.num_rows
         plan.show_string.truncate = self.truncate
         plan.show_string.vertical = self.vertical
+        return plan
+
+
+class HtmlString(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], num_rows: int, truncate: int) -> None:
+        super().__init__(child)
+        self.num_rows = num_rows
+        self.truncate = truncate
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.html_string.input.CopyFrom(self._child.plan(session))
+        plan.html_string.num_rows = self.num_rows
+        plan.html_string.truncate = self.truncate
         return plan
 
 
@@ -360,32 +460,31 @@ class Project(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
         super().__init__(child)
         self._columns = list(columns)
-        self.alias: Optional[str] = None
         self._verify_expressions()
 
     def _verify_expressions(self) -> None:
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._columns:
             if not isinstance(c, (Column, str)):
-                raise InputValidationError(
-                    f"Only Column or String can be used for projections: '{c}'."
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "columns"},
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        from pyspark.sql.connect.functions import col
+
         assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.project.input.CopyFrom(self._child.plan(session))
+
         proj_exprs = []
         for c in self._columns:
             if isinstance(c, Column):
                 proj_exprs.append(c.to_plan(session))
-            elif c == "*":
-                exp = proto.Expression()
-                exp.unresolved_star.SetInParent()
-                proj_exprs.append(exp)
             else:
-                proj_exprs.append(self.unresolved_attr(c))
+                proj_exprs.append(col(c).to_plan(session))
 
-        plan = proto.Relation()
-        plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend(proj_exprs)
         return plan
 
@@ -424,7 +523,7 @@ class WithColumns(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.with_columns.input.CopyFrom(self._child.plan(session))
 
         for i in range(0, len(self._columnNames)):
@@ -435,6 +534,37 @@ class WithColumns(LogicalPlan):
                 alias.metadata = self._metadata[i]
             plan.with_columns.aliases.append(alias)
 
+        return plan
+
+
+class WithWatermark(LogicalPlan):
+    """Logical plan object for a WithWatermark operation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], event_time: str, delay_threshold: str):
+        super().__init__(child)
+        self._event_time = event_time
+        self._delay_threshold = delay_threshold
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.with_watermark.input.CopyFrom(self._child.plan(session))
+        plan.with_watermark.event_time = self._event_time
+        plan.with_watermark.delay_threshold = self._delay_threshold
+        return plan
+
+
+class CachedRemoteRelation(LogicalPlan):
+    """Logical plan object for a DataFrame reference which represents a DataFrame that's been
+    cached on the server with a given id."""
+
+    def __init__(self, relationId: str):
+        super().__init__(None)
+        self._relationId = relationId
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.cached_remote_relation.relation_id = self._relationId
         return plan
 
 
@@ -449,7 +579,7 @@ class Hint(LogicalPlan):
         self._name = name
 
         for param in parameters:
-            assert isinstance(param, (list, str, float, int))
+            assert isinstance(param, (list, str, float, int, Column))
             if isinstance(param, list):
                 assert all(isinstance(p, (str, float, int)) for p in param)
 
@@ -459,7 +589,7 @@ class Hint(LogicalPlan):
         from pyspark.sql.connect.functions import array, lit
 
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self._name
         for param in self._parameters:
@@ -477,7 +607,7 @@ class Filter(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.filter.input.CopyFrom(self._child.plan(session))
         plan.filter.condition.CopyFrom(self.filter.to_plan(session))
         return plan
@@ -490,7 +620,7 @@ class Limit(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.limit.input.CopyFrom(self._child.plan(session))
         plan.limit.limit = self.limit
         return plan
@@ -503,7 +633,7 @@ class Tail(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.tail.input.CopyFrom(self._child.plan(session))
         plan.tail.limit = self.limit
         return plan
@@ -516,7 +646,7 @@ class Offset(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.offset.input.CopyFrom(self._child.plan(session))
         plan.offset.offset = self.offset
         return plan
@@ -528,16 +658,19 @@ class Deduplicate(LogicalPlan):
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
         column_names: Optional[List[str]] = None,
+        within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
         self.all_columns_as_keys = all_columns_as_keys
         self.column_names = column_names
+        self.within_watermark = within_watermark
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.deduplicate.input.CopyFrom(self._child.plan(session))
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
+        plan.deduplicate.within_watermark = self.within_watermark
         if self.column_names is not None:
             plan.deduplicate.column_names.extend(self.column_names)
         return plan
@@ -568,7 +701,7 @@ class Sort(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.order.extend([self._convert_col(c, session) for c in self.columns])
         plan.sort.is_global = self.is_global
@@ -582,24 +715,19 @@ class Drop(LogicalPlan):
         columns: List[Union[Column, str]],
     ) -> None:
         super().__init__(child)
-        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
-        self.columns = columns
-
-    def _convert_to_expr(
-        self, col: Union[Column, str], session: "SparkConnectClient"
-    ) -> proto.Expression:
-        expr = proto.Expression()
-        if isinstance(col, Column):
-            expr.CopyFrom(col.to_plan(session))
-        else:
-            expr.CopyFrom(self.unresolved_attr(col))
-        return expr
+        if len(columns) > 0:
+            assert all(isinstance(c, (Column, str)) for c in columns)
+        self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.drop.input.CopyFrom(self._child.plan(session))
-        plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
+        for c in self._columns:
+            if isinstance(c, Column):
+                plan.drop.columns.append(c.to_plan(session))
+            else:
+                plan.drop.column_names.append(c)
         return plan
 
 
@@ -622,7 +750,7 @@ class Sample(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.sample.input.CopyFrom(self._child.plan(session))
         plan.sample.lower_bound = self.lower_bound
         plan.sample.upper_bound = self.upper_bound
@@ -670,32 +798,31 @@ class Aggregate(LogicalPlan):
         from pyspark.sql.connect.functions import lit
 
         assert self._child is not None
-
-        agg = proto.Relation()
-
-        agg.aggregate.input.CopyFrom(self._child.plan(session))
-
-        agg.aggregate.grouping_expressions.extend([c.to_plan(session) for c in self._grouping_cols])
-        agg.aggregate.aggregate_expressions.extend(
+        plan = self._create_proto_relation()
+        plan.aggregate.input.CopyFrom(self._child.plan(session))
+        plan.aggregate.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.aggregate.aggregate_expressions.extend(
             [c.to_plan(session) for c in self._aggregate_cols]
         )
 
         if self._group_type == "groupby":
-            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
         elif self._group_type == "rollup":
-            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP
         elif self._group_type == "cube":
-            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_CUBE
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_CUBE
         elif self._group_type == "pivot":
-            agg.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_PIVOT
+            plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_PIVOT
             assert self._pivot_col is not None
-            agg.aggregate.pivot.col.CopyFrom(self._pivot_col.to_plan(session))
+            plan.aggregate.pivot.col.CopyFrom(self._pivot_col.to_plan(session))
             if self._pivot_values is not None and len(self._pivot_values) > 0:
-                agg.aggregate.pivot.values.extend(
+                plan.aggregate.pivot.values.extend(
                     [lit(v).to_plan(session).literal for v in self._pivot_values]
                 )
 
-        return agg
+        return plan
 
 
 class Join(LogicalPlan):
@@ -727,36 +854,30 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise NotImplementedError(
-                """
-                Unsupported join type: %s. Supported join types include:
-                "inner", "outer", "full", "fullouter", "full_outer",
-                "leftouter", "left", "left_outer", "rightouter",
-                "right", "right_outer", "leftsemi", "left_semi",
-                "semi", "leftanti", "left_anti", "anti", "cross",
-                """
-                % how
+            raise IllegalArgumentException(
+                error_class="UNSUPPORTED_JOIN_TYPE",
+                message_parameters={"join_type": how},
             )
         self.how = join_type
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
-        rel.join.left.CopyFrom(self.left.plan(session))
-        rel.join.right.CopyFrom(self.right.plan(session))
+        plan = self._create_proto_relation()
+        plan.join.left.CopyFrom(self.left.plan(session))
+        plan.join.right.CopyFrom(self.right.plan(session))
         if self.on is not None:
             if not isinstance(self.on, list):
                 if isinstance(self.on, str):
-                    rel.join.using_columns.append(self.on)
+                    plan.join.using_columns.append(self.on)
                 else:
-                    rel.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+                    plan.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
             elif len(self.on) > 0:
                 if isinstance(self.on[0], str):
-                    rel.join.using_columns.extend(cast(str, self.on))
+                    plan.join.using_columns.extend(cast(str, self.on))
                 else:
                     merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
-                    rel.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
-        rel.join.join_type = self.how
-        return rel
+                    plan.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
+        plan.join.join_type = self.how
+        return plan
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -772,6 +893,100 @@ class Join(LogicalPlan):
         <ul>
             <li>
                 <b>Join</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </uL>
+        """
+
+
+class AsOfJoin(LogicalPlan):
+    def __init__(
+        self,
+        left: LogicalPlan,
+        right: LogicalPlan,
+        left_as_of: "ColumnOrName",
+        right_as_of: "ColumnOrName",
+        on: Optional[Union[str, List[str], Column, List[Column]]],
+        how: str,
+        tolerance: Optional[Column],
+        allow_exact_matches: bool,
+        direction: str,
+    ) -> None:
+        super().__init__(left)
+        self.left = left
+        self.right = right
+        self.left_as_of = left_as_of
+        self.right_as_of = right_as_of
+        self.on = on
+        self.how = how
+        self.tolerance = tolerance
+        self.allow_exact_matches = allow_exact_matches
+        self.direction = direction
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.as_of_join.left.CopyFrom(self.left.plan(session))
+        plan.as_of_join.right.CopyFrom(self.right.plan(session))
+
+        if isinstance(self.left_as_of, Column):
+            plan.as_of_join.left_as_of.CopyFrom(self.left_as_of.to_plan(session))
+        else:
+            plan.as_of_join.left_as_of.CopyFrom(
+                ColumnReference(self.left_as_of, self.left._plan_id).to_plan(session)
+            )
+
+        if isinstance(self.right_as_of, Column):
+            plan.as_of_join.right_as_of.CopyFrom(self.right_as_of.to_plan(session))
+        else:
+            plan.as_of_join.right_as_of.CopyFrom(
+                ColumnReference(self.right_as_of, self.right._plan_id).to_plan(session)
+            )
+
+        if self.on is not None:
+            if not isinstance(self.on, list):
+                if isinstance(self.on, str):
+                    plan.as_of_join.using_columns.append(self.on)
+                else:
+                    plan.as_of_join.join_expr.CopyFrom(self.on.to_plan(session))
+            elif len(self.on) > 0:
+                if isinstance(self.on[0], str):
+                    plan.as_of_join.using_columns.extend(cast(List[str], self.on))
+                else:
+                    merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
+                    plan.as_of_join.join_expr.CopyFrom(cast(Column, merge_column).to_plan(session))
+
+        plan.as_of_join.join_type = self.how
+
+        if self.tolerance is not None:
+            plan.as_of_join.tolerance.CopyFrom(self.tolerance.to_plan(session))
+
+        plan.as_of_join.allow_exact_matches = self.allow_exact_matches
+        plan.as_of_join.direction = self.direction
+
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        assert self.left is not None
+        assert self.right is not None
+
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return (
+            f"{i}<AsOfJoin left_as_of={self.left_as_of}, right_as_of={self.right_as_of}, "
+            f"on={self.on} how={self.how}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
+
+    def _repr_html_(self) -> str:
+        assert self.left is not None
+        assert self.right is not None
+
+        return f"""
+        <ul>
+            <li>
+                <b>AsOfJoin</b><br />
                 Left: {self.left._repr_html_()}
                 Right: {self.right._repr_html_()}
             </li>
@@ -798,29 +1013,27 @@ class SetOperation(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        rel = proto.Relation()
+        plan = self._create_proto_relation()
         if self._child is not None:
-            rel.set_op.left_input.CopyFrom(self._child.plan(session))
+            plan.set_op.left_input.CopyFrom(self._child.plan(session))
         if self.other is not None:
-            rel.set_op.right_input.CopyFrom(self.other.plan(session))
+            plan.set_op.right_input.CopyFrom(self.other.plan(session))
         if self.set_op == "union":
-            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
+            plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_UNION
         elif self.set_op == "intersect":
-            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_INTERSECT
+            plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_INTERSECT
         elif self.set_op == "except":
-            rel.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
+            plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
-            raise NotImplementedError(
-                """
-                Unsupported set operation type: %s.
-                """
-                % rel.set_op.set_op_type
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"feature": self.set_op},
             )
 
-        rel.set_op.is_all = self.is_all
-        rel.set_op.by_name = self.by_name
-        rel.set_op.allow_missing_columns = self.allow_missing_columns
-        return rel
+        plan.set_op.is_all = self.is_all
+        plan.set_op.by_name = self.by_name
+        plan.set_op.allow_missing_columns = self.allow_missing_columns
+        return plan
 
     def print(self, indent: int = 0) -> str:
         assert self._child is not None
@@ -858,12 +1071,12 @@ class Repartition(LogicalPlan):
         self._shuffle = shuffle
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
+        plan = self._create_proto_relation()
         if self._child is not None:
-            rel.repartition.input.CopyFrom(self._child.plan(session))
-        rel.repartition.shuffle = self._shuffle
-        rel.repartition.num_partitions = self._num_partitions
-        return rel
+            plan.repartition.input.CopyFrom(self._child.plan(session))
+        plan.repartition.shuffle = self._shuffle
+        plan.repartition.num_partitions = self._num_partitions
+        return plan
 
 
 class RepartitionByExpression(LogicalPlan):
@@ -880,7 +1093,7 @@ class RepartitionByExpression(LogicalPlan):
         self.columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
+        plan = self._create_proto_relation()
 
         part_exprs = []
         for c in self.columns:
@@ -892,13 +1105,13 @@ class RepartitionByExpression(LogicalPlan):
                 part_exprs.append(exp)
             else:
                 part_exprs.append(self.unresolved_attr(c))
-        rel.repartition_by_expression.partition_exprs.extend(part_exprs)
+        plan.repartition_by_expression.partition_exprs.extend(part_exprs)
 
         if self._child is not None:
-            rel.repartition_by_expression.input.CopyFrom(self._child.plan(session))
+            plan.repartition_by_expression.input.CopyFrom(self._child.plan(session))
         if self.num_partitions is not None:
-            rel.repartition_by_expression.num_partitions = self.num_partitions
-        return rel
+            plan.repartition_by_expression.num_partitions = self.num_partitions
+        return plan
 
 
 class SubqueryAlias(LogicalPlan):
@@ -909,22 +1122,59 @@ class SubqueryAlias(LogicalPlan):
         self._alias = alias
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
+        plan = self._create_proto_relation()
         if self._child is not None:
-            rel.subquery_alias.input.CopyFrom(self._child.plan(session))
-        rel.subquery_alias.alias = self._alias
-        return rel
+            plan.subquery_alias.input.CopyFrom(self._child.plan(session))
+        plan.subquery_alias.alias = self._alias
+        return plan
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str) -> None:
+    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
         super().__init__(None)
+
+        if args is not None:
+            if isinstance(args, Dict):
+                for k, v in args.items():
+                    assert isinstance(k, str)
+            else:
+                assert isinstance(args, List)
+
         self._query = query
+        self._args = args
+
+    def _to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
+        if isinstance(v, Column):
+            return v.to_plan(session)
+        else:
+            return LiteralExpression._from_value(v).to_plan(session)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
-        rel.sql.query = self._query
-        return rel
+        plan = self._create_proto_relation()
+        plan.sql.query = self._query
+
+        if self._args is not None and len(self._args) > 0:
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    plan.sql.named_arguments[k].CopyFrom(self._to_expr(session, v))
+            else:
+                for v in self._args:
+                    plan.sql.pos_arguments.append(self._to_expr(session, v))
+
+        return plan
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        cmd.sql_command.sql = self._query
+        if self._args is not None and len(self._args) > 0:
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    cmd.sql_command.named_arguments[k].CopyFrom(self._to_expr(session, v))
+            else:
+                for v in self._args:
+                    cmd.sql_command.pos_arguments.append(self._to_expr(session, v))
+
+        return cmd
 
 
 class Range(LogicalPlan):
@@ -942,13 +1192,13 @@ class Range(LogicalPlan):
         self._num_partitions = num_partitions
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        rel = proto.Relation()
-        rel.range.start = self._start
-        rel.range.end = self._end
-        rel.range.step = self._step
+        plan = self._create_proto_relation()
+        plan.range.start = self._start
+        plan.range.end = self._end
+        plan.range.step = self._step
         if self._num_partitions is not None:
-            rel.range.num_partitions = self._num_partitions
-        return rel
+            plan.range.num_partitions = self._num_partitions
+        return plan
 
 
 class ToSchema(LogicalPlan):
@@ -958,8 +1208,7 @@ class ToSchema(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.to_schema.input.CopyFrom(self._child.plan(session))
         plan.to_schema.schema.CopyFrom(pyspark_types_to_proto_types(self._schema))
         return plan
@@ -972,8 +1221,7 @@ class WithColumnsRenamed(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.with_columns_renamed.input.CopyFrom(self._child.plan(session))
         for k, v in self._colsMap.items():
             plan.with_columns_renamed.rename_columns_map[k] = v
@@ -987,7 +1235,7 @@ class Unpivot(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         ids: List["ColumnOrName"],
-        values: List["ColumnOrName"],
+        values: Optional[List["ColumnOrName"]],
         variable_column_name: str,
         value_column_name: str,
     ) -> None:
@@ -1005,13 +1253,41 @@ class Unpivot(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.unpivot.input.CopyFrom(self._child.plan(session))
         plan.unpivot.ids.extend([self.col_to_expr(x, session) for x in self.ids])
-        plan.unpivot.values.extend([self.col_to_expr(x, session) for x in self.values])
+        if self.values is not None:
+            plan.unpivot.values.values.extend([self.col_to_expr(x, session) for x in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
+        return plan
+
+
+class CollectMetrics(LogicalPlan):
+    """Logical plan object for a CollectMetrics operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        exprs: List["ColumnOrName"],
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._exprs = exprs
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.collect_metrics.input.CopyFrom(self._child.plan(session))
+        plan.collect_metrics.name = self._name
+        plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
         return plan
 
 
@@ -1049,7 +1325,7 @@ class NAFill(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.fill_na.input.CopyFrom(self._child.plan(session))
         if self.cols is not None and len(self.cols) > 0:
             plan.fill_na.cols.extend(self.cols)
@@ -1071,7 +1347,7 @@ class NADrop(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.drop_na.input.CopyFrom(self._child.plan(session))
         if self.cols is not None and len(self.cols) > 0:
             plan.drop_na.cols.extend(self.cols)
@@ -1107,7 +1383,7 @@ class NAReplace(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.replace.input.CopyFrom(self._child.plan(session))
         if self.cols is not None and len(self.cols) > 0:
             plan.replace.cols.extend(self.cols)
@@ -1135,7 +1411,7 @@ class StatSummary(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.summary.input.CopyFrom(self._child.plan(session))
         plan.summary.statistics.extend(self.statistics)
         return plan
@@ -1148,7 +1424,7 @@ class StatDescribe(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.describe.input.CopyFrom(self._child.plan(session))
         plan.describe.cols.extend(self.cols)
         return plan
@@ -1162,8 +1438,7 @@ class StatCov(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.cov.input.CopyFrom(self._child.plan(session))
         plan.cov.col1 = self._col1
         plan.cov.col2 = self._col2
@@ -1185,8 +1460,7 @@ class StatApproxQuantile(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.approx_quantile.input.CopyFrom(self._child.plan(session))
         plan.approx_quantile.cols.extend(self._cols)
         plan.approx_quantile.probabilities.extend(self._probabilities)
@@ -1202,8 +1476,7 @@ class StatCrosstab(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.crosstab.input.CopyFrom(self._child.plan(session))
         plan.crosstab.col1 = self.col1
         plan.crosstab.col2 = self.col2
@@ -1223,8 +1496,7 @@ class StatFreqItems(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.freq_items.input.CopyFrom(self._child.plan(session))
         plan.freq_items.cols.extend(self._cols)
         plan.freq_items.support = self._support
@@ -1260,8 +1532,7 @@ class StatSampleBy(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.sample_by.input.CopyFrom(self._child.plan(session))
         plan.sample_by.col.CopyFrom(self._col._expr.to_plan(session))
         if len(self._fractions) > 0:
@@ -1284,8 +1555,7 @@ class StatCorr(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.corr.input.CopyFrom(self._child.plan(session))
         plan.corr.col1 = self._col1
         plan.corr.col2 = self._col2
@@ -1300,8 +1570,7 @@ class ToDF(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
-
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.to_df.input.CopyFrom(self._child.plan(session))
         plan.to_df.column_names.extend(self._cols)
         return plan
@@ -1318,8 +1587,8 @@ class CreateView(LogicalPlan):
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
-
         plan = proto.Command()
+
         plan.create_dataframe_view.replace = self._replace
         plan.create_dataframe_view.is_global = self._is_global
         plan.create_dataframe_view.name = self._name
@@ -1333,16 +1602,18 @@ class WriteOperation(LogicalPlan):
         self.source: Optional[str] = None
         self.path: Optional[str] = None
         self.table_name: Optional[str] = None
+        self.table_save_method: Optional[str] = None
         self.mode: Optional[str] = None
         self.sort_cols: List[str] = []
         self.partitioning_cols: List[str] = []
-        self.options: dict[str, Optional[str]] = {}
+        self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
         plan = proto.Command()
+
         plan.write_operation.input.CopyFrom(self._child.plan(session))
         if self.source is not None:
             plan.write_operation.source = self.source
@@ -1360,13 +1631,23 @@ class WriteOperation(LogicalPlan):
                 plan.write_operation.options[k] = cast(str, self.options[k])
 
         if self.table_name is not None:
-            plan.write_operation.table_name = self.table_name
+            plan.write_operation.table.table_name = self.table_name
+            if self.table_save_method is not None:
+                tsm = self.table_save_method.lower()
+                if tsm == "save_as_table":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE  # noqa: E501
+                    )
+                elif tsm == "insert_into":
+                    plan.write_operation.table.save_method = (
+                        proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO
+                    )
+                else:
+                    raise ValueError(
+                        f"Unknown TestSaveMethod value for DataFrame: {self.table_save_method}"
+                    )
         elif self.path is not None:
             plan.write_operation.path = self.path
-        else:
-            raise AssertionError(
-                "Invalid configuration of WriteCommand, neither path or table_name present."
-            )
 
         if self.mode is not None:
             wm = self.mode.lower()
@@ -1389,6 +1670,7 @@ class WriteOperation(LogicalPlan):
             f"<WriteOperation source='{self.source}' "
             f"path='{self.path} "
             f"table_name='{self.table_name}' "
+            f"table_save_method='{self.table_save_method}' "
             f"mode='{self.mode}' "
             f"sort_cols='{self.sort_cols}' "
             f"partitioning_cols='{self.partitioning_cols}' "
@@ -1402,6 +1684,7 @@ class WriteOperation(LogicalPlan):
             f"<uL><li>WriteOperation <br />source='{self.source}'<br />"
             f"path: '{self.path}<br />"
             f"table_name: '{self.table_name}' <br />"
+            f"table_save_method: '{self.table_save_method}' <br />"
             f"mode: '{self.mode}' <br />"
             f"sort_cols: '{self.sort_cols}' <br />"
             f"partitioning_cols: '{self.partitioning_cols}' <br />"
@@ -1410,7 +1693,84 @@ class WriteOperation(LogicalPlan):
             f"options: '{self.options}'<br />"
             f"</li></ul>"
         )
-        pass
+
+
+class WriteOperationV2(LogicalPlan):
+    def __init__(self, child: "LogicalPlan", table_name: str) -> None:
+        super(WriteOperationV2, self).__init__(child)
+        self.table_name: Optional[str] = table_name
+        self.provider: Optional[str] = None
+        self.partitioning_columns: List["ColumnOrName"] = []
+        self.options: dict[str, Optional[str]] = {}
+        self.table_properties: dict[str, Optional[str]] = {}
+        self.mode: Optional[str] = None
+        self.overwrite_condition: Optional["ColumnOrName"] = None
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        plan = proto.Command()
+        plan.write_operation_v2.input.CopyFrom(self._child.plan(session))
+        if self.table_name is not None:
+            plan.write_operation_v2.table_name = self.table_name
+        if self.provider is not None:
+            plan.write_operation_v2.provider = self.provider
+
+        plan.write_operation_v2.partitioning_columns.extend(
+            [self.col_to_expr(x, session) for x in self.partitioning_columns]
+        )
+
+        for k in self.options:
+            if self.options[k] is None:
+                plan.write_operation_v2.options.pop(k, None)
+            else:
+                plan.write_operation_v2.options[k] = cast(str, self.options[k])
+
+        for k in self.table_properties:
+            if self.table_properties[k] is None:
+                plan.write_operation_v2.table_properties.pop(k, None)
+            else:
+                plan.write_operation_v2.table_properties[k] = cast(str, self.table_properties[k])
+
+        if self.mode is not None:
+            wm = self.mode.lower()
+            if wm == "create":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE
+            elif wm == "overwrite":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE
+            elif wm == "overwrite_partition":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS
+            elif wm == "append":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_APPEND
+            elif wm == "replace":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_REPLACE
+                if self.overwrite_condition is not None:
+                    plan.write_operation_v2.overwrite_condition.CopyFrom(
+                        self.col_to_expr(self.overwrite_condition, session)
+                    )
+            elif wm == "create_or_replace":
+                plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
+            else:
+                raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
+        return plan
+
+
+class WriteStreamOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteStreamOperation, self).__init__(child)
+        self.write_op = proto.WriteStreamOperationStart()
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        self.write_op.input.CopyFrom(self._child.plan(session))
+        cmd = proto.Command()
+        cmd.write_stream_operation_start.CopyFrom(self.write_op)
+        return cmd
 
 
 # Catalog API (internal-only)
@@ -1421,7 +1781,9 @@ class CurrentDatabase(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(current_database=proto.CurrentDatabase()))
+        plan = self._create_proto_relation()
+        plan.catalog.current_database.SetInParent()
+        return plan
 
 
 class SetCurrentDatabase(LogicalPlan):
@@ -1430,40 +1792,53 @@ class SetCurrentDatabase(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation()
+        plan = self._create_proto_relation()
         plan.catalog.set_current_database.db_name = self._db_name
         return plan
 
 
 class ListDatabases(LogicalPlan):
-    def __init__(self) -> None:
+    def __init__(self, pattern: Optional[str] = None) -> None:
         super().__init__(None)
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(list_databases=proto.ListDatabases()))
+        plan = self._create_proto_relation()
+        plan.catalog.list_databases.SetInParent()
+        if self._pattern is not None:
+            plan.catalog.list_databases.pattern = self._pattern
+        return plan
 
 
 class ListTables(LogicalPlan):
-    def __init__(self, db_name: Optional[str] = None) -> None:
+    def __init__(self, db_name: Optional[str] = None, pattern: Optional[str] = None) -> None:
         super().__init__(None)
         self._db_name = db_name
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(list_tables=proto.ListTables()))
+        plan = self._create_proto_relation()
+        plan.catalog.list_tables.SetInParent()
         if self._db_name is not None:
             plan.catalog.list_tables.db_name = self._db_name
+        if self._pattern is not None:
+            plan.catalog.list_tables.pattern = self._pattern
         return plan
 
 
 class ListFunctions(LogicalPlan):
-    def __init__(self, db_name: Optional[str] = None) -> None:
+    def __init__(self, db_name: Optional[str] = None, pattern: Optional[str] = None) -> None:
         super().__init__(None)
         self._db_name = db_name
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(list_functions=proto.ListFunctions()))
+        plan = self._create_proto_relation()
+        plan.catalog.list_functions.SetInParent()
         if self._db_name is not None:
             plan.catalog.list_functions.db_name = self._db_name
+        if self._pattern is not None:
+            plan.catalog.list_functions.pattern = self._pattern
         return plan
 
 
@@ -1474,7 +1849,7 @@ class ListColumns(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(list_columns=proto.ListColumns()))
+        plan = self._create_proto_relation()
         plan.catalog.list_columns.table_name = self._table_name
         if self._db_name is not None:
             plan.catalog.list_columns.db_name = self._db_name
@@ -1487,7 +1862,7 @@ class GetDatabase(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(get_database=proto.GetDatabase()))
+        plan = self._create_proto_relation()
         plan.catalog.get_database.db_name = self._db_name
         return plan
 
@@ -1499,7 +1874,7 @@ class GetTable(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(get_table=proto.GetTable()))
+        plan = self._create_proto_relation()
         plan.catalog.get_table.table_name = self._table_name
         if self._db_name is not None:
             plan.catalog.get_table.db_name = self._db_name
@@ -1513,7 +1888,7 @@ class GetFunction(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(get_function=proto.GetFunction()))
+        plan = self._create_proto_relation()
         plan.catalog.get_function.function_name = self._function_name
         if self._db_name is not None:
             plan.catalog.get_function.db_name = self._db_name
@@ -1526,7 +1901,7 @@ class DatabaseExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(database_exists=proto.DatabaseExists()))
+        plan = self._create_proto_relation()
         plan.catalog.database_exists.db_name = self._db_name
         return plan
 
@@ -1538,7 +1913,7 @@ class TableExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(table_exists=proto.TableExists()))
+        plan = self._create_proto_relation()
         plan.catalog.table_exists.table_name = self._table_name
         if self._db_name is not None:
             plan.catalog.table_exists.db_name = self._db_name
@@ -1552,7 +1927,7 @@ class FunctionExists(LogicalPlan):
         self._db_name = db_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(function_exists=proto.FunctionExists()))
+        plan = self._create_proto_relation()
         plan.catalog.function_exists.function_name = self._function_name
         if self._db_name is not None:
             plan.catalog.function_exists.db_name = self._db_name
@@ -1576,9 +1951,7 @@ class CreateExternalTable(LogicalPlan):
         self._options = options
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(
-            catalog=proto.Catalog(create_external_table=proto.CreateExternalTable())
-        )
+        plan = self._create_proto_relation()
         plan.catalog.create_external_table.table_name = self._table_name
         if self._path is not None:
             plan.catalog.create_external_table.path = self._path
@@ -1614,7 +1987,7 @@ class CreateTable(LogicalPlan):
         self._options = options
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(create_table=proto.CreateTable()))
+        plan = self._create_proto_relation()
         plan.catalog.create_table.table_name = self._table_name
         if self._path is not None:
             plan.catalog.create_table.path = self._path
@@ -1637,7 +2010,7 @@ class DropTempView(LogicalPlan):
         self._view_name = view_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(drop_temp_view=proto.DropTempView()))
+        plan = self._create_proto_relation()
         plan.catalog.drop_temp_view.view_name = self._view_name
         return plan
 
@@ -1648,9 +2021,7 @@ class DropGlobalTempView(LogicalPlan):
         self._view_name = view_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(
-            catalog=proto.Catalog(drop_global_temp_view=proto.DropGlobalTempView())
-        )
+        plan = self._create_proto_relation()
         plan.catalog.drop_global_temp_view.view_name = self._view_name
         return plan
 
@@ -1661,45 +2032,46 @@ class RecoverPartitions(LogicalPlan):
         self._table_name = table_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(recover_partitions=proto.RecoverPartitions()))
+        plan = self._create_proto_relation()
         plan.catalog.recover_partitions.table_name = self._table_name
         return plan
 
 
-# TODO(SPARK-41612): Support Catalog.isCached
-# class IsCached(LogicalPlan):
-#     def __init__(self, table_name: str) -> None:
-#         super().__init__(None)
-#         self._table_name = table_name
-#
-#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(is_cached=proto.IsCached()))
-#         plan.catalog.is_cached.table_name = self._table_name
-#         return plan
-#
-#
-# TODO(SPARK-41600): Support Catalog.cacheTable
-# class CacheTable(LogicalPlan):
-#     def __init__(self, table_name: str) -> None:
-#         super().__init__(None)
-#         self._table_name = table_name
-#
-#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(cache_table=proto.CacheTable()))
-#         plan.catalog.cache_table.table_name = self._table_name
-#         return plan
-#
-#
-# TODO(SPARK-41623): Support Catalog.uncacheTable
-# class UncacheTable(LogicalPlan):
-#     def __init__(self, table_name: str) -> None:
-#         super().__init__(None)
-#         self._table_name = table_name
-#
-#     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-#         plan = proto.Relation(catalog=proto.Catalog(uncache_table=proto.UncacheTable()))
-#         plan.catalog.uncache_table.table_name = self._table_name
-#         return plan
+class IsCached(LogicalPlan):
+    def __init__(self, table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.is_cached.table_name = self._table_name
+        return plan
+
+
+class CacheTable(LogicalPlan):
+    def __init__(self, table_name: str, storage_level: Optional[StorageLevel] = None) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._storage_level = storage_level
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        _cache_table = proto.CacheTable(table_name=self._table_name)
+        if self._storage_level:
+            _cache_table.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
+        plan.catalog.cache_table.CopyFrom(_cache_table)
+        return plan
+
+
+class UncacheTable(LogicalPlan):
+    def __init__(self, table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.uncache_table.table_name = self._table_name
+        return plan
 
 
 class ClearCache(LogicalPlan):
@@ -1707,7 +2079,9 @@ class ClearCache(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(clear_cache=proto.ClearCache()))
+        plan = self._create_proto_relation()
+        plan.catalog.clear_cache.SetInParent()
+        return plan
 
 
 class RefreshTable(LogicalPlan):
@@ -1716,7 +2090,7 @@ class RefreshTable(LogicalPlan):
         self._table_name = table_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(refresh_table=proto.RefreshTable()))
+        plan = self._create_proto_relation()
         plan.catalog.refresh_table.table_name = self._table_name
         return plan
 
@@ -1727,7 +2101,7 @@ class RefreshByPath(LogicalPlan):
         self._path = path
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(refresh_by_path=proto.RefreshByPath()))
+        plan = self._create_proto_relation()
         plan.catalog.refresh_by_path.path = self._path
         return plan
 
@@ -1737,7 +2111,9 @@ class CurrentCatalog(LogicalPlan):
         super().__init__(None)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(current_catalog=proto.CurrentCatalog()))
+        plan = self._create_proto_relation()
+        plan.catalog.current_catalog.SetInParent()
+        return plan
 
 
 class SetCurrentCatalog(LogicalPlan):
@@ -1746,14 +2122,259 @@ class SetCurrentCatalog(LogicalPlan):
         self._catalog_name = catalog_name
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(set_current_catalog=proto.SetCurrentCatalog()))
+        plan = self._create_proto_relation()
         plan.catalog.set_current_catalog.catalog_name = self._catalog_name
         return plan
 
 
 class ListCatalogs(LogicalPlan):
-    def __init__(self) -> None:
+    def __init__(self, pattern: Optional[str] = None) -> None:
         super().__init__(None)
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+        plan = self._create_proto_relation()
+        plan.catalog.list_catalogs.SetInParent()
+        if self._pattern is not None:
+            plan.catalog.list_catalogs.pattern = self._pattern
+        return plan
+
+
+class MapPartitions(LogicalPlan):
+    """Logical plan object for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        function: "UserDefinedFunction",
+        cols: List[str],
+        is_barrier: bool,
+    ) -> None:
+        super().__init__(child)
+
+        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._is_barrier = is_barrier
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.map_partitions.input.CopyFrom(self._child.plan(session))
+        plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.map_partitions.is_barrier = self._is_barrier
+        return plan
+
+
+class GroupMap(LogicalPlan):
+    """Logical plan object for a Group Map API: apply, applyInPandas."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[str],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+
+        super().__init__(child)
+        self._grouping_cols = grouping_cols
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.group_map.input.CopyFrom(self._child.plan(session))
+        plan.group_map.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan
+
+
+class CoGroupMap(LogicalPlan):
+    """Logical plan object for a CoGroup Map API: applyInPandas."""
+
+    def __init__(
+        self,
+        input: Optional["LogicalPlan"],
+        input_grouping_cols: Sequence[Column],
+        other: Optional["LogicalPlan"],
+        other_grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[Column],
+    ):
+        assert isinstance(input_grouping_cols, list) and all(
+            isinstance(c, Column) for c in input_grouping_cols
+        )
+        assert isinstance(other_grouping_cols, list) and all(
+            isinstance(c, Column) for c in other_grouping_cols
+        )
+
+        super().__init__(input)
+        self._input_grouping_cols = input_grouping_cols
+        self._other_grouping_cols = other_grouping_cols
+        self._other = cast(LogicalPlan, other)
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.co_group_map.input.CopyFrom(self._child.plan(session))
+        plan.co_group_map.input_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._input_grouping_cols]
+        )
+        plan.co_group_map.other.CopyFrom(self._other.plan(session))
+        plan.co_group_map.other_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._other_grouping_cols]
+        )
+        plan.co_group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan
+
+
+class ApplyInPandasWithState(LogicalPlan):
+    """Logical plan object for a applyInPandasWithState."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        output_schema: str,
+        state_schema: str,
+        output_mode: str,
+        timeout_conf: str,
+        cols: List[str],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+
+        super().__init__(child)
+        self._grouping_cols = grouping_cols
+        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._output_schema = output_schema
+        self._state_schema = state_schema
+        self._output_mode = output_mode
+        self._timeout_conf = timeout_conf
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.apply_in_pandas_with_state.input.CopyFrom(self._child.plan(session))
+        plan.apply_in_pandas_with_state.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.apply_in_pandas_with_state.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.apply_in_pandas_with_state.output_schema = self._output_schema
+        plan.apply_in_pandas_with_state.state_schema = self._state_schema
+        plan.apply_in_pandas_with_state.output_mode = self._output_mode
+        plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
+        return plan
+
+
+class PythonUDTF:
+    """Represents a Python user-defined table function."""
+
+    def __init__(
+        self,
+        func: Type,
+        return_type: Optional[Union[DataType, str]],
+        eval_type: int,
+        python_ver: str,
+    ) -> None:
+        self._func = func
+        self._name = func.__name__
+        self._return_type: Optional[DataType] = (
+            None
+            if return_type is None
+            else UnparsedDataType(return_type)
+            if isinstance(return_type, str)
+            else return_type
+        )
+        self._eval_type = eval_type
+        self._python_ver = python_ver
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDTF:
+        udtf = proto.PythonUDTF()
+        if self._return_type is not None:
+            udtf.return_type.CopyFrom(pyspark_types_to_proto_types(self._return_type))
+        udtf.eval_type = self._eval_type
+        try:
+            udtf.command = CloudPickleSerializer().dumps(self._func)
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="UDTF_SERIALIZATION_ERROR",
+                message_parameters={
+                    "name": self._name,
+                    "message": "Please check the stack trace and "
+                    "make sure the function is serializable.",
+                },
+            )
+        udtf.python_ver = self._python_ver
+        return udtf
+
+    def __repr__(self) -> str:
+        return (
+            f"PythonUDTF({self._name}, {self._return_type}, "
+            f"{self._eval_type}, {self._python_ver})"
+        )
+
+
+class CommonInlineUserDefinedTableFunction(LogicalPlan):
+    """
+    Logical plan object for a user-defined table function with
+    an inlined defined function body.
+    """
+
+    def __init__(
+        self,
+        function_name: str,
+        function: PythonUDTF,
+        deterministic: bool,
+        arguments: Sequence[Expression],
+    ) -> None:
+        super().__init__(None)
+        self._function_name = function_name
+        self._deterministic = deterministic
+        self._arguments = arguments
+        self._function = function
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.common_inline_user_defined_table_function.function_name = self._function_name
+        plan.common_inline_user_defined_table_function.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.common_inline_user_defined_table_function.arguments.extend(
+                [arg.to_plan(session) for arg in self._arguments]
+            )
+        plan.common_inline_user_defined_table_function.python_udtf.CopyFrom(
+            self._function.to_plan(session)
+        )
+        return plan
+
+    def udtf_plan(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedTableFunction":
+        """
+        Compared to `plan`, it returns a `proto.CommonInlineUserDefinedTableFunction`
+        instead of a `proto.Relation`.
+        """
+        plan = proto.CommonInlineUserDefinedTableFunction()
+        plan.function_name = self._function_name
+        plan.deterministic = self._deterministic
+        if len(self._arguments) > 0:
+            plan.arguments.extend([arg.to_plan(session) for arg in self._arguments])
+        plan.python_udtf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))
+        return plan
+
+    def __repr__(self) -> str:
+        return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
+
+
+class CachedRelation(LogicalPlan):
+    def __init__(self, plan: proto.Relation) -> None:
+        super(CachedRelation, self).__init__(None)
+        self._plan = plan
+        # Update the plan ID based on the incremented counter.
+        self._plan.common.plan_id = self._plan_id
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return self._plan

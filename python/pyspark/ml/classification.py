@@ -180,7 +180,7 @@ class ClassificationModel(PredictionModel, _ClassifierParams, metaclass=ABCMeta)
         """
         return self._set(rawPredictionCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @abstractmethod
     @since("2.1.0")
     def numClasses(self) -> int:
@@ -284,7 +284,7 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel[T]):
     To be mixed in with :class:`pyspark.ml.JavaModel`
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def numClasses(self) -> int:
         """
@@ -335,7 +335,7 @@ class _ClassificationSummary(JavaWrapper):
     .. versionadded:: 3.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def predictions(self) -> DataFrame:
         """
@@ -343,7 +343,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("predictions")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def predictionCol(self) -> str:
         """
@@ -351,7 +351,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("predictionCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def labelCol(self) -> str:
         """
@@ -360,7 +360,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("labelCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def weightCol(self) -> str:
         """
@@ -386,7 +386,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("labels")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def truePositiveRateByLabel(self) -> List[float]:
         """
@@ -394,7 +394,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("truePositiveRateByLabel")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def falsePositiveRateByLabel(self) -> List[float]:
         """
@@ -402,7 +402,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("falsePositiveRateByLabel")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def precisionByLabel(self) -> List[float]:
         """
@@ -410,7 +410,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("precisionByLabel")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def recallByLabel(self) -> List[float]:
         """
@@ -425,7 +425,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("fMeasureByLabel", beta)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def accuracy(self) -> float:
         """
@@ -435,7 +435,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("accuracy")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def weightedTruePositiveRate(self) -> float:
         """
@@ -444,7 +444,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("weightedTruePositiveRate")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def weightedFalsePositiveRate(self) -> float:
         """
@@ -452,7 +452,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("weightedFalsePositiveRate")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def weightedRecall(self) -> float:
         """
@@ -461,7 +461,7 @@ class _ClassificationSummary(JavaWrapper):
         """
         return self._call_java("weightedRecall")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def weightedPrecision(self) -> float:
         """
@@ -485,7 +485,7 @@ class _TrainingSummary(JavaWrapper):
     .. versionadded:: 3.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def objectiveHistory(self) -> List[float]:
         """
@@ -495,7 +495,7 @@ class _TrainingSummary(JavaWrapper):
         """
         return self._call_java("objectiveHistory")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def totalIterations(self) -> int:
         """
@@ -512,7 +512,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
     .. versionadded:: 3.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def scoreCol(self) -> str:
         """
@@ -536,7 +536,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         return self._call_java("roc")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def areaUnderROC(self) -> float:
         """
@@ -545,7 +545,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         return self._call_java("areaUnderROC")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def pr(self) -> DataFrame:
         """
@@ -555,7 +555,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         return self._call_java("pr")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def fMeasureByThreshold(self) -> DataFrame:
         """
@@ -564,7 +564,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         return self._call_java("fMeasureByThreshold")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def precisionByThreshold(self) -> DataFrame:
         """
@@ -574,7 +574,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         return self._call_java("precisionByThreshold")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def recallByThreshold(self) -> DataFrame:
         """
@@ -857,7 +857,7 @@ class LinearSVCModel(
         """
         return self._set(threshold=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def coefficients(self) -> Vector:
         """
@@ -865,7 +865,7 @@ class LinearSVCModel(
         """
         return self._call_java("coefficients")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def intercept(self) -> float:
         """
@@ -1527,7 +1527,7 @@ class LogisticRegressionModel(
     .. versionadded:: 1.3.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def coefficients(self) -> Vector:
         """
@@ -1536,7 +1536,7 @@ class LogisticRegressionModel(
         """
         return self._call_java("coefficients")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def intercept(self) -> float:
         """
@@ -1545,7 +1545,7 @@ class LogisticRegressionModel(
         """
         return self._call_java("intercept")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def coefficientMatrix(self) -> Matrix:
         """
@@ -1553,7 +1553,7 @@ class LogisticRegressionModel(
         """
         return self._call_java("coefficientMatrix")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def interceptVector(self) -> Vector:
         """
@@ -1561,7 +1561,7 @@ class LogisticRegressionModel(
         """
         return self._call_java("interceptVector")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def summary(self) -> "LogisticRegressionTrainingSummary":
         """
@@ -1609,7 +1609,7 @@ class LogisticRegressionSummary(_ClassificationSummary):
     .. versionadded:: 2.0.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def probabilityCol(self) -> str:
         """
@@ -1618,7 +1618,7 @@ class LogisticRegressionSummary(_ClassificationSummary):
         """
         return self._call_java("probabilityCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def featuresCol(self) -> str:
         """
@@ -2279,13 +2279,13 @@ class RandomForestClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def summary(self) -> "RandomForestClassificationTrainingSummary":
         """
@@ -2767,7 +2767,7 @@ class GBTClassificationModel(
         """
         return self._call_java("featureImportances")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
@@ -3018,7 +3018,7 @@ class NaiveBayesModel(
     .. versionadded:: 1.5.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def pi(self) -> Vector:
         """
@@ -3026,7 +3026,7 @@ class NaiveBayesModel(
         """
         return self._call_java("pi")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def theta(self) -> Matrix:
         """
@@ -3034,7 +3034,7 @@ class NaiveBayesModel(
         """
         return self._call_java("theta")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def sigma(self) -> Matrix:
         """
@@ -3311,7 +3311,7 @@ class MultilayerPerceptronClassificationModel(
     .. versionadded:: 1.6.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def weights(self) -> Vector:
         """
@@ -4227,7 +4227,7 @@ class FMClassificationModel(
     .. versionadded:: 3.0.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def intercept(self) -> float:
         """
@@ -4235,7 +4235,7 @@ class FMClassificationModel(
         """
         return self._call_java("intercept")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def linear(self) -> Vector:
         """
@@ -4243,7 +4243,7 @@ class FMClassificationModel(
         """
         return self._call_java("linear")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def factors(self) -> Matrix:
         """

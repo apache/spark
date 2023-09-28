@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorS
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 abstract class StreamingJoinSuite
@@ -223,6 +224,7 @@ abstract class StreamingJoinSuite
   }
 }
 
+@SlowSQLTest
 class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._
@@ -619,8 +621,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
-            ShuffleExchangeExec(opA: HashPartitioning, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _))
+            ShuffleExchangeExec(opA: HashPartitioning, _, _, _),
+            ShuffleExchangeExec(opB: HashPartitioning, _, _, _))
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j
@@ -776,6 +778,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 }
 
 
+@SlowSQLTest
 class StreamingOuterJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._
@@ -1416,6 +1419,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 }
 
+@SlowSQLTest
 class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
 
   test("windowed full outer join") {
@@ -1619,6 +1623,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
   }
 }
 
+@SlowSQLTest
 class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._

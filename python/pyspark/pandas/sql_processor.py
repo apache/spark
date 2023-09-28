@@ -208,7 +208,7 @@ def _get_local_scope() -> Dict[str, Any]:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
     except Exception:
         # TODO (rxin, thunterdb): use a narrower scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+        # See https://github.com/databricks/koalas/pull/448
         return {}
 
 
@@ -224,7 +224,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
         return shell.user_ns
     except Exception:
         # TODO (rxin, thunterdb): use a narrower scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+        # See https://github.com/databricks/koalas/pull/448
         return None
 
 
@@ -300,7 +300,7 @@ class SQLProcessor:
         # TODO: use a string builder
         res = ""
         try:
-            for (pre, inner, _, _) in blocks:
+            for pre, inner, _, _ in blocks:
                 var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res

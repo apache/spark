@@ -28,6 +28,9 @@ class RuntimeConfig:
     """User-facing configuration API, accessible through `SparkSession.conf`.
 
     Options set here are automatically propagated to the Hadoop configuration during I/O.
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, jconf: JavaObject) -> None:
@@ -35,12 +38,14 @@ class RuntimeConfig:
         self._jconf = jconf
 
     @since(2.0)
-    def set(self, key: str, value: str) -> None:
+    def set(self, key: str, value: Union[str, int, bool]) -> None:
         """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
     @since(2.0)
-    def get(self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue) -> str:
+    def get(
+        self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
+    ) -> Optional[str]:
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """

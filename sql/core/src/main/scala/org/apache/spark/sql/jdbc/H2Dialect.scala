@@ -22,7 +22,7 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
@@ -276,4 +276,8 @@ private[sql] object H2Dialect extends JdbcDialect {
       }
     }
   }
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

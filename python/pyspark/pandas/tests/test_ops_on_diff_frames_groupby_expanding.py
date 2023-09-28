@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import pandas as pd
 
 from pyspark import pandas as ps
@@ -24,7 +22,7 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
+class OpsOnDiffFramesGroupByExpandingTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -51,17 +49,10 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
         psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        # The behavior of GroupBy.expanding is changed from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pkey).expanding(2), f)().sort_index(),
-            )
-        else:
-            self.assert_eq(
-                getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pkey).expanding(2), f)().drop("a", axis=1).sort_index(),
-            )
+        self.assert_eq(
+            getattr(psdf.groupby(kkey).expanding(2), f)().sort_index(),
+            getattr(pdf.groupby(pkey).expanding(2), f)().sort_index(),
+        )
 
         self.assert_eq(
             getattr(psdf.groupby(kkey)["b"].expanding(2), f)().sort_index(),
@@ -92,6 +83,12 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_expanding_var(self):
         self._test_groupby_expanding_func("var")
+
+
+class OpsOnDiffFramesGroupByExpandingTests(
+    OpsOnDiffFramesGroupByExpandingTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

@@ -206,9 +206,9 @@ SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -224,9 +224,9 @@ SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY ud
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2407",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

@@ -49,7 +49,7 @@ public final class ColumnarBatchRow extends InternalRow {
         row.setNullAt(i);
       } else {
         DataType dt = columns[i].dataType();
-        PhysicalDataType pdt = dt.physicalDataType();
+        PhysicalDataType pdt = PhysicalDataType.apply(dt);
         if (pdt instanceof PhysicalBooleanType) {
           row.setBoolean(i, getBoolean(i));
         } else if (pdt instanceof PhysicalByteType) {
@@ -175,6 +175,8 @@ public final class ColumnarBatchRow extends InternalRow {
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof TimestampNTZType) {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 import sys
 from typing import TYPE_CHECKING, Union, Sequence, List, Optional
@@ -29,6 +32,7 @@ from pyspark.sql.connect.types import (
     JVM_LONG_MAX,
 )
 from pyspark.sql.window import Window as PySparkWindow, WindowSpec as PySparkWindowSpec
+from pyspark.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -66,7 +70,6 @@ class WindowSpec:
         orderSpec: Sequence[SortOrder],
         frame: Optional[WindowFrame],
     ) -> None:
-
         assert isinstance(partitionSpec, list) and all(
             isinstance(p, Expression) for p in partitionSpec
         )
@@ -91,12 +94,14 @@ class WindowSpec:
                     if isinstance(c, (str, Column)):
                         _cols.append(c)
                     else:
-                        raise TypeError(
-                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        raise PySparkTypeError(
+                            error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                            message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                         )
             else:
-                raise TypeError(
-                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
                 )
 
         newPartitionSpec: List[Expression] = []
@@ -122,12 +127,14 @@ class WindowSpec:
                     if isinstance(c, (str, Column)):
                         _cols.append(c)
                     else:
-                        raise TypeError(
-                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        raise PySparkTypeError(
+                            error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                            message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                         )
             else:
-                raise TypeError(
-                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
                 )
 
         newOrderSpec: List[SortOrder] = []
@@ -227,41 +234,28 @@ Window.__doc__ = PySparkWindow.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.window
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.window.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.window tests").remote("local[4]").getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.window
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.window,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        globs = pyspark.sql.connect.window.__dict__.copy()
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.window tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.window,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.window doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

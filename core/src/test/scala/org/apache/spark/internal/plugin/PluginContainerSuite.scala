@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
 import com.google.common.io.Files
@@ -307,14 +307,14 @@ class TestSparkPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = {
     val p = new TestDriverPlugin()
     require(TestSparkPlugin.driverPlugin == null, "Driver plugin already initialized.")
-    TestSparkPlugin.driverPlugin = spy(p)
+    TestSparkPlugin.driverPlugin = spy[TestDriverPlugin](p)
     TestSparkPlugin.driverPlugin
   }
 
   override def executorPlugin(): ExecutorPlugin = {
     val p = new TestExecutorPlugin()
     require(TestSparkPlugin.executorPlugin == null, "Executor plugin already initialized.")
-    TestSparkPlugin.executorPlugin = spy(p)
+    TestSparkPlugin.executorPlugin = spy[TestExecutorPlugin](p)
     TestSparkPlugin.executorPlugin
   }
 

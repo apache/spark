@@ -189,6 +189,18 @@ class AggregateOptimizeSuite extends AnalysisTest {
           .groupBy()(max($"$t.b"), min($"$t.c")).analyze),
         streamed.groupBy()(max($"$t.b"), min($"$t.c")).analyze)
 
+      // distinct aggregate
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(countDistinct($"$t.b"), sumDistinct($"$t.c")).analyze),
+        streamed.groupBy()(countDistinct($"$t.b"), sumDistinct($"$t.c")).analyze)
+
+      // mixed
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(countDistinct($"$t.b"), min($"$t.c")).analyze),
+        streamed.groupBy()(countDistinct($"$t.b"), min($"$t.c")).analyze)
+
       // negative cases
       // with non-deterministic project
       val p1 = x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", rand(1) as "b1")

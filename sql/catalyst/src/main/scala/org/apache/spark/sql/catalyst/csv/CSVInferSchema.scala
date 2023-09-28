@@ -183,7 +183,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private def tryParseDouble(field: String): DataType = {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
-    } else if (options.prefersDate) {
+    } else if (options.preferDate) {
       tryParseDate(field)
     } else {
       tryParseTimestampNTZ(field)

@@ -46,6 +46,15 @@ case class InMemoryTableScanExec(
     }
   }
 
+  override def simpleStringWithNodeId(): String = {
+    val columnarInfo = if (relation.cacheBuilder.supportsColumnarInput || supportsColumnar) {
+      s" (columnarIn=${relation.cacheBuilder.supportsColumnarInput}, columnarOut=$supportsColumnar)"
+    } else {
+      ""
+    }
+    super.simpleStringWithNodeId() + columnarInfo
+  }
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def doCanonicalize(): SparkPlan =
@@ -165,5 +174,15 @@ case class InMemoryTableScanExec(
 
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     columnarInputRDD
+  }
+
+  def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded
+
+  /**
+   * This method is only used by AQE which executes the actually cached RDD that without filter and
+   * serialization of row/columnar.
+   */
+  def baseCacheRDD(): RDD[CachedBatch] = {
+    relation.cacheBuilder.cachedColumnBuffers
   }
 }

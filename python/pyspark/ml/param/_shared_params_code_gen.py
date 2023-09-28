@@ -332,6 +332,30 @@ if __name__ == "__main__":
             "0.0",
             "TypeConverters.toFloat",
         ),
+        (
+            "numTrainWorkers",
+            "number of training workers",
+            "1",
+            "TypeConverters.toInt",
+        ),
+        (
+            "batchSize",
+            "number of training batch size",
+            None,
+            "TypeConverters.toInt",
+        ),
+        (
+            "learningRate",
+            "learning rate for training",
+            None,
+            "TypeConverters.toFloat",
+        ),
+        (
+            "momentum",
+            "momentum for training optimizer",
+            None,
+            "TypeConverters.toFloat",
+        ),
     ]
 
     code = []

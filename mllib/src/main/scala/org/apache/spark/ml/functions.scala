@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions.udf
 @Since("3.0.0")
 object functions {
 // scalastyle:on
-  private val vectorToArrayUdf = udf { vec: Any =>
+  private[spark] val vectorToArrayUdf = udf { vec: Any =>
     vec match {
       case v: Vector => v.toArray
       case v: OldVector => v.toArray
@@ -38,7 +38,7 @@ object functions {
     }
   }.asNonNullable()
 
-  private val vectorToArrayFloatUdf = udf { vec: Any =>
+  private[spark] val vectorToArrayFloatUdf = udf { vec: Any =>
     vec match {
       case v: SparseVector =>
         val data = new Array[Float](v.size)
@@ -72,7 +72,7 @@ object functions {
     }
   }
 
-  private val arrayToVectorUdf = udf { array: Seq[Double] =>
+  private[spark] val arrayToVectorUdf = udf { array: Seq[Double] =>
     Vectors.dense(array.toArray)
   }
 

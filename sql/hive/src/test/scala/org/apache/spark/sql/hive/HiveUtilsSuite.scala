@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.ChildFirstURLClassLoader
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
@@ -74,6 +78,32 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
         HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
     } finally {
       Thread.currentThread().setContextClassLoader(contextClassLoader)
+    }
+  }
+
+  test("SPARK-42539: User-provided JARs should not take precedence over builtin Hive JARs") {
+    withTempDir { tmpDir =>
+        val classFile = TestUtils.createCompiledClass(
+          "Hive", tmpDir, packageName = Some("org.apache.hadoop.hive.ql.metadata"))
+
+      val jarFile = new File(tmpDir, "hive-fake.jar")
+      TestUtils.createJar(Seq(classFile), jarFile, Some("org/apache/hadoop/hive/ql/metadata"))
+
+      val conf = new SparkConf
+      val contextClassLoader = Thread.currentThread().getContextClassLoader
+      val loader = new MutableURLClassLoader(Array(jarFile.toURI.toURL), contextClassLoader)
+      try {
+        Thread.currentThread().setContextClassLoader(loader)
+        val client = HiveUtils.newClientForMetadata(
+          conf,
+          SparkHadoopUtil.newConfiguration(conf),
+          HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+        client.createDatabase(
+          CatalogDatabase("foo", "", URI.create(s"file://${tmpDir.getAbsolutePath}/foo.db"), Map()),
+          ignoreIfExists = true)
+      } finally {
+        Thread.currentThread().setContextClassLoader(contextClassLoader)
+      }
     }
   }
 

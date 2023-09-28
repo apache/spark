@@ -1,0 +1,6 @@
+Project [summary#0, element_at(id#0, summary#0, None, false) AS id#0, element_at(b#0, summary#0, None, false) AS b#0]
++- Project [id#0, b#0, summary#0]
+   +- Generate explode([count,mean,stddev,min,max]), false, [summary#0]
+      +- Aggregate [map(cast(count as string), cast(count(id#0L) as string), cast(mean as string), cast(avg(id#0L) as string), cast(stddev as string), cast(stddev(cast(id#0L as double)) as string), cast(min as string), cast(min(id#0L) as string), cast(max as string), cast(max(id#0L) as string)) AS id#0, map(cast(count as string), cast(count(b#0) as string), cast(mean as string), cast(avg(b#0) as string), cast(stddev as string), cast(stddev(b#0) as string), cast(min as string), cast(min(b#0) as string), cast(max as string), cast(max(b#0) as string)) AS b#0]
+         +- Project [id#0L, b#0]
+            +- LocalRelation <empty>, [id#0L, a#0, b#0]

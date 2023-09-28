@@ -130,14 +130,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       hostLocalDirs: Map[String, Array[String]]): Unit = {
     val mockExternalBlockStoreClient = mock(classOf[ExternalBlockStoreClient])
     val hostLocalDirManager = new HostLocalDirManager(
-      futureExecutionContext = global,
       cacheSize = 1,
       blockStoreClient = mockExternalBlockStoreClient)
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
       .thenAnswer { invocation =>
-        import scala.collection.JavaConverters._
+        import scala.jdk.CollectionConverters._
         invocation.getArgument[CompletableFuture[java.util.Map[String, Array[String]]]](3)
           .complete(hostLocalDirs.asJava)
       }
@@ -371,7 +370,6 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val mockExternalBlockStoreClient = mock(classOf[ExternalBlockStoreClient])
     val hostLocalDirManager = new HostLocalDirManager(
-      futureExecutionContext = global,
       cacheSize = 1,
       blockStoreClient = mockExternalBlockStoreClient)
 

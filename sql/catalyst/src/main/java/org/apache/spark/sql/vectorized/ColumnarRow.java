@@ -56,7 +56,7 @@ public final class ColumnarRow extends InternalRow {
         row.setNullAt(i);
       } else {
         DataType dt = data.getChild(i).dataType();
-        PhysicalDataType pdt = dt.physicalDataType();
+        PhysicalDataType pdt = PhysicalDataType.apply(dt);
         if (pdt instanceof PhysicalBooleanType) {
           row.setBoolean(i, getBoolean(i));
         } else if (pdt instanceof PhysicalByteType) {

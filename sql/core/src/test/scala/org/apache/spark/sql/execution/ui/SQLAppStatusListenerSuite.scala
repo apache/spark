@@ -21,7 +21,6 @@ import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
@@ -40,6 +39,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource, TestLocalScanTable}
 import org.apache.spark.sql.connector.catalog.Table
@@ -191,7 +191,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -344,7 +344,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -382,7 +382,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -413,7 +413,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -455,7 +455,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -486,7 +486,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -518,7 +518,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -659,7 +659,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
-      1,
+      Some(1),
       "test",
       "test",
       df.queryExecution.toString,
@@ -669,7 +669,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
-      2,
+      Some(2),
       "test",
       "test",
       df.queryExecution.toString,
@@ -687,7 +687,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       3,
-      3,
+      Some(3),
       "test",
       "test",
       df.queryExecution.toString,
@@ -724,7 +724,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -846,7 +846,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder(), Seq.empty,
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
       table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -885,7 +885,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomDriverMetricScanBuilder(),
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
       Seq.empty, table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -989,14 +989,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {
     var received = false
+    val e = new Exception("test")
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
           case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage)) =>
-            val error = new ObjectMapper().readTree(errorMessage)
-            assert(error.get("errorClass").toPrettyString === "\"java.lang.Exception\"")
-            assert(error.path("messageParameters").get("message").toPrettyString === "\"test\"")
-            received = true
+            received = errorMessage == Utils.exceptionString(e)
           case _ =>
         }
       }
@@ -1004,7 +1002,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     intercept[Exception] {
       SQLExecution.withNewExecutionId(spark.range(1).queryExecution) {
-        throw new Exception("test")
+        throw e
       }
     }
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)

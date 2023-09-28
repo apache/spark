@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
@@ -37,7 +40,7 @@ import org.apache.spark.sql.types.DataType
  * Parsed logical plans are located in Catalyst so that as much SQL parsing logic as possible is be
  * kept in a [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser]].
  */
-abstract class ParsedStatement extends LogicalPlan {
+abstract class ParsedStatement extends LogicalPlan with CTEInChildren {
   // Redact properties and options when parsed nodes are used by generic methods like toString
   override def productIterator: Iterator[Any] = super.productIterator.map {
     case mapArg: Map[_, _] => conf.redactOptions(mapArg)
@@ -135,6 +138,16 @@ case class QualifiedColType(
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
   def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+
+  def getV2Default: ColumnDefaultValue = {
+    default.map { sql =>
+      val e = ResolveDefaultColumns.analyze(colName, dataType, sql, "ALTER TABLE")
+      assert(e.resolved && e.foldable,
+        "The existence default value must be a simple SQL string that is resolved and foldable, " +
+          "but got: " + sql)
+      new ColumnDefaultValue(sql, LiteralValue(e.eval(), dataType))
+    }.orNull
+  }
 }
 
 /**
@@ -152,6 +165,8 @@ case class QualifiedColType(
  *                             would have Map('a' -> Some('1'), 'b' -> None).
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
+ * @param byName               If true, reorder the data columns to match the column names of the
+ *                             target table.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -159,12 +174,15 @@ case class InsertIntoStatement(
     userSpecifiedCols: Seq[String],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends UnaryParsedStatement {
+    ifPartitionNotExists: Boolean,
+    byName: Boolean = false) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
   require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid with static partitions")
+  require(userSpecifiedCols.isEmpty || !byName,
+    "BY NAME is only valid without specified cols")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =

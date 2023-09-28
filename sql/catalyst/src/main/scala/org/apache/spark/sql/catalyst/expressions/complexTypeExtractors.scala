@@ -64,7 +64,7 @@ object ExtractValue {
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
-      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
         throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
@@ -82,8 +82,8 @@ object ExtractValue {
     if (ordinal == -1) {
       throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
-        fields.filter(checkField).mkString(", "))
+      val numberOfAppearance = fields.count(checkField)
+      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance)
     } else {
       ordinal
     }

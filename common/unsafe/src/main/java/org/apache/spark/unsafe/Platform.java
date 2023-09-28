@@ -68,7 +68,9 @@ public final class Platform {
     }
     try {
       Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      Constructor<?> constructor = (majorVersion < 21) ?
+        cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE) :
+        cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
       Field cleanerField = cls.getDeclaredField("cleaner");
       try {
         constructor.setAccessible(true);

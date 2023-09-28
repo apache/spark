@@ -63,11 +63,6 @@ private[spark] class TaskSetManager(
 
   private val conf = sched.sc.conf
 
-  // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
-  private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
-  private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
-  private val addedArchives = HashMap[String, Long](sched.sc.addedArchives.toSeq: _*)
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
   // Serializer for closures and tasks.
@@ -568,9 +563,7 @@ private[spark] class TaskSetManager(
       tName,
       index,
       task.partitionId,
-      addedFiles,
-      addedJars,
-      addedArchives,
+      task.artifacts,
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
@@ -1006,7 +999,6 @@ private[spark] class TaskSetManager(
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
-    // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message, exception)
     isZombie = true
     maybeFinishTaskSet()
@@ -1054,6 +1046,7 @@ private[spark] class TaskSetManager(
     // can destroy the whole host). The reason is the next stage wouldn't be able to fetch the
     // data from this dead executor so we would need to rerun these tasks on other executors.
     val maybeShuffleMapOutputLoss = isShuffleMapTasks &&
+      !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {

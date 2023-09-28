@@ -134,6 +134,10 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
         if (shouldReport(queryProgress.progress.runId)) {
           listener.onQueryProgress(queryProgress)
         }
+      case queryIdle: QueryIdleEvent =>
+        if (shouldReport(queryIdle.runId)) {
+          listener.onQueryIdle(queryIdle)
+        }
       case queryTerminated: QueryTerminatedEvent =>
         if (shouldReport(queryTerminated.runId)) {
           listener.onQueryTerminated(queryTerminated)

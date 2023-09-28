@@ -26,7 +26,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
@@ -41,8 +41,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Que
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -1047,7 +1046,7 @@ abstract class CSVSuite
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1070,7 +1069,7 @@ abstract class CSVSuite
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .save(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
         val res = spark.read
           .format("csv")
           .option("inferSchema", "true")
@@ -1117,7 +1116,7 @@ abstract class CSVSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      for (timestampType <- timestampTypes) {
+      timestampTypes.foreach { timestampType =>
         withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
           val res = spark.read
             .format("csv")
@@ -1853,7 +1852,7 @@ abstract class CSVSuite
 
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
-      import collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val schema = new StructType()
         .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
         .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
@@ -2843,7 +2842,7 @@ abstract class CSVSuite
         .load(path.getAbsolutePath)
 
       val expected = if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-        // When legacy parser is enabled, `prefersDate` will be disabled
+        // When legacy parser is enabled, `preferDate` will be disabled
         Seq(
           Row("2001-09-08"),
           Row("1941-01-02"),
@@ -2940,7 +2939,7 @@ abstract class CSVSuite
         .csv(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy != LegacyBehaviorPolicy.LEGACY) {
-        // When legacy parser is enabled, `prefersDate` will be disabled
+        // When legacy parser is enabled, `preferDate` will be disabled
         checkAnswer(
           output,
           Seq(
@@ -3084,6 +3083,73 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-42237: change binary to unsupported dataType") {
+    withTempPath { path =>
+      val colName: String = "value"
+      val exception = intercept[AnalysisException] {
+        Seq(Array[Byte](1, 2))
+          .toDF(colName)
+          .write
+          .csv(path.getCanonicalPath)
+      }
+      checkError(
+        exception = exception,
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> s"`$colName`",
+          "columnType" -> "\"BINARY\"",
+          "format" -> "CSV")
+      )
+    }
+  }
+
+  test("SPARK-42335: Pass the comment option through to univocity " +
+    "if users set it explicitly in CSV dataSource") {
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "\u0000").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\"def\""), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.option("comment", "#").csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF()
+        .write.csv(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.text(path.getCanonicalPath),
+        Seq(Row("\"#abc\""), Row("def"), Row("xyz"))
+      )
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "\u0000").csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.option("comment", "#").csv(path.getCanonicalPath),
+        Seq(Row("\u0000def"), Row("xyz")))
+    }
+    withTempPath { path =>
+      Seq("#abc", "\u0000def", "xyz").toDF().write.text(path.getCanonicalPath)
+      checkAnswer(
+        spark.read.csv(path.getCanonicalPath),
+        Seq(Row("#abc"), Row("\u0000def"), Row("xyz"))
+      )
+    }
+  }
+
   test("SPARK-40667: validate CSV Options") {
     assert(CSVOptions.getAllOptions.size == 38)
     // Please add validation on any new CSV options here
@@ -3091,7 +3157,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("inferSchema"))
     assert(CSVOptions.isValidOption("ignoreLeadingWhiteSpace"))
     assert(CSVOptions.isValidOption("ignoreTrailingWhiteSpace"))
-    assert(CSVOptions.isValidOption("prefersDate"))
+    assert(CSVOptions.isValidOption("preferDate"))
     assert(CSVOptions.isValidOption("escapeQuotes"))
     assert(CSVOptions.isValidOption("quoteAll"))
     assert(CSVOptions.isValidOption("enforceSchema"))
@@ -3132,7 +3198,7 @@ abstract class CSVSuite
     assert(CSVOptions.getAlternativeOption("charset").contains("encoding"))
     assert(CSVOptions.getAlternativeOption("compression").contains("codec"))
     assert(CSVOptions.getAlternativeOption("codec").contains("compression"))
-    assert(CSVOptions.getAlternativeOption("prefersDate").isEmpty)
+    assert(CSVOptions.getAlternativeOption("preferDate").isEmpty)
   }
 }
 
@@ -3154,8 +3220,10 @@ class CSVv1Suite extends CSVSuite {
 
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "_LEGACY_ERROR_TEMP_2177",
-        parameters = Map("failFastMode" -> "FAILFAST")
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "badRecord" -> "[2015,Chevy,Volt,null,null]",
+          "failFastMode" -> "FAILFAST")
       )
     }
   }

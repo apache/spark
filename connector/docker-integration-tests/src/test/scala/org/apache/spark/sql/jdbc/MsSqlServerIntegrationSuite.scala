@@ -372,7 +372,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "bits", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
-    val filtered = df.where(col("c") === 0).collect()
+    val filtered = df.where(!col("c")).collect()
     assert(filtered.length == 0)
   }
 

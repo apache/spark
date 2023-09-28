@@ -20,8 +20,8 @@ import java.util.{Arrays, Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
@@ -342,7 +342,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -356,7 +356,7 @@ class SQLAppStatusListener(
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
-    exec.rootExecutionId = rootExecutionId
+    exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription

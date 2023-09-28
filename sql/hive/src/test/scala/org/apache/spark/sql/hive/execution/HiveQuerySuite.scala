@@ -24,7 +24,6 @@ import java.sql.Timestamp
 
 import scala.util.Try
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
@@ -1258,12 +1257,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """INSERT INTO TABLE dp_test PARTITION(dp)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
         "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "targetColumns" -> "4",
-        "insertedColumns" -> "3",
-        "staticPartCols" -> "0"))
+        "tableColumns" -> "`key`, `value`, `dp`, `sp`",
+        "dataColumns" -> "`key`, `value`, `(key % 5)`"))
 
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
@@ -1641,12 +1639,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("udf_radians") {
     withSQLConf("hive.fetch.task.conversion" -> "more") {
       val result = sql("select radians(57.2958) FROM src tablesample (1 rows)").collect()
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-        assertResult(Array(Row(1.0000003575641672))) (result)
-      } else {
-        assertResult(Array(Row(1.000000357564167))) (result)
-      }
-
+      assertResult(Array(Row(1.0000003575641672))) (result)
       assertResult(Array(Row(2.4999991485811655))) {
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }

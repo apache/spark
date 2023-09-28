@@ -283,14 +283,14 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
     } else if (numArgs == 2) {
       val scale = expressions(1)
       if (!(scale.foldable && scale.dataType == IntegerType)) {
-        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
       }
       if (scale.eval() == null) {
-        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
       }
       buildWithTwoParams(expressions(0), scale)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 }
@@ -434,8 +434,18 @@ case class Acosh(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class Conv(
+    numExpr: Expression,
+    fromBaseExpr: Expression,
+    toBaseExpr: Expression,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends TernaryExpression
+    with ImplicitCastInputTypes
+    with NullIntolerant
+    with SupportQueryContext {
+
+  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
+    this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
 
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
@@ -448,14 +458,17 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     NumberConverter.convert(
       num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
-      toBase.asInstanceOf[Int])
+      toBase.asInstanceOf[Int],
+      ansiEnabled,
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
+    val context = getContextOrNullCode(ctx, ansiEnabled)
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $ansiEnabled, $context);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
@@ -466,6 +479,12 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 @ExpressionDescription(
@@ -1153,14 +1172,13 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       val maybeFailOnErrorCode = if (failOnError) {
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (${ev.value} == null) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $c,
-           |    $format,
+           |    UTF8String.fromString("HEX"),
            |    "try_to_binary");
            |}
            |""".stripMargin
@@ -1253,7 +1271,7 @@ case class Pow(left: Expression, right: Expression)
        4
   """,
   since = "1.5.0",
-  group = "math_funcs")
+  group = "bitwise_funcs")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1491,7 +1509,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "scala",
+              "inputName" -> toSQLId("scala"),
               "inputType" -> toSQLType(scale.dataType),
               "inputExpr" -> toSQLExpr(scale)))
         }

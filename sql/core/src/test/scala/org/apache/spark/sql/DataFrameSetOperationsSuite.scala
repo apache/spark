@@ -23,6 +23,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +31,8 @@ import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSess
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
+class DataFrameSetOperationsSuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {
@@ -352,20 +354,40 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
-    val e = intercept[AnalysisException](df.intersect(df))
-    assert(e.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e2 = intercept[AnalysisException](df.except(df))
-    assert(e2.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e3 = intercept[AnalysisException](df.distinct())
-    assert(e3.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
+    checkError(
+      exception = intercept[AnalysisException](df.intersect(df)),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.except(df)),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.distinct()),
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
     withTempView("v") {
       df.createOrReplaceTempView("v")
-      val e4 = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v"))
-      assert(e4.message.contains(
-        "Cannot have map type columns in DataFrame which calls set operations"))
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v")),
+        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`m`",
+          "dataType" -> "\"MAP<STRING, BIGINT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT m FROM v",
+          start = 0,
+          stop = 23)
+      )
     }
   }
 
@@ -1009,14 +1031,19 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // If right side of the nested struct has extra col.
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
     df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
-    val errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains("UNION can only be performed on tables with" +
-      " compatible column types." +
-      " The third column of the second table is struct<c1:int,c2:int,c3:struct<c3:int,c5:int>>" +
-      " type which is not compatible with struct<c1:int,c2:int,c3:struct<c3:int>> at the same" +
-      " column of the first table"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      errorClass = "INCOMPATIBLE_COLUMN_TYPE",
+      parameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "third",
+        "dataType2" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT>>\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT, c5: INT>>\"")
+    )
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
@@ -1376,7 +1403,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         plan: SparkPlan,
         targetPlan: (SparkPlan) => Boolean,
         isColumnar: Boolean): Unit = {
-      val target = plan.collect {
+      val target = collect(plan) {
         case p if targetPlan(p) => p
       }
       assert(target.nonEmpty)
@@ -1389,6 +1416,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         val df2 = Seq(4, 5, 6).toDF("j").cache()
 
         val union = df1.union(df2)
+        union.collect()
         checkIfColumnar(union.queryExecution.executedPlan,
           _.isInstanceOf[InMemoryTableScanExec], supported)
         checkIfColumnar(union.queryExecution.executedPlan,

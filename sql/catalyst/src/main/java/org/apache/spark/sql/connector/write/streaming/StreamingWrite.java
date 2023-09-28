@@ -59,6 +59,16 @@ public interface StreamingWrite {
   StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo info);
 
   /**
+   * Returns whether Spark should use the commit coordinator to ensure that at most one task for
+   * each partition commits.
+   *
+   * @return true if commit coordinator should be used, false otherwise.
+   */
+  default boolean useCommitCoordinator() {
+    return true;
+  }
+
+  /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit
    * messages are collected from successful data writers and are produced by
    * {@link DataWriter#commit()}.

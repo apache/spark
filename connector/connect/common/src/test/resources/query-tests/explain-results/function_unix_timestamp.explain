@@ -1,0 +1,2 @@
+Project [unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), false) AS unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss)#0L]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

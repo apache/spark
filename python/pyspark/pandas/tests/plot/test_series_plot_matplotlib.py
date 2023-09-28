@@ -39,7 +39,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotMatplotlibTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -391,6 +391,10 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         ax2 = psdf["single"].plot.hist()
         bin2 = self.plot_to_base64(ax2)
         self.assertEqual(bin1, bin2)
+
+
+class SeriesPlotMatplotlibTests(SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

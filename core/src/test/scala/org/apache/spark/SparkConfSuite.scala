@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -496,6 +496,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
           assert(reqs.head.amount == slots)
           assert(reqs.head.numParts == 1)
         }
+    }
+  }
+
+  test("SPARK-44650: spark.executor.defaultJavaOptions Check illegal java options") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+    conf.set(EXECUTOR_JAVA_OPTIONS.key, "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
+    }
+    conf.remove(EXECUTOR_JAVA_OPTIONS.key)
+    conf.set("spark.executor.defaultJavaOptions", "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
     }
   }
 }

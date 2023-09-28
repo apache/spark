@@ -41,6 +41,24 @@ The schema of the `image` column is:
 
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+In PySpark we provide Spark SQL data source API for loading image data as a DataFrame.
+
+{% highlight python %}
+>>> df = spark.read.format("image").option("dropInvalid", True).load("data/mllib/images/origin/kittens")
+>>> df.select("image.origin", "image.width", "image.height").show(truncate=False)
++-----------------------------------------------------------------------+-----+------+
+|origin                                                                 |width|height|
++-----------------------------------------------------------------------+-----+------+
+|file:///spark/data/mllib/images/origin/kittens/54893.jpg               |300  |311   |
+|file:///spark/data/mllib/images/origin/kittens/DP802813.jpg            |199  |313   |
+|file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg |300  |200   |
+|file:///spark/data/mllib/images/origin/kittens/DP153539.jpg            |300  |296   |
++-----------------------------------------------------------------------+-----+------+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 [`ImageDataSource`](api/scala/org/apache/spark/ml/source/image/ImageDataSource.html)
 implements a Spark SQL data source API for loading image data as a DataFrame.
@@ -82,23 +100,6 @@ Will output:
 {% endhighlight %}
 </div>
 
-<div data-lang="python" markdown="1">
-In PySpark we provide Spark SQL data source API for loading image data as a DataFrame.
-
-{% highlight python %}
->>> df = spark.read.format("image").option("dropInvalid", True).load("data/mllib/images/origin/kittens")
->>> df.select("image.origin", "image.width", "image.height").show(truncate=False)
-+-----------------------------------------------------------------------+-----+------+
-|origin                                                                 |width|height|
-+-----------------------------------------------------------------------+-----+------+
-|file:///spark/data/mllib/images/origin/kittens/54893.jpg               |300  |311   |
-|file:///spark/data/mllib/images/origin/kittens/DP802813.jpg            |199  |313   |
-|file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg |300  |200   |
-|file:///spark/data/mllib/images/origin/kittens/DP153539.jpg            |300  |296   |
-+-----------------------------------------------------------------------+-----+------+
-{% endhighlight %}
-</div>
-
 <div data-lang="r" markdown="1">
 In SparkR we provide Spark SQL data source API for loading image data as a DataFrame.
 
@@ -132,6 +133,31 @@ The schemas of the columns are:
  - features: `VectorUDT` (represents the feature vector)
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+In PySpark we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
+
+{% highlight python %}
+>>> df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt")
+>>> df.show(10)
++-----+--------------------+
+|label|            features|
++-----+--------------------+
+|  0.0|(780,[127,128,129...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[124,125,126...|
+|  1.0|(780,[152,153,154...|
+|  1.0|(780,[151,152,153...|
+|  0.0|(780,[129,130,131...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[99,100,101,...|
+|  0.0|(780,[154,155,156...|
+|  0.0|(780,[127,128,129...|
++-----+--------------------+
+only showing top 10 rows
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 [`LibSVMDataSource`](api/scala/org/apache/spark/ml/source/libsvm/LibSVMDataSource.html)
 implements a Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
@@ -184,30 +210,6 @@ Will output:
 +-----+--------------------+
 only showing top 10 rows
 */
-{% endhighlight %}
-</div>
-
-<div data-lang="python" markdown="1">
-In PySpark we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
-
-{% highlight python %}
->>> df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt")
->>> df.show(10)
-+-----+--------------------+
-|label|            features|
-+-----+--------------------+
-|  0.0|(780,[127,128,129...|
-|  1.0|(780,[158,159,160...|
-|  1.0|(780,[124,125,126...|
-|  1.0|(780,[152,153,154...|
-|  1.0|(780,[151,152,153...|
-|  0.0|(780,[129,130,131...|
-|  1.0|(780,[158,159,160...|
-|  1.0|(780,[99,100,101,...|
-|  0.0|(780,[154,155,156...|
-|  0.0|(780,[127,128,129...|
-+-----+--------------------+
-only showing top 10 rows
 {% endhighlight %}
 </div>
 

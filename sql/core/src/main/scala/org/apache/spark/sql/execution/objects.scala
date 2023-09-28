@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
@@ -32,8 +32,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -58,13 +60,8 @@ trait ObjectProducerExec extends SparkPlan {
 /**
  * Physical version of `ObjectConsumer`.
  */
-trait ObjectConsumerExec extends UnaryExecNode {
+trait ObjectConsumerExec extends UnaryExecNode with ReferenceAllColumns[SparkPlan] {
   assert(child.output.length == 1)
-
-  // This operator always need all columns of its child, even it doesn't reference to.
-  @transient
-  override lazy val references: AttributeSet = child.outputSet
-
   def inputObjectType: DataType = child.output.head.dataType
 }
 
@@ -597,7 +594,7 @@ case class FlatMapGroupsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(groupedByRKey, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      val outputTypes = StructType.fromAttributes(output).map(_.dataType)
+      val outputTypes = DataTypeUtils.fromAttributes(output).map(_.dataType)
 
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())

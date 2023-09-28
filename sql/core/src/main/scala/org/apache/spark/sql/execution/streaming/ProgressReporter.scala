@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.text.SimpleDateFormat
 import java.util.{Date, Optional, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsS
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.Clock
 
 /**
@@ -142,15 +142,37 @@ trait ProgressReporter extends Logging {
     latestStreamProgress = to
   }
 
-  private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
+  private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
     progressBuffer.synchronized {
       progressBuffer += newProgress
       while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
         progressBuffer.dequeue()
       }
     }
+  }
+
+  private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
+    // Reset noDataEventTimestamp if we processed any data
+    lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
+
+    addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
     logInfo(s"Streaming query made progress: $newProgress")
+  }
+
+  private def updateIdleness(newProgress: StreamingQueryProgress): Unit = {
+    val now = triggerClock.getTimeMillis()
+    if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
+      addNewProgress(newProgress)
+      if (lastNoExecutionProgressEventTime > Long.MinValue) {
+        postEvent(new QueryIdleEvent(newProgress.id, newProgress.runId,
+          formatTimestamp(currentTriggerStartTimestamp)))
+        logInfo(s"Streaming query has been idle and waiting for new data more than " +
+          s"$noDataProgressEventInterval ms.")
+      }
+
+      lastNoExecutionProgressEventTime = now
+    }
   }
 
   /**
@@ -229,15 +251,9 @@ trait ProgressReporter extends Logging {
       observedMetrics = new java.util.HashMap(observedMetrics.asJava))
 
     if (hasExecuted) {
-      // Reset noDataEventTimestamp if we processed any data
-      lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
       updateProgress(newProgress)
     } else {
-      val now = triggerClock.getTimeMillis()
-      if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
-        lastNoExecutionProgressEventTime = now
-        updateProgress(newProgress)
-      }
+      updateIdleness(newProgress)
     }
 
     currentStatus = currentStatus.copy(isTriggerActive = false)

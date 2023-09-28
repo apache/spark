@@ -24,18 +24,12 @@ from struct import pack, unpack
 import sys
 import threading
 import traceback
-from typing import Optional, Generator
+from typing import Generator
 import warnings
-from pyspark.context import SparkContext
 
 # Use b'\x00' as separator instead of b'\n', because the bytes are encoded in utf-8
 _SERVER_POLL_INTERVAL = 0.1
 _TRUNCATE_MSG_LEN = 4000
-
-
-def get_driver_host(sc: SparkContext) -> Optional[str]:
-    return sc.getConf().get("spark.driver.host")
-
 
 _log_print_lock = threading.Lock()  # pylint: disable=invalid-name
 
@@ -162,6 +156,9 @@ class LogStreamingClient(LogStreamingClientBase):
         warnings.warn(f"{error_msg}: {traceback.format_exc()}\n")
 
     def _connect(self) -> None:
+        if self.port == -1:
+            self._fail("Log streaming server is not available.")
+            return
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)

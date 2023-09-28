@@ -297,7 +297,6 @@ class MatrixUDT(UserDefinedType):
 
 
 class Vector:
-
     __UDT__ = VectorUDT()
 
     """
@@ -991,7 +990,7 @@ class Vectors:
     Notes
     -----
     Dense vectors are simply represented as NumPy array objects,
-    so there is no need to covert them for use in MLlib. For sparse vectors,
+    so there is no need to convert them for use in MLlib. For sparse vectors,
     the factory methods in this class create an MLlib-compatible type, or users
     can pass in SciPy's `scipy.sparse` column vectors.
     """
@@ -1200,7 +1199,6 @@ class Vectors:
 
 
 class Matrix:
-
     __UDT__ = MatrixUDT()
 
     """
@@ -1617,7 +1615,7 @@ class QRDecomposition(Generic[QT, RT]):
         self._Q = Q
         self._R = R
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def Q(self) -> QT:
         """
@@ -1626,7 +1624,7 @@ class QRDecomposition(Generic[QT, RT]):
         """
         return self._Q
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def R(self) -> RT:
         """

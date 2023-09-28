@@ -51,7 +51,7 @@ public class ColumnVectorUtils {
    */
   public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
     DataType t = col.dataType();
-    PhysicalDataType pdt = t.physicalDataType();
+    PhysicalDataType pdt = PhysicalDataType.apply(t);
 
     if (row.isNullAt(fieldIdx)) {
       col.setNull();

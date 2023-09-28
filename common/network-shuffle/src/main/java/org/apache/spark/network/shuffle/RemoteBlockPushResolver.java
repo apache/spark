@@ -328,6 +328,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int size = (int) indexFile.length();
     // First entry is the zero offset
     int numChunks = (size / Long.BYTES) - 1;
+    if (numChunks <= 0) {
+      throw new RuntimeException(String.format(
+          "Merged shuffle index file %s is empty", indexFile.getPath()));
+    }
     File metaFile = appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
     if (!metaFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle meta file %s not found",
@@ -494,7 +498,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void removeAppAttemptPathInfoFromDB(String appId, int attemptId) {
     AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
         db.delete(key);
@@ -701,7 +705,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onData(String streamId, ByteBuffer buf) {
           // Ignore the requests. It reaches here either when a request is received after the
           // shuffle file is finalized or when a request is for a duplicate block.
-          pushMergeMetrics.ignoredBlockBytes.mark(buf.limit());
+          pushMergeMetrics.ignoredBlockBytes.mark(buf.remaining());
         }
 
         @Override
@@ -967,7 +971,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * Write the application attempt's local path information to the DB
    */
   private void writeAppPathsInfoToDb(String appId, int attemptId, AppPathsInfo appPathsInfo) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
@@ -985,7 +989,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   private void writeAppAttemptShuffleMergeInfoToDB(
       AppAttemptShuffleMergeId appAttemptShuffleMergeId) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(
+        appAttemptShuffleMergeId.appId)) {
       // Write AppAttemptShuffleMergeId into LevelDB for finalized shuffles
       try{
         byte[] dbKey = getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId);
@@ -1211,6 +1216,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // Use on-heap instead of direct ByteBuffer since these buffers will be GC'ed very quickly
     private List<ByteBuffer> deferredBufs;
 
+    // This collects the total pushed block bytes received in the onData method. Once these bytes
+    // are not being used, we add them to the ignoredBlockBytes of the pushMergeMetrics.
+    private long receivedBytes = 0;
+
     private PushBlockStreamCallback(
         RemoteBlockPushResolver mergeManager,
         AppShuffleInfo appShuffleInfo,
@@ -1323,6 +1332,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
+     * Update ignoredBlockBytes in pushMergeMetrics.
+     */
+    private void updateIgnoredBlockBytes() {
+      if (receivedBytes > 0) {
+        mergeManager.pushMergeMetrics.ignoredBlockBytes.mark(receivedBytes);
+        receivedBytes = 0;
+      }
+    }
+
+    /**
      * This increments the number of IOExceptions and throws RuntimeException if it exceeds the
      * threshold which will abort the merge of a particular shuffle partition.
      */
@@ -1358,6 +1377,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public void onData(String streamId, ByteBuffer buf) throws IOException {
+      receivedBytes += buf.remaining();
       // When handling the block data using StreamInterceptor, it can help to reduce the amount
       // of data that needs to be buffered in memory since it does not wait till the completion
       // of the frame before handling the message, thus releasing the ByteBuf earlier. However,
@@ -1481,6 +1501,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // the client in cases of duplicate even though no data is written.
           if (isDuplicateBlock()) {
             freeDeferredBufs();
+            // Since we just return without throwing exception, and the received bytes are ignored,
+            // thus we need to add them to ignoredBlockBytes in pushMergeMetrics.
+            updateIgnoredBlockBytes();
             return;
           }
           if (partitionInfo.getCurrentMapIndex() < 0) {
@@ -1538,6 +1561,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       } else {
         logger.debug("Encountered issue when merging {}", streamId, throwable);
       }
+      // The block was received by ESS but didn't get merged, so it is considered as "ignored".
+      // Capturing them in ignoredBlockBytes would help measure any server side improvement.
+      updateIgnoredBlockBytes();
       // Only update partitionInfo if the failure corresponds to a valid request. If the
       // request is too late, i.e. received after shuffle merge finalize or stale block push,
       // #onFailure will also be triggered, and we can just ignore. Also, if we couldn't find
@@ -2126,8 +2152,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     static final String DEFERRED_BLOCKS_METRIC = "deferredBlocks";
     // staleBlockPushes tracks the number of stale shuffle block push requests
     static final String STALE_BLOCK_PUSHES_METRIC = "staleBlockPushes";
-    // ignoredBlockBytes tracks the size of the blocks that are ignored after the shuffle file is
-    // finalized or when a request is for a duplicate block
+    // ignoredBlockBytes tracks the size of the blocks that are ignored. The pushed block data are
+    // considered as ignored for these cases: 1. received after the shuffle file is finalized;
+    // 2. when a request is for a duplicate block; 3. the part that ESS failed to write.
     static final String IGNORED_BLOCK_BYTES_METRIC = "ignoredBlockBytes";
 
     private final Map<String, Metric> allMetrics;

@@ -500,7 +500,7 @@ class SingularValueDecomposition(JavaModelWrapper, Generic[UT, VT]):
     .. versionadded:: 2.2.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def U(self) -> Optional[UT]:  # type: ignore[return]
         """
@@ -517,7 +517,7 @@ class SingularValueDecomposition(JavaModelWrapper, Generic[UT, VT]):
             else:
                 raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def s(self) -> Vector:
         """
@@ -525,7 +525,7 @@ class SingularValueDecomposition(JavaModelWrapper, Generic[UT, VT]):
         """
         return self.call("s")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def V(self) -> VT:
         """

@@ -48,12 +48,6 @@ class MissingPandasLikeSeries:
     tz_localize = _unsupported_function("tz_localize")
     view = _unsupported_function("view")
 
-    # Deprecated functions
-    slice_shift = _unsupported_function(
-        "slice_shift", deprecated=True, reason="Use DataFrame/Series.shift instead."
-    )
-    tshift = _unsupported_function("tshift", deprecated=True, reason="Use `shift` instead.")
-
     # Properties we won't support.
     array = common.array(_unsupported_property)
     nbytes = _unsupported_property(

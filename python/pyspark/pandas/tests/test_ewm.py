@@ -22,7 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.pandas.window import ExponentialMoving
 
 
-class EWMTest(PandasOnSparkTestCase, TestUtils):
+class EWMTestsMixin:
     def test_ewm_error(self):
         with self.assertRaisesRegex(
             TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
@@ -415,6 +415,10 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_ewm_func(self):
         self._test_groupby_ewm_func("mean")
+
+
+class EWMTests(EWMTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

@@ -184,7 +184,7 @@ class ParamGridBuilder:
         if isinstance(args[0], dict):
             self.baseOn(*args[0].items())
         else:
-            for (param, value) in args:
+            for param, value in args:
                 self.addGrid(param, [value])
 
         return self
@@ -461,7 +461,7 @@ class _ValidatorSharedReadWrite:
         evaluator = instance.getEvaluator()
         uidMap = MetaAlgorithmReadWrite.getUidMap(estiamtor)
 
-        for elem in [evaluator] + list(uidMap.values()):  # type: ignore[arg-type]
+        for elem in [evaluator] + list(uidMap.values()):
             if not isinstance(elem, MLWritable):
                 raise ValueError(
                     f"Validator write will fail because it contains {elem.uid} "

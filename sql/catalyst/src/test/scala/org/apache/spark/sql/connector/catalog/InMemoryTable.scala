@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import org.scalatest.Assertions.assert
-
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
@@ -39,9 +37,12 @@ class InMemoryTable(
     distribution: Distribution = Distributions.unspecified(),
     ordering: Array[SortOrder] = Array.empty,
     numPartitions: Option[Int] = None,
-    isDistributionStrictlyRequired: Boolean = true)
+    advisoryPartitionSize: Option[Long] = None,
+    isDistributionStrictlyRequired: Boolean = true,
+    override val numRowsPerSplit: Int = Int.MaxValue)
   extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
-    ordering, numPartitions, isDistributionStrictlyRequired) with SupportsDelete {
+    ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
+    numRowsPerSplit) with SupportsDelete {
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
@@ -62,8 +63,16 @@ class InMemoryTable(
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
-        .map(key -> _.withRow(row))
-        .getOrElse(key -> new BufferedRows(key).withRow(row))
+        .map { splits =>
+          val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
+            splits :+ new BufferedRows(key)
+          } else {
+            splits
+          }
+          newSplits.last.withRow(row)
+          key -> newSplits
+        }
+        .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
       addPartitionKey(key)
     })
     this
@@ -80,14 +89,18 @@ class InMemoryTable(
     with SupportsOverwrite {
 
     override def truncate(): WriteBuilder = {
-      assert(writer == Append)
+      if (writer != Append) {
+        throw new IllegalArgumentException(s"Unsupported writer type: $writer")
+      }
       writer = TruncateAndAppend
       streamingWriter = StreamingTruncateAndAppend
       this
     }
 
     override def overwrite(filters: Array[Filter]): WriteBuilder = {
-      assert(writer == Append)
+      if (writer != Append) {
+        throw new IllegalArgumentException(s"Unsupported writer type: $writer")
+      }
       writer = new Overwrite(filters)
       streamingWriter = new StreamingNotSupportedOperation(
         s"overwrite (${filters.mkString("filters(", ", ", ")")})")

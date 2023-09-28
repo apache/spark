@@ -46,7 +46,8 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
       // Download jars for Hive 2.0
       val client = IsolatedClientLoader.forVersion(
         hiveMetastoreVersion = "2.0",
-        hadoopVersion = "2.7.4",
+        // 3.0.x is chosen because that HADOOP-14067 got fixed in 3.1.0
+        hadoopVersion = "3.0.3",
         sparkConf = new SparkConf(),
         hadoopConf = hadoopConf,
         config = HiveClientBuilder.buildConf(Map.empty),
@@ -81,10 +82,8 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-32212: built-in Hadoop version should support shaded client if it is not hadoop 2") {
+  test("SPARK-32212: built-in Hadoop version should support shaded client") {
     val hadoopVersion = VersionInfo.getVersion
-    if (!hadoopVersion.startsWith("2")) {
-      assert(IsolatedClientLoader.supportsHadoopShadedClient(hadoopVersion))
-    }
+    assert(IsolatedClientLoader.supportsHadoopShadedClient(hadoopVersion))
   }
 }

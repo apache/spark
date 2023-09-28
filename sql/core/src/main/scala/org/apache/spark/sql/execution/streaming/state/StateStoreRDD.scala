@@ -86,10 +86,10 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
 
+    val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
       storeConf, hadoopConfBroadcast.value.value)
-    val inputIter = dataRDD.iterator(partition, ctxt)
     storeReadFunction(store, inputIter)
   }
 }
@@ -120,10 +120,10 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
 
+    val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.get(
       storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
       storeConf, hadoopConfBroadcast.value.value)
-    val inputIter = dataRDD.iterator(partition, ctxt)
     storeUpdateFunction(store, inputIter)
   }
 }

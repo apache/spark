@@ -20,8 +20,8 @@ package org.apache.spark
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -498,12 +498,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   private[spark] def validateSettings(): Unit = {
     if (contains("spark.local.dir")) {
       val msg = "Note that spark.local.dir will be overridden by the value set by " +
-        "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone/kubernetes and LOCAL_DIRS" +
+        "the cluster manager (via SPARK_LOCAL_DIRS in standalone/kubernetes and LOCAL_DIRS" +
         " in YARN)."
       logWarning(msg)
     }
-
-    val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -518,16 +516,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     // Validate spark.executor.extraJavaOptions
-    getOption(executorOptsKey).foreach { javaOpts =>
-      if (javaOpts.contains("-Dspark")) {
-        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
-          "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
-        throw new Exception(msg)
-      }
-      if (javaOpts.contains("-Xmx")) {
-        val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-          s"(was '$javaOpts'). Use spark.executor.memory instead."
-        throw new Exception(msg)
+    Seq(EXECUTOR_JAVA_OPTIONS.key, "spark.executor.defaultJavaOptions").foreach { executorOptsKey =>
+      getOption(executorOptsKey).foreach { javaOpts =>
+        if (javaOpts.contains("-Dspark")) {
+          val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
+            "Set them directly on a SparkConf or in a properties file " +
+            "when using ./bin/spark-submit."
+          throw new Exception(msg)
+        }
+        if (javaOpts.contains("-Xmx")) {
+          val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
+            s"(was '$javaOpts'). Use spark.executor.memory instead."
+          throw new Exception(msg)
+        }
       }
     }
 
@@ -709,7 +710,11 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.access.namenodes", "2.2"),
       AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
     "spark.kafka.consumer.cache.capacity" -> Seq(
-      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
+      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0")),
+    MAX_EXECUTOR_FAILURES.key -> Seq(
+      AlternateConfig("spark.yarn.max.executor.failures", "3.5")),
+    EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key -> Seq(
+      AlternateConfig("spark.yarn.executor.failuresValidityInterval", "3.5"))
   )
 
   /**

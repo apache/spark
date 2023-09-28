@@ -37,7 +37,8 @@ trait SimpleTableProvider extends TableProvider {
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    getOrLoadTable(options).schema()
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    getOrLoadTable(options).columns.asSchema
   }
 
   override def getTable(

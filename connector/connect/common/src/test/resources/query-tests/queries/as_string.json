@@ -1,0 +1,16 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "subqueryAlias": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "alias": "foo"
+  }
+}

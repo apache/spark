@@ -38,8 +38,6 @@ private[spark] trait ResourceAllocator {
    * For task resources ([[org.apache.spark.scheduler.ExecutorResourceInfo]]), this value
    * can be a multiple, such that each address can be allocated up to [[slotsPerAddress]]
    * times.
-   *
-   * TODO Use [[org.apache.spark.util.collection.OpenHashMap]] instead to gain better performance.
    */
   private lazy val addressAvailabilityMap = {
     mutable.HashMap(resourceAddresses.map(_ -> slotsPerAddress): _*)
@@ -76,11 +74,9 @@ private[spark] trait ResourceAllocator {
    */
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      if (!addressAvailabilityMap.contains(address)) {
+      val isAvailable = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
-          s"address $address doesn't exist.")
-      }
-      val isAvailable = addressAvailabilityMap(address)
+        s"address $address doesn't exist."))
       if (isAvailable > 0) {
         addressAvailabilityMap(address) -= 1
       } else {
@@ -97,11 +93,9 @@ private[spark] trait ResourceAllocator {
    */
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      if (!addressAvailabilityMap.contains(address)) {
+      val isAvailable = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
-          s"address $address doesn't exist.")
-      }
-      val isAvailable = addressAvailabilityMap(address)
+          s"address $address doesn't exist."))
       if (isAvailable < slotsPerAddress) {
         addressAvailabilityMap(address) += 1
       } else {

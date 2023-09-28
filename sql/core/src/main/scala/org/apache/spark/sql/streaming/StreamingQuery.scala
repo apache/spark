@@ -52,7 +52,7 @@ trait StreamingQuery {
 
   /**
    * Returns the unique id of this run of the query. That is, every start/restart of a query will
-   * generated a unique runId. Therefore, every time a query is restarted from
+   * generate a unique runId. Therefore, every time a query is restarted from
    * checkpoint, it will have the same [[id]] but different [[runId]]s.
    */
   def runId: UUID

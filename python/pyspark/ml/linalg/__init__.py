@@ -281,7 +281,6 @@ class MatrixUDT(UserDefinedType):
 
 
 class Vector:
-
     __UDT__ = VectorUDT()
 
     """
@@ -871,7 +870,7 @@ class Vectors:
     Notes
     -----
     Dense vectors are simply represented as NumPy array objects,
-    so there is no need to covert them for use in MLlib. For sparse vectors,
+    so there is no need to convert them for use in MLlib. For sparse vectors,
     the factory methods in this class create an MLlib-compatible type, or users
     can pass in SciPy's `scipy.sparse` column vectors.
     """
@@ -1024,7 +1023,6 @@ class Vectors:
 
 
 class Matrix:
-
     __UDT__ = MatrixUDT()
 
     """

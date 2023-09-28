@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -52,6 +52,9 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
+
+  override def excluded: Seq[String] = Seq("listNamespaces: basic behavior", "Drop namespace")
+
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:21.3.0")

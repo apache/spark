@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.SystemUtils
 import org.slf4j.Logger

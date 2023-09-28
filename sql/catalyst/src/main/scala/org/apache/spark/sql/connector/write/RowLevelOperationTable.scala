@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.write
 
 import java.util
 
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,6 +38,7 @@ private[sql] case class RowLevelOperationTable(
 
   override def name: String = table.name
   override def schema: StructType = table.schema
+  override def columns: Array[Column] = table.columns()
   override def capabilities: util.Set[TableCapability] = table.capabilities
   override def toString: String = table.toString
 

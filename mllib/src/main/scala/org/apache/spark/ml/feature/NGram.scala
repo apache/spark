@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -64,7 +65,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
-    require(inputType.sameType(ArrayType(StringType)),
+    require(DataTypeUtils.sameType(inputType, ArrayType(StringType)),
       s"Input type must be ${ArrayType(StringType).catalogString} but got " +
         inputType.catalogString)
   }

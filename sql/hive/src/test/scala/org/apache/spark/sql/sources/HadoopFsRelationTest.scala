@@ -30,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -240,9 +240,15 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          testDF.write.format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 
@@ -339,13 +345,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        partitionedTestDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.ErrorIfExists)
-          .partitionBy("p1", "p2")
-          .save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          partitionedTestDF.write
+            .format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists)
+            .partitionBy("p1", "p2")
+            .save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 

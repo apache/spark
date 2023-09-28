@@ -94,11 +94,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "22024",
   "messageParameters" : {
-    "argName" : "scale",
-    "funcName" : "ceil",
-    "requiredType" : "int"
+    "funcName" : "`ceil`",
+    "paramName" : "`scale`",
+    "paramType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -117,11 +118,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "22024",
   "messageParameters" : {
-    "argName" : "scale",
-    "funcName" : "ceil",
-    "requiredType" : "int"
+    "funcName" : "`ceil`",
+    "paramName" : "`scale`",
+    "paramType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -140,10 +142,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`ceil`"
   },
@@ -252,11 +255,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "22024",
   "messageParameters" : {
-    "argName" : "scale",
-    "funcName" : "floor",
-    "requiredType" : "int"
+    "funcName" : "`floor`",
+    "paramName" : "`scale`",
+    "paramType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -275,11 +279,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "22024",
   "messageParameters" : {
-    "argName" : "scale",
-    "funcName" : "floor",
-    "requiredType" : "int"
+    "funcName" : "`floor`",
+    "paramName" : "`scale`",
+    "paramType" : "\"INT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -298,10 +303,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`floor`"
   },

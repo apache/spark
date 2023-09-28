@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
@@ -95,7 +96,7 @@ private[columnar] abstract class ComplexColumnBuilder[JvmType](
   extends BasicColumnBuilder[JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
-private[columnar] abstract class NativeColumnBuilder[T <: AtomicType](
+private[columnar] abstract class NativeColumnBuilder[T <: PhysicalDataType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
   extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
@@ -136,13 +137,18 @@ private[columnar] class DecimalColumnBuilder(dataType: DecimalType)
   extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
 
 private[columnar] class StructColumnBuilder(dataType: StructType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), STRUCT(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType), STRUCT(PhysicalStructType(dataType.fields)))
 
 private[columnar] class ArrayColumnBuilder(dataType: ArrayType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), ARRAY(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType),
+    ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
 
 private[columnar] class MapColumnBuilder(dataType: MapType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), MAP(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType),
+    MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
 
 private[columnar] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 128 * 1024

@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.sasl;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
@@ -44,7 +44,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -58,10 +58,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.util.ByteArrayWritableChannel;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.MapConfigProvider;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
@@ -209,7 +206,7 @@ public class SparkSaslSuite {
 
       channel.reset();
       count = emsg.transferTo(channel, emsg.transferred());
-      assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
+      assertTrue(count > 1 && count < data.length, "Unexpected count: " + count);
       assertEquals(data.length, emsg.transferred());
     } finally {
       msg.release();

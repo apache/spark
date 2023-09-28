@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -602,7 +602,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       return DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "position",
+          "inputName" -> toSQLId("position"),
           "inputType" -> toSQLType(pos.dataType),
           "inputExpr" -> toSQLExpr(pos)
         )
@@ -637,14 +637,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
     if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      try {
-        pattern = Pattern.compile(lastRegex.toString)
-      } catch {
-        case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
-      }
+      val patternAndRegex = RegExpUtils.getPatternAndLastRegex(p, prettyName)
+      pattern = patternAndRegex._1
+      lastRegex = patternAndRegex._2
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -675,15 +670,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termResult = ctx.freshName("termResult")
 
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
     val position = ctx.freshName("position")
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
 
@@ -695,15 +687,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        try {
-          $termPattern = $classNamePattern.compile($termLastRegex.toString());
-        } catch (java.util.regex.PatternSyntaxException e) {
-          throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
-        }
-      }
+      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
       if (!$rep.equals($termLastReplacementInUTF8)) {
         // replacement string changed
         $termLastReplacementInUTF8 = $rep.clone();
@@ -713,7 +697,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       int $position = $pos - 1;
       if ($position == 0 || $position < $source.length()) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
-        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {
@@ -746,12 +729,10 @@ object RegExpReplace {
 }
 
 object RegExpExtractBase {
-  def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
-    if (groupIndex < 0) {
-      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
-    } else if (groupCount < groupIndex) {
-      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
-        groupCount, groupIndex)
+  def checkGroupIndex(prettyName: String, groupCount: Int, groupIndex: Int): Unit = {
+    if (groupIndex < 0 || groupCount < groupIndex) {
+      throw QueryExecutionErrors.invalidRegexGroupIndexError(
+        prettyName, groupCount, groupIndex)
     }
   }
 }
@@ -777,40 +758,11 @@ abstract class RegExpExtractBase
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
       // regex value changed
-      try {
-        val r = p.asInstanceOf[UTF8String].clone()
-        pattern = Pattern.compile(r.toString)
-        lastRegex = r
-      } catch {
-        case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
-      }
+      val patternAndRegex = RegExpUtils.getPatternAndLastRegex(p, prettyName)
+      pattern = patternAndRegex._1
+      lastRegex = patternAndRegex._2
     }
     pattern.matcher(s.toString)
-  }
-
-  protected def initLastMatcherCode(
-      ctx: CodegenContext,
-      subject: String,
-      regexp: String,
-      matcher: String): String = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
-    s"""
-      |if (!$regexp.equals($termLastRegex)) {
-      |  // regex value changed
-      |  try {
-      |    UTF8String r = $regexp.clone();
-      |    $termPattern = $classNamePattern.compile(r.toString());
-      |    $termLastRegex = r;
-      |  } catch (java.util.regex.PatternSyntaxException e) {
-      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
-      |  }
-      |}
-      |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
-      |""".stripMargin
   }
 }
 
@@ -857,7 +809,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         UTF8String.EMPTY_UTF8
@@ -884,10 +836,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+        $classNameRegExpExtractBase.checkGroupIndex("$prettyName", $matchResult.groupCount(), $idx);
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {
@@ -950,7 +902,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     while(m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         matchResults += UTF8String.EMPTY_UTF8
@@ -978,11 +930,14 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-         | ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+         | ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
          | while ($matcher.find()) {
          |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-         |   $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+         |   $classNameRegExpExtractBase.checkGroupIndex(
+         |     "$prettyName",
+         |     $matchResult.groupCount(),
+         |     $idx);
          |   if ($matchResult.group($idx) == null) {
          |     $matchResults.add(UTF8String.EMPTY_UTF8);
          |   } else {
@@ -1135,7 +1090,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       s"""
          |try {
          |  $setEvNotNull
-         |  ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+         |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
          |  if ($matcher.find()) {
          |    ${ev.value} = $matcher.toMatchResult().start() + 1;
          |  } else {
@@ -1151,4 +1106,42 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpInStr =
     copy(subject = newFirst, regexp = newSecond, idx = newThird)
+}
+
+object RegExpUtils {
+  def initLastMatcherCode(
+      ctx: CodegenContext,
+      subject: String,
+      regexp: String,
+      matcher: String,
+      prettyName: String): String = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    s"""
+       |if (!$regexp.equals($termLastRegex)) {
+       |  // regex value changed
+       |  try {
+       |    UTF8String r = $regexp.clone();
+       |    $termPattern = $classNamePattern.compile(r.toString());
+       |    $termLastRegex = r;
+       |  } catch (java.util.regex.PatternSyntaxException e) {
+       |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
+       |  }
+       |}
+       |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+       |""".stripMargin
+  }
+
+  def getPatternAndLastRegex(p: Any, prettyName: String): (Pattern, UTF8String) = {
+    val r = p.asInstanceOf[UTF8String].clone()
+    val pattern = try {
+      Pattern.compile(r.toString)
+    } catch {
+      case e: PatternSyntaxException =>
+        throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
+    }
+    (pattern, r)
+  }
 }

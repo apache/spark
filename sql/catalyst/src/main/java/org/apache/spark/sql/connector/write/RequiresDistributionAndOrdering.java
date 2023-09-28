@@ -66,11 +66,32 @@ public interface RequiresDistributionAndOrdering extends Write {
    * <p>
    * Note that Spark doesn't support the number of partitions on {@link UnspecifiedDistribution},
    * the query will fail if the number of partitions are provided but the distribution is
-   * unspecified.
+   * unspecified. Data sources may either request a particular number of partitions or
+   * a preferred partition size via {@link #advisoryPartitionSizeInBytes}, not both.
    *
    * @return the required number of partitions, any value less than 1 mean no requirement.
    */
   default int requiredNumPartitions() { return 0; }
+
+  /**
+   * Returns the advisory (not guaranteed) shuffle partition size in bytes for this write.
+   * <p>
+   * Implementations may override this to indicate the preferable partition size in shuffles
+   * performed to satisfy the requested distribution. Note that Spark doesn't support setting
+   * the advisory partition size for {@link UnspecifiedDistribution}, the query will fail if
+   * the advisory partition size is set but the distribution is unspecified. Data sources may
+   * either request a particular number of partitions via {@link #requiredNumPartitions()} or
+   * a preferred partition size, not both.
+   * <p>
+   * Data sources should be careful with large advisory sizes as it will impact the writing
+   * parallelism and may degrade the overall job performance.
+   * <p>
+   * Note this value only acts like a guidance and Spark does not guarantee the actual and advisory
+   * shuffle partition sizes will match. Ignored if the adaptive execution is disabled.
+   *
+   * @return the advisory partition size, any value less than 1 means no preference.
+   */
+  default long advisoryPartitionSizeInBytes() { return 0; }
 
   /**
    * Returns the ordering required by this write.

@@ -1,0 +1,5 @@
+Project [a_b#0]
++- Project [a_b#0]
+   +- Aggregate [a_b#0], [a_b#0, pivotfirst(__pivot_col#0, count(1) AS count#0L, 0, 0) AS __pivot_count(1) AS count AS `count(1) AS count`#0]
+      +- Aggregate [CASE WHEN isnull(a#0) THEN null ELSE cast(a#0 as string) END, CASE WHEN isnull(b#0) THEN null ELSE regexp_replace(cast(b#0 as string), `, , 1) END], [CASE WHEN isnull(a#0) THEN null ELSE cast(a#0 as string) END AS a_b#0, CASE WHEN isnull(b#0) THEN null ELSE regexp_replace(cast(b#0 as string), `, , 1) END AS __pivot_col#0, count(1) AS count(1) AS count#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0]

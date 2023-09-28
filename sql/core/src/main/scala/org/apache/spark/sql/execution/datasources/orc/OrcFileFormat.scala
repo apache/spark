@@ -35,6 +35,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -140,12 +141,10 @@ class OrcFileFormat
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
     val enableVectorizedReader = sqlConf.orcVectorizedReaderEnabled &&
-      options.get(FileFormat.OPTION_RETURNING_BATCH)
-        .getOrElse {
-          throw new IllegalArgumentException(
-            "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
-              "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false.")
-        }
+      options.getOrElse(FileFormat.OPTION_RETURNING_BATCH,
+        throw new IllegalArgumentException(
+          "OPTION_RETURNING_BATCH should always be set for OrcFileFormat. " +
+            "To workaround this issue, set spark.sql.orc.enableVectorizedReader=false."))
         .equals("true")
     if (enableVectorizedReader) {
       // If the passed option said that we are to return batches, we need to also be able to
@@ -221,7 +220,7 @@ class OrcFileFormat
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
-          val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+          val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
           val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
 

@@ -19,7 +19,7 @@ from distutils.version import LooseVersion
 
 import matplotlib as mat
 import numpy as np
-from matplotlib.axes._base import _process_plot_format
+from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
 
@@ -749,7 +749,6 @@ def plot_frame(
     yerr=None,
     xerr=None,
     secondary_y=False,
-    sort_columns=False,
     **kwds,
 ):
     """
@@ -835,8 +834,6 @@ def plot_frame(
     mark_right : boolean, default True
         When using a secondary_y axis, automatically mark the column
         labels with "(right)" in the legend
-    sort_columns: bool, default is False
-        When True, will sort values on plots.
     **kwds : keywords
         Options to pass to matplotlib plotting method
 
@@ -852,7 +849,6 @@ def plot_frame(
       for bar plot layout by `position` keyword.
       From 0 (left/bottom-end) to 1 (right/top-end). Default is 0.5 (center)
     """
-
     return _plot(
         data,
         kind=kind,
@@ -883,7 +879,6 @@ def plot_frame(
         sharey=sharey,
         secondary_y=secondary_y,
         layout=layout,
-        sort_columns=sort_columns,
         **kwds,
     )
 
@@ -905,7 +900,6 @@ def _plot(data, x=None, y=None, subplots=False, ax=None, kind="line", **kwds):
     if kind in ("scatter", "hexbin"):
         plot_obj = klass(data, x, y, subplots=subplots, ax=ax, kind=kind, **kwds)
     else:
-
         # check data type and do preprocess before applying plot
         if isinstance(data, DataFrame):
             if x is not None:

@@ -85,7 +85,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         java_model = java_class(df._jdf)
         super(BinaryClassificationMetrics, self).__init__(java_model)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def areaUnderROC(self) -> float:
         """
@@ -94,7 +94,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         """
         return self.call("areaUnderROC")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def areaUnderPR(self) -> float:
         """
@@ -161,7 +161,7 @@ class RegressionMetrics(JavaModelWrapper):
         java_model = java_class(df._jdf)
         super(RegressionMetrics, self).__init__(java_model)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def explainedVariance(self) -> float:
         r"""
@@ -170,7 +170,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("explainedVariance")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def meanAbsoluteError(self) -> float:
         """
@@ -179,7 +179,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("meanAbsoluteError")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def meanSquaredError(self) -> float:
         """
@@ -188,7 +188,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("meanSquaredError")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def rootMeanSquaredError(self) -> float:
         """
@@ -197,7 +197,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("rootMeanSquaredError")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def r2(self) -> float:
         """
@@ -348,7 +348,7 @@ class MulticlassMetrics(JavaModelWrapper):
         else:
             return self.call("fMeasure", label, beta)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def accuracy(self) -> float:
         """
@@ -357,7 +357,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("accuracy")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weightedTruePositiveRate(self) -> float:
         """
@@ -366,7 +366,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedTruePositiveRate")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weightedFalsePositiveRate(self) -> float:
         """
@@ -374,7 +374,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedFalsePositiveRate")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weightedRecall(self) -> float:
         """
@@ -383,7 +383,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedRecall")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weightedPrecision(self) -> float:
         """
@@ -482,7 +482,7 @@ class RankingMetrics(JavaModelWrapper, Generic[T]):
         """
         return self.call("precisionAt", int(k))
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def meanAveragePrecision(self) -> float:
         """
@@ -614,7 +614,7 @@ class MultilabelMetrics(JavaModelWrapper):
         else:
             return self.call("f1Measure", float(label))
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def microPrecision(self) -> float:
         """
@@ -623,7 +623,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microPrecision")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def microRecall(self) -> float:
         """
@@ -632,7 +632,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microRecall")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def microF1Measure(self) -> float:
         """
@@ -641,7 +641,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microF1Measure")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def hammingLoss(self) -> float:
         """
@@ -649,7 +649,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("hammingLoss")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def subsetAccuracy(self) -> float:
         """
@@ -658,7 +658,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("subsetAccuracy")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def accuracy(self) -> float:
         """

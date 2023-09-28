@@ -1,0 +1,2 @@
+Project [convert_timezone(current_timezone(), "Asia/Urumqi", cast(t#0 as timestamp_ntz)) AS convert_timezone(current_timezone(), "Asia/Urumqi", t)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

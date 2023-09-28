@@ -395,12 +395,9 @@ case class JsonTuple(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
@@ -666,7 +663,7 @@ case class JsonToStructs(
        {"[1]":{"b":2}}
       > SELECT _FUNC_(map('a', 1));
        {"a":1}
-      > SELECT _FUNC_(array((map('a', 1))));
+      > SELECT _FUNC_(array(map('a', 1)));
        [{"a":1}]
   """,
   group = "json_funcs",
@@ -803,7 +800,7 @@ case class SchemaOfJson(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "json",
+          "inputName" -> toSQLId("json"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
     } else {

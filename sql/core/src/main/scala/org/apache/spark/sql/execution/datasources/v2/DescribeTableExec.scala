@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.IdentityTransform
 
@@ -68,6 +68,11 @@ case class DescribeTableExec(
         case (key, value) => key + "=" + value
       }.mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
+
+    // If any columns have default values, append them to the result.
+    ResolveDefaultColumns.getDescribeMetadata(table.schema).foreach { row =>
+      rows += toCatalystRow(row._1, row._2, row._3)
+    }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {

@@ -56,7 +56,7 @@ public class KVTypeInfo {
       KVIndex idx = m.getAnnotation(KVIndex.class);
       if (idx != null) {
         checkIndex(idx, indices);
-        Preconditions.checkArgument(m.getParameterTypes().length == 0,
+        Preconditions.checkArgument(m.getParameterCount() == 0,
           "Annotated method %s::%s should not have any parameters.", type.getName(), m.getName());
         m.setAccessible(true);
         indices.put(idx.value(), idx);

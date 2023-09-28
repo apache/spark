@@ -29,7 +29,7 @@ public final class SpecializedGettersReader {
       DataType dataType,
       boolean handleNull,
       boolean handleUserDefinedType) {
-    PhysicalDataType physicalDataType = dataType.physicalDataType();
+    PhysicalDataType physicalDataType = PhysicalDataType.apply(dataType);
     if (handleNull && (obj.isNullAt(ordinal) || physicalDataType instanceof PhysicalNullType)) {
       return null;
     }
