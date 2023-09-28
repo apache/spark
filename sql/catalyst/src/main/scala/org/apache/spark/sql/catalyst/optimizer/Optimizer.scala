@@ -690,7 +690,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET, joins, Generate and Python UDFs.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -773,6 +773,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
+    case LocalLimit(exp, g: Generate) if g.outer =>
+      LocalLimit(exp, g.copy(child = maybePushLocalLimit(exp, g.child)))
+    case LocalLimit(exp, p @ Project(_, g: Generate)) if g.outer =>
+      LocalLimit(exp, p.copy(child = g.copy(child = maybePushLocalLimit(exp, g.child))))
     // Push down limits through Python UDFs.
     case LocalLimit(le, udf: BatchEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))

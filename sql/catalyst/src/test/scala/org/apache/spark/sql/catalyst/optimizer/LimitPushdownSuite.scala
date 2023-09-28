@@ -21,10 +21,11 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, Explode}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.IntegerType
 
 class LimitPushdownSuite extends PlanTest {
 
@@ -45,6 +46,9 @@ class LimitPushdownSuite extends PlanTest {
   private val testRelation2 = LocalRelation.fromExternalRows(
     Seq("d".attr.int, "e".attr.int, "f".attr.int),
     1.to(6).map(_ => Row(1, 2, 3)))
+  private val arrayRelation = LocalRelation.fromExternalRows(
+    Seq("a".attr.int, "b".attr.array(IntegerType)),
+    1.to(6).map(i => Row(i, Array(1, i))))
   private val x = testRelation.subquery("x")
   private val y = testRelation.subquery("y")
 
@@ -351,5 +355,32 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
+  }
+
+  test("Push down limit through generate") {
+    comparePlans(
+      Optimize.execute(arrayRelation.generate(Explode($"b"), outer = true).limit(2).analyze),
+      LocalLimit(2, arrayRelation).generate(Explode($"b"), outer = true).limit(2).analyze)
+
+    // Do not push down if outer = false
+    val originQuery = arrayRelation.generate(Explode($"b"), outer = false).limit(2).analyze
+    comparePlans(
+      Optimize.execute(originQuery),
+      originQuery)
+  }
+
+  test("Push down limit through generate and join") {
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originQuery = arrayRelation.as("x").join(y, LeftOuter, condition)
+      .generate(Explode($"x.b"), outer = true)
+      .limit(2)
+    val correctAnswer =
+      LocalLimit(2, LocalLimit(2, arrayRelation).as("x").join(y, LeftOuter, condition))
+      .generate(Explode($"x.b"), outer = true)
+      .limit(2)
+
+    comparePlans(
+      Optimize.execute(originQuery.analyze),
+      correctAnswer.analyze)
   }
 }
