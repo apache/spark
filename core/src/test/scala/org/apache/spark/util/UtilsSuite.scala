@@ -1290,6 +1290,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     }
   }
 
+  test("load extensions when ClassNotFound") {
+    val conf = new SparkConf(false)
+    val instances = Utils.loadExtensions(classOf[Object], Seq("NotExistedClass"), conf)
+    assert(instances.size === 0)
+  }
+
   test("check Kubernetes master URL") {
     val k8sMasterURLHttps = Utils.checkAndGetK8sMasterUrl("k8s://https://host:port")
     assert(k8sMasterURLHttps === "k8s://https://host:port")

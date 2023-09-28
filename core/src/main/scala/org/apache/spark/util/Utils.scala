@@ -2840,6 +2840,10 @@ private[spark] object Utils
 
             case cause => throw cause
           }
+
+        case e: ClassNotFoundException =>
+          logError(s"Extension $name class not found.")
+          None
       }
     }
   }
