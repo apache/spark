@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig

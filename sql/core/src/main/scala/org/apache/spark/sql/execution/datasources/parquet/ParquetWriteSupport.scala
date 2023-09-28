@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util
 
-import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.ParquetProperties

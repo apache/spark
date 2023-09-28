@@ -20,8 +20,8 @@ package org.apache.spark.scheduler.dynalloc
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors

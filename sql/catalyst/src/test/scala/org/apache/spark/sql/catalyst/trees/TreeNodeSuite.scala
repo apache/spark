@@ -864,35 +864,6 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(getStateful(withNestedStatefulBefore) ne getStateful(withNestedStatefulAfter))
   }
 
-  object MalformedClassObject extends Serializable {
-    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
-      override protected def withNewChildInternal(newChild: Expression): Expression =
-        copy(child = newChild)
-    }
-  }
-
-  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
-    val testTriggersExpectedError = try {
-      classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
-      false
-    } catch {
-      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
-        true
-      case ex: Throwable => throw ex
-    }
-    // This test case only applies on older JDK versions (e.g. JDK8u), and doesn't trigger the
-    // issue on newer JDK versions (e.g. JDK11u).
-    assume(testTriggersExpectedError, "the test case didn't trigger malformed class name error")
-
-    val expr = MalformedClassObject.MalformedNameExpression(Literal(1))
-    try {
-      expr.nodeName
-    } catch {
-      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
-        fail("TreeNode.nodeName should not throw malformed class name error")
-    }
-  }
-
   test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
     case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LeafNode {
       val output: Seq[Attribute] = Nil

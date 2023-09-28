@@ -19,8 +19,8 @@ package org.apache.spark.streaming.util
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
