@@ -102,7 +102,7 @@ class SparkContext:
     Parameters
     ----------
     master : str, optional
-        Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+        Cluster URL to connect to (e.g. spark://host:port, local[4]).
     appName : str, optional
         A name for your job, to display on the cluster web UI.
     sparkHome : str, optional
@@ -1908,7 +1908,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listFiles()
             )
         )
@@ -2036,7 +2036,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listArchives()
             )
         )

@@ -22,11 +22,11 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.util.concurrent.ThreadLocalRandom
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.classTag

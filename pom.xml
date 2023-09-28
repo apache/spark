@@ -417,13 +417,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.github.sbt</groupId>
-      <artifactId>junit-interface</artifactId>
+      <groupId>net.aichler</groupId>
+      <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -826,7 +826,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.45</version>
+        <version>1.0.0</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1182,7 +1182,7 @@
       </dependency>
       <dependency>
         <groupId>org.jmock</groupId>
-        <artifactId>jmock-junit4</artifactId>
+        <artifactId>jmock-junit5</artifactId>
         <scope>test</scope>
         <version>2.12.0</version>
       </dependency>
@@ -1193,15 +1193,15 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.13.2</version>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>5.9.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.github.sbt</groupId>
-        <artifactId>junit-interface</artifactId>
-        <version>0.13.3</version>
+        <groupId>net.aichler</groupId>
+        <artifactId>jupiter-interface</artifactId>
+        <version>0.11.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1435,6 +1435,10 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -3591,13 +3595,6 @@
       <modules>
         <module>resource-managers/yarn</module>
         <module>common/network-yarn</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>mesos</id>
-      <modules>
-        <module>resource-managers/mesos</module>
       </modules>
     </profile>
 

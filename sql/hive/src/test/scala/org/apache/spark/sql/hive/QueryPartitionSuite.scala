@@ -65,16 +65,8 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
     }
   }
 
-  test("SPARK-5068: query data when path doesn't exist") {
-    withSQLConf(SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "true") {
-      queryWhenPathNotExist()
-    }
-  }
-
-  test("Replace spark.sql.hive.verifyPartitionPath by spark.files.ignoreMissingFiles") {
-    withSQLConf(
-      SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "false",
-      SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+  test("Replace spark.sql.hive.verifyPartitionPath by spark.sql.files.ignoreMissingFiles") {
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
       queryWhenPathNotExist()
     }
   }

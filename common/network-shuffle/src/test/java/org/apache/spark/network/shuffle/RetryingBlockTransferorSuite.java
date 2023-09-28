@@ -30,13 +30,12 @@ import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -60,7 +59,7 @@ public class RetryingBlockTransferorSuite {
 
   private static final int MAX_RETRIES = 2;
 
-  @Before
+  @BeforeEach
   public void initMap() {
     configMap = new HashMap<String, String>() {{
       put("spark.shuffle.io.maxRetries", Integer.toString(MAX_RETRIES));

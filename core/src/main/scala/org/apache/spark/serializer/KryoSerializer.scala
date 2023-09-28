@@ -23,8 +23,8 @@ import java.nio.ByteBuffer
 import java.util.Locale
 import javax.annotation.Nullable
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Properties
 import scala.util.control.NonFatal
@@ -733,9 +733,9 @@ private class JavaIterableWrapperSerializer
 }
 
 private object JavaIterableWrapperSerializer extends Logging {
-  // The class returned by JavaConverters.asJava
+  // The class returned by CollectionConverters.asJava
   // (scala.collection.convert.Wrappers$IterableWrapper).
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
   val wrapperClass = Seq(1).asJava.getClass
 
   // Get the underlying method so we can use it to get the Scala collection for serialization.

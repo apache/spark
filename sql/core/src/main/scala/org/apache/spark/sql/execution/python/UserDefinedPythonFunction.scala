@@ -23,8 +23,8 @@ import java.nio.channels.SelectionKey
 import java.nio.charset.StandardCharsets
 import java.util.HashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 

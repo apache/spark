@@ -21,11 +21,11 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import com.google.common.collect.ImmutableMap;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -43,7 +43,7 @@ public class ExternalShuffleSecuritySuite {
   TransportServer server;
   TransportContext transportContext;
 
-  @Before
+  @BeforeEach
   public void beforeEach() throws IOException {
     transportContext = new TransportContext(conf, new ExternalBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,
@@ -51,7 +51,7 @@ public class ExternalShuffleSecuritySuite {
     this.server = transportContext.createServer(Arrays.asList(bootstrap));
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     if (server != null) {
       server.close();
@@ -72,14 +72,14 @@ public class ExternalShuffleSecuritySuite {
   public void testBadAppId() {
     Exception e = assertThrows(Exception.class,
       () -> validate("wrong-app-id", "secret", false));
-    assertTrue(e.getMessage(), e.getMessage().contains("Wrong appId!"));
+    assertTrue(e.getMessage().contains("Wrong appId!"), e.getMessage());
   }
 
   @Test
   public void testBadSecret() {
     Exception e = assertThrows(Exception.class,
       () -> validate("my-app-id", "bad-secret", false));
-    assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
+    assertTrue(e.getMessage().contains("Mismatched response"), e.getMessage());
   }
 
   @Test

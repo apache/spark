@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.Files
 
 import scala.annotation.meta.getter
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
