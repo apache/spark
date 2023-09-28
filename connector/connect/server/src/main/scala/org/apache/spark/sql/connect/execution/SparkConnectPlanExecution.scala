@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString

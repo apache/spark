@@ -20,9 +20,9 @@ package test.org.apache.spark.sql.streaming;
 import java.io.File;
 import java.util.concurrent.TimeoutException;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
@@ -36,13 +36,13 @@ public class JavaDataStreamReaderWriterSuite {
   private SparkSession spark;
   private String input;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
     input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     try {
       Utils.deleteRecursively(new File(input));

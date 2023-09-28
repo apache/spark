@@ -338,8 +338,7 @@ Time/date components
    DatetimeIndex.minute
    DatetimeIndex.second
    DatetimeIndex.microsecond
-   DatetimeIndex.week
-   DatetimeIndex.weekofyear
+   DatetimeIndex.isocalendar
    DatetimeIndex.dayofweek
    DatetimeIndex.day_of_week
    DatetimeIndex.weekday

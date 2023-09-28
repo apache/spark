@@ -118,7 +118,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     Seq("json", "parquet").foreach { testFileFormat =>
       test(s"metadata struct ($testFileFormat): " + testName) {
         withTempDir { dir =>
-          import scala.collection.JavaConverters._
+          import scala.jdk.CollectionConverters._
 
           // 1. create df0 and df1 and save under /data/f0 and /data/f1
           val df0 = spark.createDataFrame(data0.asJava, fileSchema)

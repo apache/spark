@@ -808,7 +808,7 @@ message FetchErrorDetailsResponse {
     string method_name = 2;
 
     // The name of the file containing the execution point.
-    string file_name = 3;
+    optional string file_name = 3;
 
     // The line number of the source line containing the execution point.
     int32 line_number = 4;

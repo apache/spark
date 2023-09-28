@@ -23,7 +23,7 @@ import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -255,7 +255,7 @@ private[client] sealed abstract class Shim {
   }
 }
 
-private[client] class Shim_v0_12 extends Shim with Logging {
+private class Shim_v0_12 extends Shim with Logging {
   // See HIVE-12224, HOLD_DDLTIME was broken as soon as it landed
   protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
@@ -698,7 +698,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 }
 
-private[client] class Shim_v0_13 extends Shim_v0_12 {
+private class Shim_v0_13 extends Shim_v0_12 {
 
   private lazy val setCurrentSessionStateMethod =
     findStaticMethod(
@@ -1222,7 +1222,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 }
 
-private[client] class Shim_v0_14 extends Shim_v0_13 {
+private class Shim_v0_14 extends Shim_v0_13 {
 
   // true if this is an ACID operation
   protected lazy val isAcid = JBoolean.FALSE
@@ -1341,9 +1341,9 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
 
 }
 
-private[client] class Shim_v1_0 extends Shim_v0_14
+private class Shim_v1_0 extends Shim_v0_14
 
-private[client] class Shim_v1_1 extends Shim_v1_0 {
+private class Shim_v1_1 extends Shim_v1_0 {
 
   // throws an exception if the index does not exist
   protected lazy val throwExceptionInDropIndex = JBoolean.TRUE
@@ -1366,7 +1366,7 @@ private[client] class Shim_v1_1 extends Shim_v1_0 {
 
 }
 
-private[client] class Shim_v1_2 extends Shim_v1_1 {
+private class Shim_v1_2 extends Shim_v1_1 {
 
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L

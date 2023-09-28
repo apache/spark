@@ -28,8 +28,8 @@ import java.util.jar.JarInputStream
 import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
 import org.apache.commons.lang3.StringUtils
@@ -60,7 +60,7 @@ import org.apache.spark.util._
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone and Mesos cluster modes.
+ * The latter two operations are currently supported only for standalone cluster mode.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -249,11 +249,10 @@ private[spark] class SparkSubmit extends Logging {
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
-          case m if m.startsWith("mesos") => MESOS
           case m if m.startsWith("k8s") => KUBERNETES
           case m if m.startsWith("local") => LOCAL
           case _ =>
-            error("Master must either be yarn or start with spark, mesos, k8s, or local")
+            error("Master must either be yarn or start with spark, k8s, or local")
             -1
         }
       case None => LOCAL // default master or remote mode.
@@ -315,7 +314,6 @@ private[spark] class SparkSubmit extends Logging {
       case _ =>
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-    val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
@@ -324,9 +322,9 @@ private[spark] class SparkSubmit extends Logging {
     val isCustomClasspathInClusterModeDisallowed =
       !sparkConf.get(ALLOW_CUSTOM_CLASSPATH_BY_PROXY_USER_IN_CLUSTER_MODE) &&
       args.proxyUser != null &&
-      (isYarnCluster || isMesosCluster || isStandAloneCluster || isKubernetesCluster)
+      (isYarnCluster || isStandAloneCluster || isKubernetesCluster)
 
-    if (!isMesosCluster && !isStandAloneCluster) {
+    if (!isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
       val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
@@ -371,10 +369,8 @@ private[spark] class SparkSubmit extends Logging {
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
 
-    // Kerberos is not supported in standalone mode, and keytab support is not yet available
-    // in Mesos cluster mode.
+    // Kerberos is not supported in standalone mode
     if (clusterManager != STANDALONE
-        && !isMesosCluster
         && args.principal != null
         && args.keytab != null) {
       // If client mode, make sure the keytab is just a local path.
@@ -594,11 +590,6 @@ private[spark] class SparkSubmit extends Logging {
       error("Distributing R packages with standalone cluster is not supported.")
     }
 
-    // TODO: Support distributing R packages with mesos cluster
-    if (args.isR && clusterManager == MESOS && !RUtils.rPackages.isEmpty) {
-      error("Distributing R packages with mesos cluster is not supported.")
-    }
-
     // If we're running an R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
@@ -656,13 +647,13 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
 
       // Propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, STANDALONE | MESOS | KUBERNETES,
+      OptionAssigner(args.packages, STANDALONE | KUBERNETES,
         CLUSTER, confKey = JAR_PACKAGES.key),
-      OptionAssigner(args.repositories, STANDALONE | MESOS | KUBERNETES,
+      OptionAssigner(args.repositories, STANDALONE | KUBERNETES,
         CLUSTER, confKey = JAR_REPOSITORIES.key),
-      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
+      OptionAssigner(args.ivyRepoPath, STANDALONE | KUBERNETES,
         CLUSTER, confKey = JAR_IVY_REPO_PATH.key),
-      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,
+      OptionAssigner(args.packagesExclusions, STANDALONE | KUBERNETES,
         CLUSTER, confKey = JAR_PACKAGES_EXCLUSIONS.key),
 
       // Yarn only
@@ -681,22 +672,22 @@ private[spark] class SparkSubmit extends Logging {
         confKey = EXECUTOR_INSTANCES.key),
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_CORES.key),
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorMemory, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_MEMORY.key),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.totalExecutorCores, STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.files, LOCAL | STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = FILES.key),
-      OptionAssigner(args.archives, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.archives, LOCAL | STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = ARCHIVES.key),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
-      OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.jars, STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = JARS.key),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverMemory, STANDALONE | YARN | KUBERNETES, CLUSTER,
         confKey = DRIVER_MEMORY.key),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | YARN | KUBERNETES, CLUSTER,
         confKey = DRIVER_CORES.key),
-      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.supervise.toString, STANDALONE, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = JAR_IVY_REPO_PATH.key),
 
@@ -790,8 +781,7 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    if ((clusterManager == MESOS || clusterManager == KUBERNETES)
-       && UserGroupInformation.isSecurityEnabled) {
+    if (clusterManager == KUBERNETES && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 
@@ -813,26 +803,6 @@ private[spark] class SparkSubmit extends Logging {
       }
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
-      }
-    }
-
-    if (isMesosCluster) {
-      assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
-      childMainClass = REST_CLUSTER_SUBMIT_CLASS
-      if (args.isPython) {
-        // Second argument is main class
-        childArgs += (args.primaryResource, "")
-        if (args.pyFiles != null) {
-          sparkConf.set(SUBMIT_PYTHON_FILES, args.pyFiles.split(",").toSeq)
-        }
-      } else if (args.isR) {
-        // Second argument is main class
-        childArgs += (args.primaryResource, "")
-      } else {
-        childArgs += (args.primaryResource, args.mainClass)
-      }
-      if (args.childArgs != null) {
-        childArgs ++= args.childArgs
       }
     }
 
@@ -897,7 +867,7 @@ private[spark] class SparkSubmit extends Logging {
     val formattedPyFiles = if (deployMode != CLUSTER) {
       PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
     } else {
-      // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
+      // Ignoring formatting python path in yarn cluster mode, these two modes
       // support dealing with remote python files, they could distribute and add python files
       // locally.
       resolvedPyFiles
@@ -926,7 +896,7 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Kubernetes
   // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
@@ -1066,10 +1036,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
   // Cluster managers
   private val YARN = 1
   private val STANDALONE = 2
-  private val MESOS = 4
   private val LOCAL = 8
   private val KUBERNETES = 16
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | KUBERNETES
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | LOCAL | KUBERNETES
 
   // Deploy modes
   private val CLIENT = 1

@@ -17,15 +17,15 @@
 
 package org.apache.spark.network.shuffle;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class ShuffleIndexInformationSuite {
   private static final String sortBlock0 = "tiny block";
@@ -34,7 +34,7 @@ public class ShuffleIndexInformationSuite {
   private static TestShuffleDataContext dataContext;
   private static String blockId;
 
-  @BeforeClass
+  @BeforeAll
   public static void before() throws IOException {
     dataContext = new TestShuffleDataContext(2, 5);
 
@@ -45,7 +45,7 @@ public class ShuffleIndexInformationSuite {
         sortBlock1.getBytes(StandardCharsets.UTF_8)});
   }
 
-  @AfterClass
+  @AfterAll
   public static void afterAll() {
     dataContext.cleanup();
   }
