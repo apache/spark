@@ -150,7 +150,8 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskInfo, g, includeAccumulables = true)
+    // SPARK-42205: don't log accumulables in "task getting result" events:
+    taskInfoToJson(taskInfo, g, includeAccumulables = false)
     g.writeEndObject()
   }
 

@@ -882,7 +882,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(jobFailedEvent, exJobFailureExpectedJson)
   }
 
-  test("SPARK-42205: don't log accumulables in start events") {
+  test("SPARK-42205: don't log accumulables in start and getting result events") {
     // Simulate case where a job / stage / task completes before the event logging
     // listener logs the event. In this case, the TaskInfo / StageInfo will have
     // accumulables from the finished task / stage, but we want to skip logging
@@ -897,11 +897,14 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
     val taskStart = SparkListenerTaskStart(1, 0, taskInfo)
     val jobStart = SparkListenerJobStart(10, jobSubmissionTime, Seq(stageInfo), properties)
+    val gettingResult = SparkListenerTaskGettingResult(taskInfo)
 
     assert(
       stageSubmittedFromJson(sparkEventToJsonString(stageSubmitted)).stageInfo.accumulables.isEmpty)
     assert(
       taskStartFromJson(sparkEventToJsonString(taskStart)).taskInfo.accumulables.isEmpty)
+    assert(
+      taskGettingResultFromJson(sparkEventToJsonString(gettingResult)).taskInfo.accumulables.isEmpty)
 
     // Deliberately not fixed for job starts because a job might legitimately reference
     // stages that have completed even before the job start event is emitted.
