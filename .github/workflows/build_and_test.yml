@@ -181,8 +181,8 @@ jobs:
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- extended tests"
           - modules: sql
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
+            java: ${{ needs.configure-jobs.outputs.java }}
+            hadoop: ${{ needs.configure-jobs.outputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowSQLTest
             comment: "- slow tests"
