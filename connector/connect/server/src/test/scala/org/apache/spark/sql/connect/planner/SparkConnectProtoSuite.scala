@@ -1067,9 +1067,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
-    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan match {
+    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan transform  {
       case cm: CollectMetrics => cm.copy(dataframeId = 0)
-      case other => other
     }
     val connectAnalyzed = analyzePlan(transform(connectPlan))
     comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
