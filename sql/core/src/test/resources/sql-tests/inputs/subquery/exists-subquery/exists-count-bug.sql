@@ -1,6 +1,6 @@
-create or replace view t1(c1, c2) as values (0, 1), (1, 2);
-create or replace view t2(c1, c2) as values (0, 2), (0, 3);
-create or replace view t3(c1, c2) as values (0, 3), (1, 4), (2, 5);
+create temporary view t1(c1, c2) as values (0, 1), (1, 2);
+create temporary view t2(c1, c2) as values (0, 2), (0, 3);
+create temporary view t3(c1, c2) as values (0, 3), (1, 4), (2, 5);
 
 select * from t1 where exists (select count(*) from t2 where t2.c1 = t1.c1);
 
