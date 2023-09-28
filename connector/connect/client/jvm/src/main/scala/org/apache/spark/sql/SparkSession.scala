@@ -786,9 +786,9 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    // Initialize the connection string of the Spark client builder from SPARK_REMOTE by default,
-    // if it exists. The connection string can be overridden using the remote() function,
-    // as it takes precedence over the SPARK_REMOTE environment variable.
+    // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
+    // by default, if it exists. The connection string can be overridden using
+    // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
