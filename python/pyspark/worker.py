@@ -50,8 +50,15 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
 )
-from pyspark.sql.pandas.types import _create_row, to_arrow_type
-from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import (
+    BinaryType,
+    Row,
+    StringType,
+    StructType,
+    _create_row,
+    _parse_datatype_json_string,
+)
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
