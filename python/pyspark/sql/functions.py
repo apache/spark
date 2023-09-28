@@ -11740,13 +11740,13 @@ def create_map(
     >>> df = spark.createDataFrame([("Alice", 2, "female"),
     ...                             ("Bob", 5, "male")], ("name", "age", "gender"))
     >>> df.select(sf.create_map(sf.lit('name'), df['name'],
-    ...                         sf.lit('age'), df['age'])).show(truncate=False)
-    +-------------------------+
-    |map(name, name, age, age)|
-    +-------------------------+
-    |{name -> Alice, age -> 2}|
-    |{name -> Bob, age -> 5}  |
-    +-------------------------+
+    ...                         sf.lit('gender'), df['gender'])).show(truncate=False)
+    +---------------------------------+
+    |map(name, name, gender, gender)  |
+    +---------------------------------+
+    |{name -> Alice, gender -> female}|
+    |{name -> Bob, gender -> male}    |
+    +---------------------------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
