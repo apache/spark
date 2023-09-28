@@ -20,9 +20,9 @@ package org.apache.spark.deploy
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._

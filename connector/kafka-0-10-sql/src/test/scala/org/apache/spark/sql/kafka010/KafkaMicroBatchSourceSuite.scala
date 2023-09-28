@@ -24,9 +24,9 @@ import java.util.{Locale, Optional}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.commons.io.FileUtils

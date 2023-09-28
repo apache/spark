@@ -24,11 +24,11 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -132,7 +132,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
@@ -142,7 +142,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
    * @param sparkHome Location where Spark is installed on cluster nodes.
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
@@ -164,7 +164,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
    */
   private[spark] def this(master: String, appName: String) =
@@ -173,7 +173,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
@@ -183,7 +183,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
    * @param sparkHome Location where Spark is installed on cluster nodes.
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
@@ -352,7 +352,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * (i.e.
    *  in case of local spark app something like 'local-1433865536131'
    *  in case of YARN something like 'application_1433865536131_34483'
-   *  in case of MESOS something like 'driver-20170926223339-0001'
    * )
    */
   def applicationId: String = _applicationId
@@ -557,9 +556,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(System.getenv("SPARK_PREPEND_CLASSES")).foreach { v =>
       executorEnvs("SPARK_PREPEND_CLASSES") = v
     }
-    // The Mesos scheduler backend relies on this environment variable to set executor memory.
-    // TODO: Set this only in the Mesos scheduler.
-    executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 

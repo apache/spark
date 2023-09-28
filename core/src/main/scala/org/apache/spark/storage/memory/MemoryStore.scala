@@ -21,9 +21,9 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
