@@ -148,30 +148,6 @@ class ReplSuite extends SparkFunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
 
-  if (System.getenv("MESOS_NATIVE_JAVA_LIBRARY") != null) {
-    test("running on Mesos") {
-      val output = runInterpreter("localquiet",
-        """
-          |var v = 7
-          |def getV() = v
-          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-          |v = 10
-          |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-          |var array = new Array[Int](5)
-          |val broadcastArray = sc.broadcast(array)
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-          |array(0) = 5
-          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-        """.stripMargin)
-      assertDoesNotContain("error:", output)
-      assertDoesNotContain("Exception", output)
-      assertContains("res0: Int = 70", output)
-      assertContains("res1: Int = 100", output)
-      assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-      assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    }
-  }
-
   test("line wrapper only initialized once when used as encoder outer scope") {
     val output = runInterpreter("local",
       """
