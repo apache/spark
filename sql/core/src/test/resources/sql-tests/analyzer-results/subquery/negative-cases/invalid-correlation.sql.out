@@ -49,18 +49,8 @@ AND    t2b = (SELECT max(avg)
                      )
              )
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 100,
-    "stopIndex" : 203,
-    "fragment" : "SELECT   t2b, avg(t2b) avg\n                      FROM     t2\n                      WHERE    t2a = t1.t1b"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

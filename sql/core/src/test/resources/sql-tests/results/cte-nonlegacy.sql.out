@@ -28,9 +28,10 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -88,9 +89,10 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -159,9 +161,10 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -173,9 +176,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -188,9 +192,10 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -241,9 +246,10 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

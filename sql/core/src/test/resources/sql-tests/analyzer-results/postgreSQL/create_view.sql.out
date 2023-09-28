@@ -829,33 +829,28 @@ CREATE   VIEW  pubview AS SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`pubview`, SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f), false, false, PersistedView, true
-   +- Project [a#x, b#x]
-      +- Filter (((a#x >= scalar-subquery#x []) AND (a#x <= scalar-subquery#x [])) AND exists#x [])
-         :  :- Project [d#x]
-         :  :  +- Filter (c#x = 1)
-         :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl2
-         :  :        +- Relation spark_catalog.testviewschm2.tbl2[c#x,d#x] parquet
-         :  :- Project [e#x]
-         :  :  +- Filter (f#x = 2)
-         :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl3
-         :  :        +- Relation spark_catalog.testviewschm2.tbl3[e#x,f#x] parquet
-         :  +- Project [g#x]
-         :     +- Join LeftOuter, (h#x = f#x)
-         :        :- SubqueryAlias spark_catalog.testviewschm2.tbl4
-         :        :  +- Relation spark_catalog.testviewschm2.tbl4[g#x,h#x] parquet
-         :        +- SubqueryAlias spark_catalog.testviewschm2.tbl3
-         :           +- Relation spark_catalog.testviewschm2.tbl3[e#x,f#x] parquet
-         +- SubqueryAlias spark_catalog.testviewschm2.tbl1
-            +- Relation spark_catalog.testviewschm2.tbl1[a#x,b#x] parquet
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 DESC TABLE EXTENDED pubview
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`testviewschm2`.`pubview`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`pubview`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 27,
+    "fragment" : "pubview"
+  } ]
+}
 
 
 -- !query
@@ -864,40 +859,28 @@ BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`mytempview`, SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j), false, false, PersistedView, true
-   +- Project [a#x, b#x]
-      +- Filter ((((a#x >= scalar-subquery#x []) AND (a#x <= scalar-subquery#x [])) AND exists#x []) AND NOT exists#x [])
-         :  :- Project [d#x]
-         :  :  +- Filter (c#x = 1)
-         :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl2
-         :  :        +- Relation spark_catalog.testviewschm2.tbl2[c#x,d#x] parquet
-         :  :- Project [e#x]
-         :  :  +- Filter (f#x = 2)
-         :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl3
-         :  :        +- Relation spark_catalog.testviewschm2.tbl3[e#x,f#x] parquet
-         :  :- Project [g#x]
-         :  :  +- Join LeftOuter, (h#x = f#x)
-         :  :     :- SubqueryAlias spark_catalog.testviewschm2.tbl4
-         :  :     :  +- Relation spark_catalog.testviewschm2.tbl4[g#x,h#x] parquet
-         :  :     +- SubqueryAlias spark_catalog.testviewschm2.tbl3
-         :  :        +- Relation spark_catalog.testviewschm2.tbl3[e#x,f#x] parquet
-         :  +- Project [g#x]
-         :     +- Join LeftOuter, (h#x = j#x)
-         :        :- SubqueryAlias spark_catalog.testviewschm2.tbl4
-         :        :  +- Relation spark_catalog.testviewschm2.tbl4[g#x,h#x] parquet
-         :        +- SubqueryAlias spark_catalog.testviewschm2.tmptbl
-         :           +- Relation spark_catalog.testviewschm2.tmptbl[i#x,j#x] parquet
-         +- SubqueryAlias spark_catalog.testviewschm2.tbl1
-            +- Relation spark_catalog.testviewschm2.tbl1[a#x,b#x] parquet
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 DESC TABLE EXTENDED mytempview
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`testviewschm2`.`mytempview`, true, [col_name#x, data_type#x, comment#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`mytempview`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 30,
+    "fragment" : "mytempview"
+  } ]
+}
 
 
 -- !query

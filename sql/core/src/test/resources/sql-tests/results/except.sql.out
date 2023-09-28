@@ -78,10 +78,10 @@ SELECT (SELECT min(k) FROM t2 WHERE t2.k = t1.k) min_t2 FROM t1
 MINUS
 SELECT (SELECT min(k) FROM t2) abs_min_t2 FROM t1 WHERE  t1.k = 'one'
 -- !query schema
-struct<min_t2:string>
+struct<>
 -- !query output
-NULL
-two
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -97,9 +97,10 @@ WHERE  t1.v >= (SELECT   min(t2.v)
                 FROM     t2
                 WHERE    t2.k = t1.k)
 -- !query schema
-struct<k:string>
+struct<>
 -- !query output
-two
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

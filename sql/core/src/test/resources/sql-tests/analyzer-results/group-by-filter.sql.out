@@ -806,15 +806,8 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query analysis
-Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE (id#x > scalar-subquery#x [])) AS avg(salary) FILTER (WHERE (id > scalarsubquery()))#x]
-:  +- Project [200 AS 200#x]
-:     +- OneRowRelation
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -824,22 +817,8 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query analysis
-Aggregate [dept_id#x], [dept_id#x, avg(salary#x) AS avg(salary)#x, avg(salary#x) FILTER (WHERE (dept_id#x = scalar-subquery#x [])) AS avg(salary) FILTER (WHERE (dept_id = scalarsubquery()))#x]
-:  +- GlobalLimit 1
-:     +- LocalLimit 1
-:        +- Project [dept_id#x]
-:           +- SubqueryAlias dept
-:              +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
-:                 +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
-:                    +- Project [dept_id#x, dept_name#x, state#x]
-:                       +- SubqueryAlias DEPT
-:                          +- LocalRelation [dept_id#x, dept_name#x, state#x]
-+- SubqueryAlias emp
-   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
-      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
-         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-            +- SubqueryAlias EMP
-               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query

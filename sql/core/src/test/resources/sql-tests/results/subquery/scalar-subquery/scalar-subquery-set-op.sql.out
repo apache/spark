@@ -35,10 +35,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	8
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -53,9 +53,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-1	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -70,10 +71,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	8
-2	7
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -88,10 +89,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	5
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -106,10 +107,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	8
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -124,10 +125,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	32
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -142,10 +143,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	2
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -158,10 +159,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	1
-2	-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -176,21 +177,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -205,10 +193,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	8
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -223,9 +211,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-1	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -240,10 +229,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	8
-2	7
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -258,10 +247,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	5
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -276,10 +265,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	8
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -294,10 +283,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	32
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -312,10 +301,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	2
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -328,10 +317,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	1
-2	-1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -346,21 +335,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -375,10 +351,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -393,9 +369,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -410,10 +387,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -428,10 +405,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -446,10 +423,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -464,10 +441,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -482,10 +459,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	0
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -498,10 +475,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	0
-2	-1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -516,21 +493,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -545,10 +509,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -563,9 +527,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -580,10 +545,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -598,10 +563,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -616,10 +581,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -634,10 +599,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -652,10 +617,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	0
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -668,10 +633,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	0
-2	-1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -686,21 +651,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -715,10 +667,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -733,9 +685,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-1	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -750,10 +703,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -768,10 +721,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -786,10 +739,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -804,10 +757,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	11
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -822,10 +775,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	1
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -838,10 +791,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -856,21 +809,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -885,10 +825,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -903,9 +843,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<t0a:int,t0b:int>
+struct<>
 -- !query output
-1	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -920,10 +861,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -938,10 +879,10 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -956,10 +897,10 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	3
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -974,10 +915,10 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a, t0a, t0b, t0b):bigint>
+struct<>
 -- !query output
-1	11
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -992,10 +933,10 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0b):bigint>
+struct<>
 -- !query output
-1	1
-2	0
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -1008,10 +949,10 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	NULL
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -1026,21 +967,8 @@ FROM t0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExprs" : "\"sum(t0a) AS d\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 67,
-    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -1053,10 +981,10 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	2
-2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -1069,7 +997,7 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query schema
-struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+struct<>
 -- !query output
-1	1
-2	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object

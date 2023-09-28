@@ -495,12 +495,8 @@ SetVariable [variablereference(system.session.title='Test qualifiers - success')
 -- !query
 SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title)
 -- !query analysis
-Project [scalar-subquery#x [title#x] AS scalarsubquery(title)#xL]
-:  +- Aggregate [max(id#xL) AS max(id)#xL]
-:     +- Filter (id#xL < cast(outer(title#x) as bigint))
-:        +- Range (0, 10, step=1, splits=None)
-+- SubqueryAlias t
-   +- LocalRelation [title#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -822,15 +818,8 @@ SetVariable [variablereference(system.session.title='Test DEFAULT on create - su
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
-  "messageParameters" : {
-    "colName" : "`system`.`session`.`var1`",
-    "defaultValue" : "(SELECT c1 FROM VALUES(1) AS T(c1))",
-    "statement" : "CRETE VARIABLE"
-  }
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -940,140 +929,78 @@ Project [variablereference(system.session.var1=8) AS var1#x]
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=8)]
-+- Project [scalar-subquery#x [] AS var1#x]
-   :  +- Project [c1#x]
-   :     +- SubqueryAlias T
-   :        +- LocalRelation [c1#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SELECT var1
 -- !query analysis
-Project [variablereference(system.session.var1=1) AS var1#x]
+Project [variablereference(system.session.var1=8) AS var1#x]
 +- OneRowRelation
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1) WHERE 1=0)
 -- !query analysis
-SetVariable [variablereference(system.session.var1=1)]
-+- Project [scalar-subquery#x [] AS var1#x]
-   :  +- Project [c1#x]
-   :     +- Filter (1 = 0)
-   :        +- SubqueryAlias T
-   :           +- LocalRelation [c1#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SELECT var1 AS `null`
 -- !query analysis
-Project [variablereference(system.session.var1=CAST(NULL AS INT)) AS null#x]
+Project [variablereference(system.session.var1=8) AS null#x]
 +- OneRowRelation
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0) AS T(c1))
 -- !query analysis
-SetVariable [variablereference(system.session.var1=CAST(NULL AS INT))]
-+- Project [cast(var1#x as int) AS var1#x]
-   +- Project [scalar-subquery#x [] AS var1#x]
-      :  +- Project [c1#x]
-      :     +- SubqueryAlias T
-      :        +- LocalRelation [c1#x]
-      +- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SELECT var1
 -- !query analysis
-Project [variablereference(system.session.var1=1) AS var1#x]
+Project [variablereference(system.session.var1=8) AS var1#x]
 +- OneRowRelation
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0E10) AS T(c1))
 -- !query analysis
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "sourceType" : "\"DOUBLE\"",
-    "targetType" : "\"INT\"",
-    "value" : "1.0E10D"
-  }
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SELECT var1
 -- !query analysis
-Project [variablereference(system.session.var1=1) AS var1#x]
+Project [variablereference(system.session.var1=8) AS var1#x]
 +- OneRowRelation
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES(1), (2) AS T(c1))
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-  "sqlState" : "21000",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 60,
-    "fragment" : "(SELECT c1 FROM VALUES(1), (2) AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-  "sqlState" : "42823",
-  "messageParameters" : {
-    "number" : "2"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 64,
-    "fragment" : "(SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 SET VARIABLE var1 = (SELECT c1 FROM VALUES('hello') AS T(c1))
 -- !query analysis
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'hello'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 61,
-    "fragment" : "SET VARIABLE var1 = (SELECT c1 FROM VALUES('hello') AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query

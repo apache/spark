@@ -258,75 +258,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select country, (select count(*) from data) as cnt, count(id) as cnt_id from data group by all
 -- !query analysis
-Aggregate [country#x, scalar-subquery#x []], [country#x, scalar-subquery#x [] AS cnt#xL, count(id#x) AS cnt_id#xL]
-:  :- Aggregate [count(1) AS count(1)#xL]
-:  :  +- SubqueryAlias data
-:  :     +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-:  :        +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-:  :           +- Project [country#x, city#x, name#x, id#x, power#x]
-:  :              +- SubqueryAlias data
-:  :                 +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
-:  +- Aggregate [count(1) AS count(1)#xL]
-:     +- SubqueryAlias data
-:        +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-:           +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-:              +- Project [country#x, city#x, name#x, id#x, power#x]
-:                 +- SubqueryAlias data
-:                    +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
-+- SubqueryAlias data
-   +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-         +- Project [country#x, city#x, name#x, id#x, power#x]
-            +- SubqueryAlias data
-               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 select country, (select count(*) from data d1 where d1.country = d2.country), count(id) from data d2 group by all
 -- !query analysis
-Aggregate [country#x, scalar-subquery#x [country#x]], [country#x, scalar-subquery#x [country#x] AS scalarsubquery(country)#xL, count(id#x) AS count(id)#xL]
-:  :- Aggregate [count(1) AS count(1)#xL]
-:  :  +- Filter (country#x = outer(country#x))
-:  :     +- SubqueryAlias d1
-:  :        +- SubqueryAlias data
-:  :           +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-:  :              +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-:  :                 +- Project [country#x, city#x, name#x, id#x, power#x]
-:  :                    +- SubqueryAlias data
-:  :                       +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
-:  +- Aggregate [count(1) AS count(1)#xL]
-:     +- Filter (country#x = outer(country#x))
-:        +- SubqueryAlias d1
-:           +- SubqueryAlias data
-:              +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-:                 +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-:                    +- Project [country#x, city#x, name#x, id#x, power#x]
-:                       +- SubqueryAlias data
-:                          +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
-+- SubqueryAlias d2
-   +- SubqueryAlias data
-      +- View (`data`, [country#x,city#x,name#x,id#x,power#x])
-         +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
-            +- Project [country#x, city#x, name#x, id#x, power#x]
-               +- SubqueryAlias data
-                  +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 select (select count(*) from data d1 where d1.country = d2.country) + count(id) from data d2 group by all
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 94,
-    "stopIndex" : 105,
-    "fragment" : "group by all"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

@@ -555,10 +555,10 @@ struct<>
 -- !query
 SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title)
 -- !query schema
-struct<scalarsubquery(title):bigint>
+struct<>
 -- !query output
-0
-1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -921,15 +921,8 @@ DECLARE OR REPLACE VARIABLE var1 INT DEFAULT (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
-  "messageParameters" : {
-    "colName" : "`system`.`session`.`var1`",
-    "defaultValue" : "(SELECT c1 FROM VALUES(1) AS T(c1))",
-    "statement" : "CRETE VARIABLE"
-  }
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1050,7 +1043,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1058,7 +1052,7 @@ SELECT var1
 -- !query schema
 struct<var1:int>
 -- !query output
-1
+8
 
 
 -- !query
@@ -1066,7 +1060,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1) AS T(c1) WHERE 1=0)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1074,7 +1069,7 @@ SELECT var1 AS `null`
 -- !query schema
 struct<null:int>
 -- !query output
-NULL
+8
 
 
 -- !query
@@ -1082,7 +1077,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1090,7 +1086,7 @@ SELECT var1
 -- !query schema
 struct<var1:int>
 -- !query output
-1
+8
 
 
 -- !query
@@ -1098,17 +1094,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1.0E10) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "sourceType" : "\"DOUBLE\"",
-    "targetType" : "\"INT\"",
-    "value" : "1.0E10D"
-  }
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1116,7 +1103,7 @@ SELECT var1
 -- !query schema
 struct<var1:int>
 -- !query output
-1
+8
 
 
 -- !query
@@ -1124,18 +1111,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES(1), (2) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-  "sqlState" : "21000",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 60,
-    "fragment" : "(SELECT c1 FROM VALUES(1), (2) AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1143,21 +1120,8 @@ SET VARIABLE var1 = (SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-  "sqlState" : "42823",
-  "messageParameters" : {
-    "number" : "2"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 21,
-    "stopIndex" : 64,
-    "fragment" : "(SELECT c1, c1 FROM VALUES(1), (2) AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
@@ -1165,24 +1129,8 @@ SET VARIABLE var1 = (SELECT c1 FROM VALUES('hello') AS T(c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'hello'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 61,
-    "fragment" : "SET VARIABLE var1 = (SELECT c1 FROM VALUES('hello') AS T(c1))"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query

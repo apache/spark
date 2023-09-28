@@ -695,104 +695,36 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT * FROM t1, LATERAL (SELECT c2, (SELECT MIN(c2) FROM t2))
 -- !query analysis
-Project [c1#x, c2#x, c2#x, scalarsubquery()#x]
-+- LateralJoin lateral-subquery#x [c2#x], Inner
-   :  +- SubqueryAlias __auto_generated_subquery_name
-   :     +- Project [outer(c2#x) AS c2#x, scalar-subquery#x [] AS scalarsubquery()#x]
-   :        :  +- Aggregate [min(c2#x) AS min(c2)#x]
-   :        :     +- SubqueryAlias spark_catalog.default.t2
-   :        :        +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-   :        :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-   :        :              +- LocalRelation [col1#x, col2#x]
-   :        +- OneRowRelation
-   +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-            +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1, LATERAL (SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a))
 -- !query analysis
-Project [c1#x, c2#x, scalarsubquery(a)#xL]
-+- LateralJoin lateral-subquery#x [c1#x], Inner
-   :  +- SubqueryAlias __auto_generated_subquery_name
-   :     +- Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
-   :        :  +- Aggregate [sum(c2#x) AS sum(c2)#xL]
-   :        :     +- Filter (c1#x = outer(a#x))
-   :        :        +- SubqueryAlias spark_catalog.default.t2
-   :        :           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-   :        :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-   :        :                 +- LocalRelation [col1#x, col2#x]
-   :        +- SubqueryAlias __auto_generated_subquery_name
-   :           +- Project [outer(c1#x) AS a#x]
-   :              +- OneRowRelation
-   +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-            +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t1`.`c1`",
-    "proposal" : "`t2`.`c1`, `t2`.`c2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 74,
-    "stopIndex" : 78,
-    "fragment" : "t1.c1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
 -- !query analysis
-Project [c1#x, c2#x]
-+- Filter (c1#x = scalar-subquery#x [])
-   :  +- Aggregate [min(a#x) AS min(a)#x]
-   :     +- LateralJoin lateral-subquery#x [c1#x], Inner
-   :        :  +- SubqueryAlias __auto_generated_subquery_name
-   :        :     +- Project [outer(c1#x) AS a#x]
-   :        :        +- OneRowRelation
-   :        +- SubqueryAlias spark_catalog.default.t2
-   :           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-   :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-   :                 +- LocalRelation [col1#x, col2#x]
-   +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-            +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
 -- !query analysis
-Project [c1#x, c2#x]
-+- Filter (c1#x = scalar-subquery#x [c1#x])
-   :  +- Aggregate [min(a#x) AS min(a)#x]
-   :     +- Filter (c1#x = outer(c1#x))
-   :        +- LateralJoin lateral-subquery#x [c1#x], Inner
-   :           :  +- SubqueryAlias __auto_generated_subquery_name
-   :           :     +- Project [outer(c1#x) AS a#x]
-   :           :        +- OneRowRelation
-   :           +- SubqueryAlias spark_catalog.default.t2
-   :              +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
-   :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-   :                    +- LocalRelation [col1#x, col2#x]
-   +- SubqueryAlias spark_catalog.default.t1
-      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
-         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
-            +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

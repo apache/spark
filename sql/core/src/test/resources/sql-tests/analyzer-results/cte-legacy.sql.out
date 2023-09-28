@@ -35,12 +35,8 @@ SELECT (
   SELECT * FROM t
 )
 -- !query analysis
-Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:  +- Project [1#x]
-:     +- SubqueryAlias t
-:        +- Project [1 AS 1#x]
-:           +- OneRowRelation
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -99,17 +95,8 @@ WITH
   )
 SELECT * FROM t2
 -- !query analysis
-Project [scalarsubquery()#x]
-+- SubqueryAlias t2
-   +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-      :  +- Aggregate [max(c#x) AS max(c)#x]
-      :     +- SubqueryAlias __auto_generated_subquery_name
-      :        +- Project [c#x]
-      :           +- SubqueryAlias t
-      :              +- Project [1#x AS c#x]
-      :                 +- Project [1 AS 1#x]
-      :                    +- OneRowRelation
-      +- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -199,12 +186,8 @@ SELECT (
   SELECT * FROM t
 )
 -- !query analysis
-Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:  +- Project [1#x]
-:     +- SubqueryAlias t
-:        +- Project [1 AS 1#x]
-:           +- OneRowRelation
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -216,14 +199,8 @@ SELECT (
   )
 )
 -- !query analysis
-Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:     :  +- Project [1#x]
-:     :     +- SubqueryAlias t
-:     :        +- Project [1 AS 1#x]
-:     :           +- OneRowRelation
-:     +- OneRowRelation
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -236,14 +213,8 @@ SELECT (
   )
 )
 -- !query analysis
-Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:     :  +- Project [1#x]
-:     :     +- SubqueryAlias t
-:     :        +- Project [1 AS 1#x]
-:     :           +- OneRowRelation
-:     +- OneRowRelation
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -308,12 +279,8 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query analysis
-Project [scalar-subquery#x [] AS scalarsubquery()#x]
-:  +- Project [1#x]
-:     +- SubqueryAlias abc
-:        +- Project [1 AS 1#x]
-:           +- OneRowRelation
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

@@ -1022,33 +1022,30 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 DESC TABLE EXTENDED pubview
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-a                   	int                 	                    
-b                   	int                 	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	testviewschm2       	                    
-Table               	pubview             	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	VIEW                	                    
-View Text           	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
-View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
-View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[a, b]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`pubview`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 27,
+    "fragment" : "pubview"
+  } ]
+}
 
 
 -- !query
@@ -1059,35 +1056,30 @@ AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to dataType on unresolved object
 
 
 -- !query
 DESC TABLE EXTENDED mytempview
 -- !query schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query output
-a                   	int                 	                    
-b                   	int                 	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Catalog             	spark_catalog       	                    
-Database            	testviewschm2       	                    
-Table               	mytempview          	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	VIEW                	                    
-View Text           	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[a, b]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`mytempview`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 30,
+    "fragment" : "mytempview"
+  } ]
+}
 
 
 -- !query

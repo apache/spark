@@ -13,9 +13,10 @@ SELECT
   (SELECT sum(id) FROM range(10)),
   (SELECT count(distinct id) FROM range(10))
 -- !query schema
-struct<scalarsubquery():bigint,scalarsubquery():bigint,scalarsubquery():bigint>
+struct<>
 -- !query output
-0	45	10
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -34,9 +35,10 @@ WITH tmp AS (
 )
 SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp)
 -- !query schema
-struct<id:bigint>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query

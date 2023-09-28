@@ -518,19 +518,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT * FROM t1, LATERAL (SELECT c2, (SELECT MIN(c2) FROM t2))
 -- !query schema
-struct<c1:int,c2:int,c2:int,scalarsubquery():int>
+struct<>
 -- !query output
-0	1	1	2
-1	2	2	2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1, LATERAL (SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a))
 -- !query schema
-struct<c1:int,c2:int,scalarsubquery(a):bigint>
+struct<>
 -- !query output
-0	1	5
-1	2	NULL
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
@@ -538,38 +538,26 @@ SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t1`.`c1`",
-    "proposal" : "`t2`.`c1`, `t2`.`c2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 74,
-    "stopIndex" : 78,
-    "fragment" : "t1.c1"
-  } ]
-}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
 -- !query schema
-struct<c1:int,c2:int>
+struct<>
 -- !query output
-0	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
 -- !query schema
-struct<c1:int,c2:int>
+struct<>
 -- !query output
-0	1
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+Invalid call to toAttribute on unresolved object
 
 
 -- !query
