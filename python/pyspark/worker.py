@@ -737,12 +737,10 @@ def read_udtf(pickleSer, infile, eval_type):
             if self._udtf.eval is not None:
                 # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
                 filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
-                filtered_kwargs = dict(
-                    [
-                        (key, self._remove_partition_by_exprs(value))
-                        for (key, value) in kwargs.items()
-                    ]
-                )
+                filtered_kwargs = {
+                    key: self._remove_partition_by_exprs(value)
+                    for (key, value) in kwargs.items()
+                }
                 result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
                     for row in result:
@@ -771,10 +769,10 @@ def read_udtf(pickleSer, infile, eval_type):
             return [x for x in inputs if type(x) is Row][0]
 
         def _remove_partition_by_exprs(self, arg: Any) -> Any:
-            if type(arg) is Row:
+            if isinstance(arg, Row):
                 new_row_keys = []
                 new_row_values = []
-                for i, (key, value) in enumerate(arg.asDict().items()):
+                for i, (key, value) in enumerate(zip(arg.__fields__, arg)):
                     if i not in self._partition_child_indexes:
                         new_row_keys.append(key)
                         new_row_values.append(value)
