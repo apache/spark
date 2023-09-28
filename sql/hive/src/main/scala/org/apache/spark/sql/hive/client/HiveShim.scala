@@ -255,8 +255,6 @@ private[client] sealed abstract class Shim {
 }
 
 private[client] class Shim_v2_0 extends Shim with Logging {
-  // See HIVE-12224, HOLD_DDLTIME was broken as soon as it landed
-  protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
   protected lazy val deleteDataInDropIndex = JBoolean.TRUE
   // true if this is an ACID operation
