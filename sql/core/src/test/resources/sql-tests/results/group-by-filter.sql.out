@@ -773,10 +773,14 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,avg(salary):double,avg(salary) FILTER (WHERE (id > scalarsubquery())):double>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+10	133.33333333333334	NULL
+100	400.0	400.0
+20	300.0	300.0
+30	400.0	400.0
+70	150.0	150.0
+NULL	400.0	400.0
 
 
 -- !query
@@ -786,10 +790,14 @@ SELECT emp.dept_id,
 FROM emp
 GROUP BY dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,avg(salary):double,avg(salary) FILTER (WHERE (dept_id = scalarsubquery())):double>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+10	133.33333333333334	133.33333333333334
+100	400.0	NULL
+20	300.0	NULL
+30	400.0	NULL
+70	150.0	NULL
+NULL	400.0	NULL
 
 
 -- !query

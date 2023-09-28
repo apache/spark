@@ -43,8 +43,21 @@ SELECT * FROM r
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`r`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "r"
+  } ]
+}
 
 
 -- !query
@@ -256,8 +269,20 @@ FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "messageParameters" : {
+    "expr" : "\"outer(t.id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 37,
+    "fragment" : "id"
+  } ]
+}
 
 
 -- !query
@@ -362,10 +387,9 @@ struct<y:int>
 -- !query
 select (with q as (select 1 x) select * from q)
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1
 
 
 -- !query
@@ -430,10 +454,9 @@ select
   (WITH q AS (select T.x) select * from q)
 from (select 1 x, 2 y) T
 -- !query schema
-struct<>
+struct<scalarsubquery(x):int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1
 
 
 -- !query
@@ -441,10 +464,9 @@ select
   (WITH q AS (select 3 z) select x + t.y + z from q)
 from (select 1 x, 2 y) T
 -- !query schema
-struct<>
+struct<scalarsubquery(x, y):int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+6
 
 
 -- !query
@@ -492,10 +514,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
 with cte1 as (Select id as j from t)
 select * from cte1 where j = (select max(j) from cte1 as cte2)
 -- !query schema
-struct<>
+struct<j:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+2
 
 
 -- !query

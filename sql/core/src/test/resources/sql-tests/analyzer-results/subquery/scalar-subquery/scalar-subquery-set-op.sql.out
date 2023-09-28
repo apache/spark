@@ -32,8 +32,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -48,8 +66,27 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Union false, false
+   :           :- Project [t1c#x AS c#x]
+   :           :  +- Filter (t1a#x = outer(t0a#x))
+   :           :     +- SubqueryAlias t1
+   :           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :           :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :           +- Project [t2c#x AS c#x]
+   :              +- Filter (t2b#x = outer(t0b#x))
+   :                 +- SubqueryAlias t2
+   :                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -64,8 +101,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2a#x = outer(t0a#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -80,8 +135,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x > outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x <= outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -96,8 +169,26 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -112,8 +203,26 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -128,8 +237,26 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -142,8 +269,24 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:           :  +- SubqueryAlias t1
+:           :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :           +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                       +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -156,8 +299,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -172,8 +328,27 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x AS c#x]
+:              :  +- Filter (t1a#x = outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [t2c#x AS c#x]
+:                 +- Filter (t2b#x = outer(t0b#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -188,8 +363,28 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Distinct
+   :           +- Union false, false
+   :              :- Project [t1c#x AS c#x]
+   :              :  +- Filter (t1a#x = outer(t0a#x))
+   :              :     +- SubqueryAlias t1
+   :              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :              :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :              +- Project [t2c#x AS c#x]
+   :                 +- Filter (t2b#x = outer(t0b#x))
+   :                    +- SubqueryAlias t2
+   :                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                             +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -204,8 +399,27 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x AS c#x]
+:              :  +- Filter (t1a#x = outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [t2c#x AS c#x]
+:                 +- Filter (t2a#x = outer(t0a#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -220,8 +434,27 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x AS c#x]
+:              :  +- Filter (t1a#x > outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [t2c#x AS c#x]
+:                 +- Filter (t2b#x <= outer(t0b#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -236,8 +469,27 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x]
+:              :  +- Filter (t1a#x = outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [t2c#x]
+:                 +- Filter (t2b#x = outer(t0b#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -252,8 +504,27 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:              :  +- Filter (t1a#x = outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:                 +- Filter (t2b#x = outer(t0b#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -268,8 +539,27 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [t1c#x]
+:              :  +- Filter (t1a#x = outer(t0a#x))
+:              :     +- SubqueryAlias t1
+:              :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :              +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [t2c#x]
+:                 +- Filter (t2b#x = outer(t0b#x))
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                          +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                             +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -282,8 +572,25 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Distinct
+:           +- Union false, false
+:              :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:              :  +- SubqueryAlias t1
+:              :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:              :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:              :           +- LocalRelation [col1#x, col2#x, col3#x]
+:              +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -296,8 +603,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -312,8 +632,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -328,8 +666,27 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Intersect All true
+   :           :- Project [t1c#x AS c#x]
+   :           :  +- Filter (t1a#x = outer(t0a#x))
+   :           :     +- SubqueryAlias t1
+   :           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :           :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :           +- Project [t2c#x AS c#x]
+   :              +- Filter (t2b#x = outer(t0b#x))
+   :                 +- SubqueryAlias t2
+   :                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -344,8 +701,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2a#x = outer(t0a#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -360,8 +735,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x > outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x <= outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -376,8 +769,26 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -392,8 +803,26 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -408,8 +837,26 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -422,8 +869,24 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect All true
+:           :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:           :  +- SubqueryAlias t1
+:           :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :           +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                       +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -436,8 +899,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -452,8 +928,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -468,8 +962,27 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Intersect false
+   :           :- Project [t1c#x AS c#x]
+   :           :  +- Filter (t1a#x = outer(t0a#x))
+   :           :     +- SubqueryAlias t1
+   :           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :           :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :           +- Project [t2c#x AS c#x]
+   :              +- Filter (t2b#x = outer(t0b#x))
+   :                 +- SubqueryAlias t2
+   :                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -484,8 +997,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2a#x = outer(t0a#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -500,8 +1031,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x > outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x <= outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -516,8 +1065,26 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -532,8 +1099,26 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -548,8 +1133,26 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -562,8 +1165,24 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Intersect false
+:           :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:           :  +- SubqueryAlias t1
+:           :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :           +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                       +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -576,8 +1195,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -592,8 +1224,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -608,8 +1258,27 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Except All true
+   :           :- Project [t1c#x AS c#x]
+   :           :  +- Filter (t1a#x = outer(t0a#x))
+   :           :     +- SubqueryAlias t1
+   :           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :           :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :           +- Project [t2c#x AS c#x]
+   :              +- Filter (t2b#x = outer(t0b#x))
+   :                 +- SubqueryAlias t2
+   :                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -624,8 +1293,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2a#x = outer(t0a#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -640,8 +1327,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x > outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x <= outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -656,8 +1361,26 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -672,8 +1395,26 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -688,8 +1429,26 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -702,8 +1461,24 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except All true
+:           :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:           :  +- SubqueryAlias t1
+:           :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :           +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                       +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -716,8 +1491,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -732,8 +1520,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -748,8 +1554,27 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(c#x) AS sum(c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Except false
+   :           :- Project [t1c#x AS c#x]
+   :           :  +- Filter (t1a#x = outer(t0a#x))
+   :           :     +- SubqueryAlias t1
+   :           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :           :              +- LocalRelation [col1#x, col2#x, col3#x]
+   :           +- Project [t2c#x AS c#x]
+   :              +- Filter (t2b#x = outer(t0b#x))
+   :                 +- SubqueryAlias t2
+   :                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                          +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -764,8 +1589,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2a#x = outer(t0a#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -780,8 +1623,26 @@ SELECT t0a, (SELECT sum(c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(c#x) AS sum(c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x AS c#x]
+:           :  +- Filter (t1a#x > outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x AS c#x]
+:              +- Filter (t2b#x <= outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -796,8 +1657,26 @@ SELECT t0a, (SELECT sum(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -812,8 +1691,26 @@ SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x && t0a#x && t0b#x && t0b#x] AS scalarsubquery(t0a, t0a, t0a, t0b, t0b)#xL]
+:  +- Aggregate [sum(((t1a#x + (3 * t1b#x)) + (5 * t1c#x))) AS sum(((t1a + (3 * t1b)) + (5 * t1c)))#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x AS t1a#x, t1a#x AS t1b#x, outer(t0a#x) AS t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [outer(t0a#x) AS t2b#x, t2c#x AS t1a#x, outer(t0b#x) AS t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -828,8 +1725,26 @@ SELECT t0a, (SELECT count(t1c) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0b#x] AS scalarsubquery(t0a, t0b)#xL]
+:  +- Aggregate [count(t1c#x) AS count(t1c)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [t1c#x]
+:           :  +- Filter (t1a#x = outer(t0a#x))
+:           :     +- SubqueryAlias t1
+:           :        +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :           +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2c#x]
+:              +- Filter (t2b#x = outer(t0b#x))
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -842,8 +1757,24 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(d#x) AS sum(d)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Except false
+:           :- Project [(t1a#x - outer(t0a#x)) AS d#x]
+:           :  +- SubqueryAlias t1
+:           :     +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :        +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :           +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [(t2a#x - outer(t0a#x)) AS d#x]
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                       +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -856,8 +1787,21 @@ SELECT t0a, (SELECT sum(d) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 67,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -870,8 +1814,34 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1b#x]
+:           :  +- Join Inner, ((t1a#x = outer(t0a#x)) AND (t1b#x = t2b#x))
+:           :     :- SubqueryAlias t1
+:           :     :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :     :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :     :        +- LocalRelation [col1#x, col2#x, col3#x]
+:           :     +- SubqueryAlias t2
+:           :        +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:           :           +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2b#x]
+:              +- Join Inner, ((t2a#x = outer(t0a#x)) AND (t1a#x = t2a#x))
+:                 :- SubqueryAlias t1
+:                 :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:                 :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:                 :        +- LocalRelation [col1#x, col2#x, col3#x]
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -884,5 +1854,31 @@ SELECT t0a, (SELECT sum(t1b) FROM
 )
 FROM t0
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1b#x]
+:           :  +- Join LeftOuter, ((t1a#x = outer(t0a#x)) AND (t1b#x = t2b#x))
+:           :     :- SubqueryAlias t1
+:           :     :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :     :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :     :        +- LocalRelation [col1#x, col2#x, col3#x]
+:           :     +- SubqueryAlias t2
+:           :        +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:           :           +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2b#x]
+:              +- Join Inner, ((t2a#x = (outer(t0a#x) + 1)) AND (t1a#x = t2a#x))
+:                 :- SubqueryAlias t1
+:                 :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:                 :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:                 :        +- LocalRelation [col1#x, col2#x, col3#x]
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]

@@ -11,8 +11,14 @@ SELECT
   (SELECT sum(id) FROM range(10)),
   (SELECT count(distinct id) FROM range(10))
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL]
+:  :- Aggregate [min(id#xL) AS min(id)#xL]
+:  :  +- Range (0, 10, step=1, splits=None)
+:  :- Aggregate [sum(id#xL) AS sum(id)#xL]
+:  :  +- Range (0, 10, step=1, splits=None)
+:  +- Aggregate [count(distinct id#xL) AS count(DISTINCT id)#xL]
+:     +- Range (0, 10, step=1, splits=None)
++- OneRowRelation
 
 
 -- !query
@@ -29,8 +35,20 @@ WITH tmp AS (
 )
 SELECT id FROM range(3) WHERE id > (SELECT max(id) FROM tmp)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias tmp
+:     +- Intersect false
+:        :- Project [id#xL]
+:        :  +- Range (0, 2, step=1, splits=None)
+:        +- Project [id#xL]
+:           +- Range (0, 4, step=1, splits=None)
++- Project [id#xL]
+   +- Filter (id#xL > scalar-subquery#x [])
+      :  +- Aggregate [max(id#xL) AS max(id)#xL]
+      :     +- SubqueryAlias tmp
+      :        +- CTERelationRef xxxx, true, [id#xL]
+      +- Range (0, 3, step=1, splits=None)
 
 
 -- !query

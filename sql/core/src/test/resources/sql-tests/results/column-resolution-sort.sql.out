@@ -36,7 +36,7 @@ struct<max(a):int>
 -- !query
 SELECT (SELECT b FROM v1 ORDER BY all LIMIT 1) FROM v2
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+1
+1

@@ -35,28 +35,46 @@ struct<>
 -- !query
 select *, (select count(*) from r where l.a = r.c) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c group by c) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	NULL
+1	2.0	NULL
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	NULL
+NULL	NULL	NULL
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c group by 'constant') from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	NULL
+1	2.0	NULL
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	NULL
+NULL	NULL	NULL
 
 
 -- !query
@@ -66,10 +84,16 @@ select *, (
   where l.a = r.c)
 from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	false
+1	2.0	false
+2	1.0	false
+2	1.0	false
+3	3.0	false
+6	NULL	false
+NULL	5.0	false
+NULL	NULL	false
 
 
 -- !query
@@ -80,42 +104,46 @@ select *, (
   group by r.c)
 from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	NULL
+1	2.0	NULL
+2	1.0	false
+2	1.0	false
+3	3.0	false
+6	NULL	false
+NULL	5.0	NULL
+NULL	NULL	NULL
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c having count(*) <= 1) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "The plan becomes unresolved: 'Project [a#x, b#x, scalar-subquery#x [a#x && (a#x = c#x)] AS scalarsubquery(a)#x]\n:  +- Filter (count(1)#xL <= cast(1 as bigint))\n:     +- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]\n:        +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]\n:           +- LocalRelation [col1#x, col2#x]\n+- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]\n   +- LocalRelation [col1#x, col2#x]\n\nThe previous plan: Project [a#x, b#x, scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]\n:  +- Filter (count(1)#xL <= cast(1 as bigint))\n:     +- Aggregate [count(1) AS count(1)#xL]\n:        +- Filter (outer(a#x) = c#x)\n:           +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]\n:              +- LocalRelation [col1#x, col2#x]\n+- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]\n   +- LocalRelation [col1#x, col2#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+1	2.0	0
+1	2.0	0
+2	1.0	NULL
+2	1.0	NULL
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "The plan becomes unresolved: 'Project [a#x, b#x, scalar-subquery#x [a#x && (a#x = c#x)] AS scalarsubquery(a)#x]\n:  +- Filter (count(1)#xL >= cast(2 as bigint))\n:     +- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]\n:        +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]\n:           +- LocalRelation [col1#x, col2#x]\n+- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]\n   +- LocalRelation [col1#x, col2#x]\n\nThe previous plan: Project [a#x, b#x, scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]\n:  +- Filter (count(1)#xL >= cast(2 as bigint))\n:     +- Aggregate [count(1) AS count(1)#xL]\n:        +- Filter (outer(a#x) = c#x)\n:           +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]\n:              +- LocalRelation [col1#x, col2#x]\n+- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]\n   +- LocalRelation [col1#x, col2#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+1	2.0	NULL
+1	2.0	NULL
+2	1.0	2
+2	1.0	2
+3	3.0	NULL
+6	NULL	NULL
+NULL	5.0	NULL
+NULL	NULL	NULL
 
 
 -- !query
@@ -129,28 +157,46 @@ spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled	true
 -- !query
 select *, (select count(*) from r where l.a = r.c) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c group by c) from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
 
 
 -- !query
 select *, (select count(*) from r where l.a = r.c group by 'constant') from l
 -- !query schema
-struct<>
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
 
 
 -- !query

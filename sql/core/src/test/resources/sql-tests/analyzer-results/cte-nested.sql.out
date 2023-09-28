@@ -46,8 +46,16 @@ SELECT (
   SELECT * FROM t
 )
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias t
+:     :     +- Project [1 AS 1#x]
+:     :        +- OneRowRelation
+:     +- Project [1#x]
+:        +- SubqueryAlias t
+:           +- CTERelationRef xxxx, true, [1#x]
++- OneRowRelation
 
 
 -- !query
@@ -109,8 +117,30 @@ WITH
   )
 SELECT * FROM t2
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1#x AS c#x]
+:        +- Project [1 AS 1#x]
+:           +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t2
+:     +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:        :  +- Aggregate [max(c#x) AS max(c)#x]
+:        :     +- SubqueryAlias __auto_generated_subquery_name
+:        :        +- WithCTE
+:        :           :- CTERelationDef xxxx, false
+:        :           :  +- SubqueryAlias t
+:        :           :     +- Project [2#x AS c#x]
+:        :           :        +- Project [2 AS 2#x]
+:        :           :           +- OneRowRelation
+:        :           +- Project [c#x]
+:        :              +- SubqueryAlias t
+:        :                 +- CTERelationRef xxxx, true, [c#x]
+:        +- OneRowRelation
++- Project [scalarsubquery()#x]
+   +- SubqueryAlias t2
+      +- CTERelationRef xxxx, true, [scalarsubquery()#x]
 
 
 -- !query

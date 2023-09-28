@@ -498,5 +498,19 @@ from tenk1 o
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`o`.`unique1`",
+    "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`even`, `i`.`four`, `i`.`odd`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 75,
+    "stopIndex" : 83,
+    "fragment" : "o.unique1"
+  } ]
+}

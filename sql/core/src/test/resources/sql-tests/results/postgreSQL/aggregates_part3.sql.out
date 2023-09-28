@@ -53,7 +53,7 @@ select (select count(*)
         from (values (1)) t0(inner_c))
 from (values (2),(3)) t1(outer_c)
 -- !query schema
-struct<>
+struct<scalarsubquery():bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1
+1

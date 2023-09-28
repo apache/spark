@@ -23,10 +23,9 @@ AND    c.cv = (SELECT avg(c1.cv)
                FROM   c c1
                WHERE  c1.ck = p.pk)
 -- !query schema
-struct<>
+struct<pk:int,cv:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -39,10 +38,9 @@ AND    c.cv = (SELECT max(avg)
                        WHERE    c1.ck = p.pk
                        GROUP BY c1.cv))
 -- !query schema
-struct<>
+struct<pk:int,cv:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -115,10 +113,12 @@ FROM   t1
 WHERE  t1c = (SELECT max(t2c)
               FROM   t2)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b	8
+val1c	8
+val1d	NULL
+val1d	NULL
 
 
 -- !query
@@ -129,10 +129,10 @@ WHERE  t1c = (SELECT max(t2c)
 AND    t1b > (SELECT min(t3b)
               FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1d:bigint,t1f:double>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b	19	25.0
+val1c	19	25.0
 
 
 -- !query
@@ -144,10 +144,12 @@ OR     t1b = (SELECT min(t3b)
               FROM   t3
               WHERE  t3b > 10)
 -- !query schema
-struct<>
+struct<t1a:string,t1h:timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b	2014-05-04 01:01:00
+val1c	2014-05-04 01:02:00.001
+val1d	2014-06-04 01:01:00
+val1d	2014-07-04 01:02:00.001
 
 
 -- !query
@@ -157,10 +159,10 @@ FROM   t1 LEFT JOIN t2
 WHERE  t1b = (SELECT min(t3b)
               FROM   t3)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t2d:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a	6	NULL
+val1a	6	NULL
 
 
 -- !query
@@ -169,10 +171,10 @@ FROM   t1
 WHERE  t1c + 5 = (SELECT max(t2e)
                   FROM   t2)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint,t1g:decimal(4,0)>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a	16	2000
+val1a	16	2000
 
 
 -- !query
@@ -181,10 +183,10 @@ FROM   t1
 WHERE  date(t1h) = (SELECT min(t2i)
                     FROM   t2)
 -- !query schema
-struct<>
+struct<t1a:string,t1h:timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a	2014-04-04 00:00:00
+val1a	2014-04-04 01:02:00.001
 
 
 -- !query
@@ -195,10 +197,12 @@ AND    t2c + 1 = (SELECT max(t2c) + 1
                   FROM   t2, t1
                   WHERE  t2b = t1b)
 -- !query schema
-struct<>
+struct<t2d:bigint,t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+119	val1b
+119	val1c
+19	val1b
+19	val1c
 
 
 -- !query
@@ -228,10 +232,12 @@ WHERE  (SELECT max(t3c)
         WHERE  t3c > 0)
 AND    (t3b is null or t3c is null)
 -- !query schema
-struct<>
+struct<t3b:smallint,t3c:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+8	NULL
+8	NULL
+NULL	16
+NULL	16
 
 
 -- !query
@@ -242,10 +248,11 @@ WHERE  t1a < (SELECT   max(t2a)
               WHERE    t2c = t1c
               GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a
+val1a
+val1b
 
 
 -- !query
@@ -256,10 +263,14 @@ WHERE  (SELECT   max(t2a)
         WHERE    t2c = t1c
         GROUP BY t2c) IS NULL
 -- !query schema
-struct<>
+struct<t1a:string,t1c:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a	8
+val1a	8
+val1d	NULL
+val1e	NULL
+val1e	NULL
+val1e	NULL
 
 
 -- !query
@@ -272,17 +283,10 @@ WHERE  t1a = (SELECT   max(t2a)
               HAVING   count(*) >= 0)
 OR     t1i > '2014-12-31'
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "The plan becomes unresolved: 'Project [t1a#x]\n+- 'Filter ((t1a#x = scalar-subquery#x [t1c#x && (t2c#x = t1c#x)]) OR (t1i#x > cast(2014-12-31 as date)))\n   :  +- Project [max(t2a)#x, t2c#x]\n   :     +- Filter (count(1)#xL >= cast(0 as bigint))\n   :        +- Aggregate [t2c#x, t2c#x], [max(t2a#x) AS max(t2a)#x, count(1) AS count(1)#xL, t2c#x]\n   :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n   :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   :                 +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n      +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n\nThe previous plan: Project [t1a#x]\n+- Filter ((t1a#x = scalar-subquery#x [t1c#x]) OR (t1i#x > cast(2014-12-31 as date)))\n   :  +- Project [max(t2a)#x]\n   :     +- Filter (count(1)#xL >= cast(0 as bigint))\n   :        +- Aggregate [t2c#x], [max(t2a#x) AS max(t2a)#x, count(1) AS count(1)#xL]\n   :           +- Filter (t2c#x = outer(t1c#x))\n   :              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n   :                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n      +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+val1c
+val1d
 
 
 -- !query
@@ -295,17 +299,10 @@ WHERE  t1a = (SELECT   max(t2a)
               HAVING   count(*) >= 1)
 OR     t1i > '2014-12-31'
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "The plan becomes unresolved: 'Project [t1a#x]\n+- 'Filter ((t1a#x = scalar-subquery#x [t1c#x && (t2c#x = t1c#x)]) OR (t1i#x > cast(2014-12-31 as date)))\n   :  +- Project [max(t2a)#x, t2c#x]\n   :     +- Filter (count(1)#xL >= cast(1 as bigint))\n   :        +- Aggregate [t2c#x, t2c#x], [max(t2a#x) AS max(t2a)#x, count(1) AS count(1)#xL, t2c#x]\n   :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n   :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   :                 +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n      +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n\nThe previous plan: Project [t1a#x]\n+- Filter ((t1a#x = scalar-subquery#x [t1c#x]) OR (t1i#x > cast(2014-12-31 as date)))\n   :  +- Project [max(t2a)#x]\n   :     +- Filter (count(1)#xL >= cast(1 as bigint))\n   :        +- Aggregate [t2c#x], [max(t2a#x) AS max(t2a)#x, count(1) AS count(1)#xL]\n   :           +- Filter (t2c#x = outer(t1c#x))\n   :              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n   :                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n      +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+val1c
+val1d
 
 
 -- !query
@@ -317,10 +314,9 @@ WHERE  t1a < (SELECT   max(t2a)
               WHERE    t2c = t1c
               GROUP BY t2c)
 -- !query schema
-struct<>
+struct<count(t1a):bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+7
 
 
 -- !query
@@ -335,10 +331,10 @@ AND    t1b >= (SELECT   min(t2b)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b
+val1c
 
 
 -- !query
@@ -356,10 +352,10 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b
+val1c
 
 
 -- !query
@@ -377,10 +373,16 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a
+val1a
+val1b
+val1b
+val1c
+val1c
+val1d
+val1d
 
 
 -- !query
@@ -398,10 +400,12 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a
+val1b
+val1c
+val1d
 
 
 -- !query
@@ -419,10 +423,9 @@ WHERE  t1a >= (SELECT   min(t2a)
                WHERE    t2c = t1c
                GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1a
 
 
 -- !query
@@ -434,10 +437,10 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       WHERE    t2c = t1c
                       GROUP BY t2c)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+val1b
+val1c
 
 
 -- !query
@@ -447,10 +450,12 @@ WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d = t1.t1d) as tmp)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1
+1
+1
+1
 
 
 -- !query
@@ -461,10 +466,12 @@ WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
              ORDER BY s DESC
              LIMIT 1)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+1
+1
+1
+1
 
 
 -- !query
@@ -474,10 +481,14 @@ WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d <= t1.t1d) as tmp)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1
+1
+1
+1
+1
+1
 
 
 -- !query
@@ -488,10 +499,14 @@ WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
              ORDER BY s DESC
              LIMIT 1)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+1
+1
+1
+1
+1
+1
 
 
 -- !query
@@ -501,10 +516,10 @@ WHERE t1b > (SELECT MAX(tmp.s) FROM (
              SELECT RANK() OVER (partition by t3c, t2b order by t3c) as s
                FROM t2, t3 where t2.t2c = t3.t3c AND t2.t2a = t1.t1a) as tmp)
 -- !query schema
-struct<>
+struct<t1b:smallint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+8
+8
 
 
 -- !query
@@ -515,10 +530,18 @@ WHERE t1b > (SELECT MAX(tmp.s) FROM (
                FROM (SELECT t3b, t3c, max(t3d) as t3d FROM t3 GROUP BY t3b, t3c) as g) as tmp)
 ORDER BY t1b
 -- !query schema
-struct<>
+struct<t1b:smallint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+6
+6
+8
+8
+10
+10
+10
+10
+16
+16
 
 
 -- !query
@@ -528,10 +551,9 @@ WHERE t1b = (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s
                FROM t2) as tmp)
 -- !query schema
-struct<>
+struct<1:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+
 
 
 -- !query
@@ -542,10 +564,10 @@ WHERE  t1c = (SELECT t2c
               WHERE  t2b < t1b
               ORDER BY t2d LIMIT 1)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+val1a	16
+val1a	16
 
 
 -- !query
@@ -556,10 +578,14 @@ WHERE  t1c = (SELECT t2c
               WHERE  t2c = t1c
               ORDER BY t2c LIMIT 1)
 -- !query schema
-struct<>
+struct<t1a:string,t1b:smallint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+val1a	16
+val1a	16
+val1b	8
+val1c	8
+val1d	NULL
+val1d	NULL
 
 
 -- !query
@@ -598,10 +624,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -616,10 +641,10 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2a = t0a)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
+2	0
 
 
 -- !query
@@ -634,10 +659,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b <= t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -652,10 +676,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -670,10 +693,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -688,10 +710,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -706,10 +727,9 @@ SELECT * FROM t0 WHERE t0a <
   WHERE  t2b = t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -722,10 +742,9 @@ SELECT * FROM t0 WHERE t0a <
   FROM   t2)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+
 
 
 -- !query
@@ -740,8 +759,21 @@ SELECT * FROM t0 WHERE t0a <
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"sum(t0a) AS d\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 84,
+    "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
+  } ]
+}
 
 
 -- !query
@@ -758,10 +790,9 @@ HAVING t0a <
   WHERE  t2b <= t0b)
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -771,10 +802,9 @@ where (select t2.id c
        from range (1, 2) t2 where t1.id = t2.id
       ) is not null
 -- !query schema
-struct<>
+struct<id:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+1
 
 
 -- !query
@@ -784,10 +814,9 @@ SELECT * FROM t0 WHERE t0a <
    FROM   t1 JOIN t2 ON (t1a = t0a AND t2b = t1b))
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
 
 
 -- !query
@@ -797,10 +826,9 @@ SELECT * FROM t0 WHERE t0a <
    FROM   t1 JOIN t2 ON (t1a < t0a AND t2b >= t1b))
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+2	0
 
 
 -- !query
@@ -810,7 +838,7 @@ SELECT * FROM t0 WHERE t0a <
   FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
 )
 -- !query schema
-struct<>
+struct<t0a:int,t0b:int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+1	1
+2	0

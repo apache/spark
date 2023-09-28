@@ -41,8 +41,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 WITH r AS (SELECT (SELECT * FROM r))
 SELECT * FROM r
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`r`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "r"
+  } ]
+}
 
 
 -- !query
@@ -343,8 +356,20 @@ SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "messageParameters" : {
+    "expr" : "\"outer(t.id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 37,
+    "fragment" : "id"
+  } ]
+}
 
 
 -- !query
@@ -464,8 +489,16 @@ Project [y#x]
 -- !query
 select (with q as (select 1 x) select * from q)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [1 AS x#x]
+:     :        +- OneRowRelation
+:     +- Project [x#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [x#x]
++- OneRowRelation
 
 
 -- !query
@@ -572,8 +605,18 @@ select
   (WITH q AS (select T.x) select * from q)
 from (select 1 x, 2 y) T
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [outer(x#x)]
+:     :        +- OneRowRelation
+:     +- Project [x#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [x#x]
++- SubqueryAlias T
+   +- Project [1 AS x#x, 2 AS y#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -581,8 +624,18 @@ select
   (WITH q AS (select 3 z) select x + t.y + z from q)
 from (select 1 x, 2 y) T
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [x#x && y#x] AS scalarsubquery(x, y)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [3 AS z#x]
+:     :        +- OneRowRelation
+:     +- Project [((outer(x#x) + outer(y#x)) + z#x) AS ((outer(T.x) + outer(T.y)) + z)#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [z#x]
++- SubqueryAlias T
+   +- Project [1 AS x#x, 2 AS y#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -652,8 +705,24 @@ org.apache.spark.sql.catalyst.parser.ParseException
 with cte1 as (Select id as j from t)
 select * from cte1 where j = (select max(j) from cte1 as cte2)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte1
+:     +- Project [id#x AS j#x]
+:        +- SubqueryAlias t
+:           +- View (`t`, [id#x])
+:              +- Project [cast(id#x as int) AS id#x]
+:                 +- Project [id#x]
+:                    +- SubqueryAlias t
+:                       +- LocalRelation [id#x]
++- Project [j#x]
+   +- Filter (j#x = scalar-subquery#x [])
+      :  +- Aggregate [max(j#x) AS max(j)#x]
+      :     +- SubqueryAlias cte2
+      :        +- SubqueryAlias cte1
+      :           +- CTERelationRef xxxx, true, [j#x]
+      +- SubqueryAlias cte1
+         +- CTERelationRef xxxx, true, [j#x]
 
 
 -- !query

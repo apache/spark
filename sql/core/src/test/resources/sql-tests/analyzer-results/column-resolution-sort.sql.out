@@ -43,5 +43,18 @@ Project [max(a)#x]
 -- !query
 SELECT (SELECT b FROM v1 ORDER BY all LIMIT 1) FROM v2
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to dataType on unresolved object
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Sort [b#x ASC NULLS FIRST], true
+:           +- Project [b#x]
+:              +- SubqueryAlias v1
+:                 +- View (`v1`, [a#x,b#x,k#x])
+:                    +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(k#x as int) AS k#x]
+:                       +- SubqueryAlias t
+:                          +- LocalRelation [a#x, b#x, k#x]
++- SubqueryAlias v2
+   +- View (`v2`, [a#x,b#x,all#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x, cast(all#x as int) AS all#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x, all#x]

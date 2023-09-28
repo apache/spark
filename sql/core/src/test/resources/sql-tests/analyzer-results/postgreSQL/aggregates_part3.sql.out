@@ -55,5 +55,11 @@ select (select count(*)
         from (values (1)) t0(inner_c))
 from (values (2),(3)) t1(outer_c)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-Invalid call to toAttribute on unresolved object
+Project [scalar-subquery#x [] AS scalarsubquery()#xL]
+:  +- Aggregate [count(1) AS count(1)#xL]
+:     +- SubqueryAlias t0
+:        +- Project [col1#x AS inner_c#x]
+:           +- LocalRelation [col1#x]
++- SubqueryAlias t1
+   +- Project [col1#x AS outer_c#x]
+      +- LocalRelation [col1#x]
