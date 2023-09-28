@@ -19,7 +19,7 @@ package org.apache.spark.sql.protobuf
 import java.sql.Timestamp
 import java.time.Duration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
 import org.json4s.StringInput

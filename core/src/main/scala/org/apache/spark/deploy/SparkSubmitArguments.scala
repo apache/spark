@@ -21,9 +21,9 @@ import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}

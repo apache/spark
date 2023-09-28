@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.base.Splitter

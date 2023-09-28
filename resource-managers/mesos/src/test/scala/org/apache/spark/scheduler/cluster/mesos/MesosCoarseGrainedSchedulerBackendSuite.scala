@@ -19,8 +19,8 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._

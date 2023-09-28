@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}

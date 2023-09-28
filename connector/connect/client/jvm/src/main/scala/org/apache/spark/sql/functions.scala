@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
@@ -3304,6 +3304,14 @@ object functions {
    * @since 3.4.0
    */
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
+
+  /**
+   * Throws an exception with the provided error message.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
 
   /**
    * Returns the estimated number of unique values given the binary representation of a

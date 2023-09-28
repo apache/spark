@@ -21,8 +21,8 @@ import java.io.File
 import java.sql.{DriverManager, ResultSet, Statement}
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars

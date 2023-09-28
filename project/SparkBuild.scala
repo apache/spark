@@ -22,8 +22,8 @@ import java.util.Locale
 
 import scala.io.Source
 import scala.util.Properties
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import sbt._
 import sbt.Classpaths.publishOrSkip
@@ -258,10 +258,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=unchecked&msg=outer reference:s",
         "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
         "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
-        // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-        // from the corresponding files when Scala 2.12 is no longer supported.
-        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-        "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
         "-Wconf:msg=Implicit definition should have explicit type:s"
       )
@@ -1068,7 +1064,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.3")
 }
 
 /**
@@ -1643,7 +1639,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt" % "junit-interface" % "0.13.3" % "test",
+    libraryDependencies += "net.aichler" % "jupiter-interface" % "0.11.1" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

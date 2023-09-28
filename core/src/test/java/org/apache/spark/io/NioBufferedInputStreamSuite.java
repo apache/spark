@@ -16,7 +16,7 @@
  */
 package org.apache.spark.io;
 
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.InputStream;
 import java.io.IOException;
@@ -26,7 +26,7 @@ import java.io.IOException;
  */
 public class NioBufferedInputStreamSuite extends GenericFileInputStreamSuite {
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     super.setUp();
     inputStreams = new InputStream[] {

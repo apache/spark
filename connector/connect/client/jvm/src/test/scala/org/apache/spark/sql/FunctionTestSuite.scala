@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.functions._
