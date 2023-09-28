@@ -159,6 +159,20 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
+  test("Builder.remote takes precedence over SPARK_REMOTE") {
+    startDummyServer(0)
+    val incorrectUrl = s"sc://localhost:${server.getPort + 1}"
+
+    withEnvs("SPARK_REMOTE" -> incorrectUrl) {
+      val session =
+        SparkSession.builder().remote(s"sc://localhost:${server.getPort}").getOrCreate()
+
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
+    }
+  }
+
   test("SparkSession initialisation with connection string") {
     startDummyServer(0)
     client = SparkConnectClient

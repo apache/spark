@@ -786,7 +786,10 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    private val builder = SparkConnectClient.builder()
+    // Initialize the connection string of the Spark client builder from SPARK_REMOTE by default,
+    // if it exists. The connection string can be overridden using the remote() function,
+    // as it takes precedence over the SPARK_REMOTE environment variable.
+    private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -912,11 +915,6 @@ object SparkSession extends Logging {
     @deprecated(message = "Please use create() instead.", since = "3.5.0")
     def build(): SparkSession = create()
 
-    private def getClientConfiguration(): Configuration = {
-      // Use copy() to avoid modifying the state of the existing builder.
-      builder.copy().loadFromEnvironment().configuration
-    }
-
     /**
      * Create a new [[SparkSession]].
      *
@@ -928,7 +926,7 @@ object SparkSession extends Logging {
      */
     def create(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(SparkSession.this.create(getClientConfiguration()))
+        .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
@@ -948,7 +946,7 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(sessions.get(getClientConfiguration()))
+        .getOrElse(sessions.get(builder.configuration))
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session

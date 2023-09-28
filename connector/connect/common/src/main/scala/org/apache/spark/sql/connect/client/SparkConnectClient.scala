@@ -346,8 +346,6 @@ object SparkConnectClient {
   class Builder(private var _configuration: Configuration) {
     def this() = this(Configuration())
 
-    def copy(): Builder = new Builder(_configuration)
-
     def configuration: Configuration = _configuration
 
     def userId(id: String): Builder = {
@@ -645,8 +643,6 @@ object SparkConnectClient {
     }
 
     def toSparkConnectClient: SparkConnectClient = new SparkConnectClient(this, createChannel())
-
-    def toBuilder: Builder = new Builder(_configuration = this)
   }
 
   /**
