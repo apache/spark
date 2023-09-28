@@ -738,8 +738,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
                 filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
                 filtered_kwargs = {
-                    key: self._remove_partition_by_exprs(value)
-                    for (key, value) in kwargs.items()
+                    key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
                 }
                 result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
