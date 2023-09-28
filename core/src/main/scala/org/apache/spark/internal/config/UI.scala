@@ -116,6 +116,12 @@ private[spark] object UI {
     .stringConf
     .createWithDefaultString("1; mode=block")
 
+  val UI_ACCESS_HOST = ConfigBuilder("spark.ui.access.host")
+    .doc("Value for HTTP access host")
+    .version("3.5.0")
+    .stringConf
+    .createWithDefaultString("127.0.0.1,localhost,0.0.0.0")
+
   val UI_X_CONTENT_TYPE_OPTIONS = ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
     .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
     .version("2.3.0")

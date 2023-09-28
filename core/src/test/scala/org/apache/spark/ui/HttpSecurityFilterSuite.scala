@@ -175,6 +175,23 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     verify(res, times(2)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
   }
 
+  test("host impersonation") {
+    val conf = new SparkConf(false)
+
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+    val filter = new HttpSecurityFilter(conf, secMgr)
+
+    when(req.getParameter("doAs")).thenReturn("proxy")
+    when(req.getRemoteUser()).thenReturn("admin")
+    // Impersonating a host without view permissions should cause an error.
+    when(req.getHeader("host")).thenReturn("100.120.17.19")
+    filter.doFilter(req, res, chain)
+    verify(res, times(1)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+  }
+
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {
     val req = mock(classOf[HttpServletRequest])
     when(req.getParameterMap()).thenReturn(params.asJava)
