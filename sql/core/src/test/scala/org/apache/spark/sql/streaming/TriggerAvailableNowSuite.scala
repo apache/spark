@@ -26,7 +26,9 @@ import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, Offset, SerializedOffset, Source, StreamingExecutionRelation}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TriggerAvailableNowSuite extends FileStreamSourceTest {
 
   import testImplicits._
