@@ -50,7 +50,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import _create_row, to_arrow_type
 from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
@@ -776,7 +776,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     if i not in self._partition_child_indexes:
                         new_row_keys.append(key)
                         new_row_values.append(value)
-                return Row(*new_row_keys)(*new_row_values)
+                return _create_row(new_row_keys, new_row_values)
             else:
                 return arg
 
