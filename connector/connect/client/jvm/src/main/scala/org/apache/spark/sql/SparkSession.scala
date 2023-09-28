@@ -912,6 +912,11 @@ object SparkSession extends Logging {
     @deprecated(message = "Please use create() instead.", since = "3.5.0")
     def build(): SparkSession = create()
 
+    private def getClientConfiguration(): Configuration = {
+      // Use copy() to avoid modifying the state of the existing builder.
+      builder.copy().loadFromEnvironment().configuration
+    }
+
     /**
      * Create a new [[SparkSession]].
      *
@@ -923,7 +928,7 @@ object SparkSession extends Logging {
      */
     def create(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(SparkSession.this.create(builder.configuration))
+        .getOrElse(SparkSession.this.create(getClientConfiguration()))
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
@@ -943,7 +948,7 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(sessions.get(builder.configuration))
+        .getOrElse(sessions.get(getClientConfiguration()))
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
