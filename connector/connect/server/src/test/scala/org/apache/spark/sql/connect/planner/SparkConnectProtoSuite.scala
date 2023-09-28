@@ -1067,11 +1067,11 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
-    val connectAnalyzed = analyzePlan(transform(connectPlan))
-    (connectAnalyzed, sparkPlan) match {
-      case (l: CollectMetrics, r: CollectMetrics) =>
-        comparePlans(l.copy(dataframeId = 0), r.copy(dataframeId = 0), false)
-      case (l, r) => comparePlans(l, r, false)
+    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan match {
+      case cm: CollectMetrics => cm.copy(dataframeId = 0)
+      case other => other
     }
+    val connectAnalyzed = analyzePlan(transform(connectPlan))
+    comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
   }
 }
