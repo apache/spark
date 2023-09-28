@@ -360,20 +360,11 @@ from t1
 where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
                              FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a)
 -- !query schema
-struct<>
+struct<t1a:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "(t2a#x < outer(t1a#x))\nFilter ((t2c#x = t3c#x) AND (t2a#x < outer(t1a#x)))\n+- Join Inner\n   :- SubqueryAlias t2\n   :  +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])\n   :     +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n   :        +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   :           +- SubqueryAlias t2\n   :              +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n   +- SubqueryAlias t3\n      +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])\n         +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as decimal(4,0)) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]\n            +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]\n               +- SubqueryAlias t3\n                  +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 172,
-    "fragment" : "SELECT RANK() OVER (partition by t3c  order by t2b) as s\n                             FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a"
-  } ]
-}
+t1d
+t1d
+t1d
+t1e
+t1e
+t1e

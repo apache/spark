@@ -794,7 +794,8 @@ class SubquerySuite extends QueryTest
         sql(
           """
             | select t1.c1
-@@ -819,25 +816,10 @@ class SubquerySuite extends QueryTest
+            | from   t1
+            | where  t1.c1 in (select max(t2.c1)
             |                  from   t2
             |                  where  t1.c2 >= t2.c2
             |                  having count(*) > 0 )
@@ -805,7 +806,9 @@ class SubquerySuite extends QueryTest
         sql(
           """
             | select t1.c1
-@@ -847,47 +829,18 @@ class SubquerySuite extends QueryTest
+            | from   t1, t1 as t3
+            | where  t1.c1 = t3.c1
+            | and    (t1.c1 in (select max(t2.c1)
             |                   from   t2
             |                   where  t1.c2 = t2.c2
             |                          or t3.c2 = t2.c2)
