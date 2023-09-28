@@ -23,9 +23,9 @@ import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.{Codec, Source}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
 

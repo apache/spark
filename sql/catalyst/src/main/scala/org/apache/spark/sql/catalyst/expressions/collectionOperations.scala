@@ -159,7 +159,7 @@ object Size {
        4
   """,
   since = "3.3.0",
-  group = "collection_funcs")
+  group = "array_funcs")
 case class ArraySize(child: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes with UnaryLike[Expression] {
 
@@ -2333,7 +2333,7 @@ case class Get(
        b
   """,
   since = "2.4.0",
-  group = "map_funcs")
+  group = "collection_funcs")
 case class ElementAt(
     left: Expression,
     right: Expression,
@@ -2557,7 +2557,7 @@ case class ElementAt(
        b
   """,
   since = "3.3.0",
-  group = "map_funcs")
+  group = "collection_funcs")
 case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =

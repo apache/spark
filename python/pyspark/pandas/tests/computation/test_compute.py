@@ -352,9 +352,10 @@ class FrameComputeMixin:
         pdf = pd.DataFrame({"x": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5, numeric_only=True))
+        self.assert_eq(psdf.quantile(0.5, numeric_only=True), pdf.quantile(0.5, numeric_only=True))
         self.assert_eq(
-            psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75], numeric_only=True)
+            psdf.quantile([0.25, 0.5, 0.75], numeric_only=True),
+            pdf.quantile([0.25, 0.5, 0.75], numeric_only=True),
         )
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
@@ -432,6 +433,9 @@ class FrameComputeMixin:
 
 
 class FrameComputeTests(FrameComputeMixin, ComparisonTestBase, SQLTestUtils):
+    def test_quantile(self):
+        super().test_quantile()
+
     pass
 
 

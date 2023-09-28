@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.r
 import java.io._
 import java.nio.channels.Channels
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}

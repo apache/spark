@@ -100,6 +100,7 @@ class Relation(google.protobuf.message.Message):
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
+    AS_OF_JOIN_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -193,6 +194,8 @@ class Relation(google.protobuf.message.Message):
         self,
     ) -> global___CommonInlineUserDefinedTableFunction: ...
     @property
+    def as_of_join(self) -> global___AsOfJoin: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -268,6 +271,7 @@ class Relation(google.protobuf.message.Message):
         cached_remote_relation: global___CachedRemoteRelation | None = ...,
         common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
         | None = ...,
+        as_of_join: global___AsOfJoin | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -292,6 +296,8 @@ class Relation(google.protobuf.message.Message):
             b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
+            "as_of_join",
+            b"as_of_join",
             "cached_local_relation",
             b"cached_local_relation",
             "cached_remote_relation",
@@ -403,6 +409,8 @@ class Relation(google.protobuf.message.Message):
             b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
+            "as_of_join",
+            b"as_of_join",
             "cached_local_relation",
             b"cached_local_relation",
             "cached_remote_relation",
@@ -546,6 +554,7 @@ class Relation(google.protobuf.message.Message):
             "cached_local_relation",
             "cached_remote_relation",
             "common_inline_user_defined_table_function",
+            "as_of_join",
             "fill_na",
             "drop_na",
             "replace",
@@ -3672,3 +3681,117 @@ class Parse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___Parse = Parse
+
+class AsOfJoin(google.protobuf.message.Message):
+    """Relation of type [[AsOfJoin]].
+
+    `left` and `right` must be present.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    LEFT_AS_OF_FIELD_NUMBER: builtins.int
+    RIGHT_AS_OF_FIELD_NUMBER: builtins.int
+    JOIN_EXPR_FIELD_NUMBER: builtins.int
+    USING_COLUMNS_FIELD_NUMBER: builtins.int
+    JOIN_TYPE_FIELD_NUMBER: builtins.int
+    TOLERANCE_FIELD_NUMBER: builtins.int
+    ALLOW_EXACT_MATCHES_FIELD_NUMBER: builtins.int
+    DIRECTION_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left input relation for a Join."""
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right input relation for a Join."""
+    @property
+    def left_as_of(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Field to join on in left DataFrame"""
+    @property
+    def right_as_of(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Field to join on in right DataFrame"""
+    @property
+    def join_expr(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) The join condition. Could be unset when `using_columns` is utilized.
+
+        This field does not co-exist with using_columns.
+        """
+    @property
+    def using_columns(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """Optional. using_columns provides a list of columns that should present on both sides of
+        the join inputs that this Join will join on. For example A JOIN B USING col_name is
+        equivalent to A JOIN B on A.col_name = B.col_name.
+
+        This field does not co-exist with join_condition.
+        """
+    join_type: builtins.str
+    """(Required) The join type."""
+    @property
+    def tolerance(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) The asof tolerance within this range."""
+    allow_exact_matches: builtins.bool
+    """(Required) Whether allow matching with the same value or not."""
+    direction: builtins.str
+    """(Required) Whether to search for prior, subsequent, or closest matches."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+        left_as_of: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        right_as_of: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        join_expr: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        using_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        join_type: builtins.str = ...,
+        tolerance: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        allow_exact_matches: builtins.bool = ...,
+        direction: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "join_expr",
+            b"join_expr",
+            "left",
+            b"left",
+            "left_as_of",
+            b"left_as_of",
+            "right",
+            b"right",
+            "right_as_of",
+            b"right_as_of",
+            "tolerance",
+            b"tolerance",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "allow_exact_matches",
+            b"allow_exact_matches",
+            "direction",
+            b"direction",
+            "join_expr",
+            b"join_expr",
+            "join_type",
+            b"join_type",
+            "left",
+            b"left",
+            "left_as_of",
+            b"left_as_of",
+            "right",
+            b"right",
+            "right_as_of",
+            b"right_as_of",
+            "tolerance",
+            b"tolerance",
+            "using_columns",
+            b"using_columns",
+        ],
+    ) -> None: ...
+
+global___AsOfJoin = AsOfJoin

@@ -92,13 +92,17 @@ private[connect] object ErrorUtils extends Logging {
         builder.addAllStackTrace(
           currentError.getStackTrace
             .map { stackTraceElement =>
-              FetchErrorDetailsResponse.StackTraceElement
+              val stackTraceBuilder = FetchErrorDetailsResponse.StackTraceElement
                 .newBuilder()
                 .setDeclaringClass(stackTraceElement.getClassName)
                 .setMethodName(stackTraceElement.getMethodName)
-                .setFileName(stackTraceElement.getFileName)
                 .setLineNumber(stackTraceElement.getLineNumber)
-                .build()
+
+              if (stackTraceElement.getFileName != null) {
+                stackTraceBuilder.setFileName(stackTraceElement.getFileName)
+              }
+
+              stackTraceBuilder.build()
             }
             .toIterable
             .asJava)

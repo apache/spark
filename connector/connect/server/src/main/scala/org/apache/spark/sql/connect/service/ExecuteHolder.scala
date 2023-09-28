@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto

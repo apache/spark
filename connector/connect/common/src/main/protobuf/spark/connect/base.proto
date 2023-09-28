@@ -791,6 +791,11 @@ message FetchErrorDetailsRequest {
   // (Required)
   // The id of the error.
   string error_id = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
 }
 
 message FetchErrorDetailsResponse {
@@ -803,7 +808,7 @@ message FetchErrorDetailsResponse {
     string method_name = 2;
 
     // The name of the file containing the execution point.
-    string file_name = 3;
+    optional string file_name = 3;
 
     // The line number of the source line containing the execution point.
     int32 line_number = 4;

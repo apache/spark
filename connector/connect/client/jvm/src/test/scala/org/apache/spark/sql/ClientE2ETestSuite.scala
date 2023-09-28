@@ -18,18 +18,18 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
@@ -43,6 +43,90 @@ import org.apache.spark.sql.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+
+  test(s"throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
+
+  for (enrichErrorEnabled <- Seq(false, true)) {
+    test(s"cause exception - ${enrichErrorEnabled}") {
+      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+        val ex = intercept[SparkUpgradeException] {
+          spark
+            .sql("""
+                |select from_json(
+                |  '{"d": "02-29"}',
+                |  'd date',
+                |  map('dateFormat', 'MM-dd'))
+                |""".stripMargin)
+            .collect()
+        }
+        if (enrichErrorEnabled) {
+          assert(ex.getCause.isInstanceOf[DateTimeException])
+        } else {
+          assert(ex.getCause == null)
+        }
+      }
+    }
+  }
+
+  test(s"throw SparkException with large cause exception") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => throw new SparkException("test" * 10000))
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getMessage.contains("test" * 10000))
+    }
+  }
+
+  for (isServerStackTraceEnabled <- Seq(false, true)) {
+    test(s"server-side stack trace is set in exceptions - ${isServerStackTraceEnabled}") {
+      withSQLConf(
+        "spark.sql.connect.serverStacktrace.enabled" -> isServerStackTraceEnabled.toString,
+        "spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+        val ex = intercept[AnalysisException] {
+          spark.sql("select x").collect()
+        }
+        assert(
+          ex.getStackTrace
+            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
+            .isDefined
+            == isServerStackTraceEnabled)
+      }
+    }
+  }
 
   test("throw SparkArithmeticException") {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
@@ -325,18 +409,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("write jdbc") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "t1"
-      try {
-        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
-        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
-        assert(result.length == 10)
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[SparkException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
   }

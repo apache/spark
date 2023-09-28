@@ -2735,6 +2735,7 @@ class FetchErrorDetailsRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     ERROR_ID_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
     The session_id specifies a Spark session for a user identified by user_context.user_id.
@@ -2747,22 +2748,48 @@ class FetchErrorDetailsRequest(google.protobuf.message.Message):
     """(Required)
     The id of the error.
     """
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         error_id: builtins.str = ...,
+        client_type: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["user_context", b"user_context"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "error_id", b"error_id", "session_id", b"session_id", "user_context", b"user_context"
+            "_client_type",
+            b"_client_type",
+            "client_type",
+            b"client_type",
+            "error_id",
+            b"error_id",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
 
 global___FetchErrorDetailsRequest = FetchErrorDetailsRequest
 
@@ -2789,12 +2816,20 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             *,
             declaring_class: builtins.str = ...,
             method_name: builtins.str = ...,
-            file_name: builtins.str = ...,
+            file_name: builtins.str | None = ...,
             line_number: builtins.int = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_file_name", b"_file_name", "file_name", b"file_name"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_file_name",
+                b"_file_name",
                 "declaring_class",
                 b"declaring_class",
                 "file_name",
@@ -2805,6 +2840,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"method_name",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
+        ) -> typing_extensions.Literal["file_name"] | None: ...
 
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""

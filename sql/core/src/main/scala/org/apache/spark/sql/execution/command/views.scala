@@ -146,7 +146,7 @@ case class CreateViewCommand(
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-        throw QueryCompilationErrors.tableIsNotViewError(name, replace)
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(name, replace)
       } else if (replace) {
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier

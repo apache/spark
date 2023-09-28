@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -779,34 +779,35 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val literal = Literal(1).as("lit")
 
     // Ok
-    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation).resolved)
+    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation, 0).resolved)
 
     // Bad name
-    assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
+    assert(!CollectMetrics("", sum :: Nil, testRelation, 0).resolved)
     assertAnalysisErrorClass(
-      CollectMetrics("", sum :: Nil, testRelation),
+      CollectMetrics("", sum :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
       expectedMessageParameters = Map(
-        "operator" -> "'CollectMetrics , [sum(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
+        "operator" ->
+          "'CollectMetrics , [sum(a#x) AS sum#xL], 0\n+- LocalRelation <empty>, [a#x]\n")
     )
 
     // No columns
-    assert(!CollectMetrics("evt", Nil, testRelation).resolved)
+    assert(!CollectMetrics("evt", Nil, testRelation, 0).resolved)
 
     def checkAnalysisError(exprs: Seq[NamedExpression], errors: String*): Unit = {
-      assertAnalysisError(CollectMetrics("event", exprs, testRelation), errors)
+      assertAnalysisError(CollectMetrics("event", exprs, testRelation, 0), errors)
     }
 
     // Unwrapped attribute
     assertAnalysisErrorClass(
-      CollectMetrics("event", a :: Nil, testRelation),
+      CollectMetrics("event", a :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
       expectedMessageParameters = Map("expr" -> "\"a\"")
     )
 
     // Unwrapped non-deterministic expression
     assertAnalysisErrorClass(
-      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation),
+      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
       expectedMessageParameters = Map("expr" -> "\"rand(10) AS rnd\"")
     )
@@ -816,7 +817,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics(
         "event",
         Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
-        testRelation),
+        testRelation, 0),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(DISTINCT a) AS sum\"")
@@ -827,7 +828,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics(
         "event",
         Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
-        testRelation),
+        testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
     )
@@ -838,7 +839,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
     assertAnalysisErrorClass(
-      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation),
+      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation, 0),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
       expectedMessageParameters = Map(
         "expr" ->
@@ -856,14 +857,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Same result - duplicate names are allowed
     assertAnalysisSuccess(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+      CollectMetrics("evt1", count :: Nil, testRelation, 0) :: Nil))
 
     // Same children, structurally different metrics - fail
     assertAnalysisErrorClass(
       Union(
-        CollectMetrics("evt1", count :: Nil, testRelation) ::
-          CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", sum :: Nil, testRelation, 1) :: Nil),
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
@@ -873,17 +874,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val tblB = LocalRelation(b)
     assertAnalysisErrorClass(
       Union(
-        CollectMetrics("evt1", count :: Nil, testRelation) ::
-          CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+        CollectMetrics("evt1", count :: Nil, testRelation, 0) ::
+          CollectMetrics("evt1", count :: Nil, tblB, 1) :: Nil),
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
       expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Subquery different tree - fail
-    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
+    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation, 0))
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
-      CollectMetrics("evt1", count :: Nil, tblB))
+      CollectMetrics("evt1", count :: Nil, tblB, 1))
     assertAnalysisErrorClass(
       query,
       expectedErrorClass = "DUPLICATED_METRICS_NAME",
@@ -895,7 +896,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       case a: AggregateExpression => a.copy(filter = Some(true))
     }.asInstanceOf[NamedExpression]
     assertAnalysisErrorClass(
-      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
+      CollectMetrics("evt1", sumWithFilter :: Nil, testRelation, 0),
       expectedErrorClass =
         "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
       expectedMessageParameters = Map("expr" -> "\"sum(a) FILTER (WHERE true) AS sum\"")
@@ -1674,19 +1675,5 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val ident2 = PlanWithUnresolvedIdentifier(replaceable, _ => testRelation)
       checkAnalysis(ident2.select($"a"), testRelation.select($"a").analyze)
     }
-  }
-
-  test("simplifyPlanForCollectedMetrics should handle non alias-only project case") {
-    val inner = Project(
-      Seq(
-        Alias(testRelation2.output(0), "a")(),
-        testRelation2.output(1),
-        Alias(testRelation2.output(2), "c")(),
-        testRelation2.output(3),
-        testRelation2.output(4)
-      ),
-      testRelation2)
-    val actualPlan = getAnalyzer.simplifyPlanForCollectedMetrics(inner.canonicalized)
-    assert(actualPlan == testRelation2.canonicalized)
   }
 }

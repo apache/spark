@@ -46,11 +46,8 @@ function renderPlanViz() {
     .attr("rx", "5")
     .attr("ry", "5");
 
-  var nodeSize = parseInt($("#plan-viz-metadata-size").text());
-  for (var i = 0; i < nodeSize; i++) {
-    setupTooltipForSparkPlanNode(i);
-  }
-
+  setupLayoutForSparkPlanCluster(g, svg);
+  setupTooltipForSparkPlanNode(g);
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
 }
@@ -66,15 +63,44 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
  * Set up the tooltip for a SparkPlan node using metadata. When the user moves the mouse on the
  * node, it will display the details of this SparkPlan node in the right.
  */
-function setupTooltipForSparkPlanNode(nodeId) {
-  var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text();
-  d3.select("svg g .node_" + nodeId)
-    .each(function(_ignored_d) {
-      var domNode = d3.select(this).node();
-      $(domNode).tooltip({
-        title: nodeTooltip, trigger: "hover focus", container: "body", placement: "top"
+function setupTooltipForSparkPlanNode(g) {
+  g.nodes().forEach(function (v) {
+    const node = g.node(v);
+    d3.select("svg g #" + node.id).each(function () {
+      $(this).tooltip({
+        title: node.tooltip, trigger: "hover focus", container: "body", placement: "top"
       });
-    })
+    });
+  });
+}
+
+/*
+ * Set up the layout for SparkPlan cluster.
+ * By default, the label of a cluster is placed in the middle of the cluster. This function moves
+ * the label to the right top corner of the cluster and expands the cluster to fit the label.
+ */
+function setupLayoutForSparkPlanCluster(g, svg) {
+  g.nodes().filter((v) => g.node(v).isCluster).forEach((v) => {
+    const node = g.node(v);
+    const cluster = svg.select("#" + node.id);
+    const labelGroup = cluster.select(".label");
+    const bbox = labelGroup.node().getBBox();
+    const rect = cluster.select("rect");
+    const oldWidth = parseFloat(rect.attr("width"));
+    const newWidth = Math.max(oldWidth, bbox.width) + 10;
+    const oldHeight = parseFloat(rect.attr("height"));
+    const newHeight = oldHeight + bbox.height;
+    rect
+      .attr("width", (_ignored_i) => newWidth)
+      .attr("height", (_ignored_i) => newHeight)
+      .attr("x", (_ignored_i) => parseFloat(rect.attr("x")) - (newWidth - oldWidth) / 2)
+      .attr("y", (_ignored_i) => parseFloat(rect.attr("y")) - (newHeight - oldHeight) / 2);
+
+    labelGroup
+      .select("g")
+      .attr("text-anchor", "end")
+      .attr("transform", "translate(" + (newWidth / 2 - 5) + "," + (-newHeight / 2 + 5) + ")");
+  })
 }
 
 // labelSeparator should be a non-graphical character in order not to affect the width of boxes.
@@ -88,9 +114,8 @@ var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*task[^)]*\\))(.*)$";
  */
 function preprocessGraphLayout(g) {
   g.graph().ranksep = "70";
-  var nodes = g.nodes();
-  for (var i = 0; i < nodes.length; i++) {
-    var node = g.node(nodes[i]);
+  g.nodes().forEach(function (v) {
+    const node = g.node(v);
     node.padding = "5";
 
     var firstSeparator;
@@ -113,7 +138,7 @@ function preprocessGraphLayout(g) {
           newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
       }
     });
-  }
+  });
   // Curve the edges
   g.edges().forEach(function (edge) {
     g.setEdge(edge.v, edge.w, {
@@ -231,4 +256,16 @@ function onClickAdditionalMetricsCheckbox(checkboxNode) {
     additionalMetrics.hide();
   }
   window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
+}
+
+function togglePlanViz() { // eslint-disable-line no-unused-vars
+  const arrow = d3.select("#plan-viz-graph-arrow");
+  arrow.each(function () {
+    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  });
+  if (arrow.classed("arrow-open")) {
+    planVizContainer().style("display", "block");
+  } else {
+    planVizContainer().style("display", "none");
+  }
 }

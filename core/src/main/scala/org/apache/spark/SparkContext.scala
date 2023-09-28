@@ -24,11 +24,11 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -465,7 +465,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogCodec = {
       val compress = _conf.get(EVENT_LOG_COMPRESS) &&
-          !_conf.get(EVENT_LOG_COMPRESSION_CODEC).equals("none")
+          !_conf.get(EVENT_LOG_COMPRESSION_CODEC).equalsIgnoreCase("none")
       if (compress && isEventLogEnabled) {
         Some(_conf.get(EVENT_LOG_COMPRESSION_CODEC)).map(CompressionCodec.getShortName)
       } else {

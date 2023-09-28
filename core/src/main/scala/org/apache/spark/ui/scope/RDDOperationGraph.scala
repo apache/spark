@@ -234,7 +234,10 @@ private[spark] object RDDOperationGraph extends Logging {
   def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    makeDotSubgraph(dotFile, graph.rootCluster, indent = "  ")
+    val indent = "  "
+    val graphId = s"graph_${graph.rootCluster.id.replaceAll(STAGE_CLUSTER_PREFIX, "")}"
+    dotFile.append(indent).append(s"""id="$graphId";\n""")
+    makeDotSubgraph(dotFile, graph.rootCluster, indent = indent)
     graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
@@ -261,23 +264,32 @@ private[spark] object RDDOperationGraph extends Logging {
       case _ => ""
     }
     val escapedCallsite = Utility.escape(node.callsite)
-    val label = s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
-      s"<br>${escapedCallsite}"
-    s"""${node.id} [labelType="html" label="${StringEscapeUtils.escapeJava(label)}"]"""
+    val label = StringEscapeUtils.escapeJava(
+      s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
+        s"<br>$escapedCallsite")
+    s"""${node.id} [id="node_${node.id}" labelType="html" label="$label}"]"""
   }
 
-  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
+  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph.
+   *
+   * @param prefix The prefix of the subgraph id. 'graph_' for stages, 'cluster_' for
+   *               for child clusters. See also VizConstants in `spark-dag-viz.js`
+   */
   private def makeDotSubgraph(
       subgraph: StringBuilder,
       cluster: RDDOperationCluster,
-      indent: String): Unit = {
-    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+      indent: String,
+      prefix: String = "graph_"): Unit = {
+    val clusterId = s"$prefix${cluster.id}"
+    subgraph.append(indent).append(s"subgraph $clusterId {\n")
+      .append(indent).append(s"""  id="$clusterId";\n""")
+      .append(indent).append(s"""  isCluster="true";\n""")
       .append(indent).append(s"""  label="${StringEscapeUtils.escapeJava(cluster.name)}";\n""")
     cluster.childNodes.foreach { node =>
       subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      makeDotSubgraph(subgraph, cscope, indent + "  ")
+      makeDotSubgraph(subgraph, cscope, indent + "  ", "cluster_")
     }
     subgraph.append(indent).append("}\n")
   }

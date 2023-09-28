@@ -23,10 +23,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -55,7 +55,7 @@ public final class JavaXmlSuite {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         setEnv("SPARK_LOCAL_IP", "127.0.0.1");
         spark = SparkSession.builder()
@@ -68,7 +68,7 @@ public final class JavaXmlSuite {
         tempDir.toFile().deleteOnExit();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         spark.stop();
         spark = null;
@@ -85,7 +85,7 @@ public final class JavaXmlSuite {
         Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
         String prefix = XmlOptions.DEFAULT_ATTRIBUTE_PREFIX();
         long result = df.select(prefix + "id").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
     @Test
@@ -94,7 +94,7 @@ public final class JavaXmlSuite {
         options.put("rowTag", booksFileTag);
         Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
         long result = df.select("description").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
     @Test
@@ -108,7 +108,7 @@ public final class JavaXmlSuite {
 
         Dataset<Row> newDf = spark.read().format("xml").load(booksPath.toString());
         long result = newDf.select("price").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
 }

@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{Builder, WrappedArray}
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -557,7 +557,7 @@ case class NewInstance(
     // Note that static inner classes (e.g., inner classes within Scala objects) don't need
     // outer pointer registration.
     val needOuterPointer =
-      outerPointer.isEmpty && Utils.isMemberClass(cls) && !Modifier.isStatic(cls.getModifiers)
+      outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
     childrenResolved && !needOuterPointer
   }
 

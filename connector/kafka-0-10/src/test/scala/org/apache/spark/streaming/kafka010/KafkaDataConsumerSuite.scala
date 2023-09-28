@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer.ConsumerConfig._
