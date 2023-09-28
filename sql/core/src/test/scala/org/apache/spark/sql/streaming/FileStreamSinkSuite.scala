@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSinkSuite extends StreamTest {
@@ -673,6 +674,7 @@ class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: 
   }
 }
 
+@SlowSQLTest
 class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -723,6 +725,7 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   }
 }
 
+@SlowSQLTest
 class FileStreamSinkV2Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
