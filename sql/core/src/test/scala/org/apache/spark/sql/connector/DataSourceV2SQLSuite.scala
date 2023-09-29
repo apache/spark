@@ -21,8 +21,8 @@ import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.MICROSECONDS
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._

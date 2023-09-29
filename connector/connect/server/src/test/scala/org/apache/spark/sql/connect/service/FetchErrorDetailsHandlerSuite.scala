@@ -163,4 +163,29 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       testError = new Exception(s"test$i", testError)
     }
   }
+
+  test("null filename in stack trace elements") {
+    val testError = new Exception("test")
+    val stackTrace = testError.getStackTrace()
+    stackTrace(0) = new StackTraceElement(
+      stackTrace(0).getClassName,
+      stackTrace(0).getMethodName,
+      null,
+      stackTrace(0).getLineNumber)
+    testError.setStackTrace(stackTrace)
+
+    val errorId = UUID.randomUUID().toString()
+
+    SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId)
+      .errorIdToError
+      .put(errorId, testError)
+
+    val response = fetchErrorDetails(userId, sessionId, errorId)
+    assert(response.hasRootErrorIdx)
+    assert(response.getRootErrorIdx == 0)
+
+    assert(response.getErrors(0).getStackTraceCount > 0)
+    assert(!response.getErrors(0).getStackTrace(0).hasFileName)
+  }
 }

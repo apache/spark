@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.client
 
 import java.time.DateTimeException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
@@ -222,7 +222,7 @@ private object GrpcExceptionConverter {
         new StackTraceElement(
           stackTraceElement.getDeclaringClass,
           stackTraceElement.getMethodName,
-          stackTraceElement.getFileName,
+          if (stackTraceElement.hasFileName) stackTraceElement.getFileName else null,
           stackTraceElement.getLineNumber)
       })
     }

@@ -21,7 +21,7 @@ import java.{util => ju}
 import java.text.SimpleDateFormat
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.io.Text

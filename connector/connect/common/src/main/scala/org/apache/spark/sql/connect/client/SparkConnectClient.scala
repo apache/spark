@@ -21,8 +21,8 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc._

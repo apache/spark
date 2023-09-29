@@ -26,7 +26,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
@@ -1852,7 +1852,7 @@ abstract class CSVSuite
 
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val schema = new StructType()
         .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
         .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)

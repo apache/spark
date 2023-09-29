@@ -1075,6 +1075,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // allowed by spark.
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
+      case _: FunctionTableSubqueryArgumentExpression =>
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+          messageParameters = Map("treeNode" -> planToString(plan)))
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join |

@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.util.JsonUtils.toJsonString
 import org.apache.spark.util.SparkClassUtils
@@ -52,12 +52,20 @@ private[spark] object SparkThrowableHelper {
       context: String): String = {
     val displayMessage = errorReader.getErrorMessage(errorClass, messageParameters)
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
-    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_TEMP_")) "" else s"[$errorClass] "
+    val prefix = if (errorClass.startsWith("_LEGACY_ERROR_")) "" else s"[$errorClass] "
     s"$prefix$displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {
     errorReader.getSqlState(errorClass)
+  }
+
+  def isValidErrorClass(errorClass: String): Boolean = {
+    errorReader.isValidErrorClass(errorClass)
+  }
+
+  def getMessageParameters(errorClass: String): Seq[String] = {
+    errorReader.getMessageParameters(errorClass)
   }
 
   def isInternalError(errorClass: String): Boolean = {

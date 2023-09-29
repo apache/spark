@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.{QueryTest, SQLHelper}

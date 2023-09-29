@@ -20,9 +20,9 @@ package org.apache.spark.deploy.yarn
 import java.nio.ByteBuffer
 import java.util.Collections
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
@@ -3249,6 +3248,14 @@ object functions {
    * @since 3.1.0
    */
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
+
+  /**
+   * Throws an exception with the provided error class and parameter map.
+   *
+   * @group misc_funcs
+   * @since 4.0.0
+   */
+  def raise_error(c: Column, e: Column): Column = Column.fn("raise_error", c, e)
 
   /**
    * Returns the estimated number of unique values given the binary representation
