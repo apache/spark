@@ -2196,7 +2196,9 @@ private[spark] object Utils
       Option(threadInfo.getLockName),
       Option(threadInfo.getLockOwnerName),
       threadInfo.isSuspended,
-      threadInfo.isInNative)
+      threadInfo.isInNative,
+      threadInfo.isDaemon,
+      threadInfo.getPriority)
   }
 
   /**
