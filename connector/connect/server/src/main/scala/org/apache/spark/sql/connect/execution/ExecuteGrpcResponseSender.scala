@@ -344,7 +344,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       executionObserver.responseLock.notifyAll()
     }
     grpcCallObserverReadySignal.synchronized {
-      executionObserver.responseLock.notifyAll()
+      grpcCallObserverReadySignal.notifyAll()
     }
   }
 }
