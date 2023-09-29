@@ -904,7 +904,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(
       taskStartFromJson(sparkEventToJsonString(taskStart)).taskInfo.accumulables.isEmpty)
     assert(
-      taskGettingResultFromJson(sparkEventToJsonString(gettingResult)).taskInfo.accumulables.isEmpty)
+      taskGettingResultFromJson(sparkEventToJsonString(gettingResult))
+        .taskInfo.accumulables.isEmpty)
 
     // Deliberately not fixed for job starts because a job might legitimately reference
     // stages that have completed even before the job start event is emitted.
