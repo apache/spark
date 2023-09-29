@@ -306,3 +306,16 @@ WHERE  t1d NOT IN (SELECT t2d
 GROUP  BY t1b
 ORDER BY t1b NULLS last
 OFFSET 1;
+
+
+set spark.sql.optimizer.decorrelateExistsIn.enabled = false;
+-- LIMIT is not supported in correlated IN, unless the DECORRELATE_EXISTS_AND_IN_SUBQUERIES
+-- is enabled.
+SELECT *
+FROM   t1
+WHERE  t1b NOT IN (SELECT t2b
+                   FROM   t2
+                   WHERE  t2b = t1b
+                   LIMIT  2
+                   OFFSET 2);
+set spark.sql.optimizer.decorrelateExistsIn.enabled = true;
