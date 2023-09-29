@@ -236,7 +236,7 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=other-nullary-override:wv",
         "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
         "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
         "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
@@ -259,9 +259,7 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
         "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-        "-Wconf:msg=Implicit definition should have explicit type:s",
-        // for Scala 2.13.12
-        "-Wconf:msg=legacy-binding:s"
+        "-Wconf:msg=Implicit definition should have explicit type:s"
       )
     }
   )
