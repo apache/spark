@@ -19,6 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -31,7 +32,6 @@ import time
 import urllib.parse
 import uuid
 import sys
-from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,

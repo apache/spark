@@ -421,6 +421,12 @@ This section summarizes those components and their licenses. See licenses-binary
 for text of these licenses.
 
 
+Python Software Foundation License
+----------------------------------
+
+python/pyspark/loose_version.py
+
+
 BSD 2-Clause
 ------------
 
