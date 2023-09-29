@@ -19,8 +19,9 @@ package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton{
@@ -28,11 +29,18 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
   private def executeTestBody(testBody: => Unit): Unit = {
     val oldDynamicPartitionOpt = spark.conf.getOption("hive.exec.dynamic.partition")
     val oldDynamicPartitionModeOpt = spark.conf.getOption("hive.exec.dynamic.partition.mode")
+    val oldExcludedRulesOpt = spark.conf.getOption(SQLConf.OPTIMIZER_EXCLUDED_RULES.key)
     try {
       spark.conf.set("hive.exec.dynamic.partition", "true")
       spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
       testBody
     } finally {
+      if (oldExcludedRulesOpt.isDefined) {
+        oldExcludedRulesOpt.foreach(spark.conf.set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, _))
+      } else {
+        spark.conf.unset(SQLConf.OPTIMIZER_EXCLUDED_RULES.key)
+      }
+
       if (oldDynamicPartitionOpt.isDefined) {
         oldDynamicPartitionOpt.foreach(spark.conf.set("hive.exec.dynamic.partition", _))
       } else {
@@ -47,14 +55,21 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
     }
   }
 
+  def excludePartitionPruneRule(): Unit = {
+    val currentExclusions = spark.conf.getOption(SQLConf.OPTIMIZER_EXCLUDED_RULES.key)
+    val newExclusion = currentExclusions.map(old => s"$old,${PruneFileSourcePartitions.ruleName}").
+      getOrElse(PruneFileSourcePartitions.ruleName)
+    spark.conf.set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, newExclusion)
+  }
+
   test("partition file source pruning with union of partitions") {
     val test = () => {
       HiveCatalogMetrics.reset()
       val df1 = spark.table("test").as("test1").where("test1.p > 15")
       val df2 = spark.table("test").as("test2").where("test2.p < 5")
-      df1.join(df2, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("test") {
       withTempDir { dir =>
@@ -68,7 +83,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
           {
             spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("test")
             // Test total partitions = p1 union p2
-            val numPartitionFetches = test()
+            val (numPartitionFetches, resWithRule) = test()
+            excludePartitionPruneRule()
+            val (_, resWoRule) = test()
+            resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
             assert(numPartitionFetches == 9)
           }
         )
@@ -81,9 +99,9 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
       HiveCatalogMetrics.reset()
       val df1 = spark.table("test").as("test1").where("test1.p < 10")
       val df2 = spark.table("test").as("test2").where("test2.p < 5")
-      df1.join(df2, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("test") {
       withTempDir { dir =>
@@ -96,7 +114,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
         executeTestBody({
           spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("test")
           // Test total partitions = p1 superset of p2
-          val numPartitionFetches = test()
+          val (numPartitionFetches, resWithRule) = test()
+          excludePartitionPruneRule()
+          val (_, resWoRule) = test()
+          resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
           assert(numPartitionFetches == 10)
         })
       }
@@ -108,9 +129,9 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
       HiveCatalogMetrics.reset()
       val df1 = spark.table("test").as("test1").where("test1.i > 10 and test1.p is not null")
       val df2 = spark.table("test").as("test2").where("test2.i < 50 and test2.p is not null")
-      df1.join(df2, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("test") {
       withTempDir { dir =>
@@ -122,7 +143,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
              |LOCATION '${dir.toURI}'""".stripMargin)
         executeTestBody({
           spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("test")
-          val numPartitionFetches = test()
+          val (numPartitionFetches, resWithRule) = test()
+          excludePartitionPruneRule()
+          val (_, resWoRule) = test()
+          resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
           assert(numPartitionFetches == 20)
         })
       }
@@ -136,9 +160,9 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
       val df1 = spark.table("test").as("test1").where("test1.i > 10 and test1.p is not null")
       val df2 = spark.table("test").as("test2").where("test2.i < 50 and test2.p > 10")
       val df3 = spark.table("test").as("test3").where("test3.i < 17 and test3.p < 3")
-      df1.join(df2, "i").join(df3, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").join(df3, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("test") {
       withTempDir { dir =>
@@ -150,7 +174,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
              |LOCATION '${dir.toURI}'""".stripMargin)
         executeTestBody({
           spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("test")
-          val numPartitionFetches = test()
+          val (numPartitionFetches, resWithRule) = test()
+          excludePartitionPruneRule()
+          val (_, resWoRule) = test()
+          resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
           assert(numPartitionFetches == 20)
         })
       }
@@ -164,9 +191,9 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
       val df2 = spark.table("testA").as("test3").where("test3.i < 17 and test3.p < 3")
       val df3 = spark.table("testB").as("test4").where("test4.i < 10 and test4.p < 8")
       val df4 = spark.table("testB").as("test5").where("test5.i > 100 and test5.p > 16")
-      df1.join(df2, "i").join(df3, "i").join(df4, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").join(df3, "i").join(df4, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("testA") {
       withTable("testB") {
@@ -187,7 +214,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
             executeTestBody({
               spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("testA")
               spark.range(1000).selectExpr("id as i", "id % 20 as p").write.insertInto("testB")
-              val numPartitionFetches = test()
+              val (numPartitionFetches, resWithRule) = test()
+              excludePartitionPruneRule()
+              val (_, resWoRule) = test()
+              resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
               assert(numPartitionFetches == 23)
             })
           }
@@ -206,9 +236,9 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
       val df3 = spark.table("testB").as("test4").where("test4.i < 10 and test4.p is" +
         " not null")
       val df4 = spark.table("testB").as("test5").where("test5.i > 100 and test5.p > 16")
-      df1.join(df2, "i").join(df3, "i").join(df4, "i").queryExecution.optimizedPlan
+      val res = df1.join(df2, "i").join(df3, "i").join(df4, "i").collect().sortBy(_.getInt(0))
       val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
-      numPartitionFetches
+      (numPartitionFetches, res)
     }
     withTable("testA") {
       withTable("testB") {
@@ -229,7 +259,10 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
             executeTestBody({
               spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("testA")
               spark.range(1000).selectExpr("id as i", "id % 20 as p").write.insertInto("testB")
-              val numPartitionFetches = test()
+              val (numPartitionFetches, resWithRule) = test()
+              excludePartitionPruneRule()
+              val (_, resWoRule) = test()
+              resWithRule.zip(resWoRule).foreach(tup => assertResult(tup._1)(tup._2))
               assert(numPartitionFetches == 40)
             })
           }
@@ -238,7 +271,7 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
     }
   }
 
-  test("partition pruning with common filters should reuse PrunedInmemoryFileIndex") {
+  test("partition pruning with common filters should reuse InMemoryFileIndex") {
     val test = () => {
       HiveCatalogMetrics.reset()
       val df1 = spark.table("test").as("test1").where("test1.p < 10 and test1.i > 5")
