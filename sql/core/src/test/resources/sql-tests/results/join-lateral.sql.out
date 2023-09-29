@@ -635,6 +635,7 @@ SELECT * FROM t1, LATERAL (SELECT SUM(c2) IS NULL FROM t2 WHERE t1.c1 = t2.c1)
 struct<c1:int,c2:int,(sum(c2) IS NULL):boolean>
 -- !query output
 0	1	false
+1	2	true
 
 
 -- !query

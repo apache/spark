@@ -3420,7 +3420,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.decorrelateExistsIn.enabled")
       .internal()
       .doc("Decorrelate EXISTS and IN subqueries.")
-      .version("3.4.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
