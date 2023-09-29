@@ -80,9 +80,10 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
+      memManager, mapOutputTracker, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
+    store.setShuffleManager(shuffleManager)
     allStores += store
     store
   }
@@ -103,8 +104,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, sc.env.shuffleManager,
-        isDriver = true)),
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker,
+        sc.env.shuffleManager.shuffleBlockResolver.getBlocksForShuffle, true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
     allStores.clear()
@@ -242,9 +243,11 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, None)
+      memManager, mapOutputTracker, failableTransfer, securityMgr, None)
     memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")
+    failableStore.setShuffleManager(shuffleManager)
+
     allStores += failableStore // so that this gets stopped after test
     assert(master.getPeers(store.blockManagerId).toSet === Set(failableStore.blockManagerId))
 

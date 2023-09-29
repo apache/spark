@@ -93,7 +93,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker,
+        shuffleManager.shuffleBlockResolver.getBlocksForShuffle,
         isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
@@ -291,9 +292,10 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
+      memManager, mapOutputTracker, transfer, securityMgr, None)
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")
+    blockManager.setShuffleManager(shuffleManager)
     blockManagerBuffer += blockManager
     blockManager
   }

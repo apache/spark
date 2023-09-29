@@ -143,10 +143,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       None
     }
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
-      memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, externalShuffleClient)
+      memManager, mapOutputTracker, transfer, bmSecurityMgr, externalShuffleClient)
     memManager.setMemoryStore(blockManager.memoryStore)
     allStores += blockManager
     blockManager.initialize("app-id")
+    blockManager.setShuffleManager(shuffleManager)
     blockManager
   }
 
@@ -189,8 +190,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
     master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
-        isDriver = true)),
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker,
+        shuffleManager.shuffleBlockResolver.getBlocksForShuffle,
+        true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
   }
@@ -1345,9 +1347,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
-      shuffleManager, transfer, securityMgr, None)
+      transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
+    store.setShuffleManager(shuffleManager)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -1394,9 +1397,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
-        shuffleManager, transfer, securityMgr, None)
+        transfer, securityMgr, None)
       try {
         blockManager.initialize("app-id")
+        blockManager.setShuffleManager(shuffleManager)
         testPutBlockDataAsStream(blockManager, storageLevel)
       } finally {
         blockManager.stop()
@@ -2249,9 +2253,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
-      shuffleManager, transfer, securityMgr, None)
+      transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
+    store.setShuffleManager(shuffleManager)
     store.putSingle("my-block-id", new Array[User](300), StorageLevel.MEMORY_AND_DISK)
 
     val kryoException = intercept[KryoException] {
@@ -2273,9 +2278,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
-      shuffleManager, transfer, securityMgr, None)
+      transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
+    store.setShuffleManager(shuffleManager)
 
     val blockId = RDDBlockId(0, 0)
     val bytes = Array.tabulate[Byte](1000)(_.toByte)

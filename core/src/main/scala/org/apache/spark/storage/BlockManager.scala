@@ -186,11 +186,13 @@ private[spark] class BlockManager(
     val conf: SparkConf,
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
-    shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
     externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
+
+  // this is set after the ShuffleManager is instantiated in SparkContext and Executor
+  private var shuffleManager: ShuffleManager = _
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
@@ -574,6 +576,10 @@ private[spark] class BlockManager(
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
+  def setShuffleManager(sm: ShuffleManager): Unit = {
+    shuffleManager = sm
+  }
+
   def shuffleMetricsSource: Source = {
     import BlockManager._
 
@@ -586,12 +592,15 @@ private[spark] class BlockManager(
 
   private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
+    // we obtain the class name from the configuration, instead of the ShuffleManager
+    // instance because the ShuffleManager has not been created at this point.
+    val shuffleMgrClass = ShuffleManager.getShuffleManagerClassName(conf)
     val shuffleManagerMeta =
       if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
-        s"${shuffleManager.getClass.getName}:" +
+        s"${shuffleMgrClass}:"
           s"${diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()}}}"
       } else {
-        shuffleManager.getClass.getName
+        shuffleMgrClass
       }
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,

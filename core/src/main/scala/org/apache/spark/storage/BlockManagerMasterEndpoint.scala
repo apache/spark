@@ -37,7 +37,6 @@ import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPu
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
-import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
@@ -54,7 +53,7 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
     mapOutputTracker: MapOutputTrackerMaster,
-    shuffleManager: ShuffleManager,
+    shuffleBlockGetter: (Int, Long) => Seq[BlockId],
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
 
@@ -409,8 +408,10 @@ class BlockManagerMasterEndpoint(
           mapStatuses.foreach { mapStatus =>
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              val blocksToDel =
-                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+              // we get blocks from the `shuffleBlockGetter` function, which reaches
+              // into the ShuffleManager. This is done with a function because `ShuffleManager`
+              // is not initialized when `BlockManagerMasterEndpoint` is created.
+              val blocksToDel = shuffleBlockGetter(shuffleId, mapStatus.mapId)
               if (blocksToDel.nonEmpty) {
                 val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
                   new mutable.HashSet[BlockId])
