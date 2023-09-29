@@ -104,7 +104,7 @@
     <dependency>
       <groupId>net.sf.jopt-simple</groupId>
       <artifactId>jopt-simple</artifactId>
-      <version>3.2</version>
+      <version>5.0.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
