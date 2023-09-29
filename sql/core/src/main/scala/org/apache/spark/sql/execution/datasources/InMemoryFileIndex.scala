@@ -27,6 +27,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
@@ -50,7 +52,9 @@ class InMemoryFileIndex(
     userSpecifiedSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache,
     userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
-    override val metadataOpsTimeNs: Option[Long] = None)
+    override val metadataOpsTimeNs: Option[Long] = None,
+    catalogTableOpt: Option[CatalogTable] = None,
+    catalogTablePartitionsOpt: Option[Seq[CatalogTablePartition]] = None)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
@@ -139,6 +143,27 @@ class InMemoryFileIndex(
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to list leaf files" +
       s" for ${paths.length} paths.")
     output
+  }
+
+  def applyFilters(filters: Seq[Expression]): InMemoryFileIndex = {
+    val startTime = System.nanoTime()
+    val selectedPartitions = ExternalCatalogUtils.prunePartitionsByFilter(this.catalogTableOpt.get,
+      catalogTablePartitionsOpt.get, filters, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val partitions = selectedPartitions.map { p =>
+      val path = new Path(p.location)
+      val fs = path.getFileSystem(hadoopConf)
+      PartitionPath(
+        p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+        path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+    }
+    val partitionSpec = PartitionSpec(partitionSchema, partitions)
+    val timeNs = System.nanoTime() - startTime
+    new InMemoryFileIndex(
+      sparkSession, this.rootPathsSpecified, this.parameters, this.userSpecifiedSchema,
+      this.fileStatusCache, metadataOpsTimeNs = Some(timeNs),
+      userSpecifiedPartitionSpec = Some(partitionSpec),
+      catalogTableOpt = this.catalogTableOpt,
+      catalogTablePartitionsOpt = Option(selectedPartitions))
   }
 }
 
