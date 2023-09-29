@@ -58,8 +58,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         111,
         0,
         makeTaskInfo(222L, 333, 1, 333, 444L, speculative = false, includeAccumulables = false))
-    val taskGettingResult =
-      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 2000, 3000L, true))
+    val taskGettingResult = SparkListenerTaskGettingResult(
+        makeTaskInfo(1000L, 2000, 5, 2000, 3000L, speculative = true, includeAccumulables = false))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
@@ -1644,32 +1644,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Finish Time": 0,
       |    "Failed": false,
       |    "Killed": false,
-      |    "Accumulables": [
-      |      {
-      |        "ID": 1,
-      |        "Name": "Accumulable1",
-      |        "Update": "delta1",
-      |        "Value": "val1",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 2,
-      |        "Name": "Accumulable2",
-      |        "Update": "delta2",
-      |        "Value": "val2",
-      |        "Internal": false,
-      |        "Count Failed Values": false
-      |      },
-      |      {
-      |        "ID": 3,
-      |        "Name": "Accumulable3",
-      |        "Update": "delta3",
-      |        "Value": "val3",
-      |        "Internal": true,
-      |        "Count Failed Values": false
-      |      }
-      |    ]
+      |    "Accumulables": []
       |  }
       |}
     """.stripMargin
