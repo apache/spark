@@ -240,6 +240,32 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("Roll back multiple versions") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 2.zip
+      db.doMaintenance()
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 4.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(4)
+    }
+  }
+
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
   testWithChangelogCheckpointingEnabled(
