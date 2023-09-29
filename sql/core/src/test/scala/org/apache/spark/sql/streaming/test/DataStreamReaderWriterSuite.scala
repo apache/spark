@@ -36,6 +36,7 @@ import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 object LastOptions {
@@ -108,6 +109,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
+@SlowSQLTest
 class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 

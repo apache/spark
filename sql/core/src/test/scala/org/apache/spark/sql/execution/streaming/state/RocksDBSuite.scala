@@ -29,9 +29,10 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedRocksDBTest
+import org.apache.spark.tags.{ExtendedRocksDBTest, SlowSQLTest}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+@SlowSQLTest
 @ExtendedRocksDBTest
 class RocksDBSuite extends SparkFunSuite {
 

@@ -31,8 +31,10 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.kvstore.InMemoryStore
 
+@SlowSQLTest
 class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._

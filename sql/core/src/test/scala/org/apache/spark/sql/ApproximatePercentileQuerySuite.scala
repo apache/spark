@@ -25,10 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * End-to-end tests for approximate percentile aggregate function.
  */
+@SlowSQLTest
 class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
