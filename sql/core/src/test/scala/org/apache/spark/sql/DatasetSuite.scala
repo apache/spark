@@ -47,6 +47,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -2596,6 +2597,11 @@ class DatasetSuite extends QueryTest
         errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> classOf[Array[Int]].getName))
     }
+  }
+
+  test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
+    val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
+    assert(ds.count() == 2)
   }
 }
 
