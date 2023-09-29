@@ -57,7 +57,6 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val isStandaloneOrLocalCluster = master.isDefined && (
       master.get.startsWith("spark://") || master.get.startsWith("local-cluster")
     )
-  private val supportTaskResourceProfile = isStandaloneOrLocalCluster || isYarn
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
@@ -68,7 +67,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
-      if ((notRunningUnitTests || testExceptionThrown) && !supportTaskResourceProfile) {
+      if ((notRunningUnitTests || testExceptionThrown) && !(isStandaloneOrLocalCluster || isYarn)) {
         throw new SparkException("TaskResourceProfiles are only supported for Standalone and " +
           "Yarn cluster for now when dynamic allocation is disabled.")
       }
