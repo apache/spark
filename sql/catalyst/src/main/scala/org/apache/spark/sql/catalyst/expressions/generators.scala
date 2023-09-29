@@ -265,7 +265,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     })
 
     // Create the collection.
-    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
+    val wrapperClass = classOf[mutable.ArraySeq[_]].getName
     ev.copy(code =
       code"""
          |$code
