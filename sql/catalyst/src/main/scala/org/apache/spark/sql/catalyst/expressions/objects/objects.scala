@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.mutable
-import scala.collection.mutable.{Builder, WrappedArray}
+import scala.collection.mutable.Builder
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -915,7 +915,7 @@ case class MapObjects private(
   }
 
   private lazy val mapElements: scala.collection.Seq[_] => Any = customCollectionCls match {
-    case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+    case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
       // The implicit tag is a workaround to deal with a small change in the
       // (scala) signature of ArrayBuilder.make between Scala 2.12 and 2.13.
       implicit val tag: ClassTag[Any] = elementClassTag()
@@ -923,7 +923,7 @@ case class MapObjects private(
         val builder = mutable.ArrayBuilder.make[Any]
         builder.sizeHint(input.size)
         executeFuncOnCollection(input).foreach(builder += _)
-        mutable.WrappedArray.make(builder.result())
+        mutable.ArraySeq.make(builder.result())
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
@@ -1081,7 +1081,7 @@ case class MapObjects private(
 
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
-        case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
+        case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
           val tag = ctx.addReferenceObj("tag", elementClassTag())
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
           val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
@@ -1092,7 +1092,7 @@ case class MapObjects private(
                  $builder.sizeHint($dataLength);
                """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
-            s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
+            s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.make($builder.result());"
           )
 
