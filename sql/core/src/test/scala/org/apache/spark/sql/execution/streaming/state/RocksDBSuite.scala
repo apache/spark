@@ -240,7 +240,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("Roll back multiple versions") {
+  testWithChangelogCheckpointingEnabled("Rollback multiple versions") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
     new File(remoteDir).delete()  // to make sure that the directory gets created
@@ -250,7 +250,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put(version.toString, version.toString)
         db.commit()
       }
-      // upload snapshot 2.zip
+      // upload snapshot 3.zip
       db.doMaintenance()
       for (version <- 1 to 3) {
         db.load(version)
