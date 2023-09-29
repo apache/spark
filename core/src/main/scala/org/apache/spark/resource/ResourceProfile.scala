@@ -138,8 +138,8 @@ class ResourceProfile(
   }
 
   // Returns whether the executor cores was available to use to calculate the max tasks
-  // per executor and limiting resource. Some cluster managers (like standalone and coarse
-  // grained mesos) don't use the cores config by default so we can't use it to calculate slots.
+  // per executor and limiting resource. Some cluster managers (like standalone)
+  // don't use the cores config by default so we can't use it to calculate slots.
   private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
 
   // The resource that has the least amount of slots per executor. Its possible multiple or all
