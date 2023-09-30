@@ -229,7 +229,7 @@ Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#4 ASC NULLS FIRST], f
 (6) Scan parquet spark_catalog.default.store_returns
 Output [5]: [sr_item_sk#13, sr_ticket_number#14, sr_return_amt#15, sr_net_loss#16, sr_returned_date_sk#17]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_returns]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_amt:decimal(7,2),sr_net_loss:decimal(7,2)>
 
@@ -411,7 +411,7 @@ Arguments: [cs_item_sk#44 ASC NULLS FIRST, cs_order_number#46 ASC NULLS FIRST], 
 (45) Scan parquet spark_catalog.default.catalog_returns
 Output [5]: [cr_item_sk#50, cr_order_number#51, cr_return_amount#52, cr_net_loss#53, cr_returned_date_sk#54]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/catalog_returns]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_amount:decimal(7,2),cr_net_loss:decimal(7,2)>
 
@@ -555,7 +555,7 @@ Arguments: [ws_item_sk#78 ASC NULLS FIRST, ws_order_number#81 ASC NULLS FIRST], 
 (76) Scan parquet spark_catalog.default.web_returns
 Output [5]: [wr_item_sk#85, wr_order_number#86, wr_return_amt#87, wr_net_loss#88, wr_returned_date_sk#89]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/web_returns]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_amt:decimal(7,2),wr_net_loss:decimal(7,2)>
 

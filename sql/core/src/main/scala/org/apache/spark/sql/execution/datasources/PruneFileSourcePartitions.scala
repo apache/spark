@@ -55,6 +55,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val catalogFileIndexToCombinedPartitionFilter = mutable.Map[CatalogFileIndex, ExpressionSet]()
     val basisPartitionSchemaMapping = mutable.Map[CatalogFileIndex, Map[String, Attribute]]()
+    val nonRepeatedEmptyFilterCFI = mutable.Set[CatalogFileIndex]()
     val step1Plan = plan transformDown {
       case op@PhysicalOperation(projects, filters,
       logicalRelation@
@@ -93,6 +94,13 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
                 basisPartitionSchemaMap(attr.name.toLowerCase(Locale.ROOT))
             }))
           }).getOrElse(ExpressionSet(Seq.empty))
+
+        if (catalogFileIndexToCombinedPartitionFilter.contains(cfi) ||
+          partitionKeyFilters.nonEmpty) {
+          nonRepeatedEmptyFilterCFI -= cfi
+        } else {
+          nonRepeatedEmptyFilterCFI += cfi
+        }
 
         if (partitionKeyFilters.nonEmpty) {
           // Keep partition-pruning predicates so that they are visible in physical planning
@@ -136,15 +144,19 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
     val finalPlan = if (catalogFileIndexToCombinedPartitionFilter.isEmpty) {
       step1Plan
     } else {
-      val cfiToBasePFI: mutable.Map[PrunedFileIndexLookUpKey, InMemoryFileIndex]
+      val cfiToBasePFI: mutable.Map[PrunedFileIndexLookUpKey, FileIndex]
       = catalogFileIndexToCombinedPartitionFilter.flatMap {
         case (cfi, totalFilter) =>
-          val basePfi = cfi.filterPartitions(totalFilter.toSeq).
-            asInstanceOf[InMemoryFileIndex]
-          Seq(
-            ((cfi, totalFilter.headOption.map(_.canonicalized)), basePfi),
-            ((cfi, None), basePfi)
-          )
+          if (nonRepeatedEmptyFilterCFI.contains(cfi)) {
+            Seq(((cfi, None), cfi))
+          } else {
+            val basePfi = cfi.filterPartitions(totalFilter.toSeq).
+              asInstanceOf[InMemoryFileIndex]
+            Seq(
+              ((cfi, totalFilter.headOption.map(_.canonicalized)), basePfi),
+              ((cfi, None), basePfi)
+            )
+          }
       }
 
       step1Plan.transformUp {
@@ -157,7 +169,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
           val prunedFileIndex = cfiToBasePFI.getOrElse(pfiLookUpKey, {
             val basePruneFileIndex = cfiToBasePFI(cfi -> None)
-            val specificPFI = basePruneFileIndex.applyFilters(specificFilterToApply.toSeq)
+            val specificPFI = basePruneFileIndex.asInstanceOf[InMemoryFileIndex].
+              applyFilters(specificFilterToApply.toSeq)
             cfiToBasePFI.put(pfiLookUpKey, specificPFI)
             specificPFI
           })
@@ -166,15 +179,18 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
 
           // Change table stats based on the sizeInBytes of pruned files
-
-          val withStats = logicalRelation.catalogTable.map(_.copy(
-            stats = Some(CatalogStatistics(
-              sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
-              rowCount = filteredStats.flatMap(_.rowCount),
-              colStats = colStats.getOrElse(Map.empty)))))
-          val prunedLogicalRelation = logicalRelation.copy(
-            relation = prunedFsRelation, catalogTable = withStats)
-          prunedLogicalRelation
+          if (specificFilterToApply.isEmpty) {
+            logicalRelation.copy(relation = prunedFsRelation)
+          } else {
+            val withStats = logicalRelation.catalogTable.map(_.copy(
+              stats = Some(CatalogStatistics(
+                sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
+                rowCount = filteredStats.flatMap(_.rowCount),
+                colStats = colStats.getOrElse(Map.empty)))))
+            val prunedLogicalRelation = logicalRelation.copy(
+              relation = prunedFsRelation, catalogTable = withStats)
+            prunedLogicalRelation
+          }
       }
     }
     finalPlan
