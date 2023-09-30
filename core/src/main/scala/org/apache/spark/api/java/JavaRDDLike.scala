@@ -418,7 +418,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
-   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * and one operation for merging two U's, as in scala.IterableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    */
