@@ -367,8 +367,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
           recordHiveCall()
           hive.getPartitionsByFilter(table, filter)
         } catch {
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-            shouldFallback =>
+          case ex: MetaException if shouldFallback =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
@@ -381,7 +380,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             prunePartitionsFastFallback(hive, table, catalogTable, predicates)
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+          case ex: MetaException =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
