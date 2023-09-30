@@ -2777,7 +2777,7 @@ class Dataset[T] private[sql] (
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
     val generator = ScalarUserDefinedFunction(
-      UdfUtils.iterableOnceOnceToSeq(f),
+      UdfUtils.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
     select(col("*"), functions.inline(generator(struct(input: _*))))
@@ -2809,7 +2809,7 @@ class Dataset[T] private[sql] (
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
       f: A => IterableOnce[B]): DataFrame = {
     val generator = ScalarUserDefinedFunction(
-      UdfUtils.iterableOnceOnceToSeq(f),
+      UdfUtils.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])
     select(col("*"), functions.explode(generator(col(inputColumn))).as((outputColumn)))

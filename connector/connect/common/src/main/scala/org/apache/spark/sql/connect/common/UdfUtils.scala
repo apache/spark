@@ -131,7 +131,7 @@ private[sql] object UdfUtils extends Serializable {
 
   def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
 
-  def iterableOnceOnceToSeq[A, B](f: A => IterableOnce[B]): A => Seq[B] = { value =>
+  def iterableOnceToSeq[A, B](f: A => IterableOnce[B]): A => Seq[B] = { value =>
     f(value).toSeq
   }
 
