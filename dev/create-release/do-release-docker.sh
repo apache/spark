@@ -45,7 +45,7 @@ Options are:
   -n          : dry run mode. Performs checks and local builds, but do not upload anything.
   -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
   -j [path]   : path to local JDK installation to use for building. By default the script will
-                use openjdk8 installed in the docker image.
+                use openjdk17 installed in the docker image.
   -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish, finalize
 EOF
 }

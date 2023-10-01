@@ -128,6 +128,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     def failure(plan: LogicalPlan): Unit = {
       fail(s"Unexpected plan: $plan")
     }
+
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
     sql(
       """
         |SELECT * FROM testUDTF(
@@ -187,19 +189,15 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
       val query = "select * from explode(table(t))"
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException](sql(query)),
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> "\"explode(outer(__auto_generated_subquery_name_0.c))\"",
-          "paramIndex" -> "1",
-          "inputSql" -> "\"outer(__auto_generated_subquery_name_0.c)\"",
-          "inputType" -> "\"STRUCT<col: ARRAY<INT>>\"",
-          "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+        sqlState = None,
+        parameters = Map("treeNode" -> "(?s).*"),
         context = ExpectedContext(
-          fragment = "explode(table(t))",
-          start = 14,
-          stop = 30))
+          fragment = "table(t)",
+          start = 22,
+          stop = 29))
     }
 
     spark.udtf.registerPython("UDTFCountSumLast", pythonUDTFCountSumLast)
