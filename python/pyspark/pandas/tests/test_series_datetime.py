@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
