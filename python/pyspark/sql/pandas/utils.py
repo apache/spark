@@ -17,6 +17,7 @@
 
 from pyspark.loose_version import LooseVersion
 
+
 def require_minimum_pandas_version() -> None:
     """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
