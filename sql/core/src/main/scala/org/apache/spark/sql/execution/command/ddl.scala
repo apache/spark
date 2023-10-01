@@ -1025,8 +1025,7 @@ object DDLUtils extends Logging {
       case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
       case f: FileDataSourceV2 =>
         DataSourceUtils.checkFieldNames(
-          DataSourceUtils.getNoArgConstructor(f.fallbackFileFormat)
-            .newInstance().asInstanceOf[FileFormat], schema)
+          f.fallbackFileFormat.getDeclaredConstructor().newInstance(), schema)
       case _ =>
     }
   }

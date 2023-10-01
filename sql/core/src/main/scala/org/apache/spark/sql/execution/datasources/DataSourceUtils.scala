@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.lang.reflect.Constructor
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -281,19 +279,4 @@ object DataSourceUtils extends PredicateHelper {
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
-
-  private val MAX_CACHED_CONSTRUCTORS = 100
-  private val classToConstructorMapping = CacheBuilder.newBuilder()
-    .maximumSize(MAX_CACHED_CONSTRUCTORS)
-    .build[Class[_], Constructor[_]](new CacheLoader[Class[_], Constructor[_]] {
-      override def load(cls: Class[_]): Constructor[_] = {
-        cls.getDeclaredConstructor()
-      }
-    })
-
-  /**
-   * Return the no-argument constructor for the given class.
-   */
-  private[sql] def getNoArgConstructor(cls: Class[_]): Constructor[_] =
-    classToConstructorMapping.get(cls)
 }

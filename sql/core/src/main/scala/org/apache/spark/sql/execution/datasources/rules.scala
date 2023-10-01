@@ -285,7 +285,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
   }
 
   private def fallBackV2ToV1(cls: Class[_]): Class[_] =
-    DataSourceUtils.getNoArgConstructor(cls).newInstance() match {
+    cls.getDeclaredConstructor().newInstance() match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
