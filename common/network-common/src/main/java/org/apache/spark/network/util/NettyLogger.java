@@ -17,6 +17,9 @@
 
 package org.apache.spark.network.util;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.ChannelHandlerContext;
@@ -24,9 +27,6 @@ import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.logging.LogLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.io.InputStream;
 
 public class NettyLogger {
   private static final Logger logger = LoggerFactory.getLogger(NettyLogger.class);
@@ -50,9 +50,10 @@ public class NettyLogger {
         try {
           available = ((InputStream) arg).available();
         } catch (IOException ex) {
-          // Swallow
+          // Swallow, but return -1 to indicate an error happened
+          available = -1;
         }
-        return format(ctx, eventName) + " " + available + "B";
+        return format(ctx, eventName, arg) + " " + available + "B";
       } else {
         return super.format(ctx, eventName, arg);
       }
