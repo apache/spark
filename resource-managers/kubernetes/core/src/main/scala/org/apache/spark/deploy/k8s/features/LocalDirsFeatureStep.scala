@@ -45,7 +45,7 @@ private[spark] class LocalDirsFeatureStep(
       // property - we want to instead default to mounting an emptydir volume that doesn't already
       // exist in the image.
       // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
-      // a bit opinionated about YARN and Mesos.
+      // a bit opinionated about YARN.
       val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
         .orElse(conf.getOption("spark.local.dir"))
         .getOrElse(defaultLocalDir)

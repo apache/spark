@@ -305,10 +305,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     Map<String, String> userProps = new HashMap<>();
     userProps.put("spark.submit.deployMode", "client");
     assertTrue(builder.isClientMode(userProps));
-    // --master mesos --deploy-mode cluster
-    sparkSubmitArgs = Arrays.asList(parser.MASTER, "mesos", parser.DEPLOY_MODE, "cluster");
-    builder = newCommandBuilder(sparkSubmitArgs);
-    assertFalse(builder.isClientMode(Collections.emptyMap()));
   }
 
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {

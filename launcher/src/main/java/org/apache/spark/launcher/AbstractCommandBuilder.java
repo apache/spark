@@ -156,7 +156,6 @@ abstract class AbstractCommandBuilder {
         "launcher",
         "mllib",
         "repl",
-        "resource-managers/mesos",
         "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",

@@ -72,7 +72,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
     addData(data.toTraversable)
   }
 
-  def addData(data: TraversableOnce[A]): OffsetV2
+  def addData(data: IterableOnce[A]): OffsetV2
 
   def fullSchema(): StructType = encoder.schema
 
@@ -188,7 +188,7 @@ case class MemoryStream[A : Encoder](
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
-  def addData(data: TraversableOnce[A]): Offset = {
+  def addData(data: IterableOnce[A]): Offset = {
     val objects = data.toSeq
     val rows = objects.iterator.map(d => toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
     logDebug(s"Adding: $objects")

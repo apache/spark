@@ -553,7 +553,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("SPARK-43898: Register scala.collection.immutable.ArraySeq$ofRef for Scala 2.13") {
-    assume(scala.util.Properties.versionNumberString.startsWith("2.13"))
     val conf = new SparkConf(false)
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
     val ser = new KryoSerializer(conf).newInstance()
