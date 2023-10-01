@@ -916,7 +916,7 @@ private[spark] object Utils
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
+  def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
     randomizeInPlace(seq.toArray)
   }
 

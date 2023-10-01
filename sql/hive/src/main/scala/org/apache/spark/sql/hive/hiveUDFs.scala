@@ -239,7 +239,7 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     function.process(wrap(inputProjection(input), wrappers, udtInput, inputDataTypes))
     collector.collectRows()
@@ -262,7 +262,7 @@ private[hive] case class HiveGenericUDTF(
     }
   }
 
-  override def terminate(): TraversableOnce[InternalRow] = {
+  override def terminate(): IterableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     function.close()
     collector.collectRows()

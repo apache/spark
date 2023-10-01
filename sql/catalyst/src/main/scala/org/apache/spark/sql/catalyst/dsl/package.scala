@@ -415,7 +415,7 @@ package object dsl {
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
-          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          func: (Key, Iterator[Left], Iterator[Right]) => IterableOnce[Result],
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
