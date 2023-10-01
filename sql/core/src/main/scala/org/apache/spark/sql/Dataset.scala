@@ -3833,9 +3833,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    if (newLevel != StorageLevel.NONE) {
-      sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
-    }
+    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
