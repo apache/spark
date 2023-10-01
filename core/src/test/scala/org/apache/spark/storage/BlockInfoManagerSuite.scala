@@ -166,6 +166,20 @@ class BlockInfoManagerSuite extends SparkFunSuite {
     assert(blockInfoManager.get("block").get.readerCount === 1)
   }
 
+  test("lockNewBlockForWriting should not block when keepReadLock is false") {
+    withTaskId(0) {
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+    }
+    val lock1Future = Future {
+      withTaskId(1) {
+        blockInfoManager.lockNewBlockForWriting("block", newBlockInfo(), false)
+      }
+    }
+
+    assert(!ThreadUtils.awaitResult(lock1Future, 1.seconds))
+    assert(blockInfoManager.get("block").get.readerCount === 0)
+  }
+
   test("read locks are reentrant") {
     withTaskId(1) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))

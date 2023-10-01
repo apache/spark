@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Random
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
@@ -1012,7 +1012,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       assert(recs === expected(id))
     }
     topK.collect().foreach { row =>
-      val recs = row.getAs[WrappedArray[Row]]("recommendations")
+      val recs = row.getAs[mutable.ArraySeq[Row]]("recommendations")
       assert(recs(0).fieldIndex(dstColName) == 0)
       assert(recs(0).fieldIndex("rating") == 1)
     }

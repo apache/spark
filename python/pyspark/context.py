@@ -2193,6 +2193,14 @@ class SparkContext:
         """
         Add a tag to be assigned to all the jobs started by this thread.
 
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group tag. The application can use :meth:`SparkContext.cancelJobsWithTag` to cancel all
+        running executions with this tag.
+
+        There may be multiple tags present at the same time, so different parts of application may
+        use different tags to perform cancellation at different levels of granularity.
+
         .. versionadded:: 3.5.0
 
         Parameters

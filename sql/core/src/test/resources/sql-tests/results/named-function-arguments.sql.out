@@ -185,21 +185,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "inputSql" : "\"outer(__auto_generated_subquery_name_0.c)\"",
-    "inputType" : "\"STRUCT<id: BIGINT>\"",
-    "paramIndex" : "1",
-    "requiredType" : "(\"ARRAY\" or \"MAP\")",
-    "sqlExpr" : "\"explode(outer(__auto_generated_subquery_name_0.c))\""
+    "treeNode" : "'Generate explode(table-argument#x []), false\n:  +- SubqueryAlias v\n:     +- View (`v`, [id#xL])\n:        +- Project [cast(id#xL as bigint) AS id#xL]\n:           +- Project [id#xL]\n:              +- Range (0, 8, step=1, splits=None)\n+- OneRowRelation\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 45,
-    "fragment" : "explode(collection => TABLE(v))"
+    "startIndex" : 37,
+    "stopIndex" : 44,
+    "fragment" : "TABLE(v)"
   } ]
 }
 
