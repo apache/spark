@@ -84,6 +84,9 @@ public abstract class ManagedBuffer {
    *
    * If this method returns a ByteBuf, then that buffer's reference count will be incremented and
    * the caller will be responsible for releasing this new reference.
+   *
+   * Once `kernel.ssl.sendfile` and OpenSSL's `ssl_sendfile` are more widely adopted (and supported
+   * in Netty), we can potentially deprecate these APIs and just use `convertToNetty`.
    */
   public abstract Object convertToNettyForSsl() throws IOException;
 }
