@@ -45,6 +45,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -2534,6 +2535,11 @@ class DatasetSuite extends QueryTest
     val ds = Seq(Tuple1(ValueClass(1)), Tuple1(ValueClass(2))).toDS()
 
     checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
+  }
+
+  test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
+    val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
+    assert(ds.count() == 2)
   }
 }
 
