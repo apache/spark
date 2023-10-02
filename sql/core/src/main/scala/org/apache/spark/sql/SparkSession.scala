@@ -763,7 +763,8 @@ class SparkSession private(
     DataSource.lookupDataSource(runner, sessionState.conf) match {
       case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
         Dataset.ofRows(self, ExternalCommandExecutor(
-          source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
+          source.getDeclaredConstructor().newInstance()
+            .asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>
         throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
