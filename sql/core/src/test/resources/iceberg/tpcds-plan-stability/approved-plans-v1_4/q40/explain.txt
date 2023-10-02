@@ -1,0 +1,178 @@
+== Physical Plan ==
+TakeOrderedAndProject (28)
++- * HashAggregate (27)
+   +- Exchange (26)
+      +- * HashAggregate (25)
+         +- * Project (24)
+            +- * BroadcastHashJoin Inner BuildRight (23)
+               :- * Project (21)
+               :  +- * BroadcastHashJoin Inner BuildRight (20)
+               :     :- * Project (15)
+               :     :  +- * BroadcastHashJoin Inner BuildRight (14)
+               :     :     :- * Project (9)
+               :     :     :  +- * BroadcastHashJoin LeftOuter BuildRight (8)
+               :     :     :     :- * Project (3)
+               :     :     :     :  +- * Filter (2)
+               :     :     :     :     +- BatchScan spark_catalog.default.catalog_sales (1)
+               :     :     :     +- BroadcastExchange (7)
+               :     :     :        +- * Project (6)
+               :     :     :           +- * Filter (5)
+               :     :     :              +- BatchScan spark_catalog.default.catalog_returns (4)
+               :     :     +- BroadcastExchange (13)
+               :     :        +- * Project (12)
+               :     :           +- * Filter (11)
+               :     :              +- BatchScan spark_catalog.default.warehouse (10)
+               :     +- BroadcastExchange (19)
+               :        +- * Project (18)
+               :           +- * Filter (17)
+               :              +- BatchScan spark_catalog.default.item (16)
+               +- ReusedExchange (22)
+
+
+(1) BatchScan spark_catalog.default.catalog_sales
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+spark_catalog.default.catalog_sales [scan class = SparkBatchQueryScan] [filters=cs_warehouse_sk IS NOT NULL, cs_item_sk IS NOT NULL, cs_sold_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(2) Filter [codegen id : 5]
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Condition : ((isnotnull(cs_warehouse_sk#2) AND isnotnull(cs_item_sk#3)) AND isnotnull(cs_sold_date_sk#1))
+
+(3) Project [codegen id : 5]
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
+
+(4) BatchScan spark_catalog.default.catalog_returns
+Output [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+spark_catalog.default.catalog_returns [scan class = SparkBatchQueryScan] [filters=cr_order_number IS NOT NULL, cr_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(5) Filter [codegen id : 1]
+Input [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+Condition : (isnotnull(cr_order_number#7) AND isnotnull(cr_item_sk#6))
+
+(6) Project [codegen id : 1]
+Output [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+Input [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+
+(7) BroadcastExchange
+Input [3]: [cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 5]
+Left keys [2]: [cs_order_number#4, cs_item_sk#3]
+Right keys [2]: [cr_order_number#7, cr_item_sk#6]
+Join condition: None
+
+(9) Project [codegen id : 5]
+Output [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#8]
+Input [8]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5, cr_item_sk#6, cr_order_number#7, cr_refunded_cash#8]
+
+(10) BatchScan spark_catalog.default.warehouse
+Output [2]: [w_warehouse_sk#9, w_state#10]
+spark_catalog.default.warehouse [scan class = SparkBatchQueryScan] [filters=w_warehouse_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(11) Filter [codegen id : 2]
+Input [2]: [w_warehouse_sk#9, w_state#10]
+Condition : isnotnull(w_warehouse_sk#9)
+
+(12) Project [codegen id : 2]
+Output [2]: [w_warehouse_sk#9, w_state#10]
+Input [2]: [w_warehouse_sk#9, w_state#10]
+
+(13) BroadcastExchange
+Input [2]: [w_warehouse_sk#9, w_state#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(14) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [cs_warehouse_sk#2]
+Right keys [1]: [w_warehouse_sk#9]
+Join condition: None
+
+(15) Project [codegen id : 5]
+Output [5]: [cs_sold_date_sk#1, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#8, w_state#10]
+Input [7]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#8, w_warehouse_sk#9, w_state#10]
+
+(16) BatchScan spark_catalog.default.item
+Output [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+spark_catalog.default.item [scan class = SparkBatchQueryScan] [filters=i_current_price IS NOT NULL, i_current_price >= 0.99, i_current_price <= 1.49, i_item_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(17) Filter [codegen id : 3]
+Input [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+Condition : (((isnotnull(i_current_price#13) AND (i_current_price#13 >= 0.99)) AND (i_current_price#13 <= 1.49)) AND isnotnull(i_item_sk#11))
+
+(18) Project [codegen id : 3]
+Output [2]: [i_item_sk#11, i_item_id#12]
+Input [3]: [i_item_sk#11, i_item_id#12, i_current_price#13]
+
+(19) BroadcastExchange
+Input [2]: [i_item_sk#11, i_item_id#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(20) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [cs_item_sk#3]
+Right keys [1]: [i_item_sk#11]
+Join condition: None
+
+(21) Project [codegen id : 5]
+Output [5]: [cs_sold_date_sk#1, cs_sales_price#5, cr_refunded_cash#8, w_state#10, i_item_id#12]
+Input [7]: [cs_sold_date_sk#1, cs_item_sk#3, cs_sales_price#5, cr_refunded_cash#8, w_state#10, i_item_sk#11, i_item_id#12]
+
+(22) ReusedExchange [Reuses operator id: 32]
+Output [2]: [d_date_sk#14, d_date#15]
+
+(23) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [cs_sold_date_sk#1]
+Right keys [1]: [d_date_sk#14]
+Join condition: None
+
+(24) Project [codegen id : 5]
+Output [5]: [cs_sales_price#5, cr_refunded_cash#8, w_state#10, i_item_id#12, d_date#15]
+Input [7]: [cs_sold_date_sk#1, cs_sales_price#5, cr_refunded_cash#8, w_state#10, i_item_id#12, d_date_sk#14, d_date#15]
+
+(25) HashAggregate [codegen id : 5]
+Input [5]: [cs_sales_price#5, cr_refunded_cash#8, w_state#10, i_item_id#12, d_date#15]
+Keys [2]: [w_state#10, i_item_id#12]
+Functions [2]: [partial_sum(CASE WHEN (d_date#15 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)]
+Aggregate Attributes [4]: [sum#16, isEmpty#17, sum#18, isEmpty#19]
+Results [6]: [w_state#10, i_item_id#12, sum#20, isEmpty#21, sum#22, isEmpty#23]
+
+(26) Exchange
+Input [6]: [w_state#10, i_item_id#12, sum#20, isEmpty#21, sum#22, isEmpty#23]
+Arguments: hashpartitioning(w_state#10, i_item_id#12, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(27) HashAggregate [codegen id : 6]
+Input [6]: [w_state#10, i_item_id#12, sum#20, isEmpty#21, sum#22, isEmpty#23]
+Keys [2]: [w_state#10, i_item_id#12]
+Functions [2]: [sum(CASE WHEN (d_date#15 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END), sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#15 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#24, sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#25]
+Results [4]: [w_state#10, i_item_id#12, sum(CASE WHEN (d_date#15 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#24 AS sales_before#26, sum(CASE WHEN (d_date#15 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#5 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#8 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2)) ELSE 0.00 END)#25 AS sales_after#27]
+
+(28) TakeOrderedAndProject
+Input [4]: [w_state#10, i_item_id#12, sales_before#26, sales_after#27]
+Arguments: 100, [w_state#10 ASC NULLS FIRST, i_item_id#12 ASC NULLS FIRST], [w_state#10, i_item_id#12, sales_before#26, sales_after#27]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#1 IN dynamicpruning#28
+BroadcastExchange (32)
++- * Project (31)
+   +- * Filter (30)
+      +- BatchScan spark_catalog.default.date_dim (29)
+
+
+(29) BatchScan spark_catalog.default.date_dim
+Output [2]: [d_date_sk#14, d_date#15]
+spark_catalog.default.date_dim [scan class = SparkBatchQueryScan] [filters=d_date IS NOT NULL, d_date >= 10997, d_date <= 11057, d_date_sk IS NOT NULL], [runtimeFilters=[]], caseSensitive=false,[ Broadcast Var UNUSED =]
+
+(30) Filter [codegen id : 1]
+Input [2]: [d_date_sk#14, d_date#15]
+Condition : (((isnotnull(d_date#15) AND (d_date#15 >= 2000-02-10)) AND (d_date#15 <= 2000-04-10)) AND isnotnull(d_date_sk#14))
+
+(31) Project [codegen id : 1]
+Output [2]: [d_date_sk#14, d_date#15]
+Input [2]: [d_date_sk#14, d_date#15]
+
+(32) BroadcastExchange
+Input [2]: [d_date_sk#14, d_date#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+

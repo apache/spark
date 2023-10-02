@@ -657,7 +657,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val startTime = System.nanoTime()
     val ctx = new CodegenContext
-    val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    val code = try {
+      child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    } finally {
+      LocationCache.reset()
+    }
 
     // main next function.
     ctx.addNewFunction("processNext",

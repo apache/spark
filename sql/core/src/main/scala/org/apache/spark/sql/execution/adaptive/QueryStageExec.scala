@@ -63,6 +63,8 @@ abstract class QueryStageExec extends LeafExecNode {
 
   protected def doMaterialize(): Future[Any]
 
+  val reuseSource: Option[Int]
+
   /**
    * Returns the runtime statistics after stage materialization.
    */
@@ -173,7 +175,8 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+    override val _canonicalized: SparkPlan,
+    override val reuseSource: Option[Int] = None) extends ExchangeQueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -193,7 +196,7 @@ case class ShuffleQueryStageExec(
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
-      _canonicalized)
+      _canonicalized, Option(this.id))
     reuse._resultOption = this._resultOption
     reuse
   }
@@ -227,7 +230,8 @@ case class ShuffleQueryStageExec(
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+    override val _canonicalized: SparkPlan,
+    override val reuseSource: Option[Int] = None) extends ExchangeQueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b
@@ -245,7 +249,7 @@ case class BroadcastQueryStageExec(
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
-      _canonicalized)
+      _canonicalized, Option(this.id))
     reuse._resultOption = this._resultOption
     reuse
   }
@@ -269,7 +273,7 @@ case class BroadcastQueryStageExec(
 case class TableCacheQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan) extends QueryStageExec {
-
+  val reuseSource: Option[Int] = None
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanExec => i
     case _ =>
@@ -296,3 +300,6 @@ case class TableCacheQueryStageExec(
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }
+
+
+

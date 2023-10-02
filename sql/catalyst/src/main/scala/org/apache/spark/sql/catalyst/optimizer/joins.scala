@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -291,7 +292,9 @@ trait JoinSelectionHelper {
       joinType: JoinType,
       hint: JoinHint,
       hintOnly: Boolean,
-      conf: SQLConf): Option[BuildSide] = {
+      conf: SQLConf,
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan] = mutable.Set.empty):
+  Option[BuildSide] = {
     val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(hint)
     } else {
@@ -306,7 +309,8 @@ trait JoinSelectionHelper {
       canBuildBroadcastLeft(joinType) && buildLeft,
       canBuildBroadcastRight(joinType) && buildRight,
       left,
-      right
+      right,
+      broadcastedCanonicalizedSubplans
     )
   }
 
@@ -337,7 +341,8 @@ trait JoinSelectionHelper {
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
       canBuildShuffledHashJoinRight(joinType) && buildRight,
       left,
-      right
+      right,
+      mutable.Set.empty
     )
   }
 
@@ -351,8 +356,21 @@ trait JoinSelectionHelper {
     }
   }
 
-  def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
-    if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+  def getSmallerSide(left: LogicalPlan, right: LogicalPlan,
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]): BuildSide = {
+    val containsLeft = broadcastedCanonicalizedSubplans.contains(left.canonicalized)
+    val containsRight = broadcastedCanonicalizedSubplans.contains(right.canonicalized)
+    if ((containsLeft && containsRight) || !(containsLeft || containsRight)) {
+      if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
+        BuildRight
+      } else {
+        BuildLeft
+      }
+    } else if (containsLeft) {
+      BuildLeft
+    } else {
+      BuildRight
+    }
   }
 
   /**
@@ -488,11 +506,12 @@ trait JoinSelectionHelper {
       canBuildLeft: Boolean,
       canBuildRight: Boolean,
       left: LogicalPlan,
-      right: LogicalPlan): Option[BuildSide] = {
+      right: LogicalPlan,
+      broadcastedCanonicalizedSubplans: mutable.Set[LogicalPlan]): Option[BuildSide] = {
     if (canBuildLeft && canBuildRight) {
       // returns the smaller side base on its estimated physical size, if we want to build the
       // both sides.
-      Some(getSmallerSide(left, right))
+      Some(getSmallerSide(left, right, broadcastedCanonicalizedSubplans))
     } else if (canBuildLeft) {
       Some(BuildLeft)
     } else if (canBuildRight) {

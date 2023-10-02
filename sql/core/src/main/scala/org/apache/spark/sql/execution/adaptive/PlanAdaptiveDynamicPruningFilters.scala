@@ -44,14 +44,15 @@ case class PlanAdaptiveDynamicPruningFilters(
         val packedKeys = BindReferences.bindReferences(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
         val mode = HashedRelationBroadcastMode(packedKeys)
+        // TODO: Asif: check if broadcastvar push down makes sense here
         // plan a broadcast exchange of the build side of the join
         val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
 
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
           find(rootPlan) {
-            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _, _) =>
               left.sameResult(exchange)
-            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _, _) =>
               right.sameResult(exchange)
             case _ => false
           }.isDefined

@@ -33,9 +33,13 @@ trait SQLHelper {
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations.
+   * configurations, and returns the result of the f.
+   *
+   * @param pairs Sql con f properties
+   * @param f Function to execute
+   * @return T return value
    */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+  protected def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
     val conf = SQLConf.get
     val (keys, values) = pairs.unzip
     val currentValues = keys.map { key =>

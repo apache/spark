@@ -29,7 +29,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class ColumnarToRowEvaluatorFactory(
     childOutput: Seq[Attribute],
-    numOutputRows: SQLMetric,
+    val numOutputRows: SQLMetric,
     numInputBatches: SQLMetric)
     extends PartitionEvaluatorFactory[ColumnarBatch, InternalRow] {
 

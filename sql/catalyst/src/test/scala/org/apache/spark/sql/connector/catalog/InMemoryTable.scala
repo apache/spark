@@ -125,6 +125,11 @@ class InMemoryTable(
 
 object InMemoryTable {
 
+  val BROADCASTED_JOIN_KEYS_WRAPPER_CLASS =
+    "org.apache.spark.sql.catalyst.bcvar.BroadcastedJoinKeysWrapper"
+
+  val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcvar.ArrayWrapper"
+
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
       partitionNames: Seq[String],

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
@@ -63,4 +67,30 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
   default void filter(Predicate[] predicates) {
     this.filter(PredicateUtils.toV1(predicates));
   }
+
+  default boolean hasPushedBroadCastFilter() {return false;}
+
+  default NamedReference[] allAttributes() { return new NamedReference[0];}
+
+  default boolean equalToIgnoreRuntimeFilters(Scan other) {
+    return this.equals(other);
+  }
+
+  default int hashCodeIgnoreRuntimeFilters() {
+    return this.hashCode();
+  }
+
+  default List<PushedBroadcastFilterData> getPushedBroadcastFilters() {
+    return Collections.emptyList();
+  }
+
+  default Set<Long> getPushedBroadcastVarIds() {
+    return Collections.emptySet();
+  }
+
+  default int getPushedBroadcastFiltersCount() {
+    return 0;
+  }
+
+  default void callbackBeforeOpeningIterator() {}
 }
