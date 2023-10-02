@@ -64,7 +64,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     Join(outerPlan, dedupSubplan, joinType, condition, JoinHint(None, subHint))
   }
 
-  private def removeDomainJoins(
+  private def rewriteDomainJoinsIfPresent(
       outerPlan: LogicalPlan,
       sub: LogicalPlan,
       joinCond: Option[Expression]): LogicalPlan = {
@@ -131,18 +131,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, removeDomainJoins(outerPlan, sub, joinCond),
+          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftSemi, joinCond, subHint)
         case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, removeDomainJoins(outerPlan, sub, joinCond),
+          buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
             LeftAnti, joinCond, subHint)
         case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
-          Join(outerPlan, removeDomainJoins(outerPlan, newSub, joinCond),
+          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
@@ -169,7 +169,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          Join(outerPlan, removeDomainJoins(outerPlan, newSub, Some(finalJoinCond)),
+          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
             LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
@@ -204,7 +204,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val existenceJoin = ExistenceJoin(exists)
           val newCondition = conditions.reduceLeftOption(And)
           newPlan =
-            buildJoin(newPlan, removeDomainJoins(newPlan, sub, newCondition),
+            buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
               existenceJoin, newCondition, subHint)
           exists
         case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
@@ -227,7 +227,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
           val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan, removeDomainJoins(newPlan, newSub, Some(finalJoinCond)),
+          newPlan = Join(newPlan,
+            rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
           Not(exists)
         case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
@@ -237,7 +238,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
           val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan, removeDomainJoins(newPlan, newSub, newConditions),
+          newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
             ExistenceJoin(exists), newConditions, joinHint)
           exists
       }
