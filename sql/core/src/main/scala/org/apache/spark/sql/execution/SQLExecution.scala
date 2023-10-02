@@ -157,7 +157,7 @@ object SQLExecution extends Logging {
           val endTime = System.nanoTime()
           val errorMessage = ex.map {
             case e: SparkThrowable =>
-              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)
             case e =>
               Utils.exceptionString(e)
           }
