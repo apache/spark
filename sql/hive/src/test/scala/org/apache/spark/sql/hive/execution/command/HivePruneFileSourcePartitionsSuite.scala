@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, InMemoryFileIndex, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -297,6 +297,106 @@ class HivePruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils wit
           assert(numPartitionFetches == 10)
           assert(leavesWithOpt.head eq leavesWithOpt(1))
         })
+      }
+    }
+  }
+
+  test("non repeated non filtered tables should remain as CatalogFileIndex") {
+    val test = () => {
+      HiveCatalogMetrics.reset()
+      val df1 = spark.table("testA").as("test2").where("test2.i < 50 ")
+      val df2 = spark.table("testB").as("test4").where("test4.i < 10 ")
+      val df = df1.join(df2, "i")
+      val res = df.collect().sortBy(_.getInt(0))
+      val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
+      val numHiveClientCalls = HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount
+      (res, numPartitionFetches, numHiveClientCalls, df.queryExecution.optimizedPlan)
+    }
+    withTable("testA") {
+      withTable("testB") {
+        withTempDir { dir1 =>
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE testA(i int)
+               |PARTITIONED BY (p int)
+               |STORED AS parquet
+               |LOCATION '${dir1.toURI}'""".stripMargin)
+          withTempDir { dir2 =>
+            sql(
+              s"""
+                 |CREATE EXTERNAL TABLE testB(i int)
+                 |PARTITIONED BY (p int)
+                 |STORED AS parquet
+                 |LOCATION '${dir2.toURI}'""".stripMargin)
+            executeTestBody({
+              spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("testA")
+              spark.range(1000).selectExpr("id as i", "id % 20 as p").write.insertInto("testB")
+              val (res1, numPartitionFetchesWithOpt, numHiveClientCallsOpt, optmPlan) = test()
+              excludePartitionPruneRule()
+              val (res2, numPartitionFetchesWithoutOpt, numHiveClientCallsWithoutOpt, _) = test()
+              res1.zip(res2).foreach(tup => assertResult(tup._1)(tup._2))
+              assert(numPartitionFetchesWithoutOpt == numPartitionFetchesWithOpt)
+              assert(numHiveClientCallsWithoutOpt == numHiveClientCallsOpt)
+              optmPlan.collectLeaves().foreach {
+                case lr: LogicalRelation =>
+                  lr.relation.asInstanceOf[HadoopFsRelation].location.isInstanceOf[CatalogFileIndex]
+              }
+            })
+          }
+        }
+      }
+    }
+  }
+
+  test("non repeated non filtered table with filtered table") {
+    val test = () => {
+      HiveCatalogMetrics.reset()
+      val df1 = spark.table("testA").as("test2").where("test2.i < 50 ")
+      val df2 = spark.table("testB").as("test4").where("test4.p < 10 ")
+      val df = df1.join(df2, "i")
+      val res = df.collect().sortBy(_.getInt(0))
+      val numPartitionFetches = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
+      val numHiveClientCalls = HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount
+      (res, numPartitionFetches, numHiveClientCalls, df.queryExecution.optimizedPlan)
+    }
+    withTable("testA") {
+      withTable("testB") {
+        withTempDir { dir1 =>
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE testA(i int)
+               |PARTITIONED BY (p int)
+               |STORED AS parquet
+               |LOCATION '${dir1.toURI}'""".stripMargin)
+          withTempDir { dir2 =>
+            sql(
+              s"""
+                 |CREATE EXTERNAL TABLE testB(i int)
+                 |PARTITIONED BY (p int)
+                 |STORED AS parquet
+                 |LOCATION '${dir2.toURI}'""".stripMargin)
+            executeTestBody({
+              spark.range(800).selectExpr("id as i", "id % 20 as p").write.insertInto("testA")
+              spark.range(1000).selectExpr("id as i", "id % 20 as p").write.insertInto("testB")
+              val (res1, numPartitionFetchesWithOpt, numHiveClientCallsOpt, optmPlan) = test()
+              excludePartitionPruneRule()
+              val (res2, numPartitionFetchesWithoutOpt, numHiveClientCallsWithoutOpt, _) = test()
+              res1.zip(res2).foreach(tup => assertResult(tup._1)(tup._2))
+              assert(numPartitionFetchesWithoutOpt == numPartitionFetchesWithOpt)
+              assert(numHiveClientCallsWithoutOpt == numHiveClientCallsOpt)
+              var foundCFI = false
+              var foundPfi = false
+              optmPlan.collectLeaves().foreach {
+                case lr: LogicalRelation =>
+                  lr.relation.asInstanceOf[HadoopFsRelation].location match {
+                    case _: CatalogFileIndex => foundCFI = true
+                    case _: InMemoryFileIndex => foundPfi = true
+                  }
+              }
+              assert(foundPfi && foundCFI)
+            })
+          }
+        }
       }
     }
   }
