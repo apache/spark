@@ -46,12 +46,11 @@ public class NettyLogger {
         return format(ctx, eventName) + " " +
           ((ByteBufHolder) arg).content().readableBytes() + "B";
       } else if (arg instanceof InputStream) {
-        int available = 0;
+        int available = -1;
         try {
           available = ((InputStream) arg).available();
         } catch (IOException ex) {
           // Swallow, but return -1 to indicate an error happened
-          available = -1;
         }
         return format(ctx, eventName, arg) + " " + available + "B";
       } else {
