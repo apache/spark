@@ -438,7 +438,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
         recordHiveCall()
         hive.getPartitionsByNames(table, partNames.asJava)
       } catch {
-        case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+        case ex: HiveException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
           recordHiveCall()
