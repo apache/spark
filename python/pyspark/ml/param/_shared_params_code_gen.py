@@ -42,6 +42,7 @@ _type_for_type_converter = {
     "TypeConverters.toFloat": "float",
     "TypeConverters.toInt": "int",
     "TypeConverters.toListFloat": "List[float]",
+    "TypeConverters.toListInt": "List[int]",
     "TypeConverters.toListString": "List[str]",
     "TypeConverters.toString": "str",
 }
@@ -356,6 +357,12 @@ if __name__ == "__main__":
             None,
             "TypeConverters.toFloat",
         ),
+        (
+            "inputFeatureSizeList",
+            "input feature size list for input columns of vector assembler",
+            None,
+            "TypeConverters.toListInt",
+        )
     ]
 
     code = []

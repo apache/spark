@@ -876,3 +876,25 @@ class HasMomentum(Params):
         Gets the value of momentum or its default value.
         """
         return self.getOrDefault(self.momentum)
+
+
+class HasInputFeatureSizeList(Params):
+    """
+    Mixin for param inputFeatureSizeList: input feature size list for input columns of vector assembler
+    """
+
+    inputFeatureSizeList: "Param[List[int]]" = Param(
+        Params._dummy(),
+        "inputFeatureSizeList",
+        "input feature size list for input columns of vector assembler",
+        typeConverter=TypeConverters.toListInt,
+    )
+
+    def __init__(self) -> None:
+        super(HasInputFeatureSizeList, self).__init__()
+
+    def getInputFeatureSizeList(self) -> List[int]:
+        """
+        Gets the value of inputFeatureSizeList or its default value.
+        """
+        return self.getOrDefault(self.inputFeatureSizeList)
