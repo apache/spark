@@ -2309,6 +2309,55 @@ class BaseUDTFTestsMixin:
             + [Row(partition_col=42, count=3, total=3, last=None)],
         )
 
+    def test_udtf_with_prepare_string_from_analyze(self):
+        @udtf
+        class TestUDTF:
+            def __init__(self):
+                self._total = 0
+                self._buffer = None
+
+            @staticmethod
+            def analyze(argument, _):
+                if (
+                    argument.value is None
+                    or argument.is_table
+                    or not isinstance(argument.value, str)
+                    or len(argument.value) == 0
+                ):
+                    raise Exception("The first argument must be non-empty string")
+                assert argument.data_type == StringType()
+                assert not argument.is_table
+                return AnalyzeResult(
+                    schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
+                    prepare_buffer=argument.value,
+                    with_single_partition=True,
+                )
+
+            def prepare(self, buffer):
+                self._buffer = buffer
+                self._total = len(buffer)
+
+            def eval(self, argument, row: Row):
+                self._total += 1
+
+            def terminate(self):
+                yield self._total, self._buffer
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT total, buffer
+                FROM test_udtf("abc", TABLE(t))
+                """
+            ).collect(),
+            [Row(count=23, buffer="abc")],
+        )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

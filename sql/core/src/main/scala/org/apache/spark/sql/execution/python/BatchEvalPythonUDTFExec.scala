@@ -112,6 +112,7 @@ object PythonUDTFRunner {
       dataOut: DataOutputStream,
       udtf: PythonUDTF,
       argMetas: Array[ArgumentMetadata]): Unit = {
+    // Write the argument types of the UDTF.
     dataOut.writeInt(argMetas.length)
     argMetas.foreach {
       case ArgumentMetadata(offset, name) =>
@@ -124,6 +125,8 @@ object PythonUDTFRunner {
             dataOut.writeBoolean(false)
         }
     }
+    // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
+    // the TABLE argument of the Python UDTF call, if applicable.
     udtf.pythonUDTFPartitionColumnIndexes match {
       case Some(partitionColumnIndexes) =>
         dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
@@ -132,8 +135,12 @@ object PythonUDTFRunner {
       case None =>
         dataOut.writeInt(0)
     }
+    // Write the "prepare_result" string from the UDTF "analyze" method, if any.
+    PythonWorkerUtils.writeUTF(udtf.analyzeResult.prepareBuffer, dataOut)
+    // Write the contents of the Python script itself.
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)
+    // Write the result schema of the UDTF call.
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

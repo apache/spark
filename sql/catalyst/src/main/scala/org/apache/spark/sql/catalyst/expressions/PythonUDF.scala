@@ -158,7 +158,9 @@ abstract class UnevaluableGenerator extends Generator {
  * which needs a dedicated physical operator to execute it.
  * @param name name of the Python UDTF being called
  * @param func string contents of the Python code in the UDTF, along with other environment state
- * @param elementSchema result schema of the function call
+ * @param analyzeResult this contains all metadata returned by the Python UDTF 'analyze' method,
+ *                      including the result schema of the function call as well as optional other
+ *                      information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
  *                 themeselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
@@ -167,21 +169,25 @@ abstract class UnevaluableGenerator extends Generator {
  * @param udfDeterministic true if this function is deterministic wherein it returns the same result
  *                         rows for every call with the same input arguments
  * @param resultId unique expression ID for this function invocation
- * @param pythonUDTFPartitionColumnIndexes holds the indexes of the TABLE argument to the Python
- *                                         UDTF call, if applicable
+ * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
+ *                                         all PARTITION BY expressions within the TABLE argument of
+ *                                         the Python UDTF call, if applicable
  * @param analyzeResult holds the result of the polymorphic Python UDTF 'analze' method, if the UDTF
  *                      defined one
  */
 case class PythonUDTF(
     name: String,
     func: PythonFunction,
-    elementSchema: StructType,
+    analyzeResult: PythonUDTFAnalyzeResult,
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
+
+  /** This is the result schema of the function call. */
+  override val elementSchema: StructType = analyzeResult.schema
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -224,6 +230,7 @@ case class UnresolvedPolymorphicPythonUDTF(
 /**
  * Represents the result of invoking the polymorphic 'analyze' method on a Python user-defined table
  * function. This returns the table function's output schema in addition to other optional metadata.
+ *
  * @param schema result schema of this particular function call in response to the particular
  *               arguments provided, including the types of any provided scalar arguments (and
  *               their values, in the case of literals) as well as the names and types of columns of
@@ -241,12 +248,20 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
+ * @param prepareBuffer If non-empty, this string represents state computed once within the
+ *                      'analyze' method to be propagated to each instance of the UDTF class at the
+ *                      time of its creation, using its 'prepare' method. The format this buffer is
+ *                      opaque and known only to the data source. Common use cases include
+ *                      serializing protocol buffers or JSON configurations into this buffer so that
+ *                      potentially expensive initialization work done at 'analyze' time does not
+ *                      need to be recomputed later.
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
-    orderByExpressions: Seq[SortOrder]) {
+    orderByExpressions: Seq[SortOrder],
+    prepareBuffer: String) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
    * expression of a UDTF call, throwing an error if any properties of the UDTF call are

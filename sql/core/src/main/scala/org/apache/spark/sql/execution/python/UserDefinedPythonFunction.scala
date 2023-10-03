@@ -129,7 +129,12 @@ case class UserDefinedPythonTableFunction(
         PythonUDTF(
           name = name,
           func = func,
-          elementSchema = rt,
+          analyzeResult = PythonUDTFAnalyzeResult(
+            schema = rt,
+            withSinglePartition = false,
+            partitionByExpressions = Seq.empty,
+            orderByExpressions = Seq.empty,
+            prepareBuffer = ""),
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
@@ -277,11 +282,25 @@ object UserDefinedPythonTableFunction {
         new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
       // Receive the schema.
-      val schema = dataIn.readInt() match {
-        case length if length >= 0 =>
+      val schema: StructType = dataIn.readInt() match {
+        case length: Int if length >= 0 =>
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
           DataType.fromJson(new String(obj, StandardCharsets.UTF_8)).asInstanceOf[StructType]
+
+        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+          val exLength = dataIn.readInt()
+          val obj = new Array[Byte](exLength)
+          dataIn.readFully(obj)
+          val msg = new String(obj, StandardCharsets.UTF_8)
+          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
+      }
+      // Receive the "prepare_buffer" string, if any.
+      val prepareBuffer: String = dataIn.readInt() match {
+        case length: Int if length >= 0 =>
+          val obj = new Array[Byte](length)
+          dataIn.readFully(obj)
+          new String(obj, StandardCharsets.UTF_8)
 
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           val exLength = dataIn.readInt()
@@ -337,7 +356,8 @@ object UserDefinedPythonTableFunction {
         schema = schema,
         withSinglePartition = withSinglePartition,
         partitionByExpressions = partitionByColumns.toSeq,
-        orderByExpressions = orderBy.toSeq)
+        orderByExpressions = orderBy.toSeq,
+        prepareBuffer = prepareBuffer)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

@@ -107,12 +107,20 @@ class AnalyzeResult:
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
         in this case.
+    prepare_buffer: str
+        If non-empty, this string represents state computed once within the 'analyze' method to be
+        propagated to each instance of the UDTF class at the time of its creation, using its
+        'prepare' method. The format this buffer is opaque and known only to the data source. Common
+        use cases include serializing protocol buffers or JSON configurations into this buffer so
+        that potentially expensive initialization work done at 'analyze' time does not need to be
+        recomputed later.
     """
 
     schema: StructType
     with_single_partition: bool = False
     partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
     order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
+    prepare_buffer: str = ""
 
 
 def _create_udtf(

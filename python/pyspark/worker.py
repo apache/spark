@@ -680,6 +680,7 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    prepare_buffer = utf8_deserializer.loads(infile)
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -785,6 +786,24 @@ def read_udtf(pickleSer, infile, eval_type):
                 return _create_row(new_row_keys, new_row_values)
             else:
                 return arg
+
+    # Wrap the UDTF handler to call the "prepare" method if there was a non-empty "prepare_buffer"
+    # string returned from the "analyze" method earlier.
+    if len(prepare_buffer) > 0:
+        prev_handler = handler
+
+        def handler_with_prepare():
+            new_udtf = prev_handler()
+            if new_udtf.prepare is None:
+                raise PySparkRuntimeError(
+                    "The 'analyze' method returned a non-empty 'prepare_buffer' string, but the "
+                    + "UDTF does not define a corresponding 'prepare' method; please add a method "
+                    + "to the UDTF named 'prepare' accepting a single string argument and try again"
+                )
+            new_udtf.prepare(prepare_buffer)
+            return new_udtf
+
+        handler = handler_with_prepare
 
     # Instantiate the UDTF class.
     try:
