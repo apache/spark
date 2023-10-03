@@ -19,3 +19,19 @@ select * from t1 where
  (exists(select count(*) + 1 from t2 where t2.c1 = t1.c1) OR
  not exists(select count(*) - 1 from t2 where t2.c1 = t1.c1)) AND
  exists(select count(*) from t2 where t2.c1 = t1.c2);
+
+-- With legacy behavior flag set, some answers are not correct.
+set spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled = true;
+select * from t1 where exists (select count(*) from t2 where t2.c1 = t1.c1);
+
+select * from t1 where not exists (select count(*) from t2 where t2.c1 = t1.c1);
+
+select *, exists (select count(*) from t2 where t2.c1 = t1.c1) from t1;
+
+select *, not exists (select count(*) from t2 where t2.c1 = t1.c1) from t1;
+
+select * from t1 where
+ exists(select count(*) + 1 from t2 where t2.c1 = t1.c1) OR
+ not exists (select count(*) - 1 from t2 where t2.c1 = t1.c1);
+
+set spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled = false;
