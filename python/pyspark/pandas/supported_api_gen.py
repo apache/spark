@@ -19,7 +19,7 @@
 Generate 'Supported pandas APIs' documentation file
 """
 import warnings
-from distutils.version import LooseVersion
+from pyspark.loose_version import LooseVersion
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
 from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple

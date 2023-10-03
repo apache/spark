@@ -20,8 +20,8 @@ package org.apache.spark.sql.connect.service
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 
 import com.google.common.collect.Lists

@@ -21,9 +21,9 @@ import java.io.IOException
 import java.util.{HashMap => JHashMap}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
 

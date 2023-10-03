@@ -21,8 +21,8 @@ import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => Java
 import java.util
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 

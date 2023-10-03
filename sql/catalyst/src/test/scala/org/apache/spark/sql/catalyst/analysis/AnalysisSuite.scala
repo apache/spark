@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 

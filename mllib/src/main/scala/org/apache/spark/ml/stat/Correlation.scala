@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.stat
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}

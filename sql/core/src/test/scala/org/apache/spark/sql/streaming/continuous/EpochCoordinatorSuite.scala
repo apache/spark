@@ -292,7 +292,7 @@ class EpochCoordinatorSuite
     val exceptionCaptor = ArgumentCaptor.forClass(classOf[Throwable]);
     verify(query, atLeastOnce()).stopInNewThread(exceptionCaptor.capture())
 
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val throwable = exceptionCaptor.getAllValues.asScala.find(_.getMessage === msg)
     assert(throwable != null, "Stream stopped with an exception but expected message is missing")
   }

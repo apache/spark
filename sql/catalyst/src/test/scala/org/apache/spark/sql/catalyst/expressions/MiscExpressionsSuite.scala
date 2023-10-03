@@ -37,7 +37,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[RuntimeException](
       RaiseError(Literal.create(null, StringType)),
       EmptyRow,
-      null
+      "[USER_RAISED_EXCEPTION] null"
     )
 
     // Expects a string
@@ -45,10 +45,10 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
-          "requiredType" -> "\"STRING\"",
-          "inputSql" -> "\"5\"",
-          "inputType" -> "\"INT\""
+          "paramIndex" -> "2",
+          "requiredType" -> "\"MAP<STRING, STRING>\"",
+          "inputSql" -> "\"map(errorMessage, 5)\"",
+          "inputType" -> "\"MAP<STRING, INT>\""
         )
       )
     )

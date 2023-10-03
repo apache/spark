@@ -23,8 +23,8 @@ import java.util.List;
 
 import scala.Tuple2;
 
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
@@ -39,14 +39,14 @@ import org.apache.spark.sql.test.TestSparkSession;
 public class JavaDatasetAggregatorSuiteBase implements Serializable {
   private transient TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     // Trigger static initializer of TestData
     spark = new TestSparkSession();
     spark.loadTestData();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;

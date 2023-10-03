@@ -75,6 +75,11 @@
       }
     }
   },
+  "AVRO_INCOMPATIBLE_READ_TYPE" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ]
+  },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."
@@ -3479,6 +3484,11 @@
         "message" : [
           "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
         ]
+      },
+      "UNSUPPORTED_TABLE_ARGUMENT" : {
+        "message" : [
+          "Table arguments are used in a function where they are not supported<treeNode>."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -3496,6 +3506,26 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ]
+  },
+  "USER_RAISED_EXCEPTION" : {
+    "message" : [
+      "<errorMessage>"
+    ],
+    "sqlState" : "P0001"
+  },
+  "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH" : {
+    "message" : [
+      "The `raise_error()` function was used to raise error class: <errorClass> which expects parameters: <expectedParms>.",
+      "The provided parameters <providedParms> do not match the expected parameters.",
+      "Please make sure to provide all expected parameters."
+    ],
+    "sqlState" : "P0001"
+  },
+  "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS" : {
+    "message" : [
+      "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
+    ],
+    "sqlState" : "P0001"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
@@ -4095,11 +4125,6 @@
   "_LEGACY_ERROR_TEMP_1111" : {
     "message" : [
       "DESCRIBE does not support partition for v2 tables."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1113" : {
-    "message" : [
-      "Table <table> does not support <cmd>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1114" : {
@@ -6310,5 +6335,11 @@
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
     ]
+  },
+  "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
+    "message" : [
+      "<errorMessage>"
+    ],
+    "sqlState" : "P0001"
   }
 }

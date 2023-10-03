@@ -463,7 +463,7 @@ class ALSModel private[ml] (
       num: Int,
       blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     val ratingColumn = "rating"
     val recommendColumn = "recommendations"
