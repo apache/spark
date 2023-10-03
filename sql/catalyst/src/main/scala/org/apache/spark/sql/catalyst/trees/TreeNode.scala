@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -53,6 +53,8 @@ import org.apache.spark.util.collection.BitSet
 private class MutableInt(var i: Int)
 
 // A tag of a `TreeNode`, which defines name and type
+// Note: In general, if developers only care about its tagging capabilities,
+// then Unit should be considered first before using Boolean.
 case class TreeNodeTag[T](name: String)
 
 // A functor that always returns true.
@@ -259,7 +261,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
    */
-  def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
+  def flatMap[A](f: BaseType => IterableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
     ret.toSeq

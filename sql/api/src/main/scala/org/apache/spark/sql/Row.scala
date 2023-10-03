@@ -21,8 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Base64
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.hashing.MurmurHash3
 
 import org.json4s.{JArray, JBool, JDecimal, JDouble, JField, JLong, JNull, JObject, JString}

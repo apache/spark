@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.24 with access configured to it using
+* A running Kubernetes cluster at version >= 1.26 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -440,6 +440,19 @@ $ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
+
+Since Apache Spark 4.0.0, Driver UI provides a way to see driver logs via a new configuration.
+
+```
+spark.driver.log.localDir=/tmp
+```
+
+Then, the Spark driver UI can be accessed on `http://localhost:4040/logs/`.
+Optionally, the layout of log is configured by the following.
+
+```
+spark.driver.log.layout="%m%n%ex"
+```
 
 ### Debugging
 

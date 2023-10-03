@@ -20,8 +20,8 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.net.URI
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path

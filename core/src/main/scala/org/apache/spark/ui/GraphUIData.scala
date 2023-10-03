@@ -20,8 +20,8 @@ package org.apache.spark.ui
 import java.{util => ju}
 import java.lang.{Long => JLong}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
 
 /**

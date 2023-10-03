@@ -20,12 +20,12 @@ import java.io.StringReader
 import javax.xml.stream.{XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events.Attribute
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.{StaxXmlParserUtils, XmlOptions}
 
 final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 

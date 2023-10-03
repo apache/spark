@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
@@ -392,7 +392,7 @@ case class AppendColumnsWithObjectExec(
  * The result of this function is flattened before being output.
  */
 case class MapGroupsExec(
-    func: (Any, Iterator[Any]) => TraversableOnce[Any],
+    func: (Any, Iterator[Any]) => IterableOnce[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
@@ -432,7 +432,7 @@ case class MapGroupsExec(
 
 object MapGroupsExec {
   def apply(
-      func: (Any, Iterator[Any], LogicalGroupState[Any]) => TraversableOnce[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => IterableOnce[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
@@ -615,7 +615,7 @@ case class FlatMapGroupsInRWithArrowExec(
  * The result of this function is flattened before being output.
  */
 case class CoGroupExec(
-    func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
+    func: (Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any],
     keyDeserializer: Expression,
     leftDeserializer: Expression,
     rightDeserializer: Expression,

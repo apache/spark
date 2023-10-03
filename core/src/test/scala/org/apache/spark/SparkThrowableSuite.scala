@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Locale
 
+import scala.collection.convert.ImplicitConversions._
 import scala.util.Properties.lineSeparator
 import scala.util.matching.Regex
 
@@ -142,7 +143,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
-      .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
       .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
@@ -222,7 +223,20 @@ class SparkThrowableSuite extends SparkFunSuite {
          |---""".stripMargin
     }
 
-    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR_TEMP_"))
+    def orphanedGoldenFiles(): Iterable[File] = {
+      val subErrorFileNames = errors.filter(_._2.subClass.isDefined).map(error => {
+        getErrorPath(error._1) + ".md"
+      }).toSet
+
+      val docsDir = getWorkspaceFilePath("docs")
+      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).filter { f =>
+        (f.getName.startsWith("sql-error-conditions-") && f.getName.endsWith("-error-class.md")) &&
+          !subErrorFileNames.contains(f.getName)
+      }
+      orphans
+    }
+
+    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR"))
       .sortBy(_._1).map(error => {
       val name = error._1
       val info = error._2
@@ -322,6 +336,23 @@ class SparkThrowableSuite extends SparkFunSuite {
     } else {
       assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
         "The error class document is not up to date. Please regenerate it.")
+    }
+
+    val orphans = orphanedGoldenFiles()
+    if (regenerateGoldenFiles) {
+      if (orphans.nonEmpty) {
+        logInfo(s"Orphaned error class documents (${orphans.size}) is not empty, " +
+          "executing cleanup operation.")
+        orphans.foreach { f =>
+          FileUtils.deleteQuietly(f)
+          logInfo(s"Cleanup orphaned error document: ${f.getName}.")
+        }
+      } else {
+        logInfo("Orphaned error class documents is empty")
+      }
+    } else {
+      assert(orphans.isEmpty,
+        "Exist orphaned error class documents. Please regenerate it.")
     }
   }
 

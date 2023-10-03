@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
@@ -104,6 +104,10 @@ class ApplyInPandasWithStatePythonRunner(
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  }
 
   /**
    * This method sends out the additional metadata before sending out actual data.

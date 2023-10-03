@@ -201,6 +201,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
+  override def fetchErrorDetails(
+      request: proto.FetchErrorDetailsRequest,
+      responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]): Unit = {
+    try {
+      new SparkConnectFetchErrorDetailsHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "getErrorInfo",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
   private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
       : MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
@@ -347,6 +361,12 @@ object SparkConnectService extends Logging {
     }
     userSessionMapping.get((userId, sessionId), default)
   }
+
+  /**
+   * If there are no executions, return Left with System.currentTimeMillis of last active
+   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
+   */
+  def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionManager.listActiveExecutions
 
   /**
    * Used for testing

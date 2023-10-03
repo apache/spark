@@ -21,8 +21,8 @@ import java.util.Arrays;
 
 import scala.Tuple2;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoder;
@@ -39,13 +39,13 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
 
     Dataset<Tuple2<String, Integer>> aggregated = grouped.agg(new IntSumOf().toColumn());
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3), new Tuple2<>("b", 3)),
         aggregated.collectAsList());
 
     Dataset<Tuple2<String, Integer>> aggregated2 = grouped.agg(new IntSumOf().toColumn())
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
-    Assert.assertEquals(
+    Assertions.assertEquals(
       Arrays.asList(
         new Tuple2<>("a", 3),
         new Tuple2<>("b", 3)),
@@ -90,7 +90,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.avg(value -> value._2() * 2.0));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
         aggregated.collectAsList());
   }
@@ -101,7 +101,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.count(value -> value));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 1L)),
         aggregated.collectAsList());
   }
@@ -112,7 +112,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sum(value -> (double) value._2()));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 3.0)),
         aggregated.collectAsList());
   }
@@ -123,7 +123,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sumLong(value -> (long) value._2()));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
         aggregated.collectAsList());
   }

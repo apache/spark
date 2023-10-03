@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -464,7 +463,7 @@ class RelationalGroupedDataset protected[sql](
               Literal.apply(v)
             } catch {
               case _: SparkRuntimeException =>
-                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr.dataType)
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr)
             }
         })
         new RelationalGroupedDataset(
@@ -706,9 +705,8 @@ private[sql] object RelationalGroupedDataset {
 
   private def alias(expr: Expression): NamedExpression = expr match {
     case expr: NamedExpression => expr
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
+    case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 

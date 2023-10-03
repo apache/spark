@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 
@@ -59,10 +58,7 @@ class FrameCorrwithMixin:
         # Therefore, we only test the pandas 1.5.0 in different way.
         # See https://github.com/pandas-dev/pandas/issues/48826 for the reported issue,
         # and https://github.com/pandas-dev/pandas/pull/46174 for the initial PR that causes.
-        if LooseVersion(pd.__version__) == LooseVersion("1.5.0") and isinstance(pobj, pd.Series):
-            methods = ["kendall"]
-        else:
-            methods = ["pearson", "spearman", "kendall"]
+        methods = ["pearson", "spearman", "kendall"]
         for method in methods:
             for drop in [True, False]:
                 p_corr = pdf.corrwith(pobj, drop=drop, method=method)

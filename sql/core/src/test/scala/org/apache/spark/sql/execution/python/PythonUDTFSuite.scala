@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, FunctionTableSubqueryArgumentExpression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -40,29 +41,28 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
-  private val arrowPythonScript: String =
-    """
-      |import pandas as pd
-      |class VectorizedUDTF:
-      |    def eval(self, a: pd.Series, b: pd.Series):
-      |        data = [
-      |            [a, b, a + b],
-      |            [a, b, a - b],
-      |            [a, b, b - a],
-      |        ]
-      |        yield pd.DataFrame(data)
-      |""".stripMargin
-
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
-    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
+    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, Some(returnType))
+
+  private val pythonUDTFCountSumLast: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "UDTFCountSumLast", TestPythonUDTFCountSumLast.pythonScript, None)
+
+  private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "UDTFWithSinglePartition", TestPythonUDTFWithSinglePartition.pythonScript, None)
+
+  private val pythonUDTFPartitionByOrderBy: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "UDTFPartitionByOrderBy", TestPythonUDTFPartitionBy.pythonScript, None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "VectorizedUDTF",
-      arrowPythonScript,
-      returnType,
+      "SimpleUDTF",
+      pythonScript,
+      Some(returnType),
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
   test("Simple PythonUDTF") {
@@ -110,12 +110,26 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("non-deterministic UDTF should pass check analysis") {
+    assume(shouldTestPythonUDFs)
+    withSQLConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key -> "true") {
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
+      withTempView("t") {
+        Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
+        val df = sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f")
+        df.queryExecution.assertAnalyzed()
+      }
+    }
+  }
+
   test("SPARK-44503: Specify PARTITION BY and ORDER BY for TABLE arguments") {
     // Positive tests
     assume(shouldTestPythonUDFs)
     def failure(plan: LogicalPlan): Unit = {
       fail(s"Unexpected plan: $plan")
     }
+
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
     sql(
       """
         |SELECT * FROM testUDTF(
@@ -172,23 +186,70 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case other =>
         failure(other)
     }
-    // Negative tests
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
       val query = "select * from explode(table(t))"
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException](sql(query)),
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> "\"explode(outer(__auto_generated_subquery_name_0.c))\"",
-          "paramIndex" -> "1",
-          "inputSql" -> "\"outer(__auto_generated_subquery_name_0.c)\"",
-          "inputType" -> "\"STRUCT<col: ARRAY<INT>>\"",
-          "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+        sqlState = None,
+        parameters = Map("treeNode" -> "(?s).*"),
         context = ExpectedContext(
-          fragment = "explode(table(t))",
-          start = 14,
-          stop = 30))
+          fragment = "table(t)",
+          start = 22,
+          stop = 29))
+    }
+
+    spark.udtf.registerPython("UDTFCountSumLast", pythonUDTFCountSumLast)
+    var plan = sql(
+      """
+        |WITH t AS (
+        |  VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input)
+        |)
+        |SELECT count, total, last
+        |FROM UDTFCountSumLast(TABLE(t) WITH SINGLE PARTITION)
+        |ORDER BY 1, 2
+        |""".stripMargin).queryExecution.analyzed
+    plan.collectFirst { case r: Repartition => r } match {
+      case Some(Repartition(1, true, _)) =>
+      case _ =>
+        failure(plan)
+    }
+
+    spark.udtf.registerPython("UDTFWithSinglePartition", pythonUDTFWithSinglePartition)
+    plan = sql(
+      """
+        |WITH t AS (
+        |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+        |    UNION ALL
+        |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+        |)
+        |SELECT count, total, last
+        |FROM UDTFWithSinglePartition(TABLE(t))
+        |ORDER BY 1, 2
+        |""".stripMargin).queryExecution.analyzed
+    plan.collectFirst { case r: Repartition => r } match {
+      case Some(Repartition(1, true, _)) =>
+      case _ =>
+        failure(plan)
+    }
+
+    spark.udtf.registerPython("UDTFPartitionByOrderBy", pythonUDTFPartitionByOrderBy)
+    plan = sql(
+      """
+        |WITH t AS (
+        |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
+        |    UNION ALL
+        |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
+        |)
+        |SELECT partition_col, count, total, last
+        |FROM UDTFPartitionByOrderBy(TABLE(t))
+        |ORDER BY 1, 2
+        |""".stripMargin).queryExecution.analyzed
+    plan.collectFirst { case r: RepartitionByExpression => r } match {
+      case Some(_: RepartitionByExpression) =>
+      case _ =>
+        failure(plan)
     }
   }
 
@@ -202,7 +263,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       projectList = projectList,
       child = OneRowRelation())
     // There are no UDTF TABLE arguments, so there are no PARTITION BY child expression indexes.
-    val partitionChildIndexes = FunctionTableSubqueryArgumentExpression.partitionChildIndexes(_)
+    def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] =
+      udtfArguments.flatMap {
+        case f: FunctionTableSubqueryArgumentExpression =>
+          f.partitioningExpressionIndexes
+        case _ =>
+          Seq()
+      }
     assert(partitionChildIndexes(Seq(
       Literal(41))) ==
       Seq.empty[Int])
@@ -240,19 +307,18 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       Seq(1))
     // The UDTF has one scalar argument, then one TABLE argument, then another scalar argument. The
     // TABLE argument has two PARTITION BY expressions which are equal to the output attributes from
-    // the provided relation, in order. Therefore the PARTITION BY child expression indexes are 1
-    // and 2, because they begin at an offset of 1 from the zero-based start of the list of values
-    // provided to the UDTF 'eval' method.
+    // the provided relation, in order. Therefore the PARTITION BY child expression indexes are 0
+    // and 1.
     assert(partitionChildIndexes(Seq(
       Literal(41),
       FunctionTableSubqueryArgumentExpression(
         plan = projectTwoValues,
         partitionByExpressions = projectTwoValues.output),
       Literal("abc"))) ==
-      Seq(1, 2))
+      Seq(0, 1))
     // Same as above, but the PARTITION BY expressions are new expressions which must be projected
     // after all the attributes from the relation provided to the UDTF TABLE argument. Therefore the
-    // PARTITION BY child indexes are 3 and 4 because they begin at an offset of 3 from the
+    // PARTITION BY child indexes are 3 and 4 because they begin at an offset of 2 from the
     // zero-based start of the list of values provided to the UDTF 'eval' method.
     assert(partitionChildIndexes(Seq(
       Literal(41),
@@ -260,7 +326,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Literal(42), Literal(43))),
       Literal("abc"))) ==
-      Seq(3, 4))
+      Seq(2, 3))
     // Same as above, but the PARTITION BY list comprises just one addition expression.
     assert(partitionChildIndexes(Seq(
       Literal(41),
@@ -268,7 +334,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Add(projectList.head.toAttribute, Literal(1)))),
       Literal("abc"))) ==
-      Seq(3))
+      Seq(2))
     // Same as above, but the PARTITION BY list comprises one literal value and one addition
     // expression.
     assert(partitionChildIndexes(Seq(
@@ -277,6 +343,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         plan = projectTwoValues,
         partitionByExpressions = Seq(Literal(42), Add(projectList.head.toAttribute, Literal(1)))),
       Literal("abc"))) ==
-      Seq(3, 4))
+      Seq(2, 3))
   }
 }

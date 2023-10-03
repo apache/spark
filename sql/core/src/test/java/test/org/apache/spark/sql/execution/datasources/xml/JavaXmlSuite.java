@@ -23,16 +23,15 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.execution.datasources.xml.XmlOptions;
-import org.apache.spark.sql.execution.datasources.xml.XmlReader;
+import org.apache.spark.sql.catalyst.xml.XmlOptions;
 
 public final class JavaXmlSuite {
 
@@ -56,7 +55,7 @@ public final class JavaXmlSuite {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         setEnv("SPARK_LOCAL_IP", "127.0.0.1");
         spark = SparkSession.builder()
@@ -69,7 +68,7 @@ public final class JavaXmlSuite {
         tempDir.toFile().deleteOnExit();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         spark.stop();
         spark = null;
@@ -81,10 +80,12 @@ public final class JavaXmlSuite {
 
     @Test
     public void testXmlParser() {
-        Dataset<Row> df = (new XmlReader()).withRowTag(booksFileTag).xmlFile(spark, booksFile);
+        Map<String, String> options = new HashMap<>();
+        options.put("rowTag", booksFileTag);
+        Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
         String prefix = XmlOptions.DEFAULT_ATTRIBUTE_PREFIX();
         long result = df.select(prefix + "id").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
     @Test
@@ -93,19 +94,21 @@ public final class JavaXmlSuite {
         options.put("rowTag", booksFileTag);
         Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
         long result = df.select("description").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
     @Test
     public void testSave() throws IOException {
+        Map<String, String> options = new HashMap<>();
+        options.put("rowTag", booksFileTag);
         Path booksPath = getEmptyTempDir().resolve("booksFile");
 
-        Dataset<Row> df = (new XmlReader()).withRowTag(booksFileTag).xmlFile(spark, booksFile);
+        Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
         df.select("price", "description").write().format("xml").save(booksPath.toString());
 
-        Dataset<Row> newDf = (new XmlReader()).xmlFile(spark, booksPath.toString());
+        Dataset<Row> newDf = spark.read().format("xml").load(booksPath.toString());
         long result = newDf.select("price").count();
-        Assert.assertEquals(result, numBooks);
+        Assertions.assertEquals(result, numBooks);
     }
 
 }

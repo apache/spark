@@ -21,8 +21,8 @@ import java.{util => ju}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer.ConsumerConfig._

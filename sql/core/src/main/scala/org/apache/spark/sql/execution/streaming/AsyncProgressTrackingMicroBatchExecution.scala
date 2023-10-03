@@ -50,8 +50,6 @@ class AsyncProgressTrackingMicroBatchExecution(
   // to cache the batch id of the last batch written to storage
   private val lastBatchPersistedToDurableStorage = new AtomicLong(-1)
 
-  override val triggerExecutor: TriggerExecutor = validateAndGetTrigger()
-
   // used to check during the first batch if the pipeline is stateful
   private var isFirstBatch: Boolean = true
 
@@ -93,6 +91,9 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   override val commitLog =
     new AsyncCommitLog(sparkSession, checkpointFile("commits"), asyncWritesExecutorService)
+
+  // perform quick validation to fail faster
+  validateAndGetTrigger()
 
   override def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
     /* Initialize committed offsets to a committed batch, which at this
@@ -227,6 +228,8 @@ class AsyncProgressTrackingMicroBatchExecution(
   def areWritesPendingOrInProgress(): Boolean = {
     asyncWritesExecutorService.getQueue.size() > 0 || asyncWritesExecutorService.getActiveCount > 0
   }
+
+  override protected def getTrigger(): TriggerExecutor = validateAndGetTrigger()
 
   private def validateAndGetTrigger(): TriggerExecutor = {
     // validate that the pipeline is using a supported sink

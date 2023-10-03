@@ -184,7 +184,6 @@ def try_remote_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect import functions
 
@@ -200,9 +199,23 @@ def try_remote_avro_functions(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.avro import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_protobuf_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.protobuf import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -216,7 +229,6 @@ def try_remote_window(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import Window  # type: ignore[misc]
 
@@ -232,7 +244,6 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.window import WindowSpec
 
@@ -273,7 +284,6 @@ def try_remote_session_classmethod(f: FuncT) -> FuncT:
 
     @functools.wraps(f)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect.session import SparkSession  # type: ignore[misc]
 

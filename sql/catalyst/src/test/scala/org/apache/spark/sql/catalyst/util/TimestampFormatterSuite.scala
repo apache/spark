@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalDateTime}
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -333,14 +331,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       val micros1 = formatter.parse("2009-12-12 00 am")
       assert(micros1 === date(2009, 12, 12))
 
-      // JDK-8223773: DateTimeFormatter Fails to throw an Exception on Invalid HOUR_OF_AMPM
       // For `KK`, "12:00:00 am" is the same as "00:00:00 pm".
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_13)) {
-        intercept[DateTimeException](formatter.parse("2009-12-12 12 am"))
-      } else {
-        val micros2 = formatter.parse("2009-12-12 12 am")
-        assert(micros2 === date(2009, 12, 12, 12))
-      }
+      intercept[DateTimeException](formatter.parse("2009-12-12 12 am"))
 
       val micros3 = formatter.parse("2009-12-12 00 pm")
       assert(micros3 === date(2009, 12, 12, 12))
@@ -410,15 +402,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     val formatter = TimestampFormatter("DD", UTC, isParsing = false)
     assert(formatter.format(date(1970, 1, 3)) == "03")
     assert(formatter.format(date(1970, 4, 9)) == "99")
-
-    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_1_8)) {
-      // https://bugs.openjdk.java.net/browse/JDK-8079628
-      intercept[SparkUpgradeException] {
-        formatter.format(date(1970, 4, 10))
-      }
-    } else {
-      assert(formatter.format(date(1970, 4, 10)) == "100")
-    }
+    assert(formatter.format(date(1970, 4, 10)) == "100")
   }
 
   test("SPARK-32424: avoid silent data change when timestamp overflows") {
