@@ -109,7 +109,7 @@ class RocksDB(
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
-  dbOptions.setAllowFAllocate(conf.allowFallocate)
+  dbOptions.setAllowFAllocate(conf.allowFAllocate)
 
   if (conf.boundedMemoryUsage) {
     dbOptions.setWriteBufferManager(writeBufferManager)
@@ -676,7 +676,7 @@ case class RocksDBConf(
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
     compressionCodec: String,
-    allowFallocate: Boolean)
+    allowFAllocate: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -764,7 +764,7 @@ object RocksDBConf {
   // significant quantities of disk are wasted if there are
   // many smaller concurrent state-stores running with the
   // spark context
-  val ALLOW_FALLOCATE_CONF_KEY = "allowFallocate"
+  val ALLOW_FALLOCATE_CONF_KEY = "allowFAllocate"
   private val ALLOW_FALLOCATE_CONF = SQLConfEntry(ALLOW_FALLOCATE_CONF_KEY, "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
