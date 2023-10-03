@@ -100,7 +100,7 @@ class OptimizerSuite extends PlanTest {
     val message1 = intercept[SparkException] {
         optimizer.execute(analyzed)
     }.getMessage
-    assert(message1.contains("debug1, debug2 are dangling"))
+    assert(message1.contains("are dangling"))
   }
 
   test("Optimizer per rule validation catches invalid grouping types") {
@@ -334,7 +334,7 @@ class OptimizerSuite extends PlanTest {
       val message1 = intercept[SparkException] {
         optimizer.execute(analyzed)
       }.getMessage
-      assert(message1.contains("are not valid aggregate expressions"))
+      assert(message1.contains("not a valid aggregate expression"))
     }
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
@@ -337,13 +337,8 @@ object LogicalPlanIntegrity {
       case _: Command => None
       case _: MultiInstanceRelation => None
       case n if canGetOutputAttrs(n) =>
-        val inputExprIds = (n.children.flatMap(c => c.output ++ c.metadataOutput) ++ n.output)
-          .map(_.exprId).toSet
-        val danglingReferences = n.references.filter {
-          a => a.resolved && !inputExprIds.contains(a.exprId)
-        }.map(_.qualifiedName)
-        if (danglingReferences.nonEmpty) {
-          Some(s"Aliases ${danglingReferences.mkString(", ")} are dangling " +
+        if ( n.missingInput.nonEmpty) {
+          Some(s"Aliases ${ n.missingInput.mkString(", ")} are dangling " +
             s"in the references for plan:\n ${n.treeString}")
         } else {
           None
@@ -373,76 +368,18 @@ object LogicalPlanIntegrity {
    * Returns an error message if the check fails, or None if it succeeds.
    */
   def validateAggregateExpressions(plan: LogicalPlan): Option[String] = {
-    /**
-    * Returns true if all the exprIds, referenced in an Expression <subExpr>
-    * (used in the aggregate expressions of an Aggregate),
-    * are either used as measures (under an AggregateFunction) or are explicitly grouped,
-    * given the <groupingExprIds> of all grouping expressions
-    * (used in the grouping expressions of the same Aggregate)
-
-    * I.e:
-    * <groupingExprIds> can be used "freely" in an AggregateExpressions, all other exprIds can only
-    * be used under an AggregateFunction (i.e. aggregated).
-     */
-    def isAggregateSubExpressionValid(
-          groupingExpressions: Seq[Expression],
-          groupingExprIds: Set[ExprId],
-          subExpr: Expression): Boolean = {
-      // First collect all non-grouping ExprIds in <subExpr>.
-      val restrictedExprIds = subExpr.collect {
-        case g: Attribute if !groupingExprIds.contains(g.exprId) => g.exprId
-      }.groupBy(identity).mapValues(_.size)
-
-      // Second collect all non-grouping ExprIds under an AggregateFunction in <subExpr>.
-      val restrictedExprIdsUnderAggregateFunction = subExpr.flatMap {
-        case a: AggregateExpression => a.collect {
-          case g: Attribute if !groupingExprIds.contains(g.exprId) => g.exprId
-        }
-        case _ => Seq.empty
-      }.groupBy(identity).mapValues(_.size)
-
-      // Validate a) that all non-grouping exprIds are used under some aggregate function,
-      // i.e. all such exprIds are aggregated (measures) OR
-      // b) a grouping expression can be used in sub-expressions
-      // for aggregate expressions of an Aggregate.
-      restrictedExprIds == restrictedExprIdsUnderAggregateFunction ||
-         groupingExpressions.exists(_.semanticEquals(subExpr))
-    }
-
-    def isAggregateExpressionValid(groupingExpressions: Seq[Expression],
-                                   groupingExprIds: Set[ExprId],
-                                   expr: Expression): Boolean = {
-      isAggregateSubExpressionValid(groupingExpressions, groupingExprIds, expr) ||
-        (expr.children.nonEmpty &&
-          expr.children.forall(isAggregateExpressionValid(groupingExpressions, groupingExprIds, _)))
-    }
-
     plan.collectFirst {
-      case a @ Aggregate(groupingExprs, aggrExprs, _) =>
-        // Collect all exprIds used in grouping keys that can be used in aggregate expressions
-        // outside an aggregate function (like sum).
-        val groupingExprIds = groupingExprs.collect {
-          case g: NamedExpression =>
-            // A grouping key can be used everywhere in aggregate expressions,
-            // even outside an aggregate function.
-            // For example, foo#1 in:
-            //    Aggregate( [x#1 as foo#1], [foo#1 * sum(measure#3)] )
-            // or #x1 in:
-            //    Aggregate( [x#1 as foo#2], [x#1 * sum(measure#3)] )
-            g.exprId
-        }.toSet
-
-        val badExprs = aggrExprs.filterNot {
-            isAggregateExpressionValid(groupingExprs, groupingExprIds, _)
-        }
-        if (badExprs.nonEmpty) {
-          Some(s"Expressions ${badExprs.mkString(", ")} are not valid aggregate expressions" +
-            s"for plan:\n ${a.treeString}")
-        } else {
+      case a: Aggregate =>
+        try {
+          ExprUtils.assertValidAggregation(a)
           None
+        } catch {
+          case _: AnalysisException =>
+            Some(s"Aggregate: ${a.toString} is not a valid aggregate expression")
         }
     }.flatten
   }
+
 
   /**
    * Validate the structural integrity of an optimized plan.
