@@ -250,6 +250,14 @@ public class TransportConf {
   }
 
   /**
+   * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
+   */
+  public int sslShuffleChunkSize() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.network.ssl.maxEncryptedBlockSize", "64k")));
+  }
+
+  /**
    * Flag indicating whether to share the pooled ByteBuf allocators between the different Netty
    * channels. If enabled then only two pooled ByteBuf allocators are created: one where caching
    * is allowed (for transport servers) and one where not (for transport clients).
