@@ -1013,7 +1013,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   test("Verify that fallocate is allowed by default") {
      val sqlConf = new SQLConf
-     assert(sqlConfg.allowFallocate == true)
+     val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+     assert(dbConf.allowFAllocate == true)
   }
 
  /** RocksDB memory management tests for bounded memory usage */
