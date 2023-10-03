@@ -1225,7 +1225,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // If the hybrid store is enabled, try it first and fail back to leveldb store.
+    // If the hybrid store is enabled, try it first and fail back to RocksDB store.
     if (hybridStoreEnabled) {
       try {
         return createHybridStore(dm, appId, attempt, metadata)
