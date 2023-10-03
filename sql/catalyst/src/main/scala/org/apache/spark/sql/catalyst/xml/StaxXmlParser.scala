@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -46,24 +45,6 @@ class StaxXmlParser(
     filters: Seq[Filter] = Seq.empty) extends Logging {
 
   private val factory = options.buildXmlFactory()
-
-  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
-  // dates and timestamps.
-  // For more information, see comments for "enableDateTimeParsingFallback" option in XmlOptions.
-  private val enableParsingFallbackForTimestampType =
-  options.enableDateTimeParsingFallback
-    .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-    .getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        options.timestampFormatInRead.isEmpty
-    }
-  private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback
-      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-      .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-          options.dateFormatInRead.isEmpty
-      }
 
   /**
    * Parses a single XML string and turns it into either one resulting row or no row (if the
