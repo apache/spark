@@ -258,19 +258,19 @@ case class AdaptiveSparkPlanExec(
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
     // TODO: Asif: try to find a clean solution to this:
-    /**
-      * right now  a case like:
-      *        bhj
-      *   |          |
-      * BrdQS       bhj
-      *              |
-      *       BRQS      batchscan
-      *
-      * is a situation because batchscan is not part of any stage. as a result it can get into
-      * re optimization , with partial broadcast var added.
-      * till we come to a proper criteria in terms of say we do not re optimize till all the
-      * pushdown bhjs are satisfied, or some thing else. we will go with this criteria.
-      */
+     /*
+       right now  a case like:
+              bhj
+         |          |
+       BrdQS       bhj
+                    |
+             BRQS      batchscan
+
+       is a situation because batchscan is not part of any stage. as a result it can get into
+       re optimization , with partial broadcast var added.
+       till we come to a proper criteria in terms of say we do not re optimize till all the
+       pushdown bhjs are satisfied, or some thing else. we will go with this criteria.
+    */
     // In case of this adaptive plan being executed out of `withActive` scoped functions, e.g.,
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
@@ -847,6 +847,7 @@ case class AdaptiveSparkPlanExec(
       OrphanBSCollect.orphan => CreateStageResult(newPlan = plan, allChildStagesMaterialized = true,
         newStages = Seq.empty, orphanBatchScansWithProxyVar = Seq(bs))
 
+    // TODO: Asif check this thing..
     case i: InMemoryTableScanExec =>
       // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
       // hit it the first time, we should always create a new query stage.
@@ -854,7 +855,7 @@ case class AdaptiveSparkPlanExec(
       CreateStageResult(
         newPlan = newStage,
         allChildStagesMaterialized = false,
-        newStages = Seq(newStage))
+        newStages = Seq(newStage), Seq.empty)
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q, allChildStagesMaterialized = q.isMaterialized,

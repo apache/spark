@@ -242,7 +242,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   }
 
   private def getPushedBroadcastVarFilters:
-      (Option[BatchScanExec], Seq[PushedBroadcastFilterData]) = {
+      (Option[BatchScanExec], scala.collection.Seq[PushedBroadcastFilterData]) = {
     val batchScanOpt = this.child match {
       case bs: BatchScanExec if bs.scan.isInstanceOf[SupportsRuntimeFiltering] &&
         bs.scan.asInstanceOf[SupportsRuntimeFiltering].getPushedBroadcastFiltersCount > 0 =>
@@ -256,13 +256,15 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     }
     val pushedBroadcastFilters = batchScanOpt.map(bs => {
       val sr = bs.scan.asInstanceOf[SupportsRuntimeFiltering]
-      val allPushedBCvar = sr.getPushedBroadcastFilters.asScala.toSeq
+      import scala.collection.JavaConverters._
+
+      val allPushedBCvar = sr.getPushedBroadcastFilters.asScala
       val partitionColNames = sr.filterAttributes().map(
         BroadcastHashJoinUtil.convertNameReferencesToString)
       // identify non partition filters
       allPushedBCvar.filterNot(pd => partitionColNames.exists(_ == pd.columnName))
     }).getOrElse(Seq.empty)
-    (batchScanOpt, pushedBroadcastFilters)
+    (batchScanOpt, pushedBroadcastFilters.toSeq)
   }
 
   def doProduceNoBroadcastVarFilterInsert(ctx: CodegenContext): String = {
