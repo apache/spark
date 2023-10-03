@@ -332,7 +332,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val cars = spark.read.xml(getTestResourcePath(resDir + "cars.xml"))
     cars.write
       .mode(SaveMode.Overwrite)
-      .options(Map("codec" -> classOf[GzipCodec].getName))
+      .options(Map("compression" -> classOf[GzipCodec].getName))
       .xml(copyFilePath.toString)
     // Check that the part file has a .gz extension
     assert(Files.list(copyFilePath).iterator().asScala
