@@ -32,7 +32,6 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
-
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
  *
