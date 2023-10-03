@@ -103,10 +103,8 @@ class DataFrame:
     def __init__(
         self,
         session: "SparkSession",
-        schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
-        self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._session: "SparkSession" = session
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
