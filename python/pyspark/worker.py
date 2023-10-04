@@ -23,6 +23,7 @@ import sys
 import time
 from inspect import getfullargspec
 import json
+from textwrap import dedent
 from typing import Any, Callable, Iterable, Iterator
 
 import faulthandler
@@ -794,11 +795,18 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def handler_with_prepare():
             new_udtf = prev_handler()
-            if new_udtf.prepare is None:
+            method = getattr(new_udtf, "prepare", None)
+            if method is not None or not callable(method):
                 raise PySparkRuntimeError(
-                    "The 'analyze' method returned a non-empty 'prepare_buffer' string, but the "
-                    + "UDTF does not define a corresponding 'prepare' method; please add a method "
-                    + "to the UDTF named 'prepare' accepting a single string argument and try again"
+                    error_class="TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+                    message_parameters={
+                        "msg": dedent("""
+                            The 'analyze' method returned a non-empty 'prepare_buffer' string, but
+                            the UDTF does not define a corresponding 'prepare' method; please add a
+                            method to the UDTF named 'prepare' accepting a single string argument
+                            and try again.
+                            """)
+                    }
                 )
             new_udtf.prepare(prepare_buffer)
             return new_udtf

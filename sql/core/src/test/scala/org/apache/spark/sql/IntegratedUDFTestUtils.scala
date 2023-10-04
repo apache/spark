@@ -704,6 +704,41 @@ object IntegratedUDFTestUtils extends SQLHelper {
         "without a corresponding partitioning table requirement"
   }
 
+  object TestPythonUDTFInvalidPrepareBufferNoPrepareMethod extends TestUDTF {
+    val name: String = "UDTFInvalidPrepareBufferNoPrepareMethod"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, StructType
+         |class $name:
+         |    @staticmethod
+         |    def analyze():
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("count", IntegerType())
+         |                .add("total", IntegerType())
+         |                .add("last", IntegerType()),
+         |            prepare_buffer="abc")
+         |
+         |    def eval(self):
+         |        pass
+         |
+         |    def terminate(self):
+         |        yield 0, 1, 2
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Invalid Python UDTF whose 'analyze' method sets the " +
+      "'prepare_buffer' metdata but does not define a 'prepare' method"
+  }
+
   /**
    * A Scalar Pandas UDF that takes one column, casts into string, executes the
    * Python native function, and casts back to the type of input column.
