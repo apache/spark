@@ -374,8 +374,13 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
+    // Count rows in `data`. Must match the number of rows inside `data`.
     int64 row_count = 1;
+    // Serialized Arrow data.
     bytes data = 2;
+
+    // If set, row offset of the start of this ArrowBatch in execution results.
+    optional int64 start_offset = 3;
   }
 
   message Metrics {

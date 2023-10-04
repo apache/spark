@@ -1167,6 +1167,8 @@ class SparkConnectClient(object):
     ]:
         logger.info("ExecuteAndFetchAsIterator")
 
+        num_records = 0
+
         def handle_response(
             b: pb2.ExecutePlanResponse,
         ) -> Iterator[
@@ -1218,10 +1220,26 @@ class SparkConnectClient(object):
                     f"size={len(b.arrow_batch.data)}"
                 )
 
+                if (
+                    b.arrow_batch.HasField("start_offset")
+                    and num_records != b.arrow_batch.start_offset
+                ):
+                    raise SparkConnectException(
+                        f"Expected arrow batch to start at row offset {num_records} in results, "
+                        + f"but received arrow batch starting at offset {b.arrow_batch.start_offset}."
+                    )
+
                 with pa.ipc.open_stream(b.arrow_batch.data) as reader:
                     for batch in reader:
                         assert isinstance(batch, pa.RecordBatch)
+                        num_records_in_batch += batch.num_rows
                         yield batch
+
+                if num_records_in_batch != b.arrow_batch.row_count:
+                    raise SparkConnectException(
+                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got {num_records_in_batch}."
+                    )
+                num_records += num_records_in_batch
 
         try:
             if self._use_reattachable_execute:
