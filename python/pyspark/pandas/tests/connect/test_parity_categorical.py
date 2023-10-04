@@ -29,30 +29,6 @@ class CategoricalParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_factorize(self):
-        super().test_factorize()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_remove_categories(self):
-        super().test_remove_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_remove_unused_categories(self):
-        super().test_remove_unused_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_reorder_categories(self):
-        super().test_reorder_categories()
-
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_set_categories(self):
-        super().test_set_categories()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_categorical import *  # noqa: F401
