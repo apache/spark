@@ -149,21 +149,20 @@ object ExprUtils extends QueryErrorsBase {
     def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case expr: AggregateExpression =>
         val aggFunction = expr.aggregateFunction
-        aggFunction.children.foreach {
-          child =>
-            child.foreach {
-              case expr: AggregateExpression =>
-                expr.failAnalysis(
-                  errorClass = "NESTED_AGGREGATE_FUNCTION",
-                  messageParameters = Map.empty)
-              case other => // OK
-            }
+        aggFunction.children.foreach { child =>
+          child.foreach {
+            case expr: AggregateExpression =>
+              expr.failAnalysis(
+                errorClass = "NESTED_AGGREGATE_FUNCTION",
+                messageParameters = Map.empty)
+            case other => // OK
+          }
 
-            if (!child.deterministic) {
-              child.failAnalysis(
-                errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
-                messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
-            }
+          if (!child.deterministic) {
+            child.failAnalysis(
+              errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+              messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
+          }
         }
       case _: Attribute if a.groupingExpressions.isEmpty =>
         a.failAnalysis(
@@ -208,9 +207,7 @@ object ExprUtils extends QueryErrorsBase {
         // already pull out those nondeterministic expressions and evaluate them in
         // a Project node.
         throw SparkException.internalError(
-          msg = s"Non-deterministic expression '${
-            toSQLExpr(expr)
-          }' should not appear in " +
+          msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
             "grouping expression.",
           context = expr.origin.getQueryContext,
           summary = expr.origin.context.summary)

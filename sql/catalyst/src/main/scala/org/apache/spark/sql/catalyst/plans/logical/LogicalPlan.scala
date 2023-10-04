@@ -337,7 +337,7 @@ object LogicalPlanIntegrity {
       case _: Command => None
       case _: MultiInstanceRelation => None
       case n if canGetOutputAttrs(n) =>
-        if ( n.missingInput.nonEmpty) {
+        if (n.missingInput.nonEmpty) {
           Some(s"Aliases ${ n.missingInput.mkString(", ")} are dangling " +
             s"in the references for plan:\n ${n.treeString}")
         } else {
@@ -374,8 +374,9 @@ object LogicalPlanIntegrity {
           ExprUtils.assertValidAggregation(a)
           None
         } catch {
-          case _: AnalysisException =>
-            Some(s"Aggregate: ${a.toString} is not a valid aggregate expression")
+          case e: AnalysisException =>
+            Some(s"Aggregate: ${a.toString} is not a valid aggregate expression: " +
+            s"${e.getSimpleMessage}")
         }
     }.flatten
   }
@@ -413,7 +414,7 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
-      .map( err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
+      .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")
     validation
   }
