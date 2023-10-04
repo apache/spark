@@ -55,7 +55,6 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      PYTHON_TO_TEST: 'python3.9'
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
@@ -367,6 +366,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
+      PYTHON_TO_TEST: 'python3.9'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
