@@ -97,7 +97,9 @@ abstract class StringRegexExpression extends BinaryExpression
           For example, in order to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
+          enabled, the pattern to match "\abc" should be "\abc".<br><br>
+          The `pattern` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
@@ -210,7 +212,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
           For example, in order to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
+          enabled, the pattern to match "\abc" should be "\abc".<br><br>
+          The `pattern` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
@@ -425,7 +429,9 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
 
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          The `regexp` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
   """,
   examples = """
     Examples:
@@ -576,7 +582,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
           For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          The `regexp` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
       * rep - a string expression to replace matched substrings.
       * position - a positive integer literal that indicates the position within `str` to begin searching.
           The default is 1. If position is greater than the number of characters in `str`, the result is `str`.
@@ -789,7 +797,9 @@ abstract class RegExpExtractBase
           For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          The `regexp` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
       * idx - an integer expression that representing the group index. The regex maybe contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
@@ -883,7 +893,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          The `regexp` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
       * idx - an integer expression that representing the group index. The regex may contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
@@ -1054,7 +1066,9 @@ case class RegExpSubStr(left: Expression, right: Expression)
           For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          The `regexp` argument might be a raw string literal (with the `r` prefix) to avoid
+          escaping of special characters.
   """,
   examples = """
     Examples:
