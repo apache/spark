@@ -225,7 +225,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT count, total, last
-        |FROM UDTFWithSinglePartition(TABLE(t))
+        |FROM UDTFWithSinglePartition(0, TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
