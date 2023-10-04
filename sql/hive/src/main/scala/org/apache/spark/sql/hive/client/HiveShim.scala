@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.client
 
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
-import java.lang.reflect.{InvocationTargetException, Method, Modifier}
-import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
+import java.lang.reflect.{InvocationTargetException, Method}
+import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
@@ -27,8 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.IMetaStoreClient
-import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.{IMetaStoreClient, PartitionDropOptions, TableType}
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
@@ -51,7 +50,6 @@ import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
@@ -233,13 +231,6 @@ private[client] sealed abstract class Shim {
 
   def setDatabaseOwnerName(db: Database, owner: String): Unit
 
-  protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
-    val method = findMethod(klass, name, args: _*)
-    require(Modifier.isStatic(method.getModifiers),
-      s"Method $name of class $klass is not static.")
-    method
-  }
-
   def getMSC(hive: Hive): IMetaStoreClient
 
   def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): Seq[Index]
@@ -266,56 +257,8 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L
 
-  protected lazy val getMSCMethod = {
-    // Since getMSC() in Hive 0.12 is private, findMethod() could not work here
-    val msc = classOf[Hive].getDeclaredMethod("getMSC")
-    msc.setAccessible(true)
-    msc
-  }
+  override def getMSC(hive: Hive): IMetaStoreClient = hive.getMSC
 
-  override def getMSC(hive: Hive): IMetaStoreClient = {
-    getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
-  }
-
-  private lazy val setCurrentSessionStateMethod =
-    findStaticMethod(
-      classOf[SessionState],
-      "setCurrentSessionState",
-      classOf[SessionState])
-  private lazy val getDataLocationMethod = findMethod(classOf[Table], "getDataLocation")
-  private lazy val setDataLocationMethod =
-    findMethod(
-      classOf[Table],
-      "setDataLocation",
-      classOf[Path])
-  private lazy val getAllPartitionsMethod =
-    findMethod(
-      classOf[Hive],
-      "getAllPartitionsOf",
-      classOf[Table])
-  private lazy val getPartitionsByFilterMethod =
-    findMethod(
-      classOf[Hive],
-      "getPartitionsByFilter",
-      classOf[Table],
-      classOf[String])
-  private lazy val getCommandProcessorMethod =
-    findStaticMethod(
-      classOf[CommandProcessorFactory],
-      "get",
-      classOf[Array[String]],
-      classOf[HiveConf])
-  private lazy val getDriverResultsMethod =
-    findMethod(
-      classOf[Driver],
-      "getResults",
-      classOf[JList[Object]])
-  private lazy val getTimeVarMethod =
-    findMethod(
-      classOf[HiveConf],
-      "getTimeVar",
-      classOf[HiveConf.ConfVars],
-      classOf[TimeUnit])
   private lazy val loadPartitionMethod =
     findMethod(
       classOf[Hive],
@@ -350,24 +293,6 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       JBoolean.TYPE,
       JBoolean.TYPE,
       JLong.TYPE)
-  private lazy val dropIndexMethod =
-    findMethod(
-      classOf[Hive],
-      "dropIndex",
-      classOf[String],
-      classOf[String],
-      classOf[String],
-      JBoolean.TYPE,
-      JBoolean.TYPE)
-  private lazy val dropTableMethod =
-    findMethod(
-      classOf[Hive],
-      "dropTable",
-      classOf[String],
-      classOf[String],
-      JBoolean.TYPE,
-      JBoolean.TYPE,
-      JBoolean.TYPE)
   private lazy val alterTableMethod =
     findMethod(
       classOf[Hive],
@@ -380,36 +305,15 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       "alterPartitions",
       classOf[String],
       classOf[JList[Partition]])
-  private lazy val dropOptionsClass =
-    Utils.classForName("org.apache.hadoop.hive.metastore.PartitionDropOptions")
-  private lazy val dropOptionsDeleteData = dropOptionsClass.getField("deleteData")
-  private lazy val dropOptionsPurge = dropOptionsClass.getField("purgeData")
-  private lazy val dropPartitionMethod =
-    findMethod(
-      classOf[Hive],
-      "dropPartition",
-      classOf[String],
-      classOf[String],
-      classOf[JList[String]],
-      dropOptionsClass)
-  private lazy val getDatabaseOwnerNameMethod =
-    findMethod(
-      classOf[Database],
-      "getOwnerName")
-  private lazy val setDatabaseOwnerNameMethod =
-    findMethod(
-      classOf[Database],
-      "setOwnerName",
-      classOf[String])
 
   override def setCurrentSessionState(state: SessionState): Unit =
-    setCurrentSessionStateMethod.invoke(null, state)
+    SessionState.setCurrentSessionState(state)
 
   override def getDataLocation(table: Table): Option[String] =
-    Option(getDataLocationMethod.invoke(table)).map(_.toString())
+    Option(table.getDataLocation).map(_.toString())
 
   override def setDataLocation(table: Table, loc: String): Unit =
-    setDataLocationMethod.invoke(table, new Path(loc))
+    table.setDataLocation(new Path(loc))
 
   override def createPartitions(
       hive: Hive,
@@ -431,7 +335,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = {
     recordHiveCall()
-    getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
+    hive.getAllPartitionsOf(table).asScala.toSeq
   }
 
   override def getPartitionsByFilter(
@@ -461,11 +365,9 @@ private[client] class Shim_v2_0 extends Shim with Logging {
           // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
           // enabled.
           recordHiveCall()
-          getPartitionsByFilterMethod.invoke(hive, table, filter)
-            .asInstanceOf[JArrayList[Partition]]
+          hive.getPartitionsByFilter(table, filter)
         } catch {
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-            shouldFallback =>
+          case ex: MetaException if shouldFallback =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
@@ -478,7 +380,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             prunePartitionsFastFallback(hive, table, catalogTable, predicates)
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+          case ex: MetaException =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
@@ -507,7 +409,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       predicates.isEmpty ||
       predicates.exists(hasTimeZoneAwareExpression)) {
       recordHiveCall()
-      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      hive.getAllPartitionsOf(table)
     } else {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
@@ -536,33 +438,29 @@ private[client] class Shim_v2_0 extends Shim with Logging {
         recordHiveCall()
         hive.getPartitionsByNames(table, partNames.asJava)
       } catch {
-        case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+        case ex: HiveException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
             "filter from client side. Falling back to fetching all partition metadata", ex)
           recordHiveCall()
-          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          hive.getAllPartitionsOf(table)
       }
     }
   }
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
-    getCommandProcessorMethod.invoke(null, Array(token), conf).asInstanceOf[CommandProcessor]
+    CommandProcessorFactory.get(Array(token), conf)
 
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[Object]()
-    getDriverResultsMethod.invoke(driver, res)
+    driver.getResults(res)
     res.asScala.map {
       case s: String => s
       case a: Array[Object] => a(0).asInstanceOf[String]
     }.toSeq
   }
 
-  override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
-    getTimeVarMethod.invoke(
-      conf,
-      HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY,
-      TimeUnit.MILLISECONDS).asInstanceOf[Long]
-  }
+  override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long =
+    conf.getTimeVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY, TimeUnit.MILLISECONDS)
 
   override def getTablesByType(
       hive: Hive,
@@ -613,8 +511,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
     recordHiveCall()
-    dropIndexMethod.invoke(hive, dbName, tableName, indexName, throwExceptionInDropIndex,
-      deleteDataInDropIndex)
+    hive.dropIndex(dbName, tableName, indexName, throwExceptionInDropIndex, deleteDataInDropIndex)
   }
 
   override def dropTable(
@@ -625,8 +522,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
     recordHiveCall()
-    dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
-      ignoreIfNotExists: JBoolean, purge: JBoolean)
+    hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists, purge)
   }
 
   override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
@@ -646,11 +542,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit = {
-    val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
-    dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
-    dropOptionsPurge.setBoolean(dropOptions, purge)
+    val dropOptions = new PartitionDropOptions
+    dropOptions.deleteData(deleteData)
+    dropOptions.purgeData(purge)
     recordHiveCall()
-    dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
+    hive.dropPartition(dbName, tableName, part, dropOptions)
   }
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
@@ -969,11 +865,11 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   }
 
   override def getDatabaseOwnerName(db: Database): String = {
-    Option(getDatabaseOwnerNameMethod.invoke(db)).map(_.asInstanceOf[String]).getOrElse("")
+    Option(db.getOwnerName).getOrElse("")
   }
 
   override def setDatabaseOwnerName(db: Database, owner: String): Unit = {
-    setDatabaseOwnerNameMethod.invoke(db, owner)
+    db.setOwnerName(owner)
   }
 
   override def createDatabase(hive: Hive, db: Database, ignoreIfExists: Boolean): Unit = {
