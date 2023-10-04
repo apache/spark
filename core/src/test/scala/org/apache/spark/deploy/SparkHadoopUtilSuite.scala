@@ -125,6 +125,13 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     assertConfigValue(hadoopConf, "fs.s3a.session.token", null)
   }
 
+  test("SPARK-45404: aws endpoint propagation requires access and secret keys") {
+    val hadoopConf = new Configuration(false)
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(
+      hadoopConf, "endpoint", null, null, null)
+    assertConfigValue(hadoopConf, "fs.s3a.endpoint", null)
+  }
+
   test("substituteHadoopVariables") {
     val hadoopConf = new Configuration(false)
     hadoopConf.set("xxx", "yyy")
