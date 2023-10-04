@@ -469,14 +469,13 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // However, SUM(x) IS NULL is another case that returns 0, and in general any IS/NOT IS and CASE
     // expressions are suspect (and the combination of those).
     // For now we conservatively accept only those expressions that are guaranteed to be safe.
-    val exprsRejectEmptyInput = aggregateExpressions.map {
+    aggregateExpressions.forall {
       case _ : AttributeReference => true
       case Alias(_: AttributeReference, _) => true
       case Alias(_: Literal, _) => true
       case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
       case _ => false
     }
-    exprsRejectEmptyInput.forall(x => x == true)
   }
 
   def apply(
