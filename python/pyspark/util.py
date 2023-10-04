@@ -324,6 +324,7 @@ def inheritable_thread_target(f: Callable) -> Callable:
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
     """
     from pyspark import SparkContext
+    from pyspark.sql import SparkSession
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -333,12 +334,15 @@ def inheritable_thread_target(f: Callable) -> Callable:
         # copies when the function is wrapped.
         assert SparkContext._active_spark_context is not None
         properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+        session = SparkSession.getActiveSession()
 
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+            if session is not None:
+                session._jsparkSession.setActiveSession(session._jsparkSession)
             return f(*args, **kwargs)
 
         return wrapped
@@ -368,9 +372,11 @@ class InheritableThread(threading.Thread):
     """
 
     _props: JavaObject
+    _active_spark_session: JavaObject
 
     def __init__(self, target: Callable, *args: Any, **kwargs: Any):
         from pyspark import SparkContext
+        from pyspark.sql import SparkSession
 
         if isinstance(SparkContext._gateway, ClientServer):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -379,6 +385,8 @@ class InheritableThread(threading.Thread):
                 assert hasattr(self, "_props")
                 assert SparkContext._active_spark_context is not None
                 SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
+                if hasattr(self, "_active_spark_session"):
+                    self._active_spark_session.setActiveSession(self._active_spark_session)
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
@@ -391,6 +399,7 @@ class InheritableThread(threading.Thread):
 
     def start(self) -> None:
         from pyspark import SparkContext
+        from pyspark.sql import SparkSession
 
         if isinstance(SparkContext._gateway, ClientServer):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
@@ -398,6 +407,9 @@ class InheritableThread(threading.Thread):
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
             assert SparkContext._active_spark_context is not None
             self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+            active_spark_session = SparkSession.getActiveSession()
+            if active_spark_session is not None:
+                self._active_spark_session = active_spark_session._jsparkSession
         return super(InheritableThread, self).start()
 
 
