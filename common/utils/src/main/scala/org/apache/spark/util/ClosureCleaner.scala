@@ -52,10 +52,10 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   private[util] def isAmmoniteCommandOrHelper(clazz: Class[_]): Boolean = clazz.getName.matches(
-    "^ammonite\\.\\$sess\\.cmd[0-9]*(\\$Helper\\$?)?")
+    """^ammonite\.\$sess\.cmd[0-9]*(\$Helper\$?)?""")
 
   private[util] def isDefinedInAmmonite(clazz: Class[_]): Boolean = clazz.getName.matches(
-    "^ammonite\\.\\$sess\\.cmd[0-9]*.*")
+    """^ammonite\.\$sess\.cmd[0-9]*.*""")
 
   // Check whether a class represents a Scala closure
   private def isClosure(cls: Class[_]): Boolean = {
@@ -832,9 +832,14 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     // to better find and track field accesses.
     val trackedClassInternalNames = Set[String](implClassInternalName)
 
-    // Depth-first search for inner closures and track the fields that were accessed in them.
+    // Breadth-first search for inner closures and track the fields that were accessed in them.
     // Start from the lambda body's implementation method, follow method invocations
     val visited = Set.empty[MethodIdentifier[_]]
+    // Depth-first search will not work there. To make addAmmoniteCommandFieldsToTracking to work
+    // we need to process objects in order they appear in the reference tree.
+    // E.g. if there was a reference chain a -> b -> c, then DFS will process these nodes in order
+    // a -> c -> b. However, to initialize ammCmdInstances(c.getClass) we need to process node b
+    // first.
     val queue = Queue[MethodIdentifier[_]](implMethodId)
     def pushIfNotVisited(methodId: MethodIdentifier[_]): Unit = {
       if (!visited.contains(methodId)) {
@@ -848,6 +853,8 @@ private[spark] object IndylambdaScalaClosures extends Logging {
       val currentInstance = if (currentClass == lambdaProxy.getCapturedArg(0).getClass) {
         Some(lambdaProxy.getCapturedArg(0))
       } else {
+        // This key exists if we encountered a non-null reference to `currentClass` before
+        // as we're processing nodes with a breadth-first search (see comment above)
         ammCmdInstances.get(currentClass)
       }
       currentInstance.foreach { cmdInstance =>
@@ -1085,8 +1092,8 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
           op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
         val argTypes = Type.getArgumentTypes(desc)
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
-          && argTypes(0).toString.startsWith("L") // is it an object?
-          && argTypes(0).getInternalName == myName) {
+            && argTypes(0).toString.startsWith("L") // is it an object?
+            && argTypes(0).getInternalName == myName) {
           output += SparkClassUtils.classForName(
             owner.replace('/', '.'),
             initialize = false,
