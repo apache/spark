@@ -730,7 +730,7 @@ package object config {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.LEVELDB.name)
+      .createWithDefault(DBBackend.ROCKSDB.name)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
