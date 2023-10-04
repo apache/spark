@@ -244,18 +244,19 @@ class ArtifactManager:
         self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        try:
-            yield from self._add_artifacts(
-                chain(
-                    *(
-                        self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
-                        for p in path
-                    )
-                )
+
+        # It's crucial that this function is not generator, but only returns iterator.
+        # This way we are doing artifact parsing within the original caller thread
+        # And not during grpc consuming iterator, allowing for much better error reporting.
+
+        artifacts: Iterator[Artifact] = chain(
+            *(
+                self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
+                for p in path
             )
-        except Exception as e:
-            logger.error(f"Failed to submit addArtifacts request: {e}")
-            raise
+        )
+
+        return self._add_artifacts(artifacts)
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
