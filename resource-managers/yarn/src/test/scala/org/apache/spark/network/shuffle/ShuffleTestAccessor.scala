@@ -72,7 +72,7 @@ object ShuffleTestAccessor {
     resolver.db
   }
 
-  def mergeManagerLevelDB(mergeManager: RemoteBlockPushResolver): DB = {
+  def mergeManagerDB(mergeManager: RemoteBlockPushResolver): DB = {
     mergeManager.db
   }
 
