@@ -157,20 +157,20 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(input_table => TABLE(t2) PARTITION BY partition_col)
+SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "messageParameters" : {
-    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/pyspark/sql/worker/analyze_udtf.py\", line 119, in main\n    result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: UDTFWithSinglePartition.analyze() missing 1 required positional argument: 'initial_count'\n"
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/pyspark/sql/worker/analyze_udtf.py\", line 119, in main\n    result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: UDTFWithSinglePartition.analyze() missing 1 required positional argument: 'input_table'\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 90,
-    "fragment" : "UDTFWithSinglePartition(input_table => TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 75,
+    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
