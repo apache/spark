@@ -524,6 +524,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFWithSinglePartition"
     val pythonScript: String =
       s"""
+        |import json
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
@@ -533,7 +534,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |        self._last = None
         |
         |    @staticmethod
-        |    def analyze(self):
+        |    def analyze(initial_count, input_table):
+        |        prepare_buffer = ""
+        |        if initial_count.value is not None:
+        |            assert(not initial_count.is_table)
+        |            assert(initial_count.data_type == IntegerType())
+        |            count = initial_count.value
+        |            prepare_buffer = json.dumps({"initial_count": count})
         |        return AnalyzeResult(
         |            schema=StructType()
         |                .add("count", IntegerType())
@@ -542,9 +549,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            with_single_partition=True,
         |            order_by=[
         |                OrderingColumn("input"),
-        |                OrderingColumn("partition_col")])
+        |                OrderingColumn("partition_col")],
+        |            prepare_buffer=prepare_buffer)
         |
-        |    def eval(self, row: Row):
+        |    def prepare(self, buffer):
+        |      self._count = json.loads(buffer)["initial_count"]
+        |
+        |    def eval(self, initial_count, row):
         |        self._count += 1
         |        self._last = row["input"]
         |        self._sum += row["input"]

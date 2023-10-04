@@ -123,13 +123,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2))
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2))
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)
+SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -144,30 +150,27 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 70,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)"
+    "stopIndex" : 73,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)"
   } ]
 }
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+SELECT * FROM UDTFWithSinglePartition(input_table => TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
-  "sqlState" : "22023",
+  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "messageParameters" : {
-    "functionName" : "UDTFWithSinglePartition",
-    "invalidFunctionCallProperty" : "specified the WITH SINGLE PARTITION or PARTITION BY clause; please remove these clauses and retry the query again.",
-    "requestedMetadata" : "specified its own required partitioning of the input table"
+    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/pyspark/sql/worker/analyze_udtf.py\", line 119, in main\n    result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: UDTFWithSinglePartition.analyze() missing 1 required positional argument: 'initial_count'\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 75,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 90,
+    "fragment" : "UDTFWithSinglePartition(input_table => TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
@@ -176,7 +179,7 @@ org.apache.spark.sql.AnalysisException
 SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
-    UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+    UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -191,8 +194,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 66,
-    "stopIndex" : 126,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 129,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
