@@ -16,8 +16,12 @@
     under the License.
 
 
-MLlib for Spark Connect
-=======================
+MLlib (DataFrame-based) for Spark Connect
+=========================================
+
+.. warning::
+    The namespace for this package can change in the future Spark version.
+
 
 Pipeline APIs
 -------------
@@ -62,7 +66,6 @@ Classification
 
     LogisticRegression
     LogisticRegressionModel
-
 
 
 Functions
@@ -116,5 +119,4 @@ Utilities
     ParamsReadWrite
     CoreModelReadWrite
     MetaAlgorithmReadWrite
-
 
