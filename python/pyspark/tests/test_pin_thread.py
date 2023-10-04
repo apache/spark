@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
 import os
 import time
 import threading
 import unittest
 
-from pyspark import SparkContext, SparkConf, InheritableThread
+from pyspark import SparkContext, SparkConf, InheritableThread, inheritable_thread_target
+from pyspark.sql import SparkSession
 
 
 class PinThreadTests(unittest.TestCase):
@@ -178,6 +180,69 @@ class PinThreadTests(unittest.TestCase):
 
         self.assertEqual(self.sc.getLocalProperty("b"), None)
         self.assertEqual(expected, ["hi", "hello"])
+
+    @contextlib.contextmanager
+    def ensure_active_spark_session(self):
+        jvm = self.sc._jvm
+        old_active_spark_session = SparkSession.getActiveSession()
+        if old_active_spark_session is None:
+            old_default_spark_session = jvm.SparkSession.getDefaultSession()
+            try:
+                spark = SparkSession.builder.getOrCreate()
+                jvm.SparkSession.setActiveSession(spark._jsparkSession)
+                self.assertEqual(SparkSession.getActiveSession(), spark)
+                yield spark
+            finally:
+                jvm.SparkSession.setActiveSession(None)
+                self.assertEqual(SparkSession.getActiveSession(), None)
+                if old_default_spark_session.isDefined():
+                    jvm.SparkSession.setDefaultSession(old_default_spark_session.get())
+                else:
+                    jvm.SparkSession.setDefaultSession(None)
+        else:
+            yield old_active_session
+
+    def _test_inheritable_active_session(self, make_thread):
+        with self.ensure_active_spark_session() as spark:
+            active_session_in_thread = []
+
+            def get_active_session_in_thread():
+                active_session_in_thread.append(SparkSession.getActiveSession())
+
+            t = make_thread(get_active_session_in_thread)
+            t.start()
+            t.join()
+
+            self.assertEqual(active_session_in_thread, [spark])
+
+    def test_inheritable_thread_active_session(self):
+        self._test_inheritable_active_session(lambda target: InheritableThread(target=target))
+
+    def test_inheritable_thread_target_active_session(self):
+        self._test_inheritable_active_session(
+            lambda target: threading.Thread(target=inheritable_thread_target(target)))
+
+    def _test_inheritable_active_session_negative(self, make_thread):
+        self.assertEqual(SparkSession.getActiveSession(), None)
+
+        active_session_in_thread = []
+
+        def get_active_session_in_thread():
+            active_session_in_thread.append(SparkSession.getActiveSession())
+
+        t = make_thread(get_active_session_in_thread)
+        t.start()
+        t.join()
+
+        self.assertEqual(active_session_in_thread, [None])
+
+    def test_inheritable_thread_active_session_negative(self):
+        self._test_inheritable_active_session_negative(
+            lambda target: InheritableThread(target=target))
+
+    def test_inheritable_thread_target_active_session_negative(self):
+        self._test_inheritable_active_session_negative(
+            lambda target: InheritableThread(target=target))
 
 
 if __name__ == "__main__":
