@@ -68,10 +68,7 @@ from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
-    UnresolvedRegex,
-    GetColumnByOrdinal,
-)
+from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
     _to_col_with_plan_id,
     _to_col,
@@ -103,10 +100,8 @@ class DataFrame:
     def __init__(
         self,
         session: "SparkSession",
-        schema: Optional[StructType] = None,
     ):
         """Creates a new data frame"""
-        self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._session: "SparkSession" = session
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
@@ -1693,10 +1688,10 @@ class DataFrame:
         ...
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
-        if self._plan is None:
-            raise SparkConnectException("Cannot analyze on empty plan.")
-
         if isinstance(item, str):
+            if self._plan is None:
+                raise SparkConnectException("Cannot analyze on empty plan.")
+
             # validate the column name
             if not hasattr(self._session, "is_mock_session"):
                 self.select(item).isLocal()
@@ -1710,15 +1705,7 @@ class DataFrame:
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            n = len(self.columns)
-            # 1, convert bool; 2, covert negative index; 3, validate index
-            item = range(0, n)[int(item)]
-            return Column(
-                GetColumnByOrdinal(
-                    ordinal=item,
-                    plan_id=self._plan._plan_id,
-                )
-            )
+            return col(self.columns[item])
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
