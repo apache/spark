@@ -105,11 +105,12 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val join = testData.crossJoin(testData2).queryExecution.optimizedPlan.asInstanceOf[Join]
       val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
 
-      val planned = spark.sessionState.planner.JoinSelection(join)
+      val planner = spark.sessionState.planner
+      val planned = new planner.JoinSelection().apply(join)
       assert(planned.size == 1)
       assert(planned.head.isInstanceOf[CartesianProductExec])
 
-      val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+      val plannedWithHint = new planner.JoinSelection().apply(joinWithHint)
       assert(plannedWithHint.size == 1)
       assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
       assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
@@ -127,12 +128,12 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val ds = sql("SELECT * FROM testData JOIN testData2 ON key = a")
     val join = ds.queryExecution.optimizedPlan.asInstanceOf[Join]
     val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
-
-    val planned = spark.sessionState.planner.JoinSelection(join)
+    val planner = spark.sessionState.planner
+    val planned = new planner.JoinSelection().apply(join)
     assert(planned.size == 1)
     assert(planned.head.isInstanceOf[BroadcastHashJoinExec])
 
-    val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+    val plannedWithHint = new planner.JoinSelection()(joinWithHint)
     assert(plannedWithHint.size == 1)
     assert(plannedWithHint.head.isInstanceOf[SortMergeJoinExec])
   }
@@ -145,13 +146,13 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val ds = testData.join(testData2, $"key" === 1, "left_outer")
     val join = ds.queryExecution.optimizedPlan.asInstanceOf[Join]
     val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
-
-    val planned = spark.sessionState.planner.JoinSelection(join)
+    val planner = spark.sessionState.planner
+    val planned = new planner.JoinSelection()(join)
     assert(planned.size == 1)
     assert(planned.head.isInstanceOf[BroadcastNestedLoopJoinExec])
     assert(planned.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildRight)
 
-    val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+    val plannedWithHint = new planner.JoinSelection()(joinWithHint)
     assert(plannedWithHint.size == 1)
     assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
     assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)

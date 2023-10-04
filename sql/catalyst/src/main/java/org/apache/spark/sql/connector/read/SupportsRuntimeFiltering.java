@@ -68,29 +68,4 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
     this.filter(PredicateUtils.toV1(predicates));
   }
 
-  default boolean hasPushedBroadCastFilter() {return false;}
-
-  default NamedReference[] allAttributes() { return new NamedReference[0];}
-
-  default boolean equalToIgnoreRuntimeFilters(Scan other) {
-    return this.equals(other);
-  }
-
-  default int hashCodeIgnoreRuntimeFilters() {
-    return this.hashCode();
-  }
-
-  default List<PushedBroadcastFilterData> getPushedBroadcastFilters() {
-    return Collections.emptyList();
-  }
-
-  default Set<Long> getPushedBroadcastVarIds() {
-    return Collections.emptySet();
-  }
-
-  default int getPushedBroadcastFiltersCount() {
-    return 0;
-  }
-
-  default void callbackBeforeOpeningIterator() {}
 }

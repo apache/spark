@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.joins
 import scala.collection.mutable
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, LogicalQueryStage, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, ObjectType}
 
 
 object BroadcastHashJoinUtil {
@@ -78,17 +78,20 @@ object BroadcastHashJoinUtil {
             bcData.joinKeyIndexInJoiningKeys).map(_._1).getOrElse(
                 throw new IllegalStateException("missing actual index key from map"))
         val streamJoinLeafColName = getColNameFromUnderlyingScan(
-            bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeFiltering],
+            bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeV2Filtering],
             bcData.streamsideLeafJoinAttribIndex)
-        val filter = org.apache.spark.sql.sources.In(streamJoinLeafColName,
-            Array(new BroadcastedJoinKeysWrapperImpl(bcRelation, dataTypesArray, relativeIndex,
-                indexesOfInterestArray, totalJoinKeys)))
-        bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeFiltering].filter(Array(filter))
+        val actualData = new BroadcastedJoinKeysWrapperImpl(bcRelation, dataTypesArray,
+          relativeIndex, indexesOfInterestArray, totalJoinKeys)
+        val dt = ObjectType(classOf[BroadcastedJoinKeysWrapperImpl])
+        val embedAsLiteral = Literal.create(actualData, dt)
+        val filter = org.apache.spark.sql.sources.In(streamJoinLeafColName, Array(embedAsLiteral))
+        bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeV2Filtering].
+          filter(Array(filter.toV2))
         bcData.targetBatchScanExec.resetFilteredPartitionsAndInputRdd()
     }
   }
 
-  def getColNameFromUnderlyingScan(scan: SupportsRuntimeFiltering, index: Int): String = {
+  def getColNameFromUnderlyingScan(scan: SupportsRuntimeV2Filtering, index: Int): String = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     scan.allAttributes()(index).fieldNames().toSeq.quoted
   }
@@ -143,7 +146,7 @@ object BroadcastHashJoinUtil {
   }
 
   def isBatchScanReady(batchScanExec: BatchScanExec): Boolean = batchScanExec.scan match {
-    case sr: SupportsRuntimeFiltering =>
+    case sr: SupportsRuntimeV2Filtering =>
       val totalBCVars = batchScanExec.proxyForPushedBroadcastVar.fold(0)(_.foldLeft(0) {
         case (num, proxy) => num + proxy.joiningKeysData.size
       })
@@ -192,7 +195,7 @@ object BroadcastHashJoinUtil {
       val filteredBatchScansOfInterest = batchScansOfInterest.flatMap {
         case (currentStreamKey, runtimeFilteringBatchScan) =>
           val underlyingRuntimeFilteringScan = runtimeFilteringBatchScan.scan.
-              asInstanceOf[SupportsRuntimeFiltering]
+              asInstanceOf[SupportsRuntimeV2Filtering]
           val streamKey = currentStreamKey
           val streamsideLeafJoinAttribIndex = runtimeFilteringBatchScan.output.indexWhere(
               _.canonicalized == streamKey.canonicalized)

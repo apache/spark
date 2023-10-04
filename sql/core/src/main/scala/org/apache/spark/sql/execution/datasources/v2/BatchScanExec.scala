@@ -55,7 +55,7 @@ case class BatchScanExec(
         this.spjParams == other.spjParams
       if (commonEquality) {
         (this, other) match {
-          case (sr1: SupportsRuntimeFiltering, sr2: SupportsRuntimeFiltering) =>
+          case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
             sr1.equalToIgnoreRuntimeFilters(sr2)
 
           case (sr1, sr2) => sr1.batch == sr2.batch
@@ -69,7 +69,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = {
     val batchHashCode = batch match {
-      case sr: SupportsRuntimeFiltering => sr.hashCodeIgnoreRuntimeFilters()
+      case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
 
       case _ => batch.hashCode()
     }
@@ -84,8 +84,8 @@ case class BatchScanExec(
     }
 
     val pushFiltersAndRefreshIter = dataSourceFilters.nonEmpty ||
-      (scan.isInstanceOf[SupportsRuntimeFiltering] &&
-        scan.asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter)
+      (scan.isInstanceOf[SupportsRuntimeV2Filtering] &&
+        scan.asInstanceOf[SupportsRuntimeV2Filtering].hasPushedBroadCastFilter)
 
     if (pushFiltersAndRefreshIter) {
       val originalPartitioning = outputPartitioning
@@ -95,7 +95,7 @@ case class BatchScanExec(
       if (dataSourceFilters.nonEmpty) {
         filterableScan.filter(dataSourceFilters.toArray)
       }
-      filterableScan.asInstanceOf[SupportsRuntimeFiltering].callbackBeforeOpeningIterator()
+      filterableScan.callbackBeforeOpeningIterator()
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
@@ -126,11 +126,11 @@ case class BatchScanExec(
               "partition values that are not present in the original partitioning.")
           }
 
-          groupPartitions(newPartitions).get.groupedParts.map(_.parts)
+          groupPartitions(newPartitions.toSeq).get.groupedParts.map(_.parts)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.map(Seq(_))
+          newPartitions.map(Seq(_)).toSeq
       }
       this.filteredPartitions = newGroupedPartitions
     } else {

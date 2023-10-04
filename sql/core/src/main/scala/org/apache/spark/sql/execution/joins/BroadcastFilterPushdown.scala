@@ -174,7 +174,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
               _._1.hashCode()).map {
                 case (sp, joinData) => ProxyBroadcastVarAndStageIdentifier(sp, joinData.
                   sortBy(_.joinKeyIndexInJoiningKeys))
-              }), runtimeFilters = Seq.empty)
+              }.toSeq), runtimeFilters = Seq.empty)
 
           val dppRemoved = bs.runtimeFilters.filter(_.isInstanceOf[DynamicPruning]).
               map(_.asInstanceOf[DynamicPruning])
@@ -188,7 +188,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           bs.copy(proxyForPushedBroadcastVar = Option(buildLeg.toSeq.sortBy(_._1.hashCode()).map {
             case (lp, streamSideJoinKeysForBuildLeg) => ProxyBroadcastVarAndStageIdentifier(
                 lp, streamSideJoinKeysForBuildLeg.sortBy(_.joinKeyIndexInJoiningKeys))
-          }))
+          }.toSeq))
         }
         originalBatchScanToNewBatchScan.put(bs, newBs)
         newBs

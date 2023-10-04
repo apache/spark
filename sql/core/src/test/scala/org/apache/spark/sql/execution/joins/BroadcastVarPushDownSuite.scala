@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 
 class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils {
@@ -76,8 +76,8 @@ class BroadcastVarPushDownSuite extends QueryTest with BroadcastVarPushdownUtils
     }
 
     val pairedBatchScansWithBCVarToWthoutBCVar = batchScansWithBCVar.filter(
-      x => x.scan.isInstanceOf[SupportsRuntimeFiltering] && x.scan
-        .asInstanceOf[SupportsRuntimeFiltering].hasPushedBroadCastFilter).map(bs =>
+      x => x.scan.isInstanceOf[SupportsRuntimeV2Filtering] && x.scan
+        .asInstanceOf[SupportsRuntimeV2Filtering].hasPushedBroadCastFilter).map(bs =>
       batchScansWithoutBCVar.find(x => x.table.name == bs.table.name && x.schema == bs.schema).
         map(bs -> _).get)
     assert(pairedBatchScansWithBCVarToWthoutBCVar.nonEmpty)

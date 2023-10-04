@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
@@ -656,7 +655,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
+      scala.collection.immutable.TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++
+        (hset - null)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

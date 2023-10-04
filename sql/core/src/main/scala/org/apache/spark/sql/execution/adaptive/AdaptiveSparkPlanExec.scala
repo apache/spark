@@ -38,8 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
@@ -531,7 +530,7 @@ case class AdaptiveSparkPlanExec(
       allProcessedStageIds: Set[Int]): Unit = {
     val identityHashMap = new util.IdentityHashMap[BatchScanExec, java.util.Set[java.lang.Long]]()
     allUnreadyBatchScans.map(bs =>
-      bs -> bs.scan.asInstanceOf[SupportsRuntimeFiltering].getPushedBroadcastVarIds).foreach {
+      bs -> bs.scan.asInstanceOf[SupportsRuntimeV2Filtering].getPushedBroadcastVarIds).foreach {
       case (bs, set) => identityHashMap.put(bs, set)
     }
     val stagesAndBatchScanForPush =
