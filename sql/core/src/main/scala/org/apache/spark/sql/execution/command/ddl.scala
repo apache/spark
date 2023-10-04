@@ -1024,7 +1024,8 @@ object DDLUtils extends Logging {
     source match {
       case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
       case f: FileDataSourceV2 =>
-        DataSourceUtils.checkFieldNames(f.fallbackFileFormat.newInstance(), schema)
+        DataSourceUtils.checkFieldNames(
+          f.fallbackFileFormat.getDeclaredConstructor().newInstance(), schema)
       case _ =>
     }
   }

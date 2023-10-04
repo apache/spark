@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 

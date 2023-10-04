@@ -2149,6 +2149,26 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
 
+### USER_RAISED_EXCEPTION
+
+SQLSTATE: P0001
+
+`<errorMessage>`
+
+### USER_RAISED_EXCEPTION_PARAMETER_MISMATCH
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise error class: `<errorClass>` which expects parameters: `<expectedParms>`.
+The provided parameters `<providedParms>` do not match the expected parameters.
+Please make sure to provide all expected parameters.
+
+### USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise an unknown error class: `<errorClass>`
+
 ### VARIABLE_ALREADY_EXISTS
 
 [SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

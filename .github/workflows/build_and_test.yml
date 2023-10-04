@@ -149,7 +149,7 @@ jobs:
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
             mllib-local, mllib,
-            yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
+            yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -180,22 +180,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            # Using a tag that will not appear in sql module for placeholder, branch-3.3 and branch-3.4 will not run any UTs.
-            included-tags: >-
-              ${{
-                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.SlowHiveTest')
-                || 'org.apache.spark.tags.SlowSQLTest'
-              }}
+            included-tags: org.apache.spark.tags.SlowSQLTest
             comment: "- slow tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: >-
-              ${{
-                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedSQLTest')
-                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest'
-              }}
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
@@ -829,7 +820,7 @@ jobs:
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         export JAVA_VERSION=${{ matrix.java }}
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well

@@ -17,12 +17,12 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Period;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 public class CalendarIntervalSuite {

@@ -19,8 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.Command

@@ -1495,7 +1495,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-18009 calling toLocalIterator on commands") {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)

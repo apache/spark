@@ -254,7 +254,7 @@
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp_like | SELECT regexp_like('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP_LIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | rlike | SELECT rlike('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<RLIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RPadExpressionBuilder | rpad | SELECT rpad('hi', 5, '??') | struct<rpad(hi, 5, ??):string> |
-| org.apache.spark.sql.catalyst.expressions.RaiseError | raise_error | SELECT raise_error('custom error message') | struct<raise_error(custom error message):void> |
+| org.apache.spark.sql.catalyst.expressions.RaiseError | raise_error | SELECT raise_error('custom error message') | struct<raise_error(USER_RAISED_EXCEPTION, map(errorMessage, custom error message)):void> |
 | org.apache.spark.sql.catalyst.expressions.Rand | rand | SELECT rand() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Rand | random | SELECT random() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Randn | randn | SELECT randn() | struct<randn():double> |

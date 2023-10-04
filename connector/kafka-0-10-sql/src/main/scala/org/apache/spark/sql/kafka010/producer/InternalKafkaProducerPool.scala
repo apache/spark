@@ -21,8 +21,8 @@ import java.{util => ju}
 import java.util.concurrent.{ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.producer.KafkaProducer
 

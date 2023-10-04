@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
@@ -4448,6 +4448,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS =
+    buildConf("spark.sql.legacy.raiseErrorWithoutErrorClass")
+      .internal()
+      .doc("When set to true, restores the legacy behavior of `raise_error` and `assert_true` to " +
+        "not return the `[USER_RAISED_EXCEPTION]` prefix." +
+        "For example, `raise_error('error!')` returns `error!` instead of " +
+        "`[USER_RAISED_EXCEPTION] Error!`.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4503,7 +4514,9 @@ object SQLConf {
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
-        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead.")
+        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
+      DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
+        "Use raw string literals with the `r` prefix instead. ")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -5316,6 +5329,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNegativeIndexInArrayInsert: Boolean = {
     getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
   }
+
+  def legacyRaiseErrorWithoutErrorClass: Boolean =
+      getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.crypto.random._

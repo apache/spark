@@ -23,7 +23,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
