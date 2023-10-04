@@ -73,6 +73,13 @@ class LocalFile(LocalData):
         self._size: int
         self._stream: int
 
+        # Check that the file can be read
+        # so that incorrect references can be discovered during Artifact creation,
+        # and not at the point of consumption.
+
+        with self.stream():
+            pass
+
     @cached_property
     def size(self) -> int:
         return os.path.getsize(self.path)
@@ -280,6 +287,7 @@ class ArtifactManager:
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
             *path, pyfile=pyfile, archive=archive, file=file
         )
+
         self._request_add_artifacts(requests)
 
     def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:
