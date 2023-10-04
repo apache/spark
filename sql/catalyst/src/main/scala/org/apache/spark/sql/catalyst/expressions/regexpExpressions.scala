@@ -133,12 +133,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left LIKE $right"
-    case c => s"$left LIKE $right ESCAPE '$c'"
+  override def toString: String = {
+    val escapeSuffix = if (escapeChar == '\\') "" else s" ESCAPE '$escapeChar'"
+    s"$left ${prettyName.toUpperCase(Locale.ROOT)} $right" + escapeSuffix
   }
 
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
+  override def sql: String = {
+    val escapeSuffix = if (escapeChar == '\\') "" else s" ESCAPE ${Literal(escapeChar).sql}"
+    s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}" + escapeSuffix
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
