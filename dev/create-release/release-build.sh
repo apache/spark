@@ -186,6 +186,9 @@ if [[ $SPARK_VERSION < "3.2" ]]; then
 fi
 
 PUBLISH_SCALA_2_12=1
+if [[ $SPARK_VERSION < "4.0" ]]; then
+  PUBLISH_SCALA_2_12=0
+fi
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
 # Hive-specific profiles for some builds
@@ -424,10 +427,14 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+    $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+  fi
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.13
+    if [[ $SPARK_VERSION < "4.0" ]]; then
+      ./dev/change-scala-version.sh 2.13
+    fi
     $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
@@ -459,7 +466,9 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.13
+    if [[ $SPARK_VERSION < "4.0" ]]; then
+      ./dev/change-scala-version.sh 2.13
+    fi
     $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi
