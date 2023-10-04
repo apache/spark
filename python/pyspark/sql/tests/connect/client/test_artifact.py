@@ -391,7 +391,9 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
     def test_add_not_existing_artifact(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(FileNotFoundError):
-                self.artifact_manager.add_artifacts(os.path.join(d, "not_existing"), file=True)
+                self.artifact_manager.add_artifacts(
+                    os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
+                )
 
 
 class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
