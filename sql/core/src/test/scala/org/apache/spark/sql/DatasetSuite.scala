@@ -1872,8 +1872,7 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
-    val data = Seq("\u0020\u0021\u0023", "abc")
-    val df = data.toDF()
+    val df = Seq("\u0020\u0021\u0023", "abc").toDF()
 
     Seq(
       true ->
