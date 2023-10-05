@@ -240,7 +240,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("Rollback multiple versions") {
+  testWithChangelogCheckpointingEnabled("SPARK-45419: Do not reuse SST files" +
+    " in different RocksDB instances") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
     new File(remoteDir).delete()  // to make sure that the directory gets created
@@ -252,16 +253,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       // upload snapshot 3.zip
       db.doMaintenance()
+      // Roll back to version 1 and start to process data.
       for (version <- 1 to 3) {
         db.load(version)
         db.put(version.toString, version.toString)
         db.commit()
       }
-      // upload snapshot 4.zip
+      // Upload snapshot 4.zip, should not reuse the SST files in 3.zip
       db.doMaintenance()
     }
 
     withDB(remoteDir, conf = conf) { db =>
+      // Open the db to verify that the state in 4.zip is no corrupted.
       db.load(4)
     }
   }
