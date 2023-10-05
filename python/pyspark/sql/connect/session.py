@@ -381,7 +381,7 @@ class SparkSession:
             )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
-                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
+                return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
             else:
                 raise PySparkValueError(
                     error_class="CANNOT_INFER_EMPTY_SCHEMA",
@@ -547,7 +547,7 @@ class SparkSession:
         if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
             plan = CachedLocalRelation(self._cache_local_relation(local_relation))
 
-        df = DataFrame.withPlan(plan, self)
+        df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df
@@ -558,9 +558,9 @@ class SparkSession:
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
-            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+            return DataFrame(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(cmd, self)
+            return DataFrame(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -580,7 +580,7 @@ class SparkSession:
         if numPartitions is not None:
             numPartitions = int(numPartitions)
 
-        return DataFrame.withPlan(
+        return DataFrame(
             Range(
                 start=int(start), end=int(actual_end), step=int(step), num_partitions=numPartitions
             ),
@@ -769,7 +769,7 @@ class SparkSession:
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the
         output of a micro batch.
         """
-        return DataFrame.withPlan(CachedRemoteRelation(remote_id), self)
+        return DataFrame(CachedRemoteRelation(remote_id), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
