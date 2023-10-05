@@ -164,13 +164,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    val inlinedPlan = inlineCTE(plan)
     try {
-      checkAnalysis0(inlinedPlan)
+      val inlinedPlan = inlineCTE(plan)
+      try {
+        checkAnalysis0(inlinedPlan)
+      } catch {
+        case e: AnalysisException =>
+          throw new ExtendedAnalysisException(e, inlinedPlan)
+      }
     } catch {
       case e: AnalysisException =>
-        throw new ExtendedAnalysisException(e, inlinedPlan)
+        throw new ExtendedAnalysisException(e, plan)
     }
+
     plan.setAnalyzed()
   }
 
