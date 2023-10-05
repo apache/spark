@@ -362,7 +362,7 @@ if __name__ == "__main__":
             "input feature size list for input columns of vector assembler",
             None,
             "TypeConverters.toListInt",
-        )
+        ),
     ]
 
     code = []

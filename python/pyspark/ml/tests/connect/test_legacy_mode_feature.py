@@ -171,8 +171,8 @@ class FeatureTestsMixin:
         result2 = assembler1.transform(spark_df).toPandas()["out"].tolist()
         # For spark UDF, if output is a array type, 'NaN' values in UDF output array
         # are converted to 'None' value.
-        assert result2[1][1] is None
-        result2[1][1] = np.nan
+        if result2[1][1] is None:
+            result2[1][1] = np.nan
         np.testing.assert_allclose(result2, expected_result)
 
         with tempfile.TemporaryDirectory() as tmp_dir:

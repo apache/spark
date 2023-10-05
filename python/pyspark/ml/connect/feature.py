@@ -334,19 +334,19 @@ class VectorAssembler(
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[..., Any]:
-
         feature_size_list = self.getInputFeatureSizeList()
         if feature_size_list is None or len(feature_size_list) != len(self.getInputCols()):
             raise ValueError(
                 f"'feature_size_list' param must be set with an array of integer, and"
-                "its length must be equal to number of input columns.")
+                "its length must be equal to number of input columns."
+            )
         assembled_feature_size = sum(feature_size_list)
         handler_invalid = self.getHandleInvalid()
 
         if handler_invalid not in ["error", "keep"]:
             raise ValueError(f"'handler_invalid' param must be set with 'error' or 'keep' value.")
 
-        keep_invalid = (handler_invalid == "keep")
+        keep_invalid = handler_invalid == "keep"
 
         def assemble_features(*feature_list: Any):
             assembled_array = np.empty(assembled_feature_size, dtype=np.float64)
@@ -356,26 +356,23 @@ class VectorAssembler(
 
                 if keep_invalid:
                     if feature is None:
-                        assembled_array[pos: pos + feature_size] = np.nan
+                        assembled_array[pos : pos + feature_size] = np.nan
                     else:
-                        assembled_array[pos: pos + feature_size] = feature
+                        assembled_array[pos : pos + feature_size] = feature
                 else:
                     if feature is None or np.isnan(feature).any():
                         raise ValueError(
                             f"The input features contains invalid value: {str(feature)}"
                         )
                     else:
-                        assembled_array[pos: pos + feature_size] = feature
+                        assembled_array[pos : pos + feature_size] = feature
 
                 pos += feature_size
 
             return assembled_array
 
         def transform_fn(*series_list: Any) -> Any:
-            return pd.Series(
-                assemble_features(*feature_list)
-                for feature_list in zip(*series_list)
-            )
+            return pd.Series(assemble_features(*feature_list) for feature_list in zip(*series_list))
 
         return transform_fn
 
