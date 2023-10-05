@@ -253,7 +253,7 @@ class ArtifactManager:
             *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
         )
 
-        def generator():
+        def generator() -> Iterator[proto.AddArtifactsRequest]:
             try:
                 yield from self._add_artifacts(artifacts)
             except Exception as e:

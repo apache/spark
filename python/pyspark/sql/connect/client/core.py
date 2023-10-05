@@ -1555,6 +1555,7 @@ class SparkConnectClient(object):
         for attempt in self._retrying():
             with attempt:
                 return self._artifact_manager.cache_artifact(blob)
+        raise SparkConnectException("Invalid state during retry exception handling.")
 
 
 class RetryState:
