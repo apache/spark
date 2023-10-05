@@ -381,6 +381,7 @@ public class TransportConf {
       return false;
     }
     if (sslRpcOpenSslEnabled()) {
+      // OpenSSL requires both the privateKey and certChain
       File privateKey = sslRpcPrivateKey();
       if (privateKey == null || !privateKey.exists()) {
         return false;
@@ -395,10 +396,7 @@ public class TransportConf {
       if (keyStore == null || !keyStore.exists()) {
         return false;
       }
-      File trustStore = sslRpcTrustStore();
-      if (trustStore == null || !trustStore.exists()) {
-        return false;
-      }
+      // It's fine for the trust store to be missing, we would default to trusting all.
       return true;
     }
   }
