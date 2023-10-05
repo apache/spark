@@ -1886,7 +1886,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |        6|
         +---------+
 
-        Repartition the data into 7 partitions by 'age' and 'name columns.
+        Repartition the data into 3 partitions by 'age' and 'name' columns.
 
         >>> df.repartition(3, "name", "age").select(
         ...     sf.spark_partition_id().alias("partition")
