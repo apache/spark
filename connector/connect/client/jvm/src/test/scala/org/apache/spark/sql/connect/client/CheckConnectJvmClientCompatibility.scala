@@ -336,6 +336,14 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
 
+      // New private API added in the client
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner"),
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
+
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.plan"
