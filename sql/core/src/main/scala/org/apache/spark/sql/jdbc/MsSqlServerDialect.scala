@@ -109,7 +109,7 @@ private object MsSqlServerDialect extends JdbcDialect {
         None
       } else {
         sqlType match {
-          case java.sql.Types.SMALLINT => Some(ShortType)
+          case java.sql.Types.SMALLINT | java.sql.Types.TINYINT => Some(ShortType)
           case java.sql.Types.REAL => Some(FloatType)
           case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
           case _ => None
