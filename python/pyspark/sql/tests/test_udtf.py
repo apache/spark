@@ -409,6 +409,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_cleanup(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "file.txt")
+
             @udtf(returnType="x: int")
             class TestUDTF:
                 def __init__(self):

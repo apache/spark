@@ -758,7 +758,7 @@ def read_udtf(pickleSer, infile, eval_type):
             return iter(())
 
         def cleanup(self) -> None:
-            if self._udtf.cleanup is not None:
+            if hasattr(self._udtf, "cleanup"):
                 self._udtf.cleanup()
 
         def _check_partition_boundaries(self, arguments: list) -> bool:
