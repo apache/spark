@@ -176,7 +176,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
     }
-
     plan.setAnalyzed()
   }
 
