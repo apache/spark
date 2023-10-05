@@ -28,7 +28,11 @@ import org.apache.spark.network.shuffledb.LevelDB;
 import org.apache.spark.network.shuffledb.RocksDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DBProvider {
+  private static final Logger logger = LoggerFactory.getLogger(DBProvider.class);
     public static DB initDB(
         DBBackend dbBackend,
         File dbFile,
@@ -38,6 +42,7 @@ public class DBProvider {
         switch (dbBackend) {
           case LEVELDB:
             org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
+            logger.warn("The LEVELDB are deprecated. Please use ROCKSDB instead.");
             return levelDB != null ? new LevelDB(levelDB) : null;
           case ROCKSDB:
             org.rocksdb.RocksDB rocksDB = RocksDBProvider.initRockDB(dbFile, version, mapper);
