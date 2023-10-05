@@ -58,7 +58,9 @@ public class DBProvider {
     public static DB initDB(DBBackend dbBackend, File file) throws IOException {
       if (file != null) {
         switch (dbBackend) {
-          case LEVELDB: return new LevelDB(LevelDBProvider.initLevelDB(file));
+          case LEVELDB:
+            logger.warn("The LEVELDB are deprecated. Please use ROCKSDB instead.");
+            return new LevelDB(LevelDBProvider.initLevelDB(file));
           case ROCKSDB: return new RocksDB(RocksDBProvider.initRocksDB(file));
           default:
             throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
