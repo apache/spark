@@ -205,7 +205,7 @@ object ScalarUserDefinedFunction {
   }
 }
 
-object SparkConnectClosureCleaner {
+private object SparkConnectClosureCleaner {
   def clean(closure: AnyRef): Unit = {
     ClosureCleaner.clean(closure, cleanTransitively = true, mutable.Map.empty)
   }
