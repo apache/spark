@@ -3837,10 +3837,10 @@ class Listener(StreamingQueryListener):
         print("Query started: " + queryStarted.id)
 
     def onQueryProgress(self, event):
-        println("Query terminated: " + queryTerminated.id)
+        print("Query made progress: " + queryProgress.progress)
 
     def onQueryTerminated(self, event):
-        println("Query made progress: " + queryProgress.progress)
+    	print("Query terminated: " + queryTerminated.id)
 
 
 spark.streams.addListener(Listener())

@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.SortedMap
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.codahale.metrics._

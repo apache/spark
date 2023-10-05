@@ -21,8 +21,8 @@ import java.util
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse

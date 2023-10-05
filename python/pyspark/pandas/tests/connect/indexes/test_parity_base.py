@@ -29,10 +29,6 @@ class IndexesParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
-    def test_factorize(self):
-        super().test_factorize()
-
     @unittest.skip("TODO(SPARK-43704): Enable IndexesParityTests.test_to_series.")
     def test_to_series(self):
         super().test_to_series()

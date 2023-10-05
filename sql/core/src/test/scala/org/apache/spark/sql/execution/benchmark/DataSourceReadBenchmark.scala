@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.parquet.column.ParquetProperties

@@ -19,8 +19,8 @@ package org.apache.spark
 
 import java.net.URL
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -57,6 +57,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
   }
 
+  def getMessageParameters(errorClass: String): Seq[String] = {
+    val messageTemplate = getMessageTemplate(errorClass)
+    val pattern = "<([a-zA-Z0-9_-]+)>".r
+    val matches = pattern.findAllIn(messageTemplate).toSeq
+    matches.map(m => m.stripSuffix(">").stripPrefix("<"))
+  }
+
   def getMessageTemplate(errorClass: String): String = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)
@@ -84,6 +91,17 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .flatMap(errorInfoMap.get)
       .flatMap(_.sqlState)
       .orNull
+  }
+
+  def isValidErrorClass(errorClass: String): Boolean = {
+    val errorClasses = errorClass.split("\\.")
+    errorClasses match {
+      case Array(mainClass) => errorInfoMap.contains(mainClass)
+      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).map { info =>
+        info.subClass.get.contains(subClass)
+      }.getOrElse(false)
+      case _ => false
+    }
   }
 }
 

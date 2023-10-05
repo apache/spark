@@ -335,7 +335,7 @@ class ExecutorClassLoaderSuite
         // scalastyle:off classforname
         val classB = Class.forName("TestClassB", true, classLoader)
         // scalastyle:on classforname
-        val instanceOfTestClassB = classB.newInstance()
+        val instanceOfTestClassB = classB.getDeclaredConstructor().newInstance()
         assert(instanceOfTestClassB.toString === "TestClassB")
         classB.getMethod("foo").invoke(instanceOfTestClassB).asInstanceOf[String]
       }

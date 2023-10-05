@@ -20,8 +20,8 @@ package org.apache.spark.streaming.kafka010
 import java.{ util => ju }
 import java.io.File
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import kafka.log.{CleanerConfig, LogCleaner, LogConfig, ProducerStateManagerConfig, UnifiedLog}

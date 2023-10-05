@@ -23,9 +23,9 @@ import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.{Codec, Source}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -1225,7 +1225,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // If the hybrid store is enabled, try it first and fail back to leveldb store.
+    // If the hybrid store is enabled, try it first and fail back to RocksDB store.
     if (hybridStoreEnabled) {
       try {
         return createHybridStore(dm, appId, attempt, metadata)

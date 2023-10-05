@@ -275,7 +275,7 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select($"a")
-        .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
+        .where(Size(CreateArray(Seq(rand(0)))) > 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
