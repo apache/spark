@@ -250,10 +250,7 @@ class ArtifactManager:
         # And not during grpc consuming iterator, allowing for much better error reporting.
 
         artifacts: Iterator[Artifact] = chain(
-            *(
-                self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file)
-                for p in path
-            )
+            *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
         )
 
         def generator():
