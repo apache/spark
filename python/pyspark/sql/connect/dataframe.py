@@ -1677,9 +1677,6 @@ class DataFrame:
 
     def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
         if isinstance(item, str):
-            if self._plan is None:
-                raise SparkConnectException("Cannot analyze on empty plan.")
-
             # validate the column name
             if not hasattr(self._session, "is_mock_session"):
                 self.select(item).isLocal()
