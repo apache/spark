@@ -1552,7 +1552,9 @@ class SparkConnectClient(object):
                 self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
 
     def cache_artifact(self, blob: bytes) -> str:
-        return self._artifact_manager.cache_artifact(blob)
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifact(blob)
 
 
 class RetryState:
