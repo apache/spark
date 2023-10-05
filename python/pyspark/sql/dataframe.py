@@ -2693,8 +2693,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | NULL|NULL| Tom|    80|
         +-----+----+----+------+
 
-        To select an output column, you must specify the dataframe along with the column
-        name to avoid ambiguous column references.
+        To unambiguously select output columns, specify the dataframe along with the column name:
 
         >>> joined.select(df.name, df2.height).show()
         +-----+------+
@@ -2705,18 +2704,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | NULL|    80|
         +-----+------+
 
+        However, in self-joins, direct column references can cause ambiguity:
+
+        >>> df.join(df, df.name == df.name, "outer").select(df.name).show() # doctest: +SKIP
+        Traceback (most recent call last):
+        ...
+        pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
+
         A better approach is to assign aliases to the dataframes, and then reference
         the ouptut columns from the join operation using these aliases:
 
-        >>> df.alias("df").join(df2.alias("df2"), df.name == df2.name, "outer") \\
-        ...     .sort(sf.desc("df.name")).select("df.name", "df2.height")
-        +-----+------+
-        | name|height|
-        +-----+------+
-        |  Bob|    85|
-        |Alice|  NULL|
-        | NULL|    80|
-        +-----+------+
+        >>> df.alias("a").join(
+        ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
+        ... ).sort(sf.desc("a.name")).select("a.name", "b.age").show()
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |  Bob|  5|
+        |Alice|  2|
+        +-----+---+
 
         Outer join on a single column with implicit join condition using column name
 
@@ -2783,18 +2789,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+---+
         |Alice|  2|
         +-----+---+
-
-        Cross join
-
-        >>> df.join(df2, how="cross").show()
-        +-----+---+----+------+
-        | name|age|name|height|
-        +-----+---+----+------+
-        |Alice|  2| Tom|    80|
-        |Alice|  2| Bob|    85|
-        |  Bob|  5| Tom|    80|
-        |  Bob|  5| Bob|    85|
-        +-----+---+----+------+
         """
 
         if on is not None and not isinstance(on, list):
