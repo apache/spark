@@ -220,7 +220,8 @@ class PinThreadTests(unittest.TestCase):
 
     def test_inheritable_thread_target_active_session(self):
         self._test_inheritable_active_session(
-            lambda target: threading.Thread(target=inheritable_thread_target(target)))
+            lambda target: threading.Thread(target=inheritable_thread_target(target))
+        )
 
     def _test_inheritable_active_session_negative(self, make_thread):
         self.assertEqual(SparkSession.getActiveSession(), None)
@@ -238,11 +239,13 @@ class PinThreadTests(unittest.TestCase):
 
     def test_inheritable_thread_active_session_negative(self):
         self._test_inheritable_active_session_negative(
-            lambda target: InheritableThread(target=target))
+            lambda target: InheritableThread(target=target)
+        )
 
     def test_inheritable_thread_target_active_session_negative(self):
         self._test_inheritable_active_session_negative(
-            lambda target: InheritableThread(target=target))
+            lambda target: InheritableThread(target=target)
+        )
 
 
 if __name__ == "__main__":
