@@ -188,7 +188,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             // tasks not related to scheduling. This is particularly important if there are
             // multiple users or clients running code at the same time.
             var currentPartitionId = 0
-            var currentOffset = 0
+            var currentOffset = 0L
             while (currentPartitionId < numPartitions) {
               val partition = signal.synchronized {
                 var part = partitions(currentPartitionId)
