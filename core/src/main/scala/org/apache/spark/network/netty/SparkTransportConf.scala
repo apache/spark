@@ -19,7 +19,7 @@ package org.apache.spark.network.netty
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SSLOptions}
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}
 
 /**
@@ -31,6 +31,24 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
+   * @param _conf          the [[SparkConf]]
+   * @param module         the module name
+   * @param numUsableCores if nonzero, this will restrict the server and client threads to only
+   *                       use the given number of cores, rather than all of the machine's cores.
+   *                       This restriction will only occur if these properties are not already set.
+   * @param role           optional role, could be driver, executor, worker and master. Default is
+   *                       [[None]], means no role specific configurations.
+   */
+  def fromSparkConf(
+      _conf: SparkConf,
+      module: String,
+      numUsableCores: Int = 0,
+      role: Option[String] = None): TransportConf = {
+    SparkTransportConf.fromSparkConfWithSslOptions(
+      _conf, module, numUsableCores, role, sslOptions = None)
+  }
+  /**
+   * Utility for creating a [[TransportConf]] from a [[SparkConf]].
    * @param _conf the [[SparkConf]]
    * @param module the module name
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
@@ -38,12 +56,14 @@ object SparkTransportConf {
    *                       This restriction will only occur if these properties are not already set.
    * @param role           optional role, could be driver, executor, worker and master. Default is
    *                      [[None]], means no role specific configurations.
+   * @param sslOptions SSL config options
    */
-  def fromSparkConf(
+  def fromSparkConfWithSslOptions(
       _conf: SparkConf,
       module: String,
       numUsableCores: Int = 0,
-      role: Option[String] = None): TransportConf = {
+      role: Option[String] = None,
+      sslOptions: Option[SSLOptions]): TransportConf = {
     val conf = _conf.clone
     // specify default thread configuration based on our JVM's allocation of cores (rather than
     // necessarily assuming we have all the machine's cores).
@@ -57,12 +77,14 @@ object SparkTransportConf {
       conf.set(s"spark.$module.io.$suffix", value)
     }
 
-    new TransportConf(module, new ConfigProvider {
+    val configProvider = sslOptions.map(_.createConfigProvider(conf)).getOrElse({
+      new ConfigProvider {
       override def get(name: String): String = conf.get(name)
       override def get(name: String, defaultValue: String): String = conf.get(name, defaultValue)
       override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
         conf.getAll.toMap.asJava.entrySet()
       }
-    })
+    }})
+    new TransportConf(module, configProvider)
   }
 }
