@@ -143,16 +143,16 @@ object ScanOperation extends OperationHelper {
     // bottom-most Filter, or more following deterministic Filters if the bottom-most Filter is
     // also deterministic.
     if (filters.isEmpty) {
-      Some((fields.getOrElse(child.output), Nil, Nil, child))
+      Some((fields.getOrElse(plan.output), Nil, Nil, child))
     } else if (filters.head.deterministic) {
       val filtersCanPushDown = filters.takeWhile(_.deterministic)
         .flatMap(splitConjunctivePredicates)
       val filtersStayUp = filters.dropWhile(_.deterministic)
-      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+      Some((fields.getOrElse(plan.output), filtersStayUp, filtersCanPushDown, child))
     } else {
       val filtersCanPushDown = splitConjunctivePredicates(filters.head)
       val filtersStayUp = filters.drop(1)
-      Some((fields.getOrElse(child.output), filtersStayUp, filtersCanPushDown, child))
+      Some((fields.getOrElse(plan.output), filtersStayUp, filtersCanPushDown, child))
     }
   }
 }
