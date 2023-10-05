@@ -93,9 +93,8 @@ class MockRemoteSession:
 class MockDF(DataFrame):
     """Helper class that must only be used for the mock plan tests."""
 
-    def __init__(self, session: SparkSession, plan: LogicalPlan):
-        super().__init__(session)
-        self._plan = plan
+    def __init__(self, plan: LogicalPlan, session: SparkSession):
+        super().__init__(plan, session)
 
     def __getattr__(self, name):
         """All attributes are resolved to columns, because none really exist in the
@@ -115,7 +114,7 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
 
     @classmethod
     def _df_mock(cls, plan: LogicalPlan) -> MockDF:
-        return MockDF(cls.connect, plan)
+        return MockDF(plan, cls.connect)
 
     @classmethod
     def _session_range(
