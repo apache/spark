@@ -286,6 +286,26 @@ class VectorAssembler(
     if it is set to 'keep', it returns relevant number of NaN in the output.
 
     .. versionadded:: 4.0.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.feature import VectorAssembler
+    >>> import numpy as np
+    >>>
+    >>> spark_df = spark.createDataFrame(
+    ...     [
+    ...         ([2.0, 3.5, 1.5], 3.0, True, 1),
+    ...         ([-3.0, np.nan, -2.5], 4.0, False, 2),
+    ...     ],
+    ...     schema=["f1", "f2", "f3", "f4"],
+    ... )
+    >>> assembler = VectorAssembler(
+    ...     inputCols=["f1", "f2", "f3", "f4"],
+    ...     outputCol="out",
+    ...     inputFeatureSizeList=[3, 1, 1, 1],
+    ...     handleInvalid="keep",
+    ... )
+    >>> assembler.transform(spark_df).select("out").show(truncate=False)
     """
 
     _input_kwargs: Dict[str, Any]
