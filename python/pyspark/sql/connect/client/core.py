@@ -1180,6 +1180,7 @@ class SparkConnectClient(object):
                 Dict[str, Any],
             ]
         ]:
+            nonlocal num_records
             if b.session_id != self._session_id:
                 raise SparkConnectException(
                     "Received incorrect session identifier for request: "
