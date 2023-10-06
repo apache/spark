@@ -28,8 +28,9 @@ trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
   override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 1024]")
+      .setMaster("local-cluster[2, 1, 512]")
       .setAppName("test-cluster")
+      .set("spark.executor.memory", "512m")
       .set(RPC_MESSAGE_MAX_SIZE, 1) // set to 1MB to detect direct serialization of data
     sc = new SparkContext(conf)
   }
