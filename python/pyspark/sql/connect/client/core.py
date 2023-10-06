@@ -1538,14 +1538,24 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
+    def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
+        for path in paths:
+            for attempt in self._retrying():
+                with attempt:
+                    self._artifact_manager.add_artifacts(
+                        path, pyfile=pyfile, archive=archive, file=file
+                    )
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
-        self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
+        for attempt in self._retrying():
+            with attempt:
+                self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
 
     def cache_artifact(self, blob: bytes) -> str:
-        return self._artifact_manager.cache_artifact(blob)
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifact(blob)
+        raise SparkConnectException("Invalid state during retry exception handling.")
 
 
 class RetryState:
