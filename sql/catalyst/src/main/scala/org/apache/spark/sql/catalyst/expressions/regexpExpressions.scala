@@ -228,13 +228,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     Examples:
       > SELECT _FUNC_('Spark', '_Park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ R'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ R'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SYSTEMDrive/%//Users%' ESCAPE '/';
       true
