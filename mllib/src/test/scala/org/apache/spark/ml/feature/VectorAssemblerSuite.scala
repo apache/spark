@@ -184,6 +184,38 @@ class VectorAssemblerSuite
     intercept[SparkException](assemble(Array(2), keepInvalid = false)(null))
   }
 
+  test("assemble should keep Vector's NaN when keepInvalid is true") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    assert(assemble(Array(3), keepInvalid = true)(
+      Vectors.dense(1.0, 2.0, Double.NaN)
+    ) === Vectors.dense(1.0, 2.0, Double.NaN))
+    assert(assemble(Array(3), keepInvalid = true)(
+      Vectors.sparse(3, Array(0, 2), Array(1.0, Double.NaN))
+    ) === Vectors.dense(1.0, 0.0, Double.NaN))
+    assert(assemble(Array(3, 1), keepInvalid = true)(
+      Vectors.dense(1.0, 2.0, Double.NaN), null
+    ) === Vectors.dense(1.0, 2.0, Double.NaN, Double.NaN))
+    assert(assemble(Array(3, 1), keepInvalid = true)(
+      Vectors.sparse(3, Array(0, 2), Array(1.0, Double.NaN)), null
+    ) === Vectors.dense(1.0, 0.0, Double.NaN, Double.NaN))
+  }
+
+  test("assemble should throw errors when Vector has NaN and keepInvalid is false") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    intercept[SparkException](assemble(Array(3), keepInvalid = false)(
+      Vectors.dense(1.0, 2.0, Double.NaN)
+    ))
+    intercept[SparkException](assemble(Array(3), keepInvalid = false)(
+      Vectors.sparse(3, Array(0, 2), Array(1.0, Double.NaN))
+    ))
+    intercept[SparkException](assemble(Array(3, 1), keepInvalid = false)(
+      Vectors.dense(1.0, 2.0, Double.NaN), null
+    ))
+    intercept[SparkException](assemble(Array(3, 1), keepInvalid = false)(
+      Vectors.sparse(3, Array(0, 2), Array(1.0, Double.NaN)), null
+    ))
+  }
+
   test("get lengths functions") {
     import org.apache.spark.ml.feature.VectorAssembler._
     val df = dfWithNullsAndNaNs

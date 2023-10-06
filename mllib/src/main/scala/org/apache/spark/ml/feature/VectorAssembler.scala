@@ -259,28 +259,34 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
     var inputColumnIndex = 0
     vv.foreach {
       case v: Double =>
-        if (v.isNaN && !keepInvalid) {
-          throw new SparkException(
-            s"""Encountered NaN while assembling a row with handleInvalid = "error". Consider
-               |removing NaNs from dataset or using handleInvalid = "keep" or "skip"."""
-              .stripMargin)
-        } else if (v != 0.0) {
+        if (v != 0.0) {
           indices += featureIndex
-          values += v
+          if (keepInvalid) {
+            values += v
+          } else {
+            values += checkNaN(v)
+          }
         }
         inputColumnIndex += 1
         featureIndex += 1
       case vec: Vector =>
-        vec.foreachNonZero { case (i, v) =>
-          indices += featureIndex + i
-          values += v
+        if (keepInvalid) {
+          vec.foreachNonZero { case (i, v) =>
+            indices += featureIndex + i
+            values += v
+          }
+        } else {
+          vec.foreachNonZero { case (i, v) =>
+            indices += featureIndex + i
+            values += checkNaN(v)
+          }
         }
         inputColumnIndex += 1
         featureIndex += vec.size
       case null =>
         if (keepInvalid) {
-          val length: Int = lengths(inputColumnIndex)
-          Array.range(0, length).foreach { i =>
+          val length = lengths(inputColumnIndex)
+          Iterator.range(0, length).foreach { i =>
             indices += featureIndex + i
             values += Double.NaN
           }
@@ -296,5 +302,15 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
     Vectors.sparse(featureIndex, indices.result(), values.result()).compressed
+  }
+
+  private def checkNaN(v: Double): Double = {
+    if (v.isNaN) {
+      throw new SparkException(
+        s"""Encountered NaN while assembling a row with handleInvalid = "error". Consider
+           |removing NaNs from dataset or using handleInvalid = "keep" or "skip"."""
+          .stripMargin)
+    }
+    v
   }
 }
