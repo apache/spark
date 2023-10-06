@@ -90,9 +90,7 @@ private[spark] class StreamingPythonRunner(
     PythonRDD.writeUTF(sessionId, dataOut)
 
     // Send the user function to python process
-    val command = func.command
-    dataOut.writeInt(command.length)
-    dataOut.write(command.toArray)
+    PythonWorkerUtils.writePythonFunction(func, dataOut)
     dataOut.flush()
 
     val dataIn = new DataInputStream(
