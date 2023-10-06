@@ -32,7 +32,7 @@ if should_test_connect:
         MaxAbsScalerModel,
         StandardScaler,
         StandardScalerModel,
-        VectorAssembler,
+        ArrayAssembler,
     )
     import pandas as pd
 
@@ -145,7 +145,7 @@ class FeatureTestsMixin:
                 sk_result = sk_model.transform(np.stack(list(local_df1.features)))
                 np.testing.assert_allclose(sk_result, expected_result)
 
-    def test_vector_assembler(self):
+    def test_array_assembler(self):
         spark_df = self.spark.createDataFrame(
             [
                 ([2.0, 3.5, 1.5], 3.0, True, 1),
@@ -155,7 +155,7 @@ class FeatureTestsMixin:
         )
         pandas_df = spark_df.toPandas()
 
-        assembler1 = VectorAssembler(
+        assembler1 = ArrayAssembler(
             inputCols=["f1", "f2", "f3", "f4"],
             outputCol="out",
             inputFeatureSizeList=[3, 1, 1, 1],
@@ -178,11 +178,11 @@ class FeatureTestsMixin:
         with tempfile.TemporaryDirectory() as tmp_dir:
             save_path = os.path.join(tmp_dir, "assembler")
             assembler1.saveToLocal(save_path)
-            loaded_assembler = VectorAssembler.loadFromLocal(save_path)
+            loaded_assembler = ArrayAssembler.loadFromLocal(save_path)
             assert loaded_assembler.getInputCols() == ["f1", "f2", "f3", "f4"]
             assert loaded_assembler.getInputFeatureSizeList() == [3, 1, 1, 1]
 
-        assembler2 = VectorAssembler(
+        assembler2 = ArrayAssembler(
             inputCols=["f1", "f2", "f3", "f4"],
             outputCol="out",
             inputFeatureSizeList=[3, 1, 1, 1],

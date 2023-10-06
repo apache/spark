@@ -264,7 +264,7 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, Cor
         self.n_samples_seen = sk_model.n_samples_seen_
 
 
-class VectorAssembler(
+class ArrayAssembler(
     Transformer,
     HasInputCols,
     HasOutputCol,
