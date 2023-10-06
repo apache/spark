@@ -38,7 +38,7 @@ private[spark] object SparkClosureCleaner {
       cleanTransitively: Boolean = true): Unit = {
     if (ClosureCleaner.clean(closure, cleanTransitively, mutable.Map.empty)) {
       try {
-        if (SparkEnv.get != null) {
+        if (checkSerializable && SparkEnv.get != null) {
           SparkEnv.get.closureSerializer.newInstance().serialize(closure)
         }
       } catch {
