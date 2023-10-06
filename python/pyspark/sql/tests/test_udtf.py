@@ -406,7 +406,7 @@ class BaseUDTFTestsMixin:
             ],
         )
 
-    def test_udtf_cleanup(self):
+    def test_udtf_cleanup_with_exception_in_eval(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "file.txt")
 
@@ -433,6 +433,33 @@ class BaseUDTFTestsMixin:
                 data = f.read()
 
             # Only cleanup method should be called.
+            self.assertEqual(data, "cleanup")
+
+    def test_udtf_cleanup_with_exception_in_terminate(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "file.txt")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def __init__(self):
+                    self.path = path
+
+                def eval(self, x: int):
+                    yield (x,)
+
+                def terminate(self):
+                    raise Exception("terminate error")
+
+                def cleanup(self):
+                    with open(self.path, "a") as f:
+                        f.write("cleanup")
+
+            with self.assertRaisesRegex(PythonException, "terminate error"):
+                TestUDTF(lit(1)).show()
+
+            with open(path, "r") as f:
+                data = f.read()
+
             self.assertEqual(data, "cleanup")
 
     def test_init_with_exception(self):
