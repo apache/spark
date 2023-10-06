@@ -27,6 +27,7 @@ from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
+from pyspark.sql.utils import is_remote
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
@@ -200,7 +201,8 @@ def sql(
     try:
         sdf = session.sql(formatter.format(query, **kwargs), args)
     finally:
-        formatter.clear()
+        if not is_remote():
+            formatter.clear()
 
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
