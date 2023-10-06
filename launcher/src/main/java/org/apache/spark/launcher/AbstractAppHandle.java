@@ -75,7 +75,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
       try {
         connection.close();
       } catch (IOException ioe) {
-        // no-op.
+        LOG.log(Level.INFO, "disconnect waitForClose // no-op..", ioe);
       }
     }
     dispose();
@@ -109,7 +109,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
         try {
           connection.waitForClose();
         } catch (IOException ioe) {
-          // no-op.
+          LOG.log(Level.INFO, "disconnect waitForClose // no-op..", ioe);
         }
       }
       server.unregister(this);
@@ -118,6 +118,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
       setState(State.LOST, false);
       this.disposed = true;
     }
+    endEvent();
   }
 
   void setState(SparkAppHandle.State s) {
@@ -162,5 +163,13 @@ abstract class AbstractAppHandle implements SparkAppHandle {
       }
     }
   }
+
+    private void endEvent() {
+        if (listeners != null) {
+            for (Listener l : listeners) {
+                l.taskEnd(this);
+            }
+        }
+    }
 
 }
