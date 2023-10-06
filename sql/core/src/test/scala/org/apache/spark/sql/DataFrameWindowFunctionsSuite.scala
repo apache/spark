@@ -828,27 +828,29 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lag($"value", 1, null, true).over(window),
         lag($"value", 2, null, true).over(window),
         lag($"value", 3, null, true).over(window),
+        // abs(offset) > rowCount: SPARK-45430
+        lag($"value", -100, null, true).over(window),
         lag(concat($"value", $"key"), 1, null, true).over(window))
         .orderBy($"order"),
       Seq(
         Row("a", 0, null, "x", null, null, "x", "y", "z", null, "xa",
-          null, null, null, null, null, null, null),
+          null, null, null, null, null, null, null, null),
         Row("a", 1, "x", null, null, "x", "y", "z", "v", null, "ya",
-          null, null, "x", null, null, null, null),
+          null, null, "x", null, null, null, null, null),
         Row("b", 2, null, null, "y", null, "y", "z", "v", null, "ya",
-          "x", null, null, "x", null, null, "xa"),
+          "x", null, null, "x", null, null, null, "xa"),
         Row("c", 3, null, "y", null, null, "y", "z", "v", null, "ya",
-          null, "x", null, "x", null, null, "xa"),
+          null, "x", null, "x", null, null, null, "xa"),
         Row("a", 4, "y", null, "z", "y", "z", "v", null, null, "za",
-          null, null, "y", "x", null, null, "xa"),
+          null, null, "y", "x", null, null, null, "xa"),
         Row("b", 5, null, "z", "v", null, "z", "v", null, null, "za",
-          "y", null, null, "y", "x", null, "ya"),
+          "y", null, null, "y", "x", null, null, "ya"),
         Row("a", 6, "z", "v", null, "z", "v", null, null, null, "va",
-          null, "y", "z", "y", "x", null, "ya"),
+          null, "y", "z", "y", "x", null, null, "ya"),
         Row("a", 7, "v", null, null, "v", null, null, null, null, null,
-          "z", null, "v", "z", "y", "x", "za"),
+          "z", null, "v", "z", "y", "x", null, "za"),
         Row("a", 8, null, null, null, null, null, null, null, null, null,
-          "v", "z", null, "v", "z", "y", "va")))
+          "v", "z", null, "v", "z", "y", null, "va")))
   }
 
   test("lag - Offset expression <offset> must be a literal") {
