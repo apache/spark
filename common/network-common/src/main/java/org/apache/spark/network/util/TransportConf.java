@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.util;
 
+import java.io.File;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -255,6 +256,157 @@ public class TransportConf {
   public int sslShuffleChunkSize() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.network.ssl.maxEncryptedBlockSize", "64k")));
+  }
+
+  /**
+   * Whether Secure (SSL/TLS) RPC (including Block Transfer Service) is enabled
+   */
+  public boolean sslRpcEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.enabled", false);
+  }
+
+  /**
+   * SSL protocol (remember that SSLv3 was compromised) supported by Java
+   */
+  public String sslRpcProtocol() {
+    return conf.get("spark.ssl.rpc.protocol", null);
+  }
+
+  /**
+   * A comma separated list of ciphers
+   */
+  public String[] sslRpcRequestedCiphers() {
+    String ciphers = conf.get("spark.ssl.rpc.enabledAlgorithms", null);
+    return (ciphers != null ? ciphers.split(",") : null);
+  }
+
+  /**
+   * The key-store file; can be relative to the current directory
+   */
+  public File sslRpcKeyStore() {
+    String keyStore = conf.get("spark.ssl.rpc.keyStore", null);
+    if (keyStore != null) {
+      return new File(keyStore);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the key-store file
+   */
+  public String sslRpcKeyStorePassword() {
+    return conf.get("spark.ssl.rpc.keyStorePassword", null);
+  }
+
+  /**
+   * A PKCS#8 private key file in PEM format; can be relative to the current directory
+   */
+  public File sslRpcPrivateKey() {
+    String privateKey = conf.get("spark.ssl.rpc.privateKey", null);
+    if (privateKey != null) {
+      return new File(privateKey);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the private key
+   */
+  public String sslRpcKeyPassword() {
+    return conf.get("spark.ssl.rpc.keyPassword", null);
+  }
+
+  /**
+   * A X.509 certificate chain file in PEM format; can be relative to the current directory
+   */
+  public File sslRpcCertChain() {
+    String certChain = conf.get("spark.ssl.rpc.certChain", null);
+    if (certChain != null) {
+      return new File(certChain);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The trust-store file; can be relative to the current directory
+   */
+  public File sslRpcTrustStore() {
+    String trustStore = conf.get("spark.ssl.rpc.trustStore", null);
+    if (trustStore != null) {
+      return new File(trustStore);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the trust-store file
+   */
+  public String sslRpcTrustStorePassword() {
+    return conf.get("spark.ssl.rpc.trustStorePassword", null);
+  }
+
+  /**
+   * If using a trust-store that that reloads its configuration is enabled.
+   * If true, when the trust-store file on disk changes, it will be reloaded
+   */
+  public boolean sslRpcTrustStoreReloadingEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.trustStoreReloadingEnabled", false);
+  }
+
+  /**
+   * The interval, in milliseconds, the trust-store will reload its configuration
+   */
+  public int sslRpctrustStoreReloadIntervalMs() {
+    return conf.getInt("spark.ssl.rpc.trustStoreReloadIntervalMs", 10000);
+  }
+
+  /**
+   * If the OpenSSL implementation is enabled,
+   * (if available on host system), requires certChain and keyFile arguments
+   */
+  public boolean sslRpcOpenSslEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.openSslEnabled", false);
+  }
+
+  /**
+   *
+   * @return true if and only if RPC encryption is enabled and the relevant keys exist
+   */
+  public boolean sslRpcEnabledAndKeysAreValid() {
+    if (!sslRpcEnabled()) {
+      return false;
+    }
+    if (sslRpcOpenSslEnabled()) {
+      // OpenSSL requires both the privateKey and certChain
+      File privateKey = sslRpcPrivateKey();
+      if (privateKey == null || !privateKey.exists()) {
+        return false;
+      }
+      File certChain = sslRpcCertChain();
+      if (certChain == null || !certChain.exists()) {
+        return false;
+      }
+      return true;
+    } else {
+      File keyStore = sslRpcKeyStore();
+      if (keyStore == null || !keyStore.exists()) {
+        return false;
+      }
+      // It's fine for the trust store to be missing, we would default to trusting all.
+      return true;
+    }
+  }
+
+  /**
+   * If we can dangerously fallback to unencrypted connections if RPC over SSL is enabled
+   * but the key files are not present
+   */
+  public boolean sslRpcDangerouslyFallbackIfKeysNotPresent() {
+    return conf.getBoolean("spark.ssl.rpc.dangerouslyFallbackIfKeysNotPresent", false);
   }
 
   /**
