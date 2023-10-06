@@ -1230,6 +1230,7 @@ class SparkConnectClient(object):
                         + f"but received arrow batch starting at offset {b.arrow_batch.start_offset}."
                     )
 
+                num_records_in_batch = 0
                 with pa.ipc.open_stream(b.arrow_batch.data) as reader:
                     for batch in reader:
                         assert isinstance(batch, pa.RecordBatch)
