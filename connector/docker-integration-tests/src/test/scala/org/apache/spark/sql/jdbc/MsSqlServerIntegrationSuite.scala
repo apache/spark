@@ -172,7 +172,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         val types = row.toSeq.map(x => x.getClass.toString)
         assert(types.length == 12)
         assert(types(0).equals("class java.lang.Boolean"))
-        assert(types(1).equals("class java.lang.Short"))
+        if (flag) {
+          assert(types(1).equals("class java.lang.Integer"))
+        } else {
+          assert(types(1).equals("class java.lang.Short"))
+        }
         if (flag) {
           assert(types(2).equals("class java.lang.Integer"))
         } else {
