@@ -272,7 +272,8 @@ private[spark] object HadoopFSUtils extends Logging {
             }
           }
           val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-            f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
+            f.getModificationTime, 0, null, null, null, null, f.getPath,
+            f.hasAcl, f.isEncrypted, f.isErasureCoded, locations)
           if (f.isSymlink) {
             lfs.setSymlink(f.getSymlink)
           }
