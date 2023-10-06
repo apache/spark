@@ -199,16 +199,20 @@ class FrameLessOffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    resetStates(rows)
-    if (ignoreNulls) {
-      findNextRowWithNonNullInput()
+    if (offset > rows.length) {
+      fillDefaultValue(EmptyRow)
     } else {
-      // drain the first few rows if offset is larger than zero
-      while (inputIndex < offset) {
-        if (inputIterator.hasNext) inputIterator.next()
-        inputIndex += 1
+      resetStates(rows)
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+      } else {
+        // drain the first few rows if offset is larger than zero
+        while (inputIndex < offset) {
+          if (inputIterator.hasNext) inputIterator.next()
+          inputIndex += 1
+        }
+        inputIndex = offset
       }
-      inputIndex = offset
     }
   }
 

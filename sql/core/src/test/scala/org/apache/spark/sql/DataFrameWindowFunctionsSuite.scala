@@ -819,6 +819,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
         lead($"value", 3, null, true).over(window),
+        // offset > rowCount: SPARK-45430
+        lead($"value", 100, null, true).over(window),
         lead(concat($"value", $"key"), 1, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
@@ -829,23 +831,23 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lag(concat($"value", $"key"), 1, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
+        Row("a", 0, null, "x", null, null, "x", "y", "z", null, "xa",
           null, null, null, null, null, null, null),
-        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", null, "ya",
           null, null, "x", null, null, null, null),
-        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
+        Row("b", 2, null, null, "y", null, "y", "z", "v", null, "ya",
           "x", null, null, "x", null, null, "xa"),
-        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
+        Row("c", 3, null, "y", null, null, "y", "z", "v", null, "ya",
           null, "x", null, "x", null, null, "xa"),
-        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, null, "za",
           null, null, "y", "x", null, null, "xa"),
-        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
+        Row("b", 5, null, "z", "v", null, "z", "v", null, null, "za",
           "y", null, null, "y", "x", null, "ya"),
-        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
+        Row("a", 6, "z", "v", null, "z", "v", null, null, null, "va",
           null, "y", "z", "y", "x", null, "ya"),
-        Row("a", 7, "v", null, null, "v", null, null, null, null,
+        Row("a", 7, "v", null, null, "v", null, null, null, null, null,
           "z", null, "v", "z", "y", "x", "za"),
-        Row("a", 8, null, null, null, null, null, null, null, null,
+        Row("a", 8, null, null, null, null, null, null, null, null, null,
           "v", "z", null, "v", "z", "y", "va")))
   }
 
