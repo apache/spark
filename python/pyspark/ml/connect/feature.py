@@ -273,7 +273,10 @@ class VectorAssembler(
     ParamsReadWrite,
 ):
     """
-    A feature transformer that merges multiple input columns into a array type column.
+    A feature transformer that merges multiple input columns into an array type column.
+
+    Parameters
+    ----------
     You need to set param `inputCols` for specifying input column names,
     and set param `inputFeatureSizeList` for specifying corresponding input column
     feature size, for scalar type input column, corresponding feature size must be set to 1,
