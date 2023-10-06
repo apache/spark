@@ -209,6 +209,21 @@ The following table describes the different options available for configuring th
 </tr>
 </table>
 
+## SSL Encryption
+
+Spark supports SSL based encryption for RPC connections. Please refer to the SSL Configuration
+section below to understand how to configure it. The SSL settings are mostly similar across the UI 
+and RPC, however there are a few additional settings which are specific to the RPC implementation.
+The RPC implementation uses Netty under the hood (while the UI uses Jetty), which supports a
+different set of options.
+
+Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically enabled if 
+`spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
+upgrading Spark versions.
+
+The SSL encryption support supersedes the authentication and encryption settings mentioned
+earlier. If both are enabled, the SSL settings take precedence and the prior settings will be 
+disabled at runtime, and a warning message will be emitted.
 
 # Local Storage Encryption
 
@@ -437,8 +452,10 @@ application configurations will be ignored.
 Configuration for SSL is organized hierarchically. The user can configure the default SSL settings
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
-protocols without disabling the ability to configure each one individually. The following table
-describes the SSL configuration namespaces:
+protocols without disabling the ability to configure each one individually. Note that all settings 
+are inherited this way, *except* for `spark.ssl.rpc.enabled` which must be explicitly set.
+
+The following table describes the SSL configuration namespaces:
 
 <table class="table table-striped">
   <thead>
@@ -466,6 +483,10 @@ describes the SSL configuration namespaces:
     <td><code>spark.ssl.historyServer</code></td>
     <td>History Server Web UI</td>
   </tr>
+  <tr>
+    <td><code>spark.ssl.rpc</code></td>
+    <td>Spark RPC communication</td>
+  </tr>
 </table>
 
 The full breakdown of available SSL options can be found below. The `${ns}` placeholder should be
@@ -489,6 +510,8 @@ replaced with one of the above namespaces.
 
       <br />When not set, the SSL port will be derived from the non-SSL port for the
       same service. A value of "0" will make the service bind to an ephemeral port.
+
+      <br />This setting is not applicable to the `rpc` namespace.
     </td>
   </tr>
   <tr>
@@ -528,7 +551,7 @@ replaced with one of the above namespaces.
   <tr>
     <td><code>${ns}.keyStoreType</code></td>
     <td>JKS</td>
-    <td>The type of the key store.</td>
+    <td>The type of the key store. This setting is not applicable to the `rpc` namespace.</td>
   </tr>
   <tr>
     <td><code>${ns}.protocol</code></td>
@@ -545,7 +568,10 @@ replaced with one of the above namespaces.
   <tr>
     <td><code>${ns}.needClientAuth</code></td>
     <td>false</td>
-    <td>Whether to require client authentication.</td>
+    <td>
+      Whether to require client authentication. This setting is not applicable to the `rpc` 
+      namespace.
+    </td>
   </tr>
   <tr>
     <td><code>${ns}.trustStore</code></td>
@@ -563,8 +589,62 @@ replaced with one of the above namespaces.
   <tr>
     <td><code>${ns}.trustStoreType</code></td>
     <td>JKS</td>
-    <td>The type of the trust store.</td>
+    <td>The type of the trust store. This setting is not applicable to the `rpc` namespace.</td>
   </tr>
+  <tr>
+    <td><code>${ns}.openSSLEnabled</code></td>
+    <td>false</td>
+    <td>
+      Whether to use OpenSSL for cryptographic operations instead of the JDK SSL provider.
+      This setting is only applicable to the `rpc` namespace, and also requires the `certChain`
+      and `privateKey` settings to be set.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.privateKey</code></td>
+    <td>None</td>
+    <td>
+      Path to the private key file in PEM format. The path can be absolute or relative to the 
+      directory in which the process is started. 
+      This setting is only applicable to the `rpc` namespace, and is required when using the 
+      OpenSSL implementation.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.certChain</code></td>
+    <td>None</td>
+    <td>
+      Path to the certificate chain file in PEM format. The path can be absolute or relative to the 
+      directory in which the process is started. 
+      This setting is only applicable to the `rpc` namespace, and is required when using the 
+      OpenSSL implementation.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStoreReloadingEnabled</code></td>
+    <td>false</td>
+    <td>
+      Whether the trust store should be reloaded periodically.
+      This setting is only applicable to the `rpc` namespace.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStoreReloadIntervalMs</code></td>
+    <td>10000</td>
+    <td>
+      The interval at which the trust store should be reloaded (in milliseconds).
+      This setting is only applicable to the `rpc` namespace.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.dangerouslyFallbackIfKeysNotPresent</code></td>
+    <td>false</td>
+    <td>
+      Whether we should fall back to unencrypted connections if SSL is enabled but the required
+      key files are not present on the file system (instead of throwing a fatal error).
+      This setting is only applicable to the `rpc` namespace. This is a dangerous option and 
+      should only be used under exceptional circumstances.
+    </td>
 </table>
 
 Spark also supports retrieving `${ns}.keyPassword`, `${ns}.keyStorePassword` and `${ns}.trustStorePassword` from
