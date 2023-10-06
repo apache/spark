@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -261,7 +261,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
    */
-  def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
+  def flatMap[A](f: BaseType => IterableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
     ret.toSeq

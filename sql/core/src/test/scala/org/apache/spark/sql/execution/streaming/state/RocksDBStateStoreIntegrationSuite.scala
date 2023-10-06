@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import scala.collection.JavaConverters
+import scala.jdk.CollectionConverters.SetHasAsScala
 
 import org.scalatest.time.{Minute, Span}
 
@@ -92,7 +92,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             assert(nextProgress != null, "progress is not yet available")
             assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
             val stateOperatorMetrics = nextProgress.stateOperators(0)
-            assert(JavaConverters.asScalaSet(stateOperatorMetrics.customMetrics.keySet) === Set(
+            assert(stateOperatorMetrics.customMetrics.keySet.asScala === Set(
               "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
               "rocksdbPutLatency", "rocksdbFilesReused",
               "rocksdbFilesCopied", "rocksdbSstFileSize",

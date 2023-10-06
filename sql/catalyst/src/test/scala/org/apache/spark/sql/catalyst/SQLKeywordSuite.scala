@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper

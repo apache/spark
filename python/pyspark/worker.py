@@ -51,7 +51,14 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import (
+    BinaryType,
+    Row,
+    StringType,
+    StructType,
+    _create_row,
+    _parse_datatype_json_string,
+)
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
@@ -735,7 +742,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield row
                 self._udtf = self._create_udtf()
             if self._udtf.eval is not None:
-                result = self._udtf.eval(*args, **kwargs)
+                # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
+                filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
+                filtered_kwargs = {
+                    key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
+                }
+                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
                     for row in result:
                         yield row
@@ -752,16 +764,27 @@ def read_udtf(pickleSer, infile, eval_type):
                 prev_table_arg = self._get_table_arg(self._prev_arguments)
                 cur_partitions_args = []
                 prev_partitions_args = []
-                for i in partition_child_indexes:
+                for i in self._partition_child_indexes:
                     cur_partitions_args.append(cur_table_arg[i])
                     prev_partitions_args.append(prev_table_arg[i])
-                self._prev_arguments = arguments
                 result = any(k != v for k, v in zip(cur_partitions_args, prev_partitions_args))
             self._prev_arguments = arguments
             return result
 
         def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
+
+        def _remove_partition_by_exprs(self, arg: Any) -> Any:
+            if isinstance(arg, Row):
+                new_row_keys = []
+                new_row_values = []
+                for i, (key, value) in enumerate(zip(arg.__fields__, arg)):
+                    if i not in self._partition_child_indexes:
+                        new_row_keys.append(key)
+                        new_row_values.append(value)
+                return _create_row(new_row_keys, new_row_values)
+            else:
+                return arg
 
     # Instantiate the UDTF class.
     try:
@@ -1352,7 +1375,4 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
     main(sock_file, sock_file)

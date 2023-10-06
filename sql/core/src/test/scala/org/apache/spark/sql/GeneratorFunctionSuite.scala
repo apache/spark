@@ -547,7 +547,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iteratorClass = classOf[Iterator[_]].getName
     ev.copy(code =

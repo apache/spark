@@ -25,10 +25,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.spark.network.util.AbstractFileRegion;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -133,7 +133,7 @@ public class MessageWithHeaderSuite {
       msg.transferTo(channel, msg.transferred());
       writes++;
     }
-    assertTrue("Not enough writes!", minExpectedWrites <= writes);
+    assertTrue(minExpectedWrites <= writes, "Not enough writes!");
     return Unpooled.wrappedBuffer(channel.getData());
   }
 

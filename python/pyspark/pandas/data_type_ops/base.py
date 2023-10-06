@@ -17,7 +17,6 @@
 
 import numbers
 from abc import ABCMeta
-from itertools import chain
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -130,12 +129,27 @@ def _as_categorical_type(
         if len(categories) == 0:
             scol = F.lit(-1)
         else:
-            kvs = chain(
-                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
-            )
-            map_scol = F.create_map(*kvs)
+            scol = F.lit(-1)
+            if isinstance(
+                index_ops._internal.spark_type_for(index_ops._internal.column_labels[0]), BinaryType
+            ):
+                from pyspark.sql.functions import base64
 
-            scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
+                stringified_column = base64(index_ops.spark.column)
+                for code, category in enumerate(categories):
+                    # Convert each category to base64 before comparison
+                    base64_category = F.base64(F.lit(category))
+                    scol = F.when(stringified_column == base64_category, F.lit(code)).otherwise(
+                        scol
+                    )
+            else:
+                stringified_column = F.format_string("%s", index_ops.spark.column)
+
+                for code, category in enumerate(categories):
+                    scol = F.when(stringified_column == F.lit(category), F.lit(code)).otherwise(
+                        scol
+                    )
+
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(

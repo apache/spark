@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.text.SimpleDateFormat
 import java.util.{Date, Optional, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}

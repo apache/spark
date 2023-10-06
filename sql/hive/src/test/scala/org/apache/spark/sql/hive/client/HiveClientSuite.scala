@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -663,14 +662,12 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
   test("sql read hive materialized view") {
     // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-    if (version == "2.3" || version == "3.0" || version == "3.1") {
-      // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
-      assume(version == "2.3" || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+    // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
+    if (version == "2.3") {
       // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
-      val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
       client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
       client.runSqlHive(
-        s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
+        s"CREATE MATERIALIZED VIEW mv1 AS SELECT * FROM materialized_view_tbl")
       checkError(
         exception = intercept[AnalysisException] {
           versionSpark.table("mv1").collect()
@@ -908,7 +905,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.2/specification/#logical-types
+    // https://avro.apache.org/docs/1.11.3/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.scalatest.Assertions._

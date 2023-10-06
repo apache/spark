@@ -66,13 +66,13 @@ trait Generator extends Expression {
   def elementSchema: StructType
 
   /** Should be implemented by child classes to perform specific Generators. */
-  override def eval(input: InternalRow): TraversableOnce[InternalRow]
+  override def eval(input: InternalRow): IterableOnce[InternalRow]
 
   /**
    * Notifies that there are no more rows to process, clean up code, and additional
    * rows can be made here.
    */
-  def terminate(): TraversableOnce[InternalRow] = Nil
+  def terminate(): IterableOnce[InternalRow] = Nil
 
   /**
    * Check if this generator supports code generation.
@@ -100,7 +100,7 @@ trait CollectionGenerator extends Generator {
  */
 case class UserDefinedGenerator(
     elementSchema: StructType,
-    function: Row => TraversableOnce[InternalRow],
+    function: Row => IterableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
@@ -117,7 +117,7 @@ case class UserDefinedGenerator(
     }.asInstanceOf[InternalRow => Row]
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     if (inputRow == null) {
       initializeConverters()
     }
@@ -232,7 +232,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       case (e, index) => StructField(s"col$index", e.dataType)
     })
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val values = children.tail.map(_.eval(input)).toArray
     for (row <- 0 until numRows) yield {
       val fields = new Array[Any](numFields)
@@ -265,7 +265,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     })
 
     // Create the collection.
-    val wrapperClass = classOf[mutable.WrappedArray[_]].getName
+    val wrapperClass = classOf[mutable.ArraySeq[_]].getName
     ev.copy(code =
       code"""
          |$code
@@ -290,7 +290,7 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
       case (e, index) => StructField(s"col$index", e.dataType)
     })
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val numRows = children.head.eval(input).asInstanceOf[Long]
     val values = children.tail.map(_.eval(input)).toArray
     Range.Long(0, numRows, 1).map { _ =>
@@ -311,7 +311,7 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
  * such as explode_outer. This expression gets replaced during analysis.
  */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
-  final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+  final override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -369,7 +369,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       }
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     child.dataType match {
       case ArrayType(et, _) =>
         val inputArray = child.eval(input).asInstanceOf[ArrayData]
@@ -571,7 +571,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
 
   private lazy val generatorNullRow = new GenericInternalRow(elementSchema.length)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val inputArray = child.eval(input).asInstanceOf[ArrayData]
     if (inputArray == null) {
       Nil
@@ -605,7 +605,7 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
     .add("keyword", StringType, nullable = false)
     .add("reserved", BooleanType, nullable = false)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val reservedList = getReservedList()
     keywords.zip(reservedList).map { case (keyword, isReserved) =>
       InternalRow(UTF8String.fromString(keyword), isReserved)

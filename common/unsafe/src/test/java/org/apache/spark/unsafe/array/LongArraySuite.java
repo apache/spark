@@ -17,8 +17,8 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -31,12 +31,12 @@ public class LongArraySuite {
     arr.set(0, 1L);
     arr.set(1, 2L);
     arr.set(1, 3L);
-    Assert.assertEquals(2, arr.size());
-    Assert.assertEquals(1L, arr.get(0));
-    Assert.assertEquals(3L, arr.get(1));
+    Assertions.assertEquals(2, arr.size());
+    Assertions.assertEquals(1L, arr.get(0));
+    Assertions.assertEquals(3L, arr.get(1));
 
     arr.zeroOut();
-    Assert.assertEquals(0L, arr.get(0));
-    Assert.assertEquals(0L, arr.get(1));
+    Assertions.assertEquals(0L, arr.get(0));
+    Assertions.assertEquals(0L, arr.get(1));
   }
 }
