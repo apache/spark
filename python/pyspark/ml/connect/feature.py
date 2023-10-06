@@ -337,14 +337,14 @@ class VectorAssembler(
         feature_size_list = self.getInputFeatureSizeList()
         if feature_size_list is None or len(feature_size_list) != len(self.getInputCols()):
             raise ValueError(
-                f"'feature_size_list' param must be set with an array of integer, and"
+                "'feature_size_list' param must be set with an array of integer, and"
                 "its length must be equal to number of input columns."
             )
         assembled_feature_size = sum(feature_size_list)
         handler_invalid = self.getHandleInvalid()
 
         if handler_invalid not in ["error", "keep"]:
-            raise ValueError(f"'handler_invalid' param must be set with 'error' or 'keep' value.")
+            raise ValueError("'handler_invalid' param must be set with 'error' or 'keep' value.")
 
         keep_invalid = handler_invalid == "keep"
 
