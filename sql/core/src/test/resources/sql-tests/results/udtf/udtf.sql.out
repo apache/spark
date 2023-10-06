@@ -169,29 +169,27 @@ org.apache.spark.api.python.PythonException
 Traceback (most recent call last):
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 821, in read_udtf
     udtf = handler()
-           ^^^^^^^^^
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 800, in handler_with_prepare
     raise PySparkRuntimeError(
-          ^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/exceptions/base.py", line 43, in __init__
-    self.message = self.error_reader.get_error_message(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 36, in get_error_message
-    message_template = self.get_message_template(error_class)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 96, in get_message_template
-    raise ValueError(f"Cannot find main error class '{main_error_class}'")
-ValueError: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
+pyspark.errors.exceptions.base.PySparkRuntimeError: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
+The 'analyze' method returned a non-empty 'prepare_buffer' string, but
+the UDTF does not define a corresponding 'prepare' method; please add a
+method to the UDTF named 'prepare' accepting a single string argument
+and try again.
+
 
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 1350, in main
     func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
-                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 823, in read_udtf
     raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
+The 'analyze' method returned a non-empty 'prepare_buffer' string, but
+the UDTF does not define a corresponding 'prepare' method; please add a
+method to the UDTF named 'prepare' accepting a single string argument
+and try again.
 
 
 -- !query
@@ -203,29 +201,27 @@ org.apache.spark.api.python.PythonException
 Traceback (most recent call last):
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 821, in read_udtf
     udtf = handler()
-           ^^^^^^^^^
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 800, in handler_with_prepare
     raise PySparkRuntimeError(
-          ^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/exceptions/base.py", line 43, in __init__
-    self.message = self.error_reader.get_error_message(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 36, in get_error_message
-    message_template = self.get_message_template(error_class)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 96, in get_message_template
-    raise ValueError(f"Cannot find main error class '{main_error_class}'")
-ValueError: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
+pyspark.errors.exceptions.base.PySparkRuntimeError: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
+The 'analyze' method returned a non-empty 'prepare_buffer' string, but
+the UDTF does not define a corresponding 'prepare' method; please add a
+method to the UDTF named 'prepare' accepting a single string argument
+and try again.
+
 
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 1350, in main
     func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
-                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 823, in read_udtf
     raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
+The 'analyze' method returned a non-empty 'prepare_buffer' string, but
+the UDTF does not define a corresponding 'prepare' method; please add a
+method to the UDTF named 'prepare' accepting a single string argument
+and try again.
 
 
 -- !query
@@ -575,40 +571,6 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
-
-
--- !query
-SELECT * FROM UDTFInvalidPrepareBufferNoPrepareMethod()
--- !query schema
-struct<>
--- !query output
-org.apache.spark.api.python.PythonException
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 821, in read_udtf
-    udtf = handler()
-           ^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 800, in handler_with_prepare
-    raise PySparkRuntimeError(
-          ^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/exceptions/base.py", line 43, in __init__
-    self.message = self.error_reader.get_error_message(
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 36, in get_error_message
-    message_template = self.get_message_template(error_class)
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/errors/utils.py", line 96, in get_message_template
-    raise ValueError(f"Cannot find main error class '{main_error_class}'")
-ValueError: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 1350, in main
-    func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
-                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 823, in read_udtf
-    raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: Cannot find main error class 'TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON'
 
 
 -- !query

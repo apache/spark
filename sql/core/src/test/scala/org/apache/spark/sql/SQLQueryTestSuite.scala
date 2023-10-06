@@ -651,8 +651,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           TestPythonUDTFWithSinglePartition,
           TestPythonUDTFPartitionBy,
           TestPythonUDTFInvalidPartitionByAndWithSinglePartition,
-          TestPythonUDTFInvalidOrderByWithoutPartitionBy,
-          TestPythonUDTFInvalidPrepareBufferNoPrepareMethod
+          TestPythonUDTFInvalidOrderByWithoutPartitionBy
         ))).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)

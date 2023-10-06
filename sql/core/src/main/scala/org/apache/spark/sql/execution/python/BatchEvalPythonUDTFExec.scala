@@ -136,7 +136,7 @@ object PythonUDTFRunner {
         dataOut.writeInt(0)
     }
     // Write the "prepare_result" string from the UDTF "analyze" method, if any.
-    PythonWorkerUtils.writeUTF(udtf.analyzeResult.prepareBuffer, dataOut)
+    PythonWorkerUtils.writeUTF(udtf.pickledAnalyzeResult, dataOut)
     // Write the contents of the Python script itself.
     dataOut.writeInt(udtf.func.command.length)
     dataOut.write(udtf.func.command.toArray)

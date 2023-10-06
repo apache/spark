@@ -158,9 +158,11 @@ abstract class UnevaluableGenerator extends Generator {
  * which needs a dedicated physical operator to execute it.
  * @param name name of the Python UDTF being called
  * @param func string contents of the Python code in the UDTF, along with other environment state
- * @param analyzeResult this contains all metadata returned by the Python UDTF 'analyze' method,
- *                      including the result schema of the function call as well as optional other
- *                      information
+ * @param elementSchema result schema of the function call
+ * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
+ *                             contains all metadata returned by the Python UDTF 'analyze' method
+ *                             including the result schema of the function call as well as optional
+ *                             other information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
  *                 themeselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
@@ -178,16 +180,14 @@ abstract class UnevaluableGenerator extends Generator {
 case class PythonUDTF(
     name: String,
     func: PythonFunction,
-    analyzeResult: PythonUDTFAnalyzeResult,
+    elementSchema: StructType,
+    pickledAnalyzeResult: String,
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
-
-  /** This is the result schema of the function call. */
-  override val elementSchema: StructType = analyzeResult.schema
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -248,20 +248,17 @@ case class UnresolvedPolymorphicPythonUDTF(
  * @param orderByExpressions if non-empty, this contains the list of ordering items that the
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
- * @param prepareBuffer If non-empty, this string represents state computed once within the
- *                      'analyze' method to be propagated to each instance of the UDTF class at the
- *                      time of its creation, using its 'prepare' method. The format this buffer is
- *                      opaque and known only to the data source. Common use cases include
- *                      serializing protocol buffers or JSON configurations into this buffer so that
- *                      potentially expensive initialization work done at 'analyze' time does not
- *                      need to be recomputed later.
+ * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
+ *                              contains all metadata returned by the Python UDTF 'analyze' method
+ *                              including the result schema of the function call as well as optional
+ *                              other information
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
-    prepareBuffer: String) {
+    pickledAnalyzeResult: String) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
    * expression of a UDTF call, throwing an error if any properties of the UDTF call are

@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import dataclass
 from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
@@ -2310,11 +2311,16 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_with_prepare_string_from_analyze(self):
+        @dataclass
+        class AnalyzeResultWithBuffer(AnalyzeResult):
+            buffer: str
+
         @udtf
         class TestUDTF:
-            def __init__(self):
+            def __init__(self, analyze_result=None):
                 self._total = 0
-                self._buffer = None
+                if analyze_result is not None:
+                    self._buffer = analyze_result.buffer
 
             @staticmethod
             def analyze(argument, _):
@@ -2327,10 +2333,10 @@ class BaseUDTFTestsMixin:
                     raise Exception("The first argument must be non-empty string")
                 assert argument.data_type == StringType()
                 assert not argument.is_table
-                return AnalyzeResult(
+                return AnalyzeResultWithBuffer(
                     schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
-                    prepare_buffer=argument.value,
                     with_single_partition=True,
+                    buffer=argument.value
                 )
 
             def prepare(self, buffer):

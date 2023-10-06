@@ -907,11 +907,6 @@ ERROR_CLASSES_JSON = """
     "message" : [
       "Function `<func_name>` should take at least <num_cols> columns."
     ]
-  },
-  "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
-    "message" : [
-      "Failed to analyze the Python user defined table function: <msg>"
-    ]
   }
 }
 """

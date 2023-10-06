@@ -104,9 +104,6 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
--- This invalid Python UDTF whose 'analyze' method sets the prepare_buffer' metdata does not
--- define a 'prepare' method.
-SELECT * FROM UDTFInvalidPrepareBufferNoPrepareMethod();
 
 -- cleanup
 DROP VIEW t1;

@@ -453,12 +453,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM UDTFInvalidPrepareBufferNoPrepareMethod()
--- !query analysis
-[Analyzer test output redacted due to nondeterminism]
-
-
--- !query
 DROP VIEW t1
 -- !query analysis
 DropTempViewCommand t1
