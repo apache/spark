@@ -197,7 +197,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         assert(types(10).equals("class java.math.BigDecimal"))
         assert(types(11).equals("class java.math.BigDecimal"))
         assert(row.getBoolean(0) == false)
-        assert(row.getInt(1) == 255)
+        if (flag) {
+          assert(row.getInt(1) == 255)
+        } else {
+          assert(row.getShort(1) == 255)
+        }
         if (flag) {
           assert(row.getInt(2) == 32767)
         } else {
