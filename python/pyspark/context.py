@@ -2349,7 +2349,7 @@ class SparkContext:
         key : str
             The key of the local property to set.
         value : str
-            The value of the local property to set. If set to `null` then the
+            The value of the local property to set. If set to `None` then the
             property will be removed
 
         See Also
