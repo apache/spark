@@ -279,7 +279,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     if (!oldTable.namespace().sameElements(newTable.namespace())) {
       throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
     }
-    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} " +
+      s"RENAME TO ${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
