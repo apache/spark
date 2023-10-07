@@ -84,6 +84,7 @@ private class HttpSecurityFilter(
     }
 
     val hostAccessArray = conf.get(UI_ACCESS_HOST).split(",")
+    // spark-45273: set the access host range to prevent request header attacks.
     val host = hreq.getHeader("host");
     if (!checkBlankList(hostAccessArray, host)) {
       hres.sendError(HttpServletResponse.SC_FORBIDDEN,
