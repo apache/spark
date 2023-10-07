@@ -160,6 +160,15 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     }
   }
 
+  // See Old Syntax:https://dev.mysql.com/doc/refman/8.0/en/rename-table.html
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    if (!oldTable.namespace().sameElements(newTable.namespace())) {
+      throw QueryExecutionErrors.renameColumnUnsupportedForOlderMySQLError()
+    }
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
+  }
+
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   // require to have column data type to change the column nullability
   // ALTER TABLE tbl_name MODIFY [COLUMN] col_name column_definition
