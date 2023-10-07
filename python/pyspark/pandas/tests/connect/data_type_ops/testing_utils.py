@@ -22,7 +22,6 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
