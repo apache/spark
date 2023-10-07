@@ -515,17 +515,17 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45449: Cache Invalidation Issue with JDBC Table") {
-    withConnection { conn =>
-      conn.prepareStatement(
-        """CREATE TABLE "test"."cache_t" (id decimal(25) PRIMARY KEY NOT NULL,
-          |name TEXT(32) NOT NULL)""".stripMargin).executeUpdate()
+    withTable("h2.test.cache_t") {
+      withConnection { conn =>
+        conn.prepareStatement(
+          """CREATE TABLE "test"."cache_t" (id decimal(25) PRIMARY KEY NOT NULL,
+            |name TEXT(32) NOT NULL)""".stripMargin).executeUpdate()
+      }
+      sql("INSERT OVERWRITE h2.test.cache_t SELECT 1 AS id, 'a' AS name")
+      sql("CACHE TABLE t1 SELECT id, name FROM h2.test.cache_t")
+      val plan = sql("select * from t1").queryExecution.sparkPlan
+      assert(plan.isInstanceOf[InMemoryTableScanExec])
+      sql("UNCACHE TABLE IF EXISTS t1")
     }
-    val ss = spark.cloneSession()
-    ss.sql("insert overwrite h2.test.cache_t select 1 as id, 'a' as name")
-
-    sql("cache table ct1 select id, name from h2.test.cache_t")
-    val plan = sql("select * from ct1").queryExecution.sparkPlan
-    assert(plan.isInstanceOf[InMemoryTableScanExec])
   }
-
 }
