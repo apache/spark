@@ -73,7 +73,7 @@ private[spark] object HadoopFSUtils extends Logging {
    * Lists a collection of paths recursively with a single API invocation.
    * Like parallelListLeafFiles, this ignores FileNotFoundException on the given root path.
    *
-   * This is able to be be called on both driver and executors.
+   * This is able to be called on both driver and executors.
    *
    * @param path a path to list
    * @param hadoopConf Hadoop configuration

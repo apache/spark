@@ -1643,7 +1643,7 @@ object SQLConf {
 
   val USE_LISTFILES_FILESYSTEM_LIST =
     buildConf("spark.sql.sources.useListFilesFileSystemList")
-      .doc("A comma-separated list of file system schems to use FileSystem.listFiles API " +
+      .doc("A comma-separated list of file system schemes to use FileSystem.listFiles API " +
         "for a single root path listing")
       .version("4.0.0")
       .internal()
