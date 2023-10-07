@@ -20,6 +20,7 @@ package org.apache.spark.mllib.util
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 
 trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
@@ -30,7 +31,7 @@ trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
     val conf = new SparkConf()
       .setMaster("local-cluster[2, 1, 512]")
       .setAppName("test-cluster")
-      .set("spark.executor.memory", "512m")
+      .set(EXECUTOR_MEMORY.key, "512m")
       .set(RPC_MESSAGE_MAX_SIZE, 1) // set to 1MB to detect direct serialization of data
     sc = new SparkContext(conf)
   }
