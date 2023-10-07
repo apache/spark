@@ -46,14 +46,6 @@ class JDBCOptions(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
-  override def hashCode: Int = this.parameters.hashCode()
-
-  override def equals(other: Any): Boolean = other match {
-    case otherOption: JDBCOptions =>
-      otherOption.parameters.equals(this.parameters)
-    case _ => false
-  }
-
   /**
    * Returns a property with all options.
    */
@@ -247,6 +239,14 @@ class JDBCOptions(
       .get(JDBC_PREFER_TIMESTAMP_NTZ)
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
+
+  override def hashCode: Int = this.parameters.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case otherOption: JDBCOptions =>
+      otherOption.parameters.equals(this.parameters)
+    case _ => false
+  }
 }
 
 class JdbcOptionsInWrite(
