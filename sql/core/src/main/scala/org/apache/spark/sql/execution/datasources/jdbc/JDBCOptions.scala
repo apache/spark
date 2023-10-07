@@ -48,7 +48,6 @@ class JDBCOptions(
 
   override def hashCode: Int = this.parameters.hashCode()
 
-  /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any): Boolean = other match {
     case otherOption: JDBCOptions =>
       otherOption.parameters.equals(this.parameters)
