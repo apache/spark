@@ -521,7 +521,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           |name TEXT(32) NOT NULL)""".stripMargin).executeUpdate()
     }
     val ss = spark.cloneSession()
-    // the upper bound exceeds the maximum value of long
     ss.sql("insert overwrite h2.test.cache_t select 1 as id, 'a' as name")
 
     sql("cache table ct1 select id, name from h2.test.cache_t")
