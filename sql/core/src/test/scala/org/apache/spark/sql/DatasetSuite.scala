@@ -1220,7 +1220,7 @@ class DatasetSuite extends QueryTest
 
     val message = intercept[RuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getMessage
+    }.getCause.getMessage
 
     assert(message.contains("Null value appeared in non-nullable field"))
   }
