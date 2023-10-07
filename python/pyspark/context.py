@@ -2340,7 +2340,7 @@ class SparkContext:
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
 
-        To remove/unset property simply set `value` to null e.g. sc.setLocalProperty("key", null)
+        To remove/unset property simply set `value` to None e.g. sc.setLocalProperty("key", None)
 
         .. versionadded:: 1.0.0
 
