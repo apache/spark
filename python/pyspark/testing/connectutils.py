@@ -23,17 +23,6 @@ import functools
 import unittest
 import uuid
 
-from pyspark import Row, SparkConf
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.testing.sqlutils import (
-    have_pandas,
-    pandas_requirement_message,
-    pyarrow_requirement_message,
-    SQLTestUtils,
-)
-from pyspark.sql.session import SparkSession as PySparkSession
-
-
 grpc_requirement_message = None
 try:
     import grpc
@@ -55,6 +44,16 @@ try:
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
+
+from pyspark import Row, SparkConf
+from pyspark.testing.utils import PySparkErrorTestUtils
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    SQLTestUtils,
+)
+from pyspark.sql.session import SparkSession as PySparkSession
 
 
 connect_requirement_message = (
