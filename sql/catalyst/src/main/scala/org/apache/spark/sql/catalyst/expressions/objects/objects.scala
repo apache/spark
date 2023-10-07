@@ -355,7 +355,7 @@ case class StaticInvoke(
     if (scalarFunction.nonEmpty) {
       super.stringArgs
     } else {
-      super.stringArgs.take(8)
+      super.stringArgs.toSeq.dropRight(1).iterator
     }
   }
 }
