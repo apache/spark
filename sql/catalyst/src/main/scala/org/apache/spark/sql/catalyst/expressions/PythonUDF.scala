@@ -146,7 +146,7 @@ case class PythonUDAF(
 }
 
 abstract class UnevaluableGenerator extends Generator {
-  final override def eval(input: InternalRow): TraversableOnce[InternalRow] =
+  final override def eval(input: InternalRow): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =

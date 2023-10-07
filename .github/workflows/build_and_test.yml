@@ -261,7 +261,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
-        export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
+        export TERM=vt100
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         export SERIAL_SBT_TESTS=1
@@ -366,6 +366,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
+      PYTHON_TO_TEST: 'python3.9'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -447,7 +448,7 @@ jobs:
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v2
@@ -482,6 +483,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:

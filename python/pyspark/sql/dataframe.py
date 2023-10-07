@@ -1886,7 +1886,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |        6|
         +---------+
 
-        Repartition the data into 7 partitions by 'age' and 'name columns.
+        Repartition the data into 3 partitions by 'age' and 'name' columns.
 
         >>> df.repartition(3, "name", "age").select(
         ...     sf.spark_partition_id().alias("partition")
@@ -3458,10 +3458,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            n = len(self.columns)
-            # 1, convert bool; 2, covert negative index; 3, validate index
-            item = range(0, n)[int(item)]
-            jc = self._jdf.apply(item)
+            jc = self._jdf.apply(self.columns[item])
             return Column(jc)
         else:
             raise PySparkTypeError(

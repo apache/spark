@@ -45,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -664,7 +664,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
     } else {
       val mapped = new MapGroups(
-        udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+        udf.function.asInstanceOf[(Any, Iterator[Any]) => IterableOnce[Any]],
         udf.inputDeserializer(ds.groupingAttributes),
         ds.valueDeserializer,
         ds.groupingAttributes,
@@ -721,7 +721,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       rel.getOtherSortingExpressionsList)
 
     val mapped = CoGroup(
-      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
+      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any]],
       // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
       // resolve the `keyDeserializer` based on either of them, here we pick the left one.
       udf.inputDeserializer(left.groupingAttributes),
@@ -1353,8 +1353,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedAttribute(exp.getUnresolvedAttribute)
-      case proto.Expression.ExprTypeCase.GET_COLUMN_BY_ORDINAL =>
-        transformGetColumnByOrdinal(exp.getGetColumnByOrdinal)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformUnregisteredFunction(exp.getUnresolvedFunction)
           .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
@@ -1404,16 +1402,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     }
     if (attr.hasIsMetadataColumn && attr.getIsMetadataColumn) {
       expr.setTagValue(LogicalPlan.IS_METADATA_COL, ())
-    }
-    expr
-  }
-
-  private def transformGetColumnByOrdinal(
-      attr: proto.Expression.GetColumnByOrdinal): GetColumnByOrdinal = {
-    // always set dataType field null, since it is not used in Analyzer
-    val expr = GetColumnByOrdinal(attr.getOrdinal, null)
-    if (attr.hasPlanId) {
-      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
     }
     expr
   }

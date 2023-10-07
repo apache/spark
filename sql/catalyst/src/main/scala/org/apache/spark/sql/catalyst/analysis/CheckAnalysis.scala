@@ -164,12 +164,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    val inlinedPlan = inlineCTE(plan)
+    var inlinedPlan: Option[LogicalPlan] = None
     try {
-      checkAnalysis0(inlinedPlan)
+      inlinedPlan = Some(inlineCTE(plan))
     } catch {
       case e: AnalysisException =>
-        throw new ExtendedAnalysisException(e, inlinedPlan)
+        throw new ExtendedAnalysisException(e, plan)
+    }
+    try {
+      checkAnalysis0(inlinedPlan.get)
+    } catch {
+      case e: AnalysisException =>
+        throw new ExtendedAnalysisException(e, inlinedPlan.get)
     }
     plan.setAnalyzed()
   }
@@ -425,77 +431,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 messageParameters = Map.empty)
             }
 
-          case Aggregate(groupingExprs, aggregateExprs, _) =>
-            def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: AggregateExpression =>
-                val aggFunction = expr.aggregateFunction
-                aggFunction.children.foreach { child =>
-                  child.foreach {
-                    case expr: AggregateExpression =>
-                      expr.failAnalysis(
-                        errorClass = "NESTED_AGGREGATE_FUNCTION",
-                        messageParameters = Map.empty)
-                    case other => // OK
-                  }
-
-                  if (!child.deterministic) {
-                    child.failAnalysis(
-                      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
-                      messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
-                  }
-                }
-              case _: Attribute if groupingExprs.isEmpty =>
-                operator.failAnalysis(
-                  errorClass = "MISSING_GROUP_BY",
-                  messageParameters = Map.empty)
-              case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
-                throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
-              case s: ScalarSubquery
-                  if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
-                s.failAnalysis(
-                  errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
-                  messageParameters = Map("sqlExpr" -> toSQLExpr(s)))
-              case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-              // There should be no Window in Aggregate - this case will fail later check anyway.
-              // Perform this check for special case of lateral column alias, when the window
-              // expression is not eligible to propagate to upper plan because it is not valid,
-              // containing non-group-by or non-aggregate-expressions.
-              case WindowExpression(function, spec) =>
-                function.children.foreach(checkValidAggregateExpression)
-                checkValidAggregateExpression(spec)
-              case e => e.children.foreach(checkValidAggregateExpression)
-            }
-
-            def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
-                expr.failAnalysis(
-                  errorClass = "GROUP_BY_AGGREGATE",
-                  messageParameters = Map("sqlExpr" -> expr.sql))
-              }
-
-              // Check if the data type of expr is orderable.
-              if (!RowOrdering.isOrderable(expr.dataType)) {
-                expr.failAnalysis(
-                  errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map(
-                    "sqlExpr" -> toSQLExpr(expr),
-                    "dataType" -> toSQLType(expr.dataType)))
-              }
-
-              if (!expr.deterministic) {
-                // This is just a sanity check, our analysis rule PullOutNondeterministic should
-                // already pull out those nondeterministic expressions and evaluate them in
-                // a Project node.
-                throw SparkException.internalError(
-                  msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
-                    "grouping expression.",
-                  context = expr.origin.getQueryContext,
-                  summary = expr.origin.context.summary)
-              }
-            }
-
-            groupingExprs.foreach(checkValidGroupingExprs)
-            aggregateExprs.foreach(checkValidAggregateExpression)
+          case a: Aggregate => ExprUtils.assertValidAggregation(a)
 
           case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
@@ -1138,9 +1074,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       isScalar: Boolean = false,
       isLateral: Boolean = false): Unit = {
     // Some query shapes are only supported with the DecorrelateInnerQuery framework.
-    // Currently we only use this new framework for scalar and lateral subqueries.
+    // Support for Exists and IN subqueries is subject to a separate config flag
+    // 'decorrelateInnerQueryEnabledForExistsIn'.
     val usingDecorrelateInnerQueryFramework =
-      (isScalar || isLateral) && SQLConf.get.decorrelateInnerQueryEnabled
+      (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn || isScalar || isLateral) &&
+        SQLConf.get.decorrelateInnerQueryEnabled
 
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
@@ -1400,6 +1338,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Correlated subquery can have a LIMIT clause
         case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
+          checkPlan(input, aggregated, canContainOuter)
+
+        case o @ Offset(_, input) =>
+          failOnInvalidOuterReference(o)
           checkPlan(input, aggregated, canContainOuter)
 
         // Category 4: Any other operators not in the above 3 categories
