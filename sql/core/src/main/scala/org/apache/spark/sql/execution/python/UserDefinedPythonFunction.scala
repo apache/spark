@@ -297,6 +297,13 @@ object UserDefinedPythonTableFunction {
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
           new String(obj, StandardCharsets.UTF_8)
+
+        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
+          val exLength = dataIn.readInt()
+          val obj = new Array[Byte](exLength)
+          dataIn.readFully(obj)
+          val msg = new String(obj, StandardCharsets.UTF_8)
+          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
       // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1

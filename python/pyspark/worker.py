@@ -21,7 +21,7 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import getfullargspec, signature
+from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
 
@@ -708,7 +708,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
     class UDTFWithPartitions:
         """
-        This implements the logic of a UDTF that accepts an input TABLE argument with one or more`
+        This implements the logic of a UDTF that accepts an input TABLE argument with one or more
         PARTITION BY expressions.
 
         For example, let's assume we have a table like:
@@ -805,7 +805,6 @@ def read_udtf(pickleSer, infile, eval_type):
             udtf = UDTFWithPartitions(handler, partition_child_indexes)
         else:
             udtf = handler()
-
     except Exception as e:
         raise PySparkRuntimeError(
             error_class="UDTF_EXEC_ERROR",
