@@ -2321,6 +2321,8 @@ class BaseUDTFTestsMixin:
                 self._total = 0
                 if analyze_result is not None:
                     self._buffer = analyze_result.buffer
+                else:
+                    self._buffer = ""
 
             @staticmethod
             def analyze(argument, _):
@@ -2338,10 +2340,6 @@ class BaseUDTFTestsMixin:
                     with_single_partition=True,
                     buffer=argument.value
                 )
-
-            def prepare(self, buffer):
-                self._buffer = buffer
-                self._total = len(buffer)
 
             def eval(self, argument, row: Row):
                 self._total += 1

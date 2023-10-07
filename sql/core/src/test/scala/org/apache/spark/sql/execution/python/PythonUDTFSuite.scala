@@ -65,10 +65,10 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       Some(returnType),
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
 
-  private val pythonUDTFInvalidOrderByWithoutPartitionBy: UserDefinedPythonTableFunction =
+  private val pythonUDTFForwardStateFromAnalyze: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFInvalidPrepareBufferNoPrepareMethod.name,
-      TestPythonUDTFInvalidPrepareBufferNoPrepareMethod.pythonScript, None)
+      TestPythonUDTFForwardStateFromAnalyze.name,
+      TestPythonUDTFForwardStateFromAnalyze.pythonScript, None)
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
@@ -353,21 +353,14 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-45402: Add UDTF API for 'analyze' to return a buffer to consume on class creation") {
     spark.udtf.registerPython(
-      TestPythonUDTFInvalidPrepareBufferNoPrepareMethod.name,
-      pythonUDTFInvalidOrderByWithoutPartitionBy)
+      TestPythonUDTFForwardStateFromAnalyze.name,
+      pythonUDTFForwardStateFromAnalyze)
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
-      val query = s"select * from ${TestPythonUDTFInvalidPrepareBufferNoPrepareMethod.name}()"
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException](sql(query)),
-        errorClass = "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
-        sqlState = None,
-        // parameters = Map("msg" -> "(?s).*"),
-        parameters = Map("msg" -> ""),
-        context = ExpectedContext(
-          fragment = s"${TestPythonUDTFInvalidPrepareBufferNoPrepareMethod.name}()",
-          start = 14,
-          stop = 54))
+      val query = s"select * from ${TestPythonUDTFForwardStateFromAnalyze.name}()"
+      checkAnswer(
+        sql(query),
+        Row("buffer"))
     }
   }
 }

@@ -85,7 +85,7 @@ class OrderingColumn:
     overrideNullsFirst: Optional[bool] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class AnalyzeResult:
     """
     The return of Python UDTF's analyze static method.

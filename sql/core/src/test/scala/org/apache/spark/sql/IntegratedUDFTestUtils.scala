@@ -525,23 +525,30 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val pythonScript: String =
       s"""
         |import json
+        |from dataclasses import dataclass
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
+        |
+        |@dataclass
+        |class AnalyzeResultWithBuffer(AnalyzeResult):
+        |    buffer: str = ""
+        |
         |class $name:
         |    def __init__(self):
         |        self._count = 0
+        |        # self._count = json.loads(buffer)["initial_count"]
         |        self._sum = 0
         |        self._last = None
         |
         |    @staticmethod
         |    def analyze(initial_count, input_table):
-        |        prepare_buffer = ""
+        |        buffer = ""
         |        if initial_count.value is not None:
         |            assert(not initial_count.is_table)
         |            assert(initial_count.data_type == IntegerType())
         |            count = initial_count.value
-        |            prepare_buffer = json.dumps({"initial_count": count})
-        |        return AnalyzeResult(
+        |            buffer = json.dumps({"initial_count": count})
+        |        return AnalyzeResultWithBuffer(
         |            schema=StructType()
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
@@ -550,10 +557,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            order_by=[
         |                OrderingColumn("input"),
         |                OrderingColumn("partition_col")],
-        |            prepare_buffer=prepare_buffer)
-        |
-        |    def prepare(self, buffer):
-        |      self._count = json.loads(buffer)["initial_count"]
+        |            buffer=buffer)
         |
         |    def eval(self, initial_count, row):
         |        self._count += 1
@@ -704,27 +708,36 @@ object IntegratedUDFTestUtils extends SQLHelper {
         "without a corresponding partitioning table requirement"
   }
 
-  object TestPythonUDTFInvalidPrepareBufferNoPrepareMethod extends TestUDTF {
-    val name: String = "UDTFInvalidPrepareBufferNoPrepareMethod"
+  object TestPythonUDTFForwardStateFromAnalyze extends TestUDTF {
+    val name: String = "TestPythonUDTFForwardStateFromAnalyze"
     val pythonScript: String =
       s"""
+         |from dataclasses import dataclass
          |from pyspark.sql.functions import AnalyzeResult
          |from pyspark.sql.types import IntegerType, StructType
+         |
+         |@dataclass
+         |class AnalyzeResultWithBuffer(AnalyzeResult):
+         |    buffer: str = ""
+         |
          |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
          |    @staticmethod
          |    def analyze():
-         |        return AnalyzeResult(
+         |        return AnalyzeResultWithBuffer(
          |            schema=StructType()
          |                .add("count", IntegerType())
          |                .add("total", IntegerType())
          |                .add("last", IntegerType()),
-         |            prepare_buffer="abc")
+         |            buffer="abc")
          |
          |    def eval(self):
          |        pass
          |
          |    def terminate(self):
-         |        yield 0, 1, 2
+         |        yield self._analyze_result.buffer
          |""".stripMargin
 
     val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
@@ -735,8 +748,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(session: SparkSession, exprs: Column*): DataFrame =
       udtf.apply(session, exprs: _*)
 
-    val prettyName: String = "Invalid Python UDTF whose 'analyze' method sets the " +
-      "'prepare_buffer' metdata but does not define a 'prepare' method"
+    val prettyName: String = "Python UDTF whose 'analyze' method sets state and reads it later"
   }
 
   /**

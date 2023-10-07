@@ -291,22 +291,13 @@ object UserDefinedPythonTableFunction {
           val msg = new String(obj, StandardCharsets.UTF_8)
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
-      /*
-      // Receive the "prepare_buffer" string, if any.
-      val prepareBuffer: String = dataIn.readInt() match {
+      // Receive the pickled AnalyzeResult buffer, if any.
+      val pickledAnalyzeResult: String = dataIn.readInt() match {
         case length: Int if length >= 0 =>
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
           new String(obj, StandardCharsets.UTF_8)
-
-        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
-          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
-      */
       // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1
       // Receive the list of requested partitioning columns, if any.
@@ -355,7 +346,7 @@ object UserDefinedPythonTableFunction {
         withSinglePartition = withSinglePartition,
         partitionByExpressions = partitionByColumns.toSeq,
         orderByExpressions = orderBy.toSeq,
-        pickledAnalyzeResult = "")
+        pickledAnalyzeResult = pickledAnalyzeResult)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

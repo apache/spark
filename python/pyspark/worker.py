@@ -21,9 +21,8 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import getfullargspec
+from inspect import getfullargspec, signature
 import json
-from textwrap import dedent
 from typing import Any, Callable, Iterable, Iterator
 
 import faulthandler
@@ -681,7 +680,7 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
-    # pickled_analyze_result = pickleSer._read_with_length(infile)
+    pickled_analyze_result = pickleSer._read_with_length(infile)
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -695,9 +694,21 @@ def read_udtf(pickleSer, infile, eval_type):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
+    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
+    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
+    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
+    # AnalyzeResult.
+    prev_handler = handler
+    def construct_udtf():
+        try:
+            return prev_handler(pickled_analyze_result)
+        except TypeError:
+            return prev_handler()
+    handler = construct_udtf
+
     class UDTFWithPartitions:
         """
-        This implements the logic of a UDTF that accepts an input TABLE argument with one or more
+        This implements the logic of a UDTF that accepts an input TABLE argument with one or more`
         PARTITION BY expressions.
 
         For example, let's assume we have a table like:
@@ -794,6 +805,7 @@ def read_udtf(pickleSer, infile, eval_type):
             udtf = UDTFWithPartitions(handler, partition_child_indexes)
         else:
             udtf = handler()
+
     except Exception as e:
         raise PySparkRuntimeError(
             error_class="UDTF_EXEC_ERROR",
