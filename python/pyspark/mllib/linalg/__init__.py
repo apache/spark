@@ -26,22 +26,6 @@ SciPy is available in their environment.
 import sys
 import array
 import struct
-
-import numpy as np
-
-from pyspark import since
-from pyspark.ml import linalg as newlinalg
-from pyspark.sql.types import (
-    UserDefinedType,
-    StructField,
-    StructType,
-    ArrayType,
-    DoubleType,
-    IntegerType,
-    ByteType,
-    BooleanType,
-)
-
 from typing import (
     Any,
     Callable,
@@ -58,6 +42,21 @@ from typing import (
     TypeVar,
     TYPE_CHECKING,
     Union,
+)
+
+import numpy as np
+
+from pyspark import since
+from pyspark.ml import linalg as newlinalg
+from pyspark.sql.types import (
+    UserDefinedType,
+    StructField,
+    StructType,
+    ArrayType,
+    DoubleType,
+    IntegerType,
+    ByteType,
+    BooleanType,
 )
 
 if TYPE_CHECKING:
