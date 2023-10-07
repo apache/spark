@@ -154,7 +154,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         } else if (options.inferTimestamp && (SQLConf.get.legacyTimeParserPolicy ==
           LegacyBehaviorPolicy.LEGACY || timestampType == TimestampNTZType) &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          SQLConf.get.timestampType
+          timestampType
         } else if (options.inferTimestamp &&
             timestampFormatter.parseOptional(field).isDefined) {
           TimestampType

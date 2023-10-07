@@ -206,7 +206,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
         timestampType == TimestampNTZType) &&
         timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-      SQLConf.get.timestampType
+      timestampType
     } else {
       tryParseTimestamp(field)
     }
