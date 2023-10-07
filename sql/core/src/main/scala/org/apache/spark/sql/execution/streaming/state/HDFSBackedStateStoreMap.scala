@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types.{StructField, StructType}

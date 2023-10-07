@@ -22,7 +22,7 @@ import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -763,7 +763,8 @@ class SparkSession private(
     DataSource.lookupDataSource(runner, sessionState.conf) match {
       case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
         Dataset.ofRows(self, ExternalCommandExecutor(
-          source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
+          source.getDeclaredConstructor().newInstance()
+            .asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>
         throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)

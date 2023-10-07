@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 

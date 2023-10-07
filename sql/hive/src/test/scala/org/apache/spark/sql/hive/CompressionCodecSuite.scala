@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS

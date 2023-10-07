@@ -747,7 +747,7 @@ class DataFrame(Frame, Generic[T]):
         sfun: Callable[["Series"], PySparkColumn],
         name: str,
         axis: Optional[Axis] = None,
-        numeric_only: bool = True,
+        numeric_only: bool = False,
         skipna: bool = True,
         **kwargs: Any,
     ) -> "Series":
@@ -762,10 +762,8 @@ class DataFrame(Frame, Generic[T]):
             axis: used only for sanity check because the series only supports index axis.
         name : original pandas API name.
         axis : axis to apply. 0 or 1, or 'index' or 'columns.
-        numeric_only : bool, default True
-            Include only float, int, boolean columns. False is not supported. This parameter
-            is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
-            currently.
+        numeric_only : bool, default False
+            Include only float, int, boolean columns.
         skipna : bool, default True
             Exclude NA/null values when computing the result.
         """
@@ -11150,7 +11148,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     # TODO: add axis, pct, na_option parameter
     def rank(
-        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+        self, method: str = "average", ascending: bool = True, numeric_only: bool = False
     ) -> "DataFrame":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -11171,8 +11169,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
-        numeric_only : bool, optional
+        numeric_only : bool, default False
             For DataFrame objects, rank only numeric columns if set to True.
+
+            .. versionchanged:: 4.0.0
+                The default value of ``numeric_only`` is now ``False``.
+
 
         Returns
         -------
@@ -11238,11 +11240,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  2.5
         3  4.0
         """
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `None` in 4.0.0.",
-            FutureWarning,
-        )
         if numeric_only:
             numeric_col_names = []
             for label in self._internal.column_labels:
@@ -12206,7 +12203,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         q: Union[float, Iterable[float]] = 0.5,
         axis: Axis = 0,
-        numeric_only: bool = True,
+        numeric_only: bool = False,
         accuracy: int = 10000,
     ) -> DataFrameOrSeries:
         """
@@ -12222,9 +12219,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             0 <= q <= 1, the quantile(s) to compute.
         axis : int or str, default 0 or 'index'
             Can only be set to 0 now.
-        numeric_only : bool, default True
-            If False, the quantile of datetime and time delta data will be computed as well.
-            Can only be set to True now.
+        numeric_only : bool, default False
+            Include only `float`, `int` or `boolean` data.
+
+            .. versionchanged:: 4.0.0
+                The default value of ``numeric_only`` is now ``False``.
+
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
             The relative error can be deduced by 1.0 / accuracy.
@@ -12820,12 +12820,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError('axis should be either 0 or "index" currently.')
         if numeric_only is None and axis == 0:
             numeric_only = True
-
-        warnings.warn(
-            "Default value of `numeric_only` will be changed to `False` "
-            "instead of `True` in 4.0.0.",
-            FutureWarning,
-        )
 
         mode_scols: List[PySparkColumn] = []
         mode_col_names: List[str] = []

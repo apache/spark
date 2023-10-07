@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 from itertools import product
 import unittest
 

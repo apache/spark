@@ -19,6 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -31,7 +32,6 @@ import time
 import urllib.parse
 import uuid
 import sys
-from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -1538,14 +1538,24 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
+    def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
+        for path in paths:
+            for attempt in self._retrying():
+                with attempt:
+                    self._artifact_manager.add_artifacts(
+                        path, pyfile=pyfile, archive=archive, file=file
+                    )
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
-        self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
+        for attempt in self._retrying():
+            with attempt:
+                self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
 
     def cache_artifact(self, blob: bytes) -> str:
-        return self._artifact_manager.cache_artifact(blob)
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifact(blob)
+        raise SparkConnectException("Invalid state during retry exception handling.")
 
 
 class RetryState:
@@ -1565,9 +1575,12 @@ class RetryState:
         self._count += 1
 
     def throw(self) -> None:
+        raise self.exception()
+
+    def exception(self) -> BaseException:
         if self._exception is None:
             raise RuntimeError("No exception is set")
-        raise self._exception
+        return self._exception
 
     def set_done(self) -> None:
         self._done = True
@@ -1676,7 +1689,9 @@ class Retrying:
                 if backoff >= self._min_jitter_threshold:
                     backoff += random.uniform(0, self._jitter)
 
-                logger.debug(f"Retrying call after {backoff} ms sleep")
+                logger.debug(
+                    f"Will retry call after {backoff} ms sleep (error: {retry_state.exception()})"
+                )
                 self._sleep(backoff / 1000.0)
             yield AttemptManager(self._can_retry, retry_state)
 

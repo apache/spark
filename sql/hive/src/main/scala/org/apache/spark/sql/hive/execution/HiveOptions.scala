@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.orc.OrcConf.COMPRESS
