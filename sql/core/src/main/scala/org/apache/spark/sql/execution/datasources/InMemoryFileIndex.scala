@@ -149,16 +149,28 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sparkSession: SparkSession,
       parameters: Map[String, String] = Map.empty): Seq[(Path, Seq[FileStatus])] = {
-    HadoopFSUtils.parallelListLeafFiles(
-      sc = sparkSession.sparkContext,
-      paths = paths,
-      hadoopConf = hadoopConf,
-      filter = new PathFilterWrapper(filter),
-      ignoreMissingFiles =
-        new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles,
-      ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
-      parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+    val fileSystemList =
+      sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
+    val ignoreMissingFiles =
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
+    val useListFiles = paths.size == 1 &&
+      fileSystemList.contains(paths.head.getFileSystem(hadoopConf).getScheme)
+    if (useListFiles) {
+      HadoopFSUtils.listFiles(
+        path = paths.head,
+        hadoopConf = hadoopConf,
+        filter = new PathFilterWrapper(filter))
+    } else {
+      HadoopFSUtils.parallelListLeafFiles(
+        sc = sparkSession.sparkContext,
+        paths = paths,
+        hadoopConf = hadoopConf,
+        filter = new PathFilterWrapper(filter),
+        ignoreMissingFiles = ignoreMissingFiles,
+        ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
+        parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
+        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+    }
   }
 
 }
