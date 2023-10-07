@@ -1258,14 +1258,14 @@ object OptimizeRepartition extends Rule[LogicalPlan] {
 object EliminateWindowPartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-      case w @ Window(we, ps, _, _) if ps.exists(_.foldable) =>
-        val newWe = we.map {
-          _.transform {
-            case wsc @ WindowSpecDefinition(_ps, _, _) if _ps.exists(_.foldable) =>
-              wsc.copy(partitionSpec = _ps.filter(!_.foldable))
-          }.asInstanceOf[NamedExpression]
-        }
-        w.copy(windowExpressions = newWe, partitionSpec = ps.filter(!_.foldable))
+    case w @ Window(windowExprs, partitionSpec, _, _) if partitionSpec.exists(_.foldable) =>
+      val newWe = windowExprs.map(_.transformWithPruning(_.containsPattern(WINDOW_EXPRESSION)) {
+        case windowExpr @ WindowExpression(_, wsd @ WindowSpecDefinition(ps, _, _))
+          if ps.exists(_.foldable) =>
+          val newWsd = wsd.copy(partitionSpec = ps.filter(!_.foldable))
+          windowExpr.copy(windowSpec = newWsd)
+      }.asInstanceOf[NamedExpression])
+      w.copy(windowExpressions = newWe, partitionSpec = partitionSpec.filter(!_.foldable))
     }
 }
 
