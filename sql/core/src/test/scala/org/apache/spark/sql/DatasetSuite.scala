@@ -1872,6 +1872,8 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
+    val df = Seq("\u0020\u0021\u0023", "abc").toDF()
+
     Seq(
       true ->
         ("value rlike '^\\x20[\\x20-\\x23]+$'", "value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'"),
@@ -1879,8 +1881,6 @@ class DatasetSuite extends QueryTest
         ("value rlike r'^\\x20[\\x20-\\x23]+$'", "value rlike r'^\\\\x20[\\\\x20-\\\\x23]+$'")
     ).foreach { case (escaped, (filter1, filter3)) =>
       withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString) {
-        val data = Seq("\u0020\u0021\u0023", "abc")
-        val df = data.toDF()
         val rlike1 = df.filter(filter1)
         val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
         val rlike3 = df.filter(filter3)
