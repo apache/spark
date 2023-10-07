@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any, Dict, Union, List, Tuple, Callable, Optional
+import math
+
+import torch
+import torch.nn as torch_nn
+import numpy as np
+import pandas as pd
 
 from pyspark import keyword_only
 from pyspark.ml.connect.base import _PredictorParams
-
 from pyspark.ml.param.shared import HasProbabilityCol
-
-from typing import Any, Dict, Union, List, Tuple, Callable, Optional
-import numpy as np
-import pandas as pd
-import math
-
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -42,9 +42,6 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.connect.base import Predictor, PredictionModel
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
 from pyspark.sql import functions as sf
-
-import torch
-import torch.nn as torch_nn
 
 
 class _LogisticRegressionParams(
