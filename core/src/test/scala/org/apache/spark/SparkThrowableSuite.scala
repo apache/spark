@@ -267,8 +267,7 @@ class SparkThrowableSuite extends SparkFunSuite {
          |
          |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
          |
-         |$sqlErrorParentDocContent
-         |""".stripMargin
+         |$sqlErrorParentDocContent""".stripMargin
 
     errors.filter(_._2.subClass.isDefined).foreach(error => {
       val name = error._1
@@ -330,7 +329,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
         FileUtils.writeStringToFile(
           parentDocPath.toFile,
-          sqlErrorParentDoc + lineSeparator,
+          sqlErrorParentDoc,
           StandardCharsets.UTF_8)
       }
     } else {
