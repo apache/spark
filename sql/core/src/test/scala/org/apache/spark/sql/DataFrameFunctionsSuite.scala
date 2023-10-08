@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
@@ -279,22 +279,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       testData2.select(bit_get($"a", lit(0)), bit_get($"a", lit(1)), bit_get($"a", lit(2))),
       testData2.selectExpr("bit_get(a, 0)", "bit_get(a, 1)", "bit_get(a, 2)"))
-
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        sql("select bit_get(11, -1)").collect()
-      },
-      errorClass = "BIT_POSITION_OUT_OF_RANGE",
-      parameters = Map("pos" -> "-1", "upper" -> "32")
-    )
-
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        sql("select bit_get(11, 32)").collect()
-      },
-      errorClass = "BIT_POSITION_OUT_OF_RANGE",
-      parameters = Map("pos" -> "32", "upper" -> "32")
-    )
   }
 
   test("getbit") {

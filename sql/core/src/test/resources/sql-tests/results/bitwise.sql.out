@@ -293,8 +293,14 @@ select getbit(11L, -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Invalid bit position: -1 is less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "BIT_POSITION_OUT_OF_RANGE",
+  "messageParameters" : {
+    "pos" : "-1",
+    "upper" : "64"
+  }
+}
 
 
 -- !query
@@ -302,5 +308,11 @@ select getbit(11L, 64)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Invalid bit position: 64 exceeds the bit upper limit
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "BIT_POSITION_OUT_OF_RANGE",
+  "messageParameters" : {
+    "pos" : "64",
+    "upper" : "64"
+  }
+}
