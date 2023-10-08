@@ -131,6 +131,30 @@ private[spark] object PythonWorkerUtils extends Logging {
   }
 
   /**
+   * Write PythonFunction to the worker.
+   */
+  def writePythonFunction(func: PythonFunction, dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(func.command.length)
+    dataOut.write(func.command.toArray)
+  }
+
+  /**
+   * Read a string in UTF-8 charset.
+   */
+  def readUTF(dataIn: DataInputStream): String = {
+    readUTF(dataIn.readInt(), dataIn)
+  }
+
+  /**
+   * Read a string in UTF-8 charset with the given byte length.
+   */
+  def readUTF(length: Int, dataIn: DataInputStream): String = {
+    val obj = new Array[Byte](length)
+    dataIn.readFully(obj)
+    new String(obj, StandardCharsets.UTF_8)
+  }
+
+  /**
    * Receive accumulator updates from the worker.
    *
    * The updates are sent by `worker_util.send_accumulator_updates`.

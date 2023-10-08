@@ -69,6 +69,38 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
   }
 
+  /**
+   * Lists a collection of paths recursively with a single API invocation.
+   * Like parallelListLeafFiles, this ignores FileNotFoundException on the given root path.
+   *
+   * This is able to be called on both driver and executors.
+   *
+   * @param path a path to list
+   * @param hadoopConf Hadoop configuration
+   * @param filter Path filter used to exclude leaf files from result
+   * @return  the set of discovered files for the path
+   */
+  def listFiles(
+      path: Path,
+      hadoopConf: Configuration,
+      filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
+    logInfo(s"Listing $path with listFiles API")
+    try {
+      val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
+      val statues = new Iterator[LocatedFileStatus]() {
+        def next(): LocatedFileStatus = remoteIter.next
+        def hasNext(): Boolean = remoteIter.hasNext
+      }.filterNot(status => shouldFilterOutPath(status.getPath.toString))
+        .filter(f => filter.accept(f.getPath))
+        .toArray
+      Seq((path, statues))
+    } catch {
+      case _: FileNotFoundException =>
+        logWarning(s"The root directory $path was not found. Was it deleted very recently?")
+        Seq((path, Array.empty[FileStatus]))
+    }
+  }
+
   private def parallelListLeafFilesInternal(
       sc: SparkContext,
       paths: Seq[Path],
@@ -308,5 +340,15 @@ private[spark] object HadoopFSUtils extends Logging {
       pathName.startsWith(".") || pathName.endsWith("._COPYING_")
     val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
     exclude && !include
+  }
+
+  /** Checks if we should filter out this path. */
+  def shouldFilterOutPath(path: String): Boolean = {
+    val exclude = (path.contains("/_") && !path.contains("=")) || path.contains("/.")
+    val include = path.contains("/_common_metadata/") ||
+      path.endsWith("/_common_metadata") ||
+      path.contains("/_metadata/") ||
+      path.endsWith("/_metadata")
+    (exclude && !include) || shouldFilterOutPathName(path)
   }
 }

@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 
+from typing import Any, Union, List, Dict
+
 import numpy as np
 import pandas as pd
-from typing import Any, Union, List, Dict
 
 from pyspark.sql import DataFrame
 from pyspark.ml.connect.util import aggregate_dataframe
