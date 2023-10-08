@@ -42,7 +42,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
@@ -1114,8 +1114,8 @@ class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val nonDefaultListener = new IntermediateRDDStorageListener
     sc.addSparkListener(nonDefaultListener)
     val nonDefaultModel = als
-      .setFinalStorageLevel("MEMORY_ONLY")
-      .setIntermediateStorageLevel("DISK_ONLY")
+      .setFinalStorageLevel(StorageLevelMapper.MEMORY_ONLY.name())
+      .setIntermediateStorageLevel(StorageLevelMapper.DISK_ONLY.name())
       .fit(data)
     // check final factor RDD non-default storage levels
     val levels = sc.getPersistentRDDs.collect {
@@ -1168,8 +1168,8 @@ object ALSSuite extends Logging {
     "alpha" -> 0.9,
     "nonnegative" -> true,
     "checkpointInterval" -> 20,
-    "intermediateStorageLevel" -> "MEMORY_ONLY",
-    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "intermediateStorageLevel" -> StorageLevelMapper.MEMORY_ONLY.name(),
+    "finalStorageLevel" -> StorageLevelMapper.MEMORY_AND_DISK_SER.name()
   )
 
   // Helper functions to generate test data we share between ALS test suites
