@@ -40,6 +40,8 @@ case class CommandResultExec(
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandPhysicalPlan)
 
+  override def executeToIterator(): Iterator[InternalRow] = unsafeRows.iterator
+
   @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
