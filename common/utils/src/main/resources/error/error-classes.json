@@ -92,6 +92,11 @@
     ],
     "sqlState" : "22003"
   },
+  "BIT_POSITION_OUT_OF_RANGE" : {
+    "message" : [
+      "The bit position <pos> must in [0, <upper>)."
+    ]
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1026,11 +1031,6 @@
       "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
     "sqlState" : "42903"
-  },
-  "BIT_POSITION_OUT_OF_RANGE" : {
-    "message" : [
-      "The bit position <pos> must in [0, <upper>)."
-    ]
   },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
