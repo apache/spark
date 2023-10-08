@@ -174,7 +174,18 @@
             <configuration>
                 <target>
                     <echo message="Shade netty native libraries to ${spark.shade.native.packageName}" />
-                    <unzip src="${shuffle.jar}" dest="${project.build.directory}/exploded/" />
+                    <!-- 
+                      We have a LICENSE file with apache licenses and license directory for netty-tcnative licenses. This breaks
+                      packaging on OSX where filesystems are case insensitive. So, create the directory, which results
+                      in the LICENSE file not being written, letting the netty licenses be copied over.
+                      LICENSE.txt also contains the apache license so this should be OK 
+                    -->
+                    <mkdir dir="${project.build.directory}/exploded/META-INF/LICENSE" />
+                    <unzip src="${shuffle.jar}" dest="${project.build.directory}/exploded/">
+                      <patternset>
+                          <exclude name="META-INF/LICENSE"/>
+                      </patternset>
+                    </unzip>
                     <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_x86_64.so"
                           tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_x86_64.so" />
                     <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
