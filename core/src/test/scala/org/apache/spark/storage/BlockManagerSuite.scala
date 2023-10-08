@@ -2001,6 +2001,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val locationsAndStatusOption = setupBlockManagerMasterWithDiskBlocks()
 
     assert(locationsAndStatusOption.get.status.memSize == 0)
+
     assert(locationsAndStatusOption.get.status.diskSize == 128)
   }
 
