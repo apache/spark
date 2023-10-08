@@ -3340,6 +3340,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                 )
                 self.assertTrue("Caused by: java.time.DateTimeException:" in e.exception.message)
 
+    def test_not_hitting_netty_header_limit(self):
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+            with self.assertRaises(AnalysisException):
+                self.spark.sql("select " + "test" * 10000).collect()
+
     def test_error_stack_trace(self):
         with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
             with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):

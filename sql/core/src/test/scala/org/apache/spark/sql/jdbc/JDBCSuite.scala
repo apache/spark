@@ -2088,4 +2088,21 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(databricksDialect
       .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
   }
+
+  test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).get == ShortType)
+        }
+      }
+    }
+  }
 }

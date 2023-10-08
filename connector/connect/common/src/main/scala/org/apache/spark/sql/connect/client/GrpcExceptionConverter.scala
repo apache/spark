@@ -163,34 +163,58 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
 
 private object GrpcExceptionConverter {
 
+  private case class ErrorParams(
+      message: String,
+      cause: Option[Throwable],
+      // errorClass will only be set if the error is enriched and SparkThrowable.
+      errorClass: Option[String],
+      // messageParameters will only be set if the error is enriched and SparkThrowable.
+      messageParameters: Map[String, String])
+
   private def errorConstructor[T <: Throwable: ClassTag](
-      throwableCtr: (String, Option[Throwable]) => T)
-      : (String, (String, Option[Throwable]) => Throwable) = {
+      throwableCtr: ErrorParams => T): (String, ErrorParams => Throwable) = {
     val className = implicitly[reflect.ClassTag[T]].runtimeClass.getName
     (className, throwableCtr)
   }
 
   private val errorFactory = Map(
-    errorConstructor((message, _) => new ParseException(None, message, Origin(), Origin())),
-    errorConstructor((message, cause) => new AnalysisException(message, cause = cause)),
-    errorConstructor((message, _) => new NamespaceAlreadyExistsException(message)),
-    errorConstructor((message, cause) => new TableAlreadyExistsException(message, cause)),
-    errorConstructor((message, cause) => new TempTableAlreadyExistsException(message, cause)),
-    errorConstructor((message, cause) => new NoSuchDatabaseException(message, cause)),
-    errorConstructor((message, cause) => new NoSuchTableException(message, cause)),
-    errorConstructor[NumberFormatException]((message, _) =>
-      new SparkNumberFormatException(message)),
-    errorConstructor[IllegalArgumentException]((message, cause) =>
-      new SparkIllegalArgumentException(message, cause)),
-    errorConstructor[ArithmeticException]((message, _) => new SparkArithmeticException(message)),
-    errorConstructor[UnsupportedOperationException]((message, _) =>
-      new SparkUnsupportedOperationException(message)),
-    errorConstructor[ArrayIndexOutOfBoundsException]((message, _) =>
-      new SparkArrayIndexOutOfBoundsException(message)),
-    errorConstructor[DateTimeException]((message, _) => new SparkDateTimeException(message)),
-    errorConstructor((message, cause) => new SparkRuntimeException(message, cause)),
-    errorConstructor((message, cause) => new SparkUpgradeException(message, cause)),
-    errorConstructor((message, cause) => new SparkException(message, cause.orNull)))
+    errorConstructor(params =>
+      new ParseException(
+        None,
+        params.message,
+        Origin(),
+        Origin(),
+        errorClass = params.errorClass,
+        messageParameters = params.messageParameters)),
+    errorConstructor(params =>
+      new AnalysisException(
+        params.message,
+        cause = params.cause,
+        errorClass = params.errorClass,
+        messageParameters = params.messageParameters)),
+    errorConstructor(params => new NamespaceAlreadyExistsException(params.message)),
+    errorConstructor(params => new TableAlreadyExistsException(params.message, params.cause)),
+    errorConstructor(params => new TempTableAlreadyExistsException(params.message, params.cause)),
+    errorConstructor(params => new NoSuchDatabaseException(params.message, params.cause)),
+    errorConstructor(params => new NoSuchTableException(params.message, params.cause)),
+    errorConstructor[NumberFormatException](params =>
+      new SparkNumberFormatException(params.message)),
+    errorConstructor[IllegalArgumentException](params =>
+      new SparkIllegalArgumentException(params.message, params.cause)),
+    errorConstructor[ArithmeticException](params => new SparkArithmeticException(params.message)),
+    errorConstructor[UnsupportedOperationException](params =>
+      new SparkUnsupportedOperationException(params.message)),
+    errorConstructor[ArrayIndexOutOfBoundsException](params =>
+      new SparkArrayIndexOutOfBoundsException(params.message)),
+    errorConstructor[DateTimeException](params => new SparkDateTimeException(params.message)),
+    errorConstructor(params => new SparkRuntimeException(params.message, params.cause)),
+    errorConstructor(params => new SparkUpgradeException(params.message, params.cause)),
+    errorConstructor(params =>
+      new SparkException(
+        message = params.message,
+        cause = params.cause.orNull,
+        errorClass = params.errorClass,
+        messageParameters = params.messageParameters)))
 
   /**
    * errorsToThrowable reconstructs the exception based on a list of protobuf messages
@@ -202,20 +226,30 @@ private object GrpcExceptionConverter {
       errors: Seq[FetchErrorDetailsResponse.Error]): Throwable = {
 
     val error = errors(errorIdx)
-
     val classHierarchy = error.getErrorTypeHierarchyList.asScala
 
     val constructor =
       classHierarchy
         .flatMap(errorFactory.get)
         .headOption
-        .getOrElse((message: String, cause: Option[Throwable]) =>
-          new SparkException(s"${classHierarchy.head}: ${message}", cause.orNull))
+        .getOrElse((params: ErrorParams) =>
+          errorFactory
+            .get(classOf[SparkException].getName)
+            .get(params.copy(message = s"${classHierarchy.head}: ${params.message}")))
 
     val causeOpt =
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
 
-    val exception = constructor(error.getMessage, causeOpt)
+    val exception = constructor(
+      ErrorParams(
+        message = error.getMessage,
+        cause = causeOpt,
+        errorClass = if (error.hasSparkThrowable && error.getSparkThrowable.hasErrorClass) {
+          Some(error.getSparkThrowable.getErrorClass)
+        } else None,
+        messageParameters = if (error.hasSparkThrowable) {
+          error.getSparkThrowable.getMessageParametersMap.asScala.toMap
+        } else Map.empty))
 
     if (!error.getStackTraceList.isEmpty) {
       exception.setStackTrace(error.getStackTraceList.asScala.toArray.map { stackTraceElement =>

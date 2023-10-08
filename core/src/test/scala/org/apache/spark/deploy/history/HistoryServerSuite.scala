@@ -715,8 +715,8 @@ object HistoryServerSuite {
     // generate the "expected" results for the characterization tests.  Just blindly assume the
     // current behavior is correct, and write out the returned json to the test/resource files
 
-    // SPARK-38851: Use LevelDB backend because it is the default.
-    val suite = new LevelDBBackendHistoryServerSuite
+    // Use RocksDB backend because it is the default.
+    val suite = new RocksDBBackendHistoryServerSuite
     FileUtils.deleteDirectory(suite.getExpRoot)
     suite.getExpRoot.mkdirs()
     try {

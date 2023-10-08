@@ -313,9 +313,9 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
     val schema = new StructType().add("a", ArrayType(dt, nullable))
-    test(s"RowEncoder should return WrappedArray with properly typed array for $schema") {
+    test(s"RowEncoder should return mutable.ArraySeq with properly typed array for $schema") {
       val encoder = ExpressionEncoder(schema).resolveAndBind()
-      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.WrappedArray[_]](0)
+      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.ArraySeq[_]](0)
       assert(result.array.getClass === data.getClass)
       assert(result === data)
     }
@@ -473,13 +473,13 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
-  test("Encoding an ArraySeq/WrappedArray in scala-2.13") {
+  test("Encoding an mutable.ArraySeq in scala-2.13") {
     val schema = new StructType()
       .add("headers", ArrayType(new StructType()
         .add("key", StringType)
         .add("value", BinaryType)))
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
-    val data = Row(mutable.WrappedArray.make(Array(Row("key", "value".getBytes))))
+    val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
   }
 }

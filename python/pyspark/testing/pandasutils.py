@@ -23,14 +23,6 @@ from contextlib import contextmanager
 import decimal
 from typing import Any, Union
 
-import pyspark.pandas as ps
-from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.indexes import Index
-from pyspark.pandas.series import Series
-from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkAssertionError
-
 tabulate_requirement_message = None
 try:
     from tabulate import tabulate
@@ -62,6 +54,15 @@ try:
     import pandas as pd
 except ImportError:
     pass
+
+import pyspark.pandas as ps
+from pyspark.pandas.frame import DataFrame
+from pyspark.pandas.indexes import Index
+from pyspark.pandas.series import Series
+from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.errors import PySparkAssertionError
+
 
 __all__ = ["assertPandasOnSparkEqual"]
 

@@ -21,7 +21,6 @@ import java.io._
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
-import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
 import java.util.concurrent.ConcurrentHashMap
@@ -516,11 +515,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val exLength = stream.readInt()
-      val obj = new Array[Byte](exLength)
-      stream.readFully(obj)
-      new PythonException(new String(obj, StandardCharsets.UTF_8),
-        writer.exception.orNull)
+      val msg = PythonWorkerUtils.readUTF(stream)
+      new PythonException(msg, writer.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {
@@ -816,9 +812,7 @@ private[spark] class PythonRunner(
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        val command = funcs.head.funcs.head.command
-        dataOut.writeInt(command.length)
-        dataOut.write(command.toArray)
+        PythonWorkerUtils.writePythonFunction(funcs.head.funcs.head, dataOut)
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {

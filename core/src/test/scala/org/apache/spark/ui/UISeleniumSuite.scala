@@ -885,6 +885,20 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
+  test("SPARK-44895: Add 'daemon', 'priority' for ThreadStackTrace") {
+    withSpark(newSparkContext()) { sc =>
+      val uiThreads = getJson(sc.ui.get, "executors/driver/threads")
+        .children
+        .filter(v => (v \ "threadName").extract[String].matches("SparkUI-\\d+"))
+      val priority = Thread.currentThread().getPriority
+
+      uiThreads.foreach { v =>
+        assert((v \ "isDaemon").extract[Boolean])
+        assert((v \ "priority").extract[Int] === priority)
+      }
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }

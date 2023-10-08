@@ -86,6 +86,24 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(response.getSessionId === "abc123")
   }
 
+  private def withEnvs(pairs: (String, String)*)(f: => Unit): Unit = {
+    val readonlyEnv = System.getenv()
+    val field = readonlyEnv.getClass.getDeclaredField("m")
+    field.setAccessible(true)
+    val modifiableEnv = field.get(readonlyEnv).asInstanceOf[java.util.Map[String, String]]
+    try {
+      for ((k, v) <- pairs) {
+        assert(!modifiableEnv.containsKey(k))
+        modifiableEnv.put(k, v)
+      }
+      f
+    } finally {
+      for ((k, _) <- pairs) {
+        modifiableEnv.remove(k)
+      }
+    }
+  }
+
   test("Test connection") {
     testClientConnection() { testPort => SparkConnectClient.builder().port(testPort).build() }
   }
@@ -109,6 +127,49 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
     assertThrows[SparkException] {
       client.analyze(request)
+    }
+  }
+
+  test("SparkSession create with SPARK_REMOTE") {
+    startDummyServer(0)
+
+    withEnvs("SPARK_REMOTE" -> s"sc://localhost:${server.getPort}") {
+      val session = SparkSession.builder().create()
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
+
+      val session2 = SparkSession.builder().create()
+      assert(session != session2)
+    }
+  }
+
+  test("SparkSession getOrCreate with SPARK_REMOTE") {
+    startDummyServer(0)
+
+    withEnvs("SPARK_REMOTE" -> s"sc://localhost:${server.getPort}") {
+      val session = SparkSession.builder().getOrCreate()
+
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
+
+      val session2 = SparkSession.builder().getOrCreate()
+      assert(session === session2)
+    }
+  }
+
+  test("Builder.remote takes precedence over SPARK_REMOTE") {
+    startDummyServer(0)
+    val incorrectUrl = s"sc://localhost:${server.getPort + 1}"
+
+    withEnvs("SPARK_REMOTE" -> incorrectUrl) {
+      val session =
+        SparkSession.builder().remote(s"sc://localhost:${server.getPort}").getOrCreate()
+
+      val df = session.range(10)
+      df.analyze // Trigger RPC
+      assert(df.plan === service.getAndClearLatestInputPlan())
     }
   }
 

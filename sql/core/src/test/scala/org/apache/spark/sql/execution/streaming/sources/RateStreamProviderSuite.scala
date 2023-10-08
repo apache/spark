@@ -56,14 +56,15 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("RateStreamProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance()
+    val ds = DataSource.lookupDataSource("rate", spark.sqlContext.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
   test("compatible with old path in registry") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.RateSourceProvider",
-      spark.sqlContext.conf).newInstance()
+      spark.sqlContext.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 

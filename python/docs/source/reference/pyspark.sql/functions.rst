@@ -58,6 +58,7 @@ Predicate Functions
 .. autosummary::
     :toctree: api/
 
+    equal_null
     ilike
     isnan
     isnotnull
@@ -582,7 +583,6 @@ Misc Functions
     current_database
     current_schema
     current_user
-    equal_null
     hll_sketch_estimate
     hll_union
     input_file_block_length

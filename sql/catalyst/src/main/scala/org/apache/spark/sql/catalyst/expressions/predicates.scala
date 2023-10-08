@@ -1150,7 +1150,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
   """,
   since = "3.4.0",
-  group = "misc_funcs")
+  group = "predicate_funcs")
 case class EqualNull(left: Expression, right: Expression, replacement: Expression)
     extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) = this(left, right, EqualNullSafe(left, right))

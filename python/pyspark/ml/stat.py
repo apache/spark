@@ -16,9 +16,7 @@
 #
 
 import sys
-
 from typing import Optional, Tuple, TYPE_CHECKING
-
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
