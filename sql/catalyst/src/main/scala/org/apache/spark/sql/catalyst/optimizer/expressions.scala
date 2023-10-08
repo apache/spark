@@ -88,6 +88,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e
       }
 
+    // Replace ScalarSubquery with null if its maxRows is 0
+    case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
+      Literal(null, s.dataType)
+
     case other => other.mapChildren(constantFolding(_, isConditionalBranch))
   }
 
