@@ -29,10 +29,6 @@ class IndexesParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-43704): Enable IndexesParityTests.test_to_series.")
-    def test_to_series(self):
-        super().test_to_series()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.indexes.test_parity_base import *  # noqa: F401
