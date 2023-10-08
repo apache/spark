@@ -111,6 +111,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 `<value1>` `<symbol>` `<value2>` caused overflow.
 
+### BIT_POSITION_OUT_OF_RANGE
+
+SQLSTATE: none assigned
+
+The bit position `<pos>` must in [0, `<upper>`).
+
 ### CALL_ON_STREAMING_DATASET_UNSUPPORTED
 
 SQLSTATE: none assigned

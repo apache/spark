@@ -1027,6 +1027,11 @@
     ],
     "sqlState" : "42903"
   },
+  "BIT_POSITION_OUT_OF_RANGE" : {
+    "message" : [
+      "The bit position <pos> must in [0, <upper>)."
+    ]
+  },
   "GROUP_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."

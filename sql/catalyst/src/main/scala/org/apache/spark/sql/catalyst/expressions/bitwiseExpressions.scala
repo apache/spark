@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-
 
 /**
  * A function that calculates bitwise and(&) of two numbers.
@@ -247,10 +247,8 @@ case class BitwiseCount(child: Expression)
 
 object BitwiseGetUtil {
   def checkPosition(pos: Int, size: Int): Unit = {
-    if (pos < 0) {
-      throw new IllegalArgumentException(s"Invalid bit position: $pos is less than zero")
-    } else if (size <= pos) {
-      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
+    if (pos < 0 || pos >= size) {
+      throw QueryExecutionErrors.bitPositionRangeError(pos, size)
     }
   }
 }
