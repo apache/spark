@@ -965,7 +965,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
 
-  test("Non-constant scale to Round") {
+  test("SPARK-45473: Non-constant scale to Round") {
     val round = Round(Literal(1.2345), AttributeReference("scale", IntegerType)())
     assert(round.checkInputDataTypes() ==
       DataTypeMismatch(
