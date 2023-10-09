@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -158,17 +159,16 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val p = $"p".int.at(1)
 
     val expr = BitwiseGet(tl, p)
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row1, "Invalid bit position: -1 is less than zero")
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row2, "Invalid bit position: 64 exceeds the bit upper limit")
-    checkExceptionInExpression[IllegalArgumentException](
-      BitwiseGet(ti, p), row3, "Invalid bit position: 32 exceeds the bit upper limit")
-    checkExceptionInExpression[IllegalArgumentException](
-      BitwiseGet(ts, p), row4, "Invalid bit position: 16 exceeds the bit upper limit")
-    checkExceptionInExpression[IllegalArgumentException](
-      BitwiseGet(tb, p), row5, "Invalid bit position: 16 exceeds the bit upper limit")
-
+    checkErrorInExpression[SparkIllegalArgumentException](
+      expr, row1, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "-1", "upper" -> "64"))
+    checkErrorInExpression[SparkIllegalArgumentException](
+      expr, row2, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "64", "upper" -> "64"))
+    checkErrorInExpression[SparkIllegalArgumentException](
+      BitwiseGet(ti, p), row3, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "32", "upper" -> "32"))
+    checkErrorInExpression[SparkIllegalArgumentException](
+      BitwiseGet(ts, p), row4, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "16", "upper" -> "16"))
+    checkErrorInExpression[SparkIllegalArgumentException](
+      BitwiseGet(tb, p), row5, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "16", "upper" -> "8"))
     DataTypeTestUtils.integralType.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, dt, IntegerType)
     }
