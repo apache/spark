@@ -127,7 +127,7 @@ private[sql] class SparkResult[T](
           if (numRecords != expectedStartOffset) {
             throw new IllegalStateException(
               s"Expected arrow batch to start at row offset $numRecords in results, " +
-              s"but received arrow batch starting at offset $expectedStartOffset.")
+                s"but received arrow batch starting at offset $expectedStartOffset.")
           }
         }
         var numRecordsInBatch = 0
