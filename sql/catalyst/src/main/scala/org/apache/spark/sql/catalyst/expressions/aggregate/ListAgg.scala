@@ -34,6 +34,10 @@ import org.apache.spark.util.collection.OpenHashMap
        a,b,c
       > SELECT _FUNC_(col) FROM VALUES (NULL), ('a'), ('b') AS tab(col);
        a,b
+      > SELECT _FUNC_(col) FROM VALUES ('a'), ('a') AS tab(col);
+       a,a
+      > SELECT _FUNC_(DISTINCT col) FROM VALUES ('a'), ('a'), ('b') AS tab(col);
+       a,b
       > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
        a|b
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
