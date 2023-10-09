@@ -213,11 +213,11 @@ object ArrowDeserializers {
 
       case (IterableEncoder(tag, element, _, _), v: ListVector) =>
         val deserializer = deserializerFor(element, v.getDataVector, timeZoneId)
-        if (isSubClass(Classes.WRAPPED_ARRAY, tag)) {
-          // Wrapped array is a bit special because we need to use an array of the element type.
+        if (isSubClass(Classes.MUTABLE_ARRAY_SEQ, tag)) {
+          // mutable ArraySeq is a bit special because we need to use an array of the element type.
           // Some parts of our codebase (unfortunately) rely on this for type inference on results.
-          new VectorFieldDeserializer[mutable.WrappedArray[Any], ListVector](v) {
-            def value(i: Int): mutable.WrappedArray[Any] = {
+          new VectorFieldDeserializer[mutable.ArraySeq[Any], ListVector](v) {
+            def value(i: Int): mutable.ArraySeq[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
               ScalaCollectionUtils.wrap(array)
             }
@@ -332,15 +332,17 @@ object ArrowDeserializers {
         val constructor =
           methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
         val lookup = createFieldLookup(vectors)
-        val setters = fields.map { field =>
-          val vector = lookup(field.name)
-          val deserializer = deserializerFor(field.enc, vector, timeZoneId)
-          val setter = methodLookup.findVirtual(
-            tag.runtimeClass,
-            field.writeMethod.get,
-            MethodType.methodType(classOf[Unit], field.enc.clsTag.runtimeClass))
-          (bean: Any, i: Int) => setter.invoke(bean, deserializer.get(i))
-        }
+        val setters = fields
+          .filter(_.writeMethod.isDefined)
+          .map { field =>
+            val vector = lookup(field.name)
+            val deserializer = deserializerFor(field.enc, vector, timeZoneId)
+            val setter = methodLookup.findVirtual(
+              tag.runtimeClass,
+              field.writeMethod.get,
+              MethodType.methodType(classOf[Unit], field.enc.clsTag.runtimeClass))
+            (bean: Any, i: Int) => setter.invoke(bean, deserializer.get(i))
+          }
         new StructFieldSerializer[Any](struct) {
           def value(i: Int): Any = {
             val instance = constructor.invoke()

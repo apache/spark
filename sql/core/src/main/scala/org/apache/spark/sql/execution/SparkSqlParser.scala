@@ -21,7 +21,7 @@ import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode

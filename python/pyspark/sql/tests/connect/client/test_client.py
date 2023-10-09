@@ -21,6 +21,7 @@ from collections.abc import Generator
 from typing import Optional, Any
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
@@ -136,9 +137,12 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             "jitter": 10,
             "min_jitter_threshold": 10,
         }
-        self.response = proto.ExecutePlanResponse()
+        self.response = proto.ExecutePlanResponse(
+            response_id="1",
+        )
         self.finished = proto.ExecutePlanResponse(
-            result_complete=proto.ExecutePlanResponse.ResultComplete()
+            result_complete=proto.ExecutePlanResponse.ResultComplete(),
+            response_id="2",
         )
 
     def _stub_with(self, execute=None, attach=None):
@@ -153,9 +157,13 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         for b in ite:
             pass
 
-        self.assertEqual(0, stub.attach_calls)
-        self.assertGreater(1, stub.release_calls)
-        self.assertEqual(1, stub.execute_calls)
+        def check_all():
+            self.assertEqual(0, stub.attach_calls)
+            self.assertEqual(1, stub.release_until_calls)
+            self.assertEqual(1, stub.release_calls)
+            self.assertEqual(1, stub.execute_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check_all)()
 
     def test_fail_during_execute(self):
         def fatal():
@@ -167,9 +175,13 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             for b in ite:
                 pass
 
-        self.assertEqual(0, stub.attach_calls)
-        self.assertEqual(0, stub.release_calls)
-        self.assertEqual(1, stub.execute_calls)
+        def check():
+            self.assertEqual(0, stub.attach_calls)
+            self.assertEqual(1, stub.release_calls)
+            self.assertEqual(1, stub.release_until_calls)
+            self.assertEqual(1, stub.execute_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
 
     def test_fail_and_retry_during_execute(self):
         def non_fatal():
@@ -182,9 +194,13 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         for b in ite:
             pass
 
-        self.assertEqual(1, stub.attach_calls)
-        self.assertEqual(1, stub.release_calls)
-        self.assertEqual(1, stub.execute_calls)
+        def check():
+            self.assertEqual(1, stub.attach_calls)
+            self.assertEqual(1, stub.release_calls)
+            self.assertEqual(3, stub.release_until_calls)
+            self.assertEqual(1, stub.execute_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
 
     def test_fail_and_retry_during_reattach(self):
         count = 0
@@ -204,9 +220,13 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         for b in ite:
             pass
 
-        self.assertEqual(2, stub.attach_calls)
-        self.assertEqual(2, stub.release_calls)
-        self.assertEqual(1, stub.execute_calls)
+        def check():
+            self.assertEqual(2, stub.attach_calls)
+            self.assertEqual(3, stub.release_until_calls)
+            self.assertEqual(1, stub.release_calls)
+            self.assertEqual(1, stub.execute_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
 
 
 class TestException(grpc.RpcError, grpc.Call):
@@ -257,6 +277,7 @@ class MockSparkConnectStub:
         # Call counters
         self.execute_calls = 0
         self.release_calls = 0
+        self.release_until_calls = 0
         self.attach_calls = 0
 
     def ExecutePlan(self, *args, **kwargs):
@@ -267,8 +288,12 @@ class MockSparkConnectStub:
         self.attach_calls += 1
         return self._attach_ops
 
-    def ReleaseExecute(self, *args, **kwargs):
-        self.release_calls += 1
+    def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
+        if req.HasField("release_all"):
+            self.release_calls += 1
+        elif req.HasField("release_until"):
+            print("increment")
+            self.release_until_calls += 1
 
 
 class MockService:

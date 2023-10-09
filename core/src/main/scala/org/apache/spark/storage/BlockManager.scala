@@ -24,11 +24,11 @@ import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
@@ -85,6 +85,13 @@ private[spark] trait BlockData {
    */
   def toNetty(): Object
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  def toNettyForSsl(): Object
+
   def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer
 
   def toByteBuffer(): ByteBuffer
@@ -102,6 +109,8 @@ private[spark] class ByteBufferBlockData(
   override def toInputStream(): InputStream = buffer.toInputStream()
 
   override def toNetty(): Object = buffer.toNetty
+
+  override def toNettyForSsl(): AnyRef = buffer.toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     buffer.copy(allocator)
@@ -1510,14 +1519,10 @@ private[spark] class BlockManager(
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)
-      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
+      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo, keepReadLock)) {
         newInfo
       } else {
         logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-        if (!keepReadLock) {
-          // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
-          releaseLock(blockId)
-        }
         return None
       }
     }

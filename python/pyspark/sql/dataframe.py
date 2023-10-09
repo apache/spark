@@ -597,8 +597,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         level : int, optional, default None
             How many levels to print for nested schemas.
 
-            .. versionchanged:: 3.5.0
-                Added Level parameter.
+            .. versionadded:: 3.5.0
 
         Examples
         --------
@@ -1887,7 +1886,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |        6|
         +---------+
 
-        Repartition the data into 7 partitions by 'age' and 'name columns.
+        Repartition the data into 3 partitions by 'age' and 'name' columns.
 
         >>> df.repartition(3, "name", "age").select(
         ...     sf.spark_partition_id().alias("partition")
@@ -2752,6 +2751,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This is similar to a left-join except that we match on the nearest
         key rather than equal keys.
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         other : :class:`DataFrame`
@@ -2864,13 +2866,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
         cols : int, str, list or :class:`Column`, optional
             list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -2928,13 +2930,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
         cols : int, str, list, or :class:`Column`, optional
              list of :class:`Column` or column names or column ordinals to sort by.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Other Parameters
         ----------------
@@ -3814,9 +3816,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
-        """Groups the :class:`DataFrame` using the specified columns,
-        so we can run aggregation on them. See :class:`GroupedData`
-        for all the available aggregate functions.
+        """
+        Groups the :class:`DataFrame` by the specified columns so that aggregation
+        can be performed on them.
+        See :class:`GroupedData` for all the available aggregate functions.
 
         :func:`groupby` is an alias for :func:`groupBy`.
 
@@ -3825,20 +3828,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            columns to group by.
-            Each element should be a column name (string) or an expression (:class:`Column`)
+        cols : list, str, int or :class:`Column`
+            The columns to group by.
+            Each element can be a column name (string) or an expression (:class:`Column`)
             or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Grouped data by given columns.
+            A :class:`GroupedData` object representing the grouped data by the specified columns.
 
         Notes
         -----
@@ -3848,9 +3851,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (2, "Alice"), (2, "Bob"), (2, "Bob"), (5, "Bob")], schema=["age", "name"])
+        ...     ("Alice", 2), ("Bob", 2), ("Bob", 2), ("Bob", 5)], schema=["name", "age"])
 
-        Empty grouping columns triggers a global aggregation.
+        Example 1: Empty grouping columns triggers a global aggregation.
 
         >>> df.groupBy().avg().show()
         +--------+
@@ -3859,7 +3862,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    2.75|
         +--------+
 
-        Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
+        Example 2: Group-by 'name', and specify a dictionary to calculate the summation of 'age'.
 
         >>> df.groupBy("name").agg({"age": "sum"}).sort("name").show()
         +-----+--------+
@@ -3869,7 +3872,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       9|
         +-----+--------+
 
-        Group-by 'name', and calculate maximum values.
+        Example 3: Group-by 'name', and calculate maximum values.
 
         >>> df.groupBy(df.name).max().sort("name").show()
         +-----+--------+
@@ -3879,9 +3882,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       5|
         +-----+--------+
 
-        Also group-by 'name', but using the column ordinal.
+        Example 4: Also group-by 'name', but using the column ordinal.
 
-        >>> df.groupBy(2).max().sort("name").show()
+        >>> df.groupBy(1).max().sort("name").show()
         +-----+--------+
         | name|max(age)|
         +-----+--------+
@@ -3889,7 +3892,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|       5|
         +-----+--------+
 
-        Group-by 'name' and 'age', and calculate the number of rows in each group.
+        Example 5: Group-by 'name' and 'age', and calculate the number of rows in each group.
 
         >>> df.groupBy(["name", df.age]).count().sort("name", "age").show()
         +-----+---+-----+
@@ -3900,9 +3903,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|  5|    1|
         +-----+---+-----+
 
-        Also Group-by 'name' and 'age', but using the column ordinal.
+        Example 6: Also Group-by 'name' and 'age', but using the column ordinal.
 
-        >>> df.groupBy([df.name, 1]).count().sort("name", "age").show()
+        >>> df.groupBy([df.name, 2]).count().sort("name", "age").show()
         +-----+---+-----+
         | name|age|count|
         +-----+---+-----+
@@ -3927,27 +3930,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregation on them.
+        the specified columns, allowing for aggregation on them.
 
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            Columns to roll-up by.
+        cols : list, str, int or :class:`Column`
+            The columns to roll-up by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Rolled-up data by given columns.
+            Rolled-up data based on the specified columns.
 
         Notes
         -----
@@ -3956,7 +3959,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], schema=["name", "age"])
+
+        Example 1: Rollup-by 'name', and calculate the number of rows in each dimensional.
+
+        >>> df.rollup("name").count().orderBy("name").show()
+        +-----+-----+
+        | name|count|
+        +-----+-----+
+        | NULL|    2|
+        |Alice|    1|
+        |  Bob|    1|
+        +-----+-----+
+
+        Example 2: Rollup-by 'name' and 'age',
+        and calculate the number of rows in each dimensional.
+
         >>> df.rollup("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -3968,7 +3986,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|   5|    1|
         +-----+----+-----+
 
-        >>> df.rollup(2, 1).count().orderBy(1, 2).show()
+        Example 3: Also Rollup-by 'name' and 'age', but using the column ordinal.
+
+        >>> df.rollup(1, 2).count().orderBy(1, 2).show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
@@ -3995,27 +4015,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregations on them.
+        the specified columns, allowing aggregations to be performed on them.
 
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.0.0
-            Supports column ordinal.
-
         Parameters
         ----------
-        cols : list, str or :class:`Column`
-            columns to create cube by.
+        cols : list, str, int or :class:`Column`
+            The columns to cube by.
             Each element should be a column name (string) or an expression (:class:`Column`)
-            or list of them.
+            or a column ordinal (int, 1-based) or list of them.
+
+            .. versionchanged:: 4.0.0
+               Supports column ordinal.
 
         Returns
         -------
         :class:`GroupedData`
-            Cube of the data by given columns.
+            Cube of the data based on the specified columns.
 
         Notes
         -----
@@ -4024,7 +4044,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+        >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], schema=["name", "age"])
+
+        Example 1: Creating a cube on 'name',
+        and calculate the number of rows in each dimensional.
+
+        >>> df.cube("name").count().orderBy("name").show()
+        +-----+-----+
+        | name|count|
+        +-----+-----+
+        | NULL|    2|
+        |Alice|    1|
+        |  Bob|    1|
+        +-----+-----+
+
+        Example 2: Creating a cube on 'name' and 'age',
+        and calculate the number of rows in each dimensional.
+
         >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
@@ -4038,7 +4074,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  Bob|   5|    1|
         +-----+----+-----+
 
-        >>> df.cube(2, 1).count().orderBy(1, 2).show()
+        Example 3: Also creating a cube on 'name' and 'age', but using the column ordinal.
+
+        >>> df.cube(1, 2).count().orderBy(1, 2).show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
@@ -5748,7 +5786,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` by renaming an existing column.
+        """
+        Returns a new :class:`DataFrame` by renaming an existing column.
         This is a no-op if the schema doesn't contain the given column name.
 
         .. versionadded:: 1.3.0
@@ -5759,21 +5798,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         existing : str
-            string, name of the existing column to rename.
+            The name of the existing column to be renamed.
         new : str
-            string, new name of the column.
+            The new name to be assigned to the column.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame with renamed column.
+            A new DataFrame with renamed column.
+
+        See Also
+        --------
+        :meth:`withColumnsRenamed`
 
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.withColumnRenamed('age', 'age2').show()
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnRenamed("age", "age2").show()
         +----+-----+
         |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename a column that does not exist (no-op)
+
+        >>> df.withColumnRenamed("non_existing", "new_name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 3: Rename multiple columns
+
+        >>> df.withColumnRenamed("age", "age2").withColumnRenamed("name", "name2").show()
+        +----+-----+
+        |age2|name2|
         +----+-----+
         |   2|Alice|
         |   5|  Bob|
@@ -5792,7 +5858,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         colsMap : dict
-            a dict of existing column names and corresponding desired column names.
+            A dict of existing column names and corresponding desired column names.
             Currently, only a single map is supported.
 
         Returns
@@ -5804,21 +5870,49 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         :meth:`withColumnRenamed`
 
-        Notes
-        -----
-        Support Spark Connect
-
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df = df.withColumns({'age2': df.age + 2, 'age3': df.age + 3})
-        >>> df.withColumnsRenamed({'age2': 'age4', 'age3': 'age5'}).show()
-        +---+-----+----+----+
-        |age| name|age4|age5|
-        +---+-----+----+----+
-        |  2|Alice|   4|   5|
-        |  5|  Bob|   7|   8|
-        +---+-----+----+----+
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnsRenamed({"age": "age2"}).show()
+        +----+-----+
+        |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename multiple columns
+
+        >>> df.withColumnsRenamed({"age": "age2", "name": "name2"}).show()
+        +----+-----+
+        |age2|name2|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 3: Rename non-existing column (no-op)
+
+        >>> df.withColumnsRenamed({"non_existing": "new_name"}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 4: Rename with an empty dictionary (no-op)
+
+        >>> df.withColumnsRenamed({}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(

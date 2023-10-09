@@ -996,6 +996,27 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
+  test("SPARK-45346: merge schema should respect case sensitivity") {
+    import testImplicits._
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          Seq(1).toDF("col").write.mode("append").parquet(path.getCanonicalPath)
+          Seq(2).toDF("COL").write.mode("append").parquet(path.getCanonicalPath)
+          val df = spark.read.option("mergeSchema", "true").parquet(path.getCanonicalPath)
+          if (caseSensitive) {
+            assert(df.columns.toSeq.sorted == Seq("COL", "col"))
+            assert(df.collect().length == 2)
+          } else {
+            // The final column name depends on which file is listed first, and is a bit random.
+            assert(df.columns.toSeq.map(_.toLowerCase(java.util.Locale.ROOT)) == Seq("col"))
+            assert(df.collect().length == 2)
+          }
+        }
+      }
+    }
+  }
+
   // =======================================
   // Tests for parquet schema mismatch error
   // =======================================

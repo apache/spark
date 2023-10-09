@@ -19,10 +19,10 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.concurrent.duration._
 import scala.io.Codec
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}

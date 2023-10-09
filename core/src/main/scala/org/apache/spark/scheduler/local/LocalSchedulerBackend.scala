@@ -29,7 +29,9 @@ import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.TaskThreadDump
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.Utils
 
 private case class ReviveOffers()
@@ -82,6 +84,8 @@ private[spark] class LocalEndpoint(
     case StopExecutor =>
       executor.stop()
       context.reply(true)
+    case TaskThreadDump(taskId) =>
+      context.reply(executor.getTaskThreadDump(taskId))
   }
 
   def reviveOffers(): Unit = {
@@ -178,4 +182,7 @@ private[spark] class LocalSchedulerBackend(
     }
   }
 
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = {
+    localEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
+  }
 }

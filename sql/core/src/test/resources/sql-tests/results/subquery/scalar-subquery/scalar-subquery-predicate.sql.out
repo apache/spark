@@ -461,9 +461,43 @@ struct<1:int>
 -- !query
 SELECT 1
 FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d = t1.t1d
+             ORDER BY s DESC
+             LIMIT 1)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+1
+1
+1
+
+
+-- !query
+SELECT 1
+FROM t1
 WHERE t1b < (SELECT MAX(tmp.s) FROM (
              SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
                FROM t2 WHERE t2.t2d <= t1.t1d) as tmp)
+-- !query schema
+struct<1:int>
+-- !query output
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d <= t1.t1d
+             ORDER BY s DESC
+             LIMIT 1)
 -- !query schema
 struct<1:int>
 -- !query output
@@ -520,6 +554,38 @@ WHERE t1b = (SELECT MAX(tmp.s) FROM (
 struct<1:int>
 -- !query output
 
+
+
+-- !query
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2b < t1b
+              ORDER BY t2d LIMIT 1)
+-- !query schema
+struct<t1a:string,t1b:smallint>
+-- !query output
+val1a	16
+val1a	16
+
+
+-- !query
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2c = t1c
+              ORDER BY t2c LIMIT 1)
+-- !query schema
+struct<t1a:string,t1b:smallint>
+-- !query output
+val1a	16
+val1a	16
+val1b	8
+val1c	8
+val1d	NULL
+val1d	NULL
 
 
 -- !query

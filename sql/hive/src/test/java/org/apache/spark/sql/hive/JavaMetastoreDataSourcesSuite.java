@@ -26,9 +26,9 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
@@ -50,7 +50,7 @@ public class JavaMetastoreDataSourcesSuite {
   FileSystem fs;
   Dataset<Row> df;
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     sqlContext = TestHive$.MODULE$;
     sc = new JavaSparkContext(sqlContext.sparkContext());
@@ -74,7 +74,7 @@ public class JavaMetastoreDataSourcesSuite {
     df.createOrReplaceTempView("jsonTable");
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     // Clean up tables.
     if (sqlContext != null) {

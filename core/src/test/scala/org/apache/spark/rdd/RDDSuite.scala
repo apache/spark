@@ -21,9 +21,9 @@ import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException

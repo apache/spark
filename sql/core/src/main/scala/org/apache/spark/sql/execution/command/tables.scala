@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}

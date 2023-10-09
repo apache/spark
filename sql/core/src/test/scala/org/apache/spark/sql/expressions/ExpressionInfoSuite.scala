@@ -194,6 +194,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.SparkVersion",
       // Throws an error
       "org.apache.spark.sql.catalyst.expressions.RaiseError",
+      "org.apache.spark.sql.catalyst.expressions.AssertTrue",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
