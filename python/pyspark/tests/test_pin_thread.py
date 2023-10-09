@@ -200,7 +200,7 @@ class PinThreadTests(unittest.TestCase):
                 else:
                     jvm.SparkSession.setDefaultSession(None)
         else:
-            yield old_active_session
+            yield old_active_spark_session
 
     def _test_inheritable_active_session(self, make_thread):
         with self.ensure_active_spark_session() as spark:

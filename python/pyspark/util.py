@@ -460,7 +460,6 @@ class InheritableThread(threading.Thread):
         else:
             # Non Spark Connect
             from pyspark import SparkContext
-            from pyspark.sql import SparkSession
 
             if isinstance(SparkContext._gateway, ClientServer):
                 # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
