@@ -647,7 +647,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("Dataset result collection") {
     def checkResult(rows: IterableOnce[java.lang.Long], expectedValues: Long*): Unit = {
-      rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
+      rows.iterator.zipAll(expectedValues.iterator, null, null).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
