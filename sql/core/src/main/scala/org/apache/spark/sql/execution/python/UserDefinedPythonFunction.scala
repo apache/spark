@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
-import java.nio.charset.StandardCharsets
 import java.util.HashMap
 
 import scala.collection.mutable.ArrayBuffer
@@ -244,8 +243,7 @@ object UserDefinedPythonTableFunction {
       PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
       // Send Python UDTF
-      dataOut.writeInt(func.command.length)
-      dataOut.write(func.command.toArray)
+      PythonWorkerUtils.writePythonFunction(func, dataOut)
 
       // Send arguments
       dataOut.writeInt(exprs.length)
@@ -276,40 +274,30 @@ object UserDefinedPythonTableFunction {
       val dataIn = new DataInputStream(new BufferedInputStream(
         new WorkerInputStream(worker, bufferStream.toByteBuffer), bufferSize))
 
-      // Receive the schema.
-      val schema = dataIn.readInt() match {
-        case length if length >= 0 =>
-          val obj = new Array[Byte](length)
-          dataIn.readFully(obj)
-          DataType.fromJson(new String(obj, StandardCharsets.UTF_8)).asInstanceOf[StructType]
-
-        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
-          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
+      // Receive the schema or an exception raised in Python worker.
+      val length = dataIn.readInt()
+      if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+        val msg = PythonWorkerUtils.readUTF(dataIn)
+        throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
+
+      val schema = DataType.fromJson(
+        PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+
       // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1
       // Receive the list of requested partitioning columns, if any.
       val partitionByColumns = ArrayBuffer.empty[Expression]
       val numPartitionByColumns = dataIn.readInt()
       for (_ <- 0 until numPartitionByColumns) {
-        val length = dataIn.readInt()
-        val obj = new Array[Byte](length)
-        dataIn.readFully(obj)
-        val columnName = new String(obj, StandardCharsets.UTF_8)
+        val columnName = PythonWorkerUtils.readUTF(dataIn)
         partitionByColumns.append(UnresolvedAttribute(columnName))
       }
       // Receive the list of requested ordering columns, if any.
       val orderBy = ArrayBuffer.empty[SortOrder]
       val numOrderByItems = dataIn.readInt()
       for (_ <- 0 until numOrderByItems) {
-        val length = dataIn.readInt()
-        val obj = new Array[Byte](length)
-        dataIn.readFully(obj)
-        val columnName = new String(obj, StandardCharsets.UTF_8)
+        val columnName = PythonWorkerUtils.readUTF(dataIn)
         val direction = if (dataIn.readInt() == 1) Ascending else Descending
         val overrideNullsFirst = dataIn.readInt()
         overrideNullsFirst match {

@@ -108,13 +108,15 @@ abstract class StringRegexExpression extends BinaryExpression
     Examples:
       > SELECT _FUNC_('Spark', '_park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ r'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ r'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
@@ -226,13 +228,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     Examples:
       > SELECT _FUNC_('Spark', '_Park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ r'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ r'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SYSTEMDrive/%//Users%' ESCAPE '/';
       true
@@ -446,6 +450,8 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
       spark.sql.parser.escapedStringLiterals	false
       > SELECT _FUNC_('%SystemDrive%\\Users\\John', '%SystemDrive%\\\\Users.*');
       true
+      > SELECT _FUNC_('%SystemDrive%\\Users\\John', r'%SystemDrive%\\Users.*');
+      true
   """,
   note = """
     Use LIKE to match with simple string pattern.
@@ -595,6 +601,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
+       num-num
+      > SELECT _FUNC_('100-200', r'(\d+)', 'num');
        num-num
   """,
   since = "1.5.0",
@@ -813,6 +821,8 @@ abstract class RegExpExtractBase
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
+      > SELECT _FUNC_('100-200', r'(\d+)-(\d+)', 1);
+       100
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -908,6 +918,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   examples = """
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
+       ["100","300"]
+      > SELECT _FUNC_('100-200, 300-400', r'(\d+)-(\d+)', 1);
        ["100","300"]
   """,
   since = "3.1.0",
@@ -1075,6 +1087,8 @@ case class RegExpSubStr(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_(r"\abc", r"^\\abc$");
+       1
       > SELECT _FUNC_('user@spark.apache.org', '@[^.]*');
        5
   """,

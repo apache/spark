@@ -188,11 +188,11 @@
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
-    <snappy.version>1.1.10.4</snappy.version>
+    <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.24.0</commons-compress.version>
-    <commons-io.version>2.13.0</commons-io.version>
+    <commons-io.version>2.14.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -233,7 +233,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.8.1</kubernetes-client.version>
+    <kubernetes-client.version>6.9.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 

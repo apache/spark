@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -3291,6 +3292,18 @@ class DataSourceV2SQLSuiteV1Filter
           && expressionsAfter(1).toString.trim.startsWith("(id")
           && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data"))
       }
+    }
+  }
+
+  test("SPARK-45454: Set table owner to current_user if it is set") {
+    val testOwner = "test_table_owner"
+    try {
+      CURRENT_USER.set(testOwner)
+      spark.sql("CREATE TABLE testcat.table_name (id int) USING foo")
+      val table = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      assert(table.properties.get(TableCatalog.PROP_OWNER) === testOwner)
+    } finally {
+      CURRENT_USER.remove()
     }
   }
 
