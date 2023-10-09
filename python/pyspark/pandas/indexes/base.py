@@ -916,7 +916,19 @@ class Index(IndexOpsMixin):
             data_fields=[field],
             column_label_names=None,
         )
-        return first_series(DataFrame(internal))
+
+        result = first_series(DataFrame(internal))
+        if self._internal.index_level == 1:
+            return result
+        else:
+            # MultiIndex
+            def struct_to_array(scol: Column) -> Column:
+                field_names = result._internal.spark_type_for(
+                    scol
+                ).fieldNames()  # type: ignore[attr-defined]
+                return F.array([scol[field] for field in field_names])
+
+            return result.spark.transform(struct_to_array)
 
     def to_frame(self, index: bool = True, name: Optional[Name] = None) -> DataFrame:
         """
