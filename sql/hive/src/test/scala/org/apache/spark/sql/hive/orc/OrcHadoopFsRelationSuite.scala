@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
@@ -87,7 +88,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val path = s"${dir.getCanonicalPath}/table1"
       val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
       df.write
-        .option("compression", "ZlIb")
+        .option("compression", CompressionKind.ZLIB.name())
         .orc(path)
 
       // Check if this is compressed as ZLIB.
@@ -98,7 +99,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val orcFilePath = maybeOrcFile.get.toPath.toString
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(orcFilePath).get.getCompression
-      assert("ZLIB" === expectedCompressionKind.name())
+      assert(CompressionKind.ZLIB.name() === expectedCompressionKind.name())
 
       val copyDf = spark
         .read
@@ -113,7 +114,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
-      assert("SNAPPY" === expectedCompressionKind.name())
+      assert(CompressionKind.SNAPPY.name() === expectedCompressionKind.name())
     }
   }
 }
