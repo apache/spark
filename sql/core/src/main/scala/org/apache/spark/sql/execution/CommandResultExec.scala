@@ -40,8 +40,6 @@ case class CommandResultExec(
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(commandPhysicalPlan)
 
-  override def executeToIterator(): Iterator[InternalRow] = unsafeRows.iterator
-
   @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
@@ -82,6 +80,8 @@ case class CommandResultExec(
     sendDriverMetrics()
     unsafeRows
   }
+
+  override def executeToIterator(): Iterator[InternalRow] = unsafeRows.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = {
     val taken = unsafeRows.take(limit)
