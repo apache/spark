@@ -2064,6 +2064,7 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
+        self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
