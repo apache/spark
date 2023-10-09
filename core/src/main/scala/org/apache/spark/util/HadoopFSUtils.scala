@@ -31,7 +31,6 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 
-
 /**
  * Utility functions to simplify and speed-up file listing.
  */
