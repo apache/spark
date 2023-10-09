@@ -142,9 +142,7 @@ object PythonUDTFRunner {
       dataOut.write(p)
     }
     // Write the contents of the Python script itself.
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
-    // Write the result schema of the UDTF call.
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

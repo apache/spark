@@ -42,7 +42,7 @@ private[sql] class XmlOptions(
   def this(
       parameters: Map[String, String] = Map.empty,
       defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
-      defaultColumnNameOfCorruptRecord: String = "") = {
+      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord) = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,
@@ -62,42 +62,39 @@ private[sql] class XmlOptions(
     }
   }
 
-  val compressionCodec = parameters.get("compression").orElse(parameters.get("codec"))
-    .map(CompressionCodecs.getCodecClassName)
-  val rowTag = parameters.getOrElse("rowTag", XmlOptions.DEFAULT_ROW_TAG)
-  require(rowTag.nonEmpty, "'rowTag' option should not be empty string.")
+  val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+  val rowTag = parameters.getOrElse(ROW_TAG, XmlOptions.DEFAULT_ROW_TAG)
+  require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
-          "'rowTag' should not include angle brackets")
-  val rootTag = parameters.getOrElse("rootTag", XmlOptions.DEFAULT_ROOT_TAG)
+          s"'$ROW_TAG' should not include angle brackets")
+  val rootTag = parameters.getOrElse(ROOT_TAG, XmlOptions.DEFAULT_ROOT_TAG)
   require(!rootTag.startsWith("<") && !rootTag.endsWith(">"),
-          "'rootTag' should not include angle brackets")
-  val declaration = parameters.getOrElse("declaration", XmlOptions.DEFAULT_DECLARATION)
+          s"'$ROOT_TAG' should not include angle brackets")
+  val declaration = parameters.getOrElse(DECLARATION, XmlOptions.DEFAULT_DECLARATION)
   require(!declaration.startsWith("<") && !declaration.endsWith(">"),
-          "'declaration' should not include angle brackets")
-  val arrayElementName = parameters.getOrElse("arrayElementName",
+          s"'$DECLARATION' should not include angle brackets")
+  val arrayElementName = parameters.getOrElse(ARRAY_ELEMENT_NAME,
     XmlOptions.DEFAULT_ARRAY_ELEMENT_NAME)
-  val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
-  require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
-  val excludeAttributeFlag = parameters.get("excludeAttribute").map(_.toBoolean).getOrElse(false)
-  val treatEmptyValuesAsNulls =
-    parameters.get("treatEmptyValuesAsNulls").map(_.toBoolean).getOrElse(false)
+  val samplingRatio = parameters.get(SAMPLING_RATIO).map(_.toDouble).getOrElse(1.0)
+  require(samplingRatio > 0, s"$SAMPLING_RATIO ($samplingRatio) should be greater than 0")
+  val excludeAttributeFlag = getBool(EXCLUDE_ATTRIBUTE, false)
+  val treatEmptyValuesAsNulls = getBool(TREAT_EMPTY_VALUE_AS_NULLS, false)
   val attributePrefix =
-    parameters.getOrElse("attributePrefix", XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
-  val valueTag = parameters.getOrElse("valueTag", XmlOptions.DEFAULT_VALUE_TAG)
-  require(valueTag.nonEmpty, "'valueTag' option should not be empty string.")
+    parameters.getOrElse(ATTRIBUTE_PREFIX, XmlOptions.DEFAULT_ATTRIBUTE_PREFIX)
+  val valueTag = parameters.getOrElse(VALUE_TAG, XmlOptions.DEFAULT_VALUE_TAG)
+  require(valueTag.nonEmpty, s"'$VALUE_TAG' option should not be empty string.")
   require(valueTag != attributePrefix,
-    "'valueTag' and 'attributePrefix' options should not be the same.")
-  val nullValue = parameters.getOrElse("nullValue", XmlOptions.DEFAULT_NULL_VALUE)
+    s"'$VALUE_TAG' and '$ATTRIBUTE_PREFIX' options should not be the same.")
+  val nullValue = parameters.getOrElse(NULL_VALUE, XmlOptions.DEFAULT_NULL_VALUE)
   val columnNameOfCorruptRecord =
-    parameters.getOrElse("columnNameOfCorruptRecord", "_corrupt_record")
-  val ignoreSurroundingSpaces =
-    parameters.get("ignoreSurroundingSpaces").map(_.toBoolean).getOrElse(false)
-  val parseMode = ParseMode.fromString(parameters.getOrElse("mode", PermissiveMode.name))
-  val inferSchema = parameters.get("inferSchema").map(_.toBoolean).getOrElse(true)
-  val rowValidationXSDPath = parameters.get("rowValidationXSDPath").orNull
+    parameters.getOrElse(COLUMN_NAME_OF_CORRUPT_RECORD, defaultColumnNameOfCorruptRecord)
+  val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, false)
+  val parseMode = ParseMode.fromString(parameters.getOrElse(MODE, PermissiveMode.name))
+  val inferSchema = getBool(INFER_SCHEMA, true)
+  val rowValidationXSDPath = parameters.get(ROW_VALIDATION_XSD_PATH).orNull
   val wildcardColName =
-    parameters.getOrElse("wildcardColName", XmlOptions.DEFAULT_WILDCARD_COL_NAME)
-  val ignoreNamespace = parameters.get("ignoreNamespace").map(_.toBoolean).getOrElse(false)
+    parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)
+  val ignoreNamespace = getBool(IGNORE_NAMESPACE, false)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -141,17 +138,6 @@ private[sql] class XmlOptions(
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
-
-  // SPARK-39731: Enables the backward compatible parsing behavior.
-  // Generally, this config should be set to false to avoid producing potentially incorrect results
-  // which is the current default (see JacksonParser).
-  //
-  // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
-  // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
-  // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
-  // the value will be parsed as null.
-  val enableDateTimeParsingFallback: Option[Boolean] =
-  parameters.get(ENABLE_DATETIME_PARSING_FALLBACK).map(_.toBoolean)
 
   val timezone = parameters.get("timezone")
 
@@ -207,19 +193,34 @@ private[sql] object XmlOptions extends DataSourceOptions {
   val DEFAULT_CHARSET: String = StandardCharsets.UTF_8.name
   val DEFAULT_NULL_VALUE: String = null
   val DEFAULT_WILDCARD_COL_NAME = "xs_any"
+  val ROW_TAG = newOption("rowTag")
+  val ROOT_TAG = newOption("rootTag")
+  val DECLARATION = newOption("declaration")
+  val ARRAY_ELEMENT_NAME = newOption("arrayElementName")
+  val EXCLUDE_ATTRIBUTE = newOption("excludeAttribute")
+  val TREAT_EMPTY_VALUE_AS_NULLS = newOption("treatEmptyValuesAsNulls")
+  val ATTRIBUTE_PREFIX = newOption("attributePrefix")
+  val VALUE_TAG = newOption("valueTag")
+  val NULL_VALUE = newOption("nullValue")
+  val IGNORE_SURROUNDING_SPACES = newOption("ignoreSurroundingSpaces")
+  val ROW_VALIDATION_XSD_PATH = newOption("rowValidationXSDPath")
+  val WILDCARD_COL_NAME = newOption("wildcardColName")
+  val IGNORE_NAMESPACE = newOption("ignoreNamespace")
+  val INFER_SCHEMA = newOption("inferSchema")
   val PREFER_DATE = newOption("preferDate")
+  val MODE = newOption("mode")
   val LOCALE = newOption("locale")
   val COMPRESSION = newOption("compression")
-  val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
+  val SAMPLING_RATIO = newOption("samplingRatio")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
+  val TIME_ZONE = newOption("timeZone")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"
   newOption(ENCODING, CHARSET)
-  val TIME_ZONE = "timezone"
-  newOption(DateTimeUtils.TIMEZONE_OPTION, TIME_ZONE)
 
   def apply(parameters: Map[String, String]): XmlOptions =
     new XmlOptions(parameters, SQLConf.get.sessionLocalTimeZone)

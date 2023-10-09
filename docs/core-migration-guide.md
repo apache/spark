@@ -26,6 +26,8 @@ license: |
 
 - Since Spark 4.0, Spark will compress event logs. To restore the behavior before Spark 4.0, you can set `spark.eventLog.compress` to `false`.
 
+- Since Spark 4.0, `spark.shuffle.service.db.backend` is set to `ROCKSDB` by default which means Spark will use RocksDB store for shuffle service. To restore the behavior before Spark 4.0, you can set `spark.shuffle.service.db.backend` to `LEVELDB`.
+
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
 
 ## Upgrading from Core 3.3 to 3.4

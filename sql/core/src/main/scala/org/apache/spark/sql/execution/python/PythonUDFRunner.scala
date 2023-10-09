@@ -152,8 +152,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }
@@ -178,8 +177,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }
