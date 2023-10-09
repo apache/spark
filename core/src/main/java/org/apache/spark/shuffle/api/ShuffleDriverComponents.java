@@ -63,7 +63,9 @@ public interface ShuffleDriverComponents {
   default void removeShuffle(int shuffleId, boolean blocking) {}
 
   /**
-   * This method is only used for validation
+   * This method is for compatibility with older implementations
+   * the implementation should just directly return true
+   * when use distributed filesystem or in a disaggregated shuffle cluster
    */
   default boolean supportsReliableStorage() {
     return false;
@@ -74,9 +76,9 @@ public interface ShuffleDriverComponents {
    * executor host ? For example, writing shuffle data to a distributed filesystem or
    * persisting it in a remote shuffle service.
    * @param execId The executor id
-   * @return Does this executor support reliable storage
+   * @return Does this executor support reliable storage for all shuffle data
    */
   default boolean supportsReliableStorage(String execId) {
-    return false;
+    return true;
   }
 }
