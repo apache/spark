@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.{GetInfoType, HiveSQLException, OperationHand
 
 import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
@@ -252,6 +253,21 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(rs1.getString(1) === "default")
       assert(rs1.getType === ResultSet.TYPE_FORWARD_ONLY)
       assertThrows[SQLException](rs1.beforeFirst())
+    }
+  }
+
+  test("SPARK-45454: Set table owner to current_user") {
+    val testOwner = "test_table_owner"
+    val tableName = "t"
+    withTable(tableName) {
+      withCLIServiceClient(testOwner) { client =>
+        val sessionHandle = client.openSession(testOwner, "")
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+        exec(s"CREATE TABLE $tableName(id int) using parquet")
+        val owner = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).owner
+        assert(owner === testOwner)
+      }
     }
   }
 }
