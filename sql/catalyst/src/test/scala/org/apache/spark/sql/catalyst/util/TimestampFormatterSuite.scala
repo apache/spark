@@ -499,5 +499,6 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
       isParsing = true, zoneId = DateTimeTestUtils.LA)
     assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
   }
 }
