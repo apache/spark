@@ -20,6 +20,7 @@ Worker that receives input from Piped RDD.
 """
 import os
 import sys
+import dataclasses
 import time
 from inspect import getfullargspec
 import json
@@ -707,7 +708,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
         def construct_udtf():
             try:
-                return prev_handler(pickled_analyze_result)
+                return prev_handler(dataclasses.replace(pickled_analyze_result))
             except TypeError:
                 return prev_handler()
 

@@ -289,7 +289,7 @@ object UserDefinedPythonTableFunction {
       val pickledAnalyzeResult: Option[Array[Byte]] = dataIn.readInt() match {
         case 0 =>
           None
-        case length: Int if length >= 0 =>
+        case length =>
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
           Some(obj)
