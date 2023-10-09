@@ -525,7 +525,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CACHE TABLE t1 SELECT id, name FROM h2.test.cache_t")
       val plan = sql("select * from t1").queryExecution.sparkPlan
       assert(plan.isInstanceOf[InMemoryTableScanExec])
-      sql("UNCACHE TABLE IF EXISTS t1")
     }
   }
 }
