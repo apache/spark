@@ -35,18 +35,6 @@ class NumPyCompatParityTests(NumPyCompatTestsMixin, PandasOnSparkTestUtils, Reus
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43656): Fix pyspark.sql.column._to_java_column to accept Connect Column."
-    )
-    def test_np_spark_compat_frame(self):
-        super().test_np_spark_compat_frame()
-
-    @unittest.skip(
-        "TODO(SPARK-43656): Fix pyspark.sql.column._to_java_column to accept Connect Column."
-    )
-    def test_np_spark_compat_series(self):
-        super().test_np_spark_compat_series()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_numpy_compat import *  # noqa: F401

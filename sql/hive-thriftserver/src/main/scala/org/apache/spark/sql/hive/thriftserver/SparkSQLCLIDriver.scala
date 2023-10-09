@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}

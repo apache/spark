@@ -21,7 +21,7 @@ import java.util.{Iterator => JIterator}
 import java.util.Arrays
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2

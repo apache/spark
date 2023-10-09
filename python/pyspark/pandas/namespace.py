@@ -158,7 +158,8 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
         raise TypeError("Unknown data type: {}".format(type(pobj).__name__))
 
 
-_range = range  # built-in range
+# built-in range
+_range: Type[range] = range  # type: ignore[assignment]
 
 
 def range(
@@ -2563,6 +2564,10 @@ def concat(
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
+
+        columns = concat_psdf.columns
+        if isinstance(columns, pd.MultiIndex):
+            concat_psdf = concat_psdf.rename_axis([None] * columns.nlevels, axis="columns")
 
         return concat_psdf
 

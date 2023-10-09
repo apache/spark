@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.avro
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column

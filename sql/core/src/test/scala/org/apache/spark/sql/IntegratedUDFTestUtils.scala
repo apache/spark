@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.scalatest.Assertions._
@@ -363,7 +363,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestPythonUDF(name: String) extends TestUDF {
+  case class TestPythonUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -381,11 +381,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+              "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
@@ -705,7 +708,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestScalarPandasUDF(name: String) extends TestUDF {
+  case class TestScalarPandasUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -723,11 +728,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
@@ -826,7 +834,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema("col").dataType)
    * }}}
    */
-  class TestInternalScalaUDF(name: String) extends SparkUserDefinedFunction(
+  class TestInternalScalaUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends SparkUserDefinedFunction(
     (input: Any) => if (input == null) {
       null
     } else {
@@ -839,9 +849,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     override def apply(exprs: Column*): Column = {
       assert(exprs.length == 1, "Defined UDF only has one column")
       val expr = exprs.head.expr
-      assert(expr.resolved, "column should be resolved to use the same type " +
-        "as input. Try df(name) or df.col(name)")
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), expr.dataType))
+      val rt = returnType.getOrElse {
+        assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+        expr.dataType
+      }
+      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
     }
 
     override def withName(name: String): TestInternalScalaUDF = {
@@ -851,8 +864,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     }
   }
 
-  case class TestScalaUDF(name: String) extends TestUDF {
-    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name)
+  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name, returnType)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 

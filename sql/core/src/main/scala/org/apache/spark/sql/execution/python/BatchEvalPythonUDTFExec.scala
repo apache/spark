@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
@@ -132,8 +132,7 @@ object PythonUDTFRunner {
       case None =>
         dataOut.writeInt(0)
     }
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

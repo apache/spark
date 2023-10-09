@@ -211,7 +211,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
+          "operation" -> "ALTER COLUMN ... FIRST | AFTER"))
     }
   }
 
@@ -1495,7 +1495,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-18009 calling toLocalIterator on commands") {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
@@ -2068,7 +2068,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> "`tmp_v`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),
@@ -2087,7 +2087,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
           "operation" -> "ALTER TABLE ... ADD COLUMNS"),
@@ -2416,6 +2416,8 @@ object FakeLocalFsFileSystem {
 // it has only one ACL status for all paths.
 class FakeLocalFsFileSystem extends RawLocalFileSystem {
   import FakeLocalFsFileSystem._
+
+  override def getScheme(): String = "fakelocalfs"
 
   override def delete(f: Path, recursive: Boolean): Boolean = {
     aclStatus = new AclStatus.Builder().build()

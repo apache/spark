@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD

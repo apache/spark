@@ -19,7 +19,6 @@ import pandas as pd
 import numpy as np
 import re
 import unittest
-from distutils.version import LooseVersion
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase

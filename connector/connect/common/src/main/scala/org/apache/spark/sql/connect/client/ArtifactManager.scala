@@ -23,10 +23,10 @@ import java.util.Arrays
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.{CheckedInputStream, CRC32}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import Artifact._

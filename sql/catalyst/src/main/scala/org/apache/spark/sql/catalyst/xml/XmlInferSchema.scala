@@ -23,8 +23,8 @@ import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD

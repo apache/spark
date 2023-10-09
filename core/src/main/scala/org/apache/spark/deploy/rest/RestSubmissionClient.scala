@@ -409,7 +409,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
 private[spark] object RestSubmissionClient {
 
-  val supportedMasterPrefixes = Seq("spark://", "mesos://")
+  val supportedMasterPrefixes = Seq("spark://")
 
   // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
   // on the remote machine (SPARK-12345) (SPARK-25934)
@@ -423,7 +423,7 @@ private[spark] object RestSubmissionClient {
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
     env.filterKeys { k =>
-      (k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)) || k.startsWith("MESOS_")
+      k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)
     }.toMap
   }
 

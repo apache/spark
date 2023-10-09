@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config  \
     curl  \
     wget  \
-    openjdk-8-jdk  \
+    openjdk-17-jdk-headless  \
     gfortran  \
     libopenblas-dev  \
     liblapack-dev \
@@ -84,14 +84,14 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.1.0' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.1.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN pypy3 -m pip install numpy 'pandas<=2.1.1' scipy coverage matplotlib
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.1.1' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN python3.9 -m pip install torcheval
 # Add Deepspeed as a testing dependency for DeepspeedTorchDistributor
 RUN python3.9 -m pip install deepspeed

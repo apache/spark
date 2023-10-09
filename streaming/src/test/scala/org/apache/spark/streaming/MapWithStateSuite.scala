@@ -20,7 +20,7 @@ package org.apache.spark.streaming
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.PrivateMethodTester._
