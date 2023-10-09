@@ -295,9 +295,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "BIT_POSITION_OUT_OF_RANGE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "pos" : "-1",
+    "functionName" : "`getbit`",
+    "invalidValue" : "-1",
+    "parameter" : "`pos`",
     "upper" : "64"
   }
 }
@@ -310,9 +313,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "BIT_POSITION_OUT_OF_RANGE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "pos" : "64",
+    "functionName" : "`getbit`",
+    "invalidValue" : "64",
+    "parameter" : "`pos`",
     "upper" : "64"
   }
 }

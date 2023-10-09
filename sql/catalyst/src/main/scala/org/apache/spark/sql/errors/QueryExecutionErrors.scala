@@ -2776,11 +2776,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     }
   }
 
-  def bitPositionRangeError(pos: Int, size: Int): Throwable = {
+  def bitPositionRangeError(funcName: String, pos: Int, size: Int): Throwable = {
     new SparkIllegalArgumentException(
-      errorClass = "BIT_POSITION_OUT_OF_RANGE",
+      errorClass = "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
       messageParameters = Map(
-        "pos" -> pos.toString,
-        "upper" -> size.toString))
+        "parameter" -> toSQLId("pos"),
+        "functionName" -> toSQLId(funcName),
+        "upper" -> size.toString,
+        "invalidValue" -> pos.toString))
   }
 }

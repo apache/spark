@@ -160,15 +160,35 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expr = BitwiseGet(tl, p)
     checkErrorInExpression[SparkIllegalArgumentException](
-      expr, row1, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "-1", "upper" -> "64"))
+      expr, row1, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map("parameter" -> "`pos`",
+        "functionName" -> "`bit_get`",
+        "upper" -> "64",
+        "invalidValue" -> "-1"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      expr, row2, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "64", "upper" -> "64"))
+      expr, row2, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map("parameter" -> "`pos`",
+        "functionName" -> "`bit_get`",
+        "upper" -> "64",
+        "invalidValue" -> "64"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(ti, p), row3, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "32", "upper" -> "32"))
+      BitwiseGet(ti, p), row3, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map("parameter" -> "`pos`",
+        "functionName" -> "`bit_get`",
+        "upper" -> "32",
+        "invalidValue" -> "32"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(ts, p), row4, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "16", "upper" -> "16"))
+      BitwiseGet(ts, p), row4, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map("parameter" -> "`pos`",
+        "functionName" -> "`bit_get`",
+        "upper" -> "16",
+        "invalidValue" -> "16"))
     checkErrorInExpression[SparkIllegalArgumentException](
-      BitwiseGet(tb, p), row5, "BIT_POSITION_OUT_OF_RANGE", Map("pos" -> "16", "upper" -> "8"))
+      BitwiseGet(tb, p), row5, "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      Map("parameter" -> "`pos`",
+        "functionName" -> "`bit_get`",
+        "upper" -> "8",
+        "invalidValue" -> "16"))
     DataTypeTestUtils.integralType.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, dt, IntegerType)
     }

@@ -92,11 +92,6 @@
     ],
     "sqlState" : "22003"
   },
-  "BIT_POSITION_OUT_OF_RANGE" : {
-    "message" : [
-      "The bit position <pos> must in [0, <upper>)."
-    ]
-  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1867,6 +1862,11 @@
       "BINARY_FORMAT" : {
         "message" : [
           "expects one of binary formats 'base64', 'hex', 'utf-8', but got <invalidFormat>."
+        ]
+      },
+      "BIT_POSITION_RANGE" : {
+        "message" : [
+          "expects an integer value in [0, <upper>), but got <invalidValue>."
         ]
       },
       "DATETIME_UNIT" : {
