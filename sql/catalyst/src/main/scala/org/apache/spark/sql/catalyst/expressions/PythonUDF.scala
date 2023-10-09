@@ -181,7 +181,7 @@ case class PythonUDTF(
     name: String,
     func: PythonFunction,
     elementSchema: StructType,
-    pickledAnalyzeResult: String,
+    pickledAnalyzeResult: Option[Array[Byte]],
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
@@ -258,7 +258,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
-    pickledAnalyzeResult: String) {
+    pickledAnalyzeResult: Option[Array[Byte]]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
    * expression of a UDTF call, throwing an error if any properties of the UDTF call are

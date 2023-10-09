@@ -130,7 +130,7 @@ case class UserDefinedPythonTableFunction(
           name = name,
           func = func,
           elementSchema = rt,
-          pickledAnalyzeResult = "",
+          pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
@@ -292,18 +292,13 @@ object UserDefinedPythonTableFunction {
           throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
       }
       // Receive the pickled AnalyzeResult buffer, if any.
-      val pickledAnalyzeResult: String = dataIn.readInt() match {
+      val pickledAnalyzeResult: Option[Array[Byte]] = dataIn.readInt() match {
+        case 0 =>
+          None
         case length: Int if length >= 0 =>
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
-          new String(obj, StandardCharsets.UTF_8)
-
-        case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val exLength = dataIn.readInt()
-          val obj = new Array[Byte](exLength)
-          dataIn.readFully(obj)
-          val msg = new String(obj, StandardCharsets.UTF_8)
-          throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
+          Some(obj)
       }
       // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1

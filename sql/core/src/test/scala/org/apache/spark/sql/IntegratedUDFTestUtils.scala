@@ -714,7 +714,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       s"""
          |from dataclasses import dataclass
          |from pyspark.sql.functions import AnalyzeResult
-         |from pyspark.sql.types import IntegerType, StructType
+         |from pyspark.sql.types import StringType, StructType
          |
          |@dataclass
          |class AnalyzeResultWithBuffer(AnalyzeResult):
@@ -725,19 +725,18 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        self._analyze_result = analyze_result
          |
          |    @staticmethod
-         |    def analyze():
+         |    def analyze(argument):
+         |        assert(argument.data_type == StringType())
          |        return AnalyzeResultWithBuffer(
          |            schema=StructType()
-         |                .add("count", IntegerType())
-         |                .add("total", IntegerType())
-         |                .add("last", IntegerType()),
-         |            buffer="abc")
+         |                .add("result", StringType()),
+         |            buffer=argument.value)
          |
-         |    def eval(self):
+         |    def eval(self, argument):
          |        pass
          |
          |    def terminate(self):
-         |        yield self._analyze_result.buffer
+         |        yield self._analyze_result.buffer,
          |""".stripMargin
 
     val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(

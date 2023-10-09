@@ -163,65 +163,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2))
 -- !query schema
-struct<>
+struct<count:int,total:int,last:int>
 -- !query output
-org.apache.spark.api.python.PythonException
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 821, in read_udtf
-    udtf = handler()
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 800, in handler_with_prepare
-    raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
-The 'analyze' method returned a non-empty 'prepare_buffer' string, but
-the UDTF does not define a corresponding 'prepare' method; please add a
-method to the UDTF named 'prepare' accepting a single string argument
-and try again.
-
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 1350, in main
-    func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 823, in read_udtf
-    raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
-The 'analyze' method returned a non-empty 'prepare_buffer' string, but
-the UDTF does not define a corresponding 'prepare' method; please add a
-method to the UDTF named 'prepare' accepting a single string argument
-and try again.
+3	6	3
 
 
 -- !query
 SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2))
 -- !query schema
-struct<>
+struct<count:int,total:int,last:int>
 -- !query output
-org.apache.spark.api.python.PythonException
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 821, in read_udtf
-    udtf = handler()
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 800, in handler_with_prepare
-    raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
-The 'analyze' method returned a non-empty 'prepare_buffer' string, but
-the UDTF does not define a corresponding 'prepare' method; please add a
-method to the UDTF named 'prepare' accepting a single string argument
-and try again.
-
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 1350, in main
-    func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
-  File "/Users/Daniel.Tenedorio/spark-2/python/pyspark/worker.py", line 823, in read_udtf
-    raise PySparkRuntimeError(
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the '__init__' method: [TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON] Failed to analyze the Python user defined table function: 
-The 'analyze' method returned a non-empty 'prepare_buffer' string, but
-the UDTF does not define a corresponding 'prepare' method; please add a
-method to the UDTF named 'prepare' accepting a single string argument
-and try again.
+3	6	3
 
 
 -- !query

@@ -667,7 +667,7 @@ def read_udtf(pickleSer, infile, eval_type):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
+    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     args_offsets = []
     kwargs_offsets = {}
@@ -680,7 +680,11 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
-    pickled_analyze_result = pickleSer._read_with_length(infile)
+    has_pickled_analyze_result = read_bool(infile)
+    if has_pickled_analyze_result:
+        pickled_analyze_result = pickleSer._read_with_length(infile)
+    else:
+        pickled_analyze_result = None
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -698,13 +702,16 @@ def read_udtf(pickleSer, infile, eval_type):
     # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
     # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
     # AnalyzeResult.
-    prev_handler = handler
-    def construct_udtf():
-        try:
-            return prev_handler(pickled_analyze_result)
-        except TypeError:
-            return prev_handler()
-    handler = construct_udtf
+    if has_pickled_analyze_result:
+        prev_handler = handler
+
+        def construct_udtf():
+            try:
+                return prev_handler(pickled_analyze_result)
+            except TypeError:
+                return prev_handler()
+
+        handler = construct_udtf
 
     class UDTFWithPartitions:
         """

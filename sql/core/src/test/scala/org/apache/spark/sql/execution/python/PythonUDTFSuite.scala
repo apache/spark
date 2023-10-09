@@ -357,10 +357,10 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       pythonUDTFForwardStateFromAnalyze)
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
-      val query = s"select * from ${TestPythonUDTFForwardStateFromAnalyze.name}()"
+      val query = s"select * from ${TestPythonUDTFForwardStateFromAnalyze.name}('abc')"
       checkAnswer(
         sql(query),
-        Row("buffer"))
+        Row("abc"))
     }
   }
 }

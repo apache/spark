@@ -2338,7 +2338,7 @@ class BaseUDTFTestsMixin:
                 return AnalyzeResultWithBuffer(
                     schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
                     with_single_partition=True,
-                    buffer=argument.value
+                    buffer=argument.value,
                 )
 
             def eval(self, argument, row: Row):
