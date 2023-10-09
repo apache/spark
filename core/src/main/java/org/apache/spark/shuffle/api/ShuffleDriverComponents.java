@@ -68,7 +68,7 @@ public interface ShuffleDriverComponents {
    * persisting it in a remote shuffle service.
    *
    * Note: This method is for compatibility with older implementations,
-   * the newer implementation should just directly return true or false
+   * the newer implementation should not use this method.
    */
   default boolean supportsReliableStorage() {
     return false;
@@ -76,9 +76,9 @@ public interface ShuffleDriverComponents {
 
   /**
    * Does this executor support reliable storage for all shuffle data.
-   * @param execId The executor id for which the check is being performed.
+   * @param execId The executor id, null for validation use only.
    */
   default boolean supportsReliableStorage(String execId) {
-    return true;
+    return supportsReliableStorage();
   }
 }

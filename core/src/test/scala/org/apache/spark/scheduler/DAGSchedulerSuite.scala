@@ -996,7 +996,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
       classOf[TestShuffleDataIOWithMockedComponents].getName)
-    when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
     when(sc.shuffleDriverComponents.supportsReliableStorage(any())).thenReturn(true)
 
     val event = ExecutorProcessLost("", Some("hostA"))
