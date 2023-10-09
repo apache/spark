@@ -3014,6 +3014,17 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map("relationId" -> "`x`"))
 
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM non_exist VERSION AS OF 1")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`non_exist`"),
+        context = ExpectedContext(
+          fragment = "non_exist",
+          start = 14,
+          stop = 22))
+
       val subquery1 = "SELECT 1 FROM non_exist"
       checkError(
         exception = intercept[AnalysisException] {
