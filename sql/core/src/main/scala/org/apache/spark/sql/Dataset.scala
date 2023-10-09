@@ -1441,7 +1441,7 @@ class Dataset[T] private[sql](
       if (sqlContext.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        Column(addPlanId(UnresolvedAttribute.quotedString(colName)))
+        createColumnWithPlanId(colName)
       }
   }
 
@@ -1457,12 +1457,6 @@ class Dataset[T] private[sql](
   def metadataColumn(colName: String): Column =
     Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
 
-  private def addPlanId(expr: Expression): Expression = {
-    // reuse existing DATASET_ID_KEY as the PLAN_ID
-    expr.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
-    expr
-  }
-
   /**
    * Selects column based on the column name specified as a regex and returns it as [[Column]].
    * @group untypedrel
@@ -1476,8 +1470,18 @@ class Dataset[T] private[sql](
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
         Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        Column(addPlanId(UnresolvedAttribute.quotedString(colName)))
+        createColumnWithPlanId(colName)
     }
+  }
+
+  private def createColumnWithPlanId(colName: String) = {
+    val expr = resolve(colName) match {
+      case attr: AttributeReference => UnresolvedAttribute(Seq(attr.name))
+      case _ => UnresolvedAttribute.quotedString(colName)
+    }
+    // reuse existing DATASET_ID_KEY as the PLAN_ID
+    expr.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
+    Column(expr)
   }
 
   /**
