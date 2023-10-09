@@ -54,7 +54,7 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(HadoopFSUtils.shouldFilterOutPath("/ab/.cde/year=2023/month=10/day=8/hour=13"))
     assert(HadoopFSUtils.shouldFilterOutPath("/x/.hidden/part=__HIVE_DEFAULT_PARTITION__"))
     assert(HadoopFSUtils.shouldFilterOutPath("/a._COPYING_"))
-    // Case 3: Understored paths (except metadata paths of Case 1)
+    // Case 3: Underscored paths (except metadata paths of Case 1)
     assert(HadoopFSUtils.shouldFilterOutPath("/_cd"))
     assert(HadoopFSUtils.shouldFilterOutPath("/_cd/1"))
     assert(HadoopFSUtils.shouldFilterOutPath("/ab/_cd/1"))
