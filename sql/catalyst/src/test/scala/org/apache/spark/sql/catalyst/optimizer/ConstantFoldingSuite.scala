@@ -415,6 +415,28 @@ class ConstantFoldingSuite extends PlanTest {
       }
     }
   }
+
+  test("SPARK-44527: Replace ScalarSubquery with null if its maxRows is 0") {
+    val emptyRelation = LocalRelation($"a".int)
+    val oneRowRelation = LocalRelation.fromExternalRows(Seq($"a".int), Seq(Row(1)))
+    val nullIntLit = Literal(null, IntegerType)
+
+    comparePlans(
+      Optimize.execute(testRelation.select(ScalarSubquery(emptyRelation).as("o")).analyze),
+      testRelation.select(nullIntLit.as("o")).analyze)
+
+    Seq(EqualTo, LessThan, GreaterThan).foreach { comparison =>
+      comparePlans(
+        Optimize.execute(testRelation
+          .select(comparison($"a", ScalarSubquery(emptyRelation)).as("o")).analyze),
+        testRelation.select(comparison($"a", nullIntLit).as("o")).analyze)
+    }
+
+    val oneRowScalarSubquery = testRelation.select(ScalarSubquery(oneRowRelation).as("o")).analyze
+    comparePlans(
+      Optimize.execute(oneRowScalarSubquery),
+      oneRowScalarSubquery)
+  }
 }
 
 case class SerializableBoxedInt(intVal: Int) {
