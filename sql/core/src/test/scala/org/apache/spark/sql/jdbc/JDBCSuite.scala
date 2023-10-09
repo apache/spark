@@ -22,7 +22,7 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
@@ -2061,5 +2061,48 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK-44866: SnowflakeDialect BOOLEAN type mapping") {
     val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
     assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("SPARK-45139: DatabricksDialect url handling") {
+    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") == DatabricksDialect)
+  }
+
+  test("SPARK-45139: DatabricksDialect catalyst type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.TINYINT, "", 1, null) == Some(ByteType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null) == Some(ShortType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.REAL, "", 1, null) == Some(FloatType))
+  }
+
+  test("SPARK-45139: DatabricksDialect JDBC type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+    assert(databricksDialect
+      .getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "DOUBLE")
+    assert(databricksDialect
+      .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
+    assert(databricksDialect
+      .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
+
+  test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).get == ShortType)
+        }
+      }
+    }
   }
 }

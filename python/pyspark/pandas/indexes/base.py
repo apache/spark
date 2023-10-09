@@ -34,9 +34,7 @@ import pandas as pd
 import numpy as np
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
-    is_interval_dtype,
     is_bool_dtype,
-    is_categorical_dtype,
     is_integer_dtype,
     is_float_dtype,
     is_numeric_dtype,
@@ -625,44 +623,6 @@ class Index(IndexOpsMixin):
         return self.to_numpy()
 
     @property
-    def asi8(self) -> np.ndarray:
-        """
-        Integer representation of the values.
-
-        .. warning:: We recommend using `Index.to_numpy()` instead.
-
-        .. note:: This method should only be used if the resulting NumPy ndarray is expected
-            to be small, as all the data is loaded into the driver's memory.
-
-        .. deprecated:: 3.4.0
-
-        Returns
-        -------
-        numpy.ndarray
-            An ndarray with int64 dtype.
-
-        Examples
-        --------
-        >>> ps.Index([1, 2, 3]).asi8
-        array([1, 2, 3])
-
-        Returns None for non-int64 dtype
-
-        >>> ps.Index(['a', 'b', 'c']).asi8 is None
-        True
-        """
-        warnings.warn(
-            "Index.asi8 is deprecated and will be removed in 4.0.0. " "Use Index.astype instead.",
-            FutureWarning,
-        )
-        if isinstance(self.spark.data_type, IntegralType):
-            return self.to_numpy()
-        elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
-            return np.array(list(map(lambda x: x.astype(np.int64), self.to_numpy())))
-        else:
-            return None
-
-    @property
     def has_duplicates(self) -> bool:
         """
         If index has duplicates, return True, otherwise False.
@@ -956,7 +916,19 @@ class Index(IndexOpsMixin):
             data_fields=[field],
             column_label_names=None,
         )
-        return first_series(DataFrame(internal))
+
+        result = first_series(DataFrame(internal))
+        if self._internal.index_level == 1:
+            return result
+        else:
+            # MultiIndex
+            def struct_to_array(scol: Column) -> Column:
+                field_names = result._internal.spark_type_for(
+                    scol
+                ).fieldNames()  # type: ignore[attr-defined]
+                return F.array([scol[field] for field in field_names])
+
+            return result.spark.transform(struct_to_array)
 
     def to_frame(self, index: bool = True, name: Optional[Name] = None) -> DataFrame:
         """
@@ -1061,7 +1033,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
         False
         """
-        return is_categorical_dtype(self.dtype)
+        return isinstance(self.dtype, pd.CategoricalDtype)
 
     def is_floating(self) -> bool:
         """
@@ -1094,7 +1066,7 @@ class Index(IndexOpsMixin):
         >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_interval()
         False
         """
-        return is_interval_dtype(self.dtype)
+        return isinstance(self.dtype, pd.IntervalDtype)
 
     def is_numeric(self) -> bool:
         """
@@ -1117,31 +1089,6 @@ class Index(IndexOpsMixin):
         True
         """
         return is_object_dtype(self.dtype)
-
-    def is_type_compatible(self, kind: str) -> bool:
-        """
-        Whether the index type is compatible with the provided type.
-
-        .. deprecated:: 3.4.0
-
-        Examples
-        --------
-        >>> psidx = ps.Index([1, 2, 3])
-        >>> psidx.is_type_compatible('integer')
-        True
-
-        >>> psidx = ps.Index([1.0, 2.0, 3.0])
-        >>> psidx.is_type_compatible('integer')
-        False
-        >>> psidx.is_type_compatible('floating')
-        True
-        """
-        warnings.warn(
-            "Index.is_type_compatible is deprecated and will be removed in 4.0.0. "
-            "Use Index.isin instead.",
-            FutureWarning,
-        )
-        return kind == self.inferred_type
 
     def dropna(self, how: str = "any") -> "Index":
         """
@@ -2072,7 +2019,7 @@ class Index(IndexOpsMixin):
 
         if isinstance(self, MultiIndex) and level is not None:
             self_names = self.names
-            self_names[level] = names  # type: ignore[index]
+            self_names[level] = names
             names = self_names
         return self.rename(name=names, inplace=inplace)
 
@@ -2142,7 +2089,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)  # type: ignore[arg-type]
+                other = MultiIndex.from_tuples(other)
             else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
 

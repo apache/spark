@@ -887,7 +887,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
-        "inputName" -> "offset",
+        "inputName" -> "`offset`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"(- nonfoldableliteral())\""
       )

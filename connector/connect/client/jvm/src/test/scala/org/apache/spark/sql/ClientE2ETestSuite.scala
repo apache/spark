@@ -18,18 +18,18 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.time.DateTimeException
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
@@ -44,6 +44,100 @@ import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
+  test(s"throw SparkException with null filename in stack trace elements") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => {
+          val testError = new SparkException("test")
+          val stackTrace = testError.getStackTrace()
+          stackTrace(0) = new StackTraceElement(
+            stackTrace(0).getClassName,
+            stackTrace(0).getMethodName,
+            null,
+            stackTrace(0).getLineNumber)
+          testError.setStackTrace(stackTrace)
+          throw testError
+        })
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getCause.isInstanceOf[SparkException])
+      assert(ex.getCause.getStackTrace().length > 0)
+      assert(ex.getCause.getStackTrace()(0).getFileName == null)
+    }
+  }
+
+  for (enrichErrorEnabled <- Seq(false, true)) {
+    test(s"cause exception - ${enrichErrorEnabled}") {
+      withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString) {
+        val ex = intercept[SparkUpgradeException] {
+          spark
+            .sql("""
+                |select from_json(
+                |  '{"d": "02-29"}',
+                |  'd date',
+                |  map('dateFormat', 'MM-dd'))
+                |""".stripMargin)
+            .collect()
+        }
+        if (enrichErrorEnabled) {
+          assert(ex.getCause.isInstanceOf[DateTimeException])
+        } else {
+          assert(ex.getCause == null)
+        }
+      }
+    }
+  }
+
+  test(s"throw SparkException with large cause exception") {
+    withSQLConf("spark.sql.connect.enrichError.enabled" -> "true") {
+      val session = spark
+      import session.implicits._
+
+      val throwException =
+        udf((_: String) => throw new SparkException("test" * 10000))
+
+      val ex = intercept[SparkException] {
+        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+      }
+
+      assert(ex.getErrorClass != null)
+      assert(!ex.getMessageParameters.isEmpty)
+      assert(ex.getCause.isInstanceOf[SparkException])
+
+      val cause = ex.getCause.asInstanceOf[SparkException]
+      assert(cause.getErrorClass == null)
+      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getMessage.contains("test" * 10000))
+    }
+  }
+
+  for (isServerStackTraceEnabled <- Seq(false, true)) {
+    test(s"server-side stack trace is set in exceptions - ${isServerStackTraceEnabled}") {
+      withSQLConf(
+        "spark.sql.connect.serverStacktrace.enabled" -> isServerStackTraceEnabled.toString,
+        "spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+        val ex = intercept[AnalysisException] {
+          spark.sql("select x").collect()
+        }
+        assert(ex.getErrorClass != null)
+        assert(!ex.messageParameters.isEmpty)
+        assert(ex.getSqlState != null)
+        assert(!ex.isInternalError)
+        assert(
+          ex.getStackTrace
+            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
+            .isDefined
+            == isServerStackTraceEnabled)
+      }
+    }
+  }
+
   test("throw SparkArithmeticException") {
     withSQLConf("spark.sql.ansi.enabled" -> "true") {
       intercept[SparkArithmeticException] {
@@ -53,23 +147,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("throw NoSuchDatabaseException") {
-    intercept[NoSuchDatabaseException] {
+    val ex = intercept[NoSuchDatabaseException] {
       spark.sql("use database123")
     }
+    assert(ex.getErrorClass != null)
   }
 
   test("throw NoSuchTableException") {
-    intercept[NoSuchTableException] {
+    val ex = intercept[NoSuchTableException] {
       spark.catalog.getTable("test_table")
     }
+    assert(ex.getErrorClass != null)
   }
 
   test("throw NamespaceAlreadyExistsException") {
     try {
       spark.sql("create database test_db")
-      intercept[NamespaceAlreadyExistsException] {
+      val ex = intercept[NamespaceAlreadyExistsException] {
         spark.sql("create database test_db")
       }
+      assert(ex.getErrorClass != null)
     } finally {
       spark.sql("drop database test_db")
     }
@@ -78,9 +175,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("throw TempTableAlreadyExistsException") {
     try {
       spark.sql("create temporary view test_view as select 1")
-      intercept[TempTableAlreadyExistsException] {
+      val ex = intercept[TempTableAlreadyExistsException] {
         spark.sql("create temporary view test_view as select 1")
       }
+      assert(ex.getErrorClass != null)
     } finally {
       spark.sql("drop view test_view")
     }
@@ -89,16 +187,21 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("throw TableAlreadyExistsException") {
     withTable("testcat.test_table") {
       spark.sql(s"create table testcat.test_table (id int)")
-      intercept[TableAlreadyExistsException] {
+      val ex = intercept[TableAlreadyExistsException] {
         spark.sql(s"create table testcat.test_table (id int)")
       }
+      assert(ex.getErrorClass != null)
     }
   }
 
   test("throw ParseException") {
-    intercept[ParseException] {
+    val ex = intercept[ParseException] {
       spark.sql("selet 1").collect()
     }
+    assert(ex.getErrorClass != null)
+    assert(!ex.messageParameters.isEmpty)
+    assert(ex.getSqlState != null)
+    assert(!ex.isInternalError)
   }
 
   test("spark deep recursion") {
@@ -325,18 +428,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   test("write jdbc") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-      val url = "jdbc:derby:memory:1234"
-      val table = "t1"
-      try {
-        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
-        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
-        assert(result.length == 10)
-      } finally {
-        // clean up
-        assertThrows[SparkException] {
-          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
-        }
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[SparkException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
   }
@@ -545,7 +646,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result collection") {
-    def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
+    def checkResult(rows: IterableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
         case (actual, expected) => assert(actual === expected)
       }
@@ -1048,6 +1149,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result2.length == 1)
     assert(result2(0).getInt(0) === 1)
     assert(result2(0).getString(1) === "abc")
+
+    val result3 = spark.sql("select element_at(?, 1)", Array(array(lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("sql() with named parameters") {
@@ -1059,6 +1163,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
+
+    val result3 =
+      spark.sql("select element_at(:m, 'a')", Map("m" -> map(lit("a"), lit(1)))).collect()
+    assert(result3.length == 1 && result3(0).getInt(0) === 1)
   }
 
   test("joinWith, flat schema") {
@@ -1288,6 +1396,24 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       assert(filepath.startsWith(path))
       assert(rc == 100)
     }
+  }
+
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
+      .collect
+      .foreach { row =>
+        (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+      }
   }
 }
 

@@ -22,8 +22,8 @@ import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._

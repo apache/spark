@@ -17,9 +17,6 @@
 
 from typing import Any, Callable, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from pyspark.ml._typing import C, JavaObjectOrPickleDump
-
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
@@ -29,6 +26,9 @@ import pyspark.context
 from pyspark import RDD, SparkContext
 from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
+
+if TYPE_CHECKING:
+    from pyspark.ml._typing import C, JavaObjectOrPickleDump
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode

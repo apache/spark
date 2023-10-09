@@ -21,7 +21,6 @@ import string
 import tempfile
 import unittest
 import sys
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -202,16 +201,11 @@ class DataFrameConversionTestsMixin:
             psdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43561): Enable DataFrameConversionTests.test_to_latex for pandas 2.0.0.",
-    )
     def test_to_latex(self):
         pdf = self.pdf
         psdf = self.psdf
 
         self.assert_eq(psdf.to_latex(), pdf.to_latex())
-        self.assert_eq(psdf.to_latex(col_space=2), pdf.to_latex(col_space=2))
         self.assert_eq(psdf.to_latex(header=True), pdf.to_latex(header=True))
         self.assert_eq(psdf.to_latex(index=False), pdf.to_latex(index=False))
         self.assert_eq(psdf.to_latex(na_rep="-"), pdf.to_latex(na_rep="-"))

@@ -16,9 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
-import pandas as pd
-
 from typing import (
     Any,
     Generic,
@@ -30,6 +27,8 @@ from typing import (
     Tuple,
     Callable,
 )
+
+import pandas as pd
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc
@@ -151,11 +150,11 @@ class Transformer(Params, metaclass=ABCMeta):
     ) -> Union[DataFrame, pd.DataFrame]:
         """
         Transforms the input dataset.
-        The dataset can be either pandas dataframe or spark dataframe,
+        The dataset can be either pandas dataframe or spark dataframe，
         if it is a spark DataFrame, the result of transformation is a new spark DataFrame
-        that contains all existing columns and output columns with names.
-        if it is a pandas DataFrame, the input pandas dataframe is appended with output
-        columns in place.
+        that contains all existing columns and output columns with names,
+        If it is a pandas DataFrame, the result of transformation is a shallow copy
+        of the input pandas dataframe with output columns with names.
 
         Note: Transformers does not allow output column having the same name with
         existing columns.

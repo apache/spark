@@ -22,6 +22,8 @@ import java.util.Properties
 
 import scala.util.control.NonFatal
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,6 +40,7 @@ import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
@@ -61,6 +64,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         canonicalName match {
           case "h2.char_length" =>
             s"$funcName(${inputs.mkString(", ")})"
+          case "h2.char_length_magic" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
+          case "strlen" =>
+            s"CHAR_LENGTH(${inputs.mkString(", ")})"
           case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
         }
       }
@@ -103,6 +110,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     override def name(): String = "CHAR_LENGTH"
     override def canonicalName(): String = "h2.char_length"
 
+    override def produceResult(input: InternalRow): Int = {
+      val s = input.getString(0)
+      s.length
+    }
+  }
+
+  case object CharLengthWithMagicMethod extends ScalarFunction[Int] {
+    def invoke(str: UTF8String): Int = str.toString.length
+    override def inputTypes(): Array[DataType] = Array(StringType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "CHAR_LENGTH_MAGIC"
+    override def canonicalName(): String = "h2.char_length_magic"
     override def produceResult(input: InternalRow): Int = {
       val s = input.getString(0)
       s.length
@@ -194,6 +213,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
     H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
+    H2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
+    H2Dialect.registerFunction(
+      "my_strlen_static_magic", StrLen(new JavaStrLenStaticMagic()))
   }
 
   override def afterAll(): Unit = {
@@ -1482,6 +1504,58 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkFiltersRemoved(df2)
       checkPushedInfo(df2,
         "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
+  test("scan with filter push-down with UDF that has magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH_MAGIC(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [CHAR_LENGTH_MAGIC(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
+  }
+
+  test("scan with filter push-down with UDF that has static magic method") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_static_magic(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [strlen(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      val df2 = sql(
+        """
+          |SELECT *
+          |FROM h2.test.people
+          |WHERE h2.my_strlen_static_magic(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+      checkFiltersRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedFilters: [strlen(CASE WHEN NAME = 'fred' " +
+          "THEN NAME ELSE 'abc' END) > 2],")
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)

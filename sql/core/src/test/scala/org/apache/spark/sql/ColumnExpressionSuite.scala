@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
@@ -2545,8 +2545,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
     checkAnswer(
@@ -2556,8 +2557,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[SparkException] {
       nullDf.select(assert_true($"cond", $"n")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "first row")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "first row"))
 
     // assert_true(condition)
     val intDf = Seq((0, 1)).toDF("a", "b")
@@ -2565,8 +2567,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e3 = intercept[SparkException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
+
     assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage == "'('a > 'b)' is not true!")
+    assert(e3.getCause.getMessage.matches(
+      "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true!"))
   }
 
   test("raise_error") {
@@ -2575,14 +2579,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val e2 = intercept[SparkException] {
       strDf.select(raise_error($"a")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "hello")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "hello"))
   }
 
   test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {

@@ -21,9 +21,9 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -332,7 +332,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val cars = spark.read.xml(getTestResourcePath(resDir + "cars.xml"))
     cars.write
       .mode(SaveMode.Overwrite)
-      .options(Map("codec" -> classOf[GzipCodec].getName))
+      .options(Map("compression" -> classOf[GzipCodec].getName))
       .xml(copyFilePath.toString)
     // Check that the part file has a .gz extension
     assert(Files.list(copyFilePath).iterator().asScala
@@ -1264,7 +1264,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     val outputDF = Seq("0.0000", "0.01")
       .map { n => s"<Row> <Number>$n</Number> </Row>" }
       .toDF("xml")
-      .withColumn("parsed", from_xml($"xml", schema, Map("rowTag" -> "Row")))
+      .withColumn("parsed", from_xml($"xml", schema, Map("rowTag" -> "Row").asJava))
       .select("parsed.Number")
 
     val results = outputDF.collect()

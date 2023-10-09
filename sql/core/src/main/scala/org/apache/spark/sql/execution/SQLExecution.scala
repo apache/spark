@@ -66,9 +66,10 @@ object SQLExecution extends Logging {
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
    */
-  def withNewExecutionId[T](
+  private def withNewExecutionId0[T](
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+      name: Option[String] = None)(
+      body: Either[Throwable, () => T]): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
@@ -103,9 +104,6 @@ object SQLExecution extends Logging {
           redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
         }.getOrElse(callSite.shortForm)
 
-      val planDescriptionMode =
-        ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
-
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
       val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
         .filterNot { case (key, value) =>
@@ -118,28 +116,39 @@ object SQLExecution extends Logging {
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
+        val startEvent = SparkListenerSQLExecutionStart(
+          executionId = executionId,
+          rootExecutionId = Some(rootExecutionId),
+          description = desc,
+          details = callSite.longForm,
+          physicalPlanDescription = "",
+          sparkPlanInfo = SparkPlanInfo.EMPTY,
+          time = System.currentTimeMillis(),
+          modifiedConfigs = redactedConfigs,
+          jobTags = sc.getJobTags()
+        )
         try {
-          val planInfo = try {
-            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
-          } catch {
-            case NonFatal(e) =>
-              logDebug("Failed to generate SparkPlanInfo", e)
-              // If the queryExecution already failed before this, we are not able to generate the
-              // the plan info, so we use and empty graphviz node to make the UI happy
-              SparkPlanInfo.EMPTY
+          body match {
+            case Left(e) =>
+              sc.listenerBus.post(startEvent)
+              throw e
+            case Right(f) =>
+              val planDescriptionMode =
+                ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+              val planDesc = queryExecution.explainString(planDescriptionMode)
+              val planInfo = try {
+                SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+              } catch {
+                case NonFatal(e) =>
+                  logDebug("Failed to generate SparkPlanInfo", e)
+                  // If the queryExecution already failed before this, we are not able to generate
+                  // the the plan info, so we use and empty graphviz node to make the UI happy
+                  SparkPlanInfo.EMPTY
+              }
+              sc.listenerBus.post(
+                startEvent.copy(physicalPlanDescription = planDesc, sparkPlanInfo = planInfo))
+              f()
           }
-          sc.listenerBus.post(SparkListenerSQLExecutionStart(
-            executionId = executionId,
-            rootExecutionId = Some(rootExecutionId),
-            description = desc,
-            details = callSite.longForm,
-            physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
-            sparkPlanInfo = planInfo,
-            time = System.currentTimeMillis(),
-            modifiedConfigs = redactedConfigs,
-            jobTags = sc.getJobTags()
-          ))
-          body
         } catch {
           case e: Throwable =>
             ex = Some(e)
@@ -180,6 +189,19 @@ object SQLExecution extends Logging {
       sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
   }
+
+  def withNewExecutionId[T](
+      queryExecution: QueryExecution,
+      name: Option[String] = None)(body: => T): T = {
+    withNewExecutionId0(queryExecution, name)(Right(() => body))
+  }
+
+  def withNewExecutionIdOnError(
+      queryExecution: QueryExecution,
+      name: Option[String] = None)(t: Throwable): Unit = {
+    withNewExecutionId0(queryExecution, name)(Left(t))
+  }
+
 
   /**
    * Wrap an action with a known executionId. When running a different action in a different

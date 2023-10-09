@@ -73,9 +73,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 95,
-    "stopIndex" : 117,
-    "fragment" : "default.udaf1(int_col1)"
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "default.udaf1(udf(int_col1))"
   } ]
 }
 

@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * metastore
  */
 class FiltersSuite extends SparkFunSuite with PlanTest {
-  private val shim = new Shim_v0_13
+  private val shim = new Shim_v2_0
 
   private val testTable = new org.apache.hadoop.hive.ql.metadata.Table("default", "test")
   private val varCharCol = new FieldSchema()

@@ -712,11 +712,11 @@ class Column:
         --------
         >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
         >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
-        +------------------+------+
-        |substring(l, 1, 3)|d[key]|
-        +------------------+------+
-        |               abc| value|
-        +------------------+------+
+        +---------------+------+
+        |substr(l, 1, 3)|d[key]|
+        +---------------+------+
+        |            abc| value|
+        +---------------+------+
         """
         if isinstance(k, slice):
             if k.step is not None:
@@ -962,8 +962,9 @@ class Column:
 
         Parameters
         ----------
-        cols
-            The result will only be true at a location if any value matches in the Column.
+        cols : Any
+            The values to compare with the column values. The result will only be true at a location
+            if any value matches in the Column.
 
         Returns
         -------
@@ -972,12 +973,35 @@ class Column:
 
         Examples
         --------
-        >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df[df.name.isin("Bob", "Mike")].collect()
-        [Row(age=5, name='Bob')]
-        >>> df[df.age.isin([1, 2, 3])].collect()
-        [Row(age=2, name='Alice')]
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob"), (8, "Mike")], ["age", "name"])
+
+        Example 1: Filter rows with names in the specified values
+
+        >>> df[df.name.isin("Bob", "Mike")].show()
+        +---+----+
+        |age|name|
+        +---+----+
+        |  5| Bob|
+        |  8|Mike|
+        +---+----+
+
+        Example 2: Filter rows with ages in the specified list
+
+        >>> df[df.age.isin([1, 2, 3])].show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        +---+-----+
+
+        Example 3: Filter rows with names not in the specified values
+
+        >>> df[~df.name.isin("Alice", "Bob")].show()
+        +---+----+
+        |age|name|
+        +---+----+
+        |  8|Mike|
+        +---+----+
         """
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cast(Tuple, cols[0])

@@ -23,7 +23,6 @@ from pyspark.errors import PySparkPicklingError
 
 
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
-    @unittest.skip("SPARK-44463: Error handling needs improvement in connect foreachBatch")
     def test_streaming_foreach_batch_propagates_python_errors(self):
         super().test_streaming_foreach_batch_propagates_python_errors()
 
@@ -31,7 +30,6 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
     def test_streaming_foreach_batch_graceful_stop(self):
         super().test_streaming_foreach_batch_graceful_stop()
 
-    # class StreamingForeachBatchParityTests(ReusedConnectTestCase):
     def test_accessing_spark_session(self):
         spark = self.spark
 
