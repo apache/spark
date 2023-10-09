@@ -22,7 +22,6 @@ import threading
 import os
 import warnings
 from collections.abc import Sized
-from distutils.version import LooseVersion
 from functools import reduce
 from threading import RLock
 from typing import (
@@ -50,6 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
@@ -557,7 +557,7 @@ class SparkSession:
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(SQL(sqlQuery, args), self)
+            return DataFrame.withPlan(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 

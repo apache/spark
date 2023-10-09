@@ -94,9 +94,20 @@ if (!(Test-Path $tools)) {
 #
 # Pop-Location
 
-# ========================== SBT
 Push-Location $tools
 
+# ========================== Java 17
+$zuluFileName="zulu17.44.53-ca-jdk17.0.8.1-win_x64"
+Start-FileDownload "https://cdn.azul.com/zulu/bin/$zuluFileName.zip" "zulu.zip"
+
+# extract
+Invoke-Expression "7z.exe x zulu.zip"
+
+#add java 17 to environment variables
+$env:JAVA_HOME = "$tools\$zuluFileName"
+$env:PATH = "$JAVA_HOME\bin;" + $env:PATH
+
+# ========================== SBT
 $sbtVer = "1.9.3"
 Start-FileDownload "https://github.com/sbt/sbt/releases/download/v$sbtVer/sbt-$sbtVer.zip" "sbt.zip"
 

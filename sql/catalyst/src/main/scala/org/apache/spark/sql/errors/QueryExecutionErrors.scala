@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.DateTimeException
+import java.util.Locale
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
@@ -41,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -319,12 +320,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "type" ->  v.getClass.toString))
   }
 
-  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+  def pivotColumnUnsupportedError(v: Any, expr: Expression): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       messageParameters = Map(
         "value" -> v.toString,
-        "type" ->  toSQLType(dataType)))
+        "type" -> (if (expr.resolved) toSQLType(expr.dataType) else "unknown")))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): SparkException = {
@@ -422,7 +423,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2018",
+      errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
       messageParameters = Map("cls" -> cls.getName))
   }
 
@@ -1660,7 +1661,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def getPartitionMetadataByFilterError(e: InvocationTargetException): SparkRuntimeException = {
+  def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2193",
       messageParameters = Map(
@@ -2249,6 +2250,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
+  def failedToCommitStateFileError(providerClass: String, f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",
+      messageParameters = Map("providerClass" -> providerClass),
+      cause = f)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2260",
@@ -2720,5 +2728,51 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE.PURGE_TABLE",
       messageParameters = Map.empty)
+  }
+
+  def raiseError(
+      errorClass: UTF8String,
+      errorParms: MapData): RuntimeException = {
+    val errorClassStr = if (errorClass != null) {
+      errorClass.toString.toUpperCase(Locale.ROOT)
+    } else {
+      "null"
+    }
+    val errorParmsMap = if (errorParms != null) {
+      val errorParmsMutable = collection.mutable.Map[String, String]()
+      errorParms.foreach(StringType, StringType, { case (key, value) =>
+        errorParmsMutable += (key.toString ->
+          (if (value == null) { "null" } else { value.toString } ))
+      })
+      errorParmsMutable.toMap
+    } else {
+      Map.empty[String, String]
+    }
+
+    // Is the error class a known error class? If not raise an error
+    if (!SparkThrowableHelper.isValidErrorClass(errorClassStr)) {
+      new SparkRuntimeException(
+        errorClass = "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
+        messageParameters = Map("errorClass" -> toSQLValue(errorClassStr)))
+    } else {
+      // Did the user provide all parameters? If not raise an error
+      val expectedParms = SparkThrowableHelper.getMessageParameters(errorClassStr).sorted
+      val providedParms = errorParmsMap.keys.toSeq.sorted
+      if (expectedParms != providedParms) {
+        new SparkRuntimeException(
+          errorClass = "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+          messageParameters = Map("errorClass" -> toSQLValue(errorClassStr),
+            "expectedParms" -> expectedParms.map { p => toSQLValue(p) }.mkString(","),
+            "providedParms" -> providedParms.map { p => toSQLValue(p) }.mkString(",")))
+      } else if (errorClassStr == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") {
+        // Don't break old raise_error() if asked
+        new RuntimeException(errorParmsMap.head._2)
+      } else {
+        // All good, raise the error
+        new SparkRuntimeException(
+          errorClass = errorClassStr,
+          messageParameters = errorParmsMap)
+      }
+    }
   }
 }

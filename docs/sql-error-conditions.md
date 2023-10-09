@@ -93,6 +93,12 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
+### AVRO_INCOMPATIBLE_READ_TYPE
+
+SQLSTATE: none assigned
+
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: "spark.sql.legacy.avro.allowIncompatibleSchema".
+
 ### BATCH_METADATA_NOT_FOUND
 
 [SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -271,6 +277,14 @@ SQLSTATE: none assigned
 Cannot up cast `<expression>` from `<sourceType>` to `<targetType>`.
 `<details>`
 
+### [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
+SQLSTATE: none assigned
+
+Error writing state store files for provider `<providerClass>`.
+
+For more details see [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
 ### CAST_INVALID_INPUT
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -288,6 +302,12 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+
+SQLSTATE: none assigned
+
+`MapObjects` does not support the class `<cls>` as resulting collection.
 
 ### CODEC_NOT_AVAILABLE
 
@@ -508,6 +528,28 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 SQLSTATE: none assigned
 
 Exceeds char/varchar type length limitation: `<limit>`.
+
+### EXPECT_PERMANENT_VIEW_NOT_TEMP
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a permanent view but `<viewName>` is a temp view.
+
+### [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a table but `<viewName>` is a view.
+
+For more details see [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+### [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
@@ -2092,27 +2134,11 @@ Unsupported subquery expression:
 
 For more details see [UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY](sql-error-conditions-unsupported-subquery-expression-category-error-class.html)
 
-### [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The table `<tableName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_TABLE_OPERATION](sql-error-conditions-unsupported-table-operation-error-class.html)
-
 ### UNSUPPORTED_TYPED_LITERAL
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Literals of the type `<unsupportedType>` are not supported. Supported types are `<supportedTypes>`.
-
-### [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
-
-SQLSTATE: none assigned
-
-The view `<viewName>` does not support `<operation>`.
-
-For more details see [UNSUPPORTED_VIEW_OPERATION](sql-error-conditions-unsupported-view-operation-error-class.html)
 
 ### UNTYPED_SCALA_UDF
 
@@ -2122,6 +2148,26 @@ You're using untyped Scala UDF, which does not have the input type information. 
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
+
+### USER_RAISED_EXCEPTION
+
+SQLSTATE: P0001
+
+`<errorMessage>`
+
+### USER_RAISED_EXCEPTION_PARAMETER_MISMATCH
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise error class: `<errorClass>` which expects parameters: `<expectedParms>`.
+The provided parameters `<providedParms>` do not match the expected parameters.
+Please make sure to provide all expected parameters.
+
+### USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise an unknown error class: `<errorClass>`
 
 ### VARIABLE_ALREADY_EXISTS
 
@@ -2190,5 +2236,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

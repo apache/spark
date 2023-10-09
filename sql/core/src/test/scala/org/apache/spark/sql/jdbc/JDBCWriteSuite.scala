@@ -21,8 +21,8 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Properties
 
-import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 

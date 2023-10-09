@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer._

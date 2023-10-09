@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Locale
 
-import scala.collection.convert.ImplicitConversions._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties.lineSeparator
 import scala.util.matching.Regex
 
@@ -143,7 +143,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
-      .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
       .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
@@ -229,14 +229,14 @@ class SparkThrowableSuite extends SparkFunSuite {
       }).toSet
 
       val docsDir = getWorkspaceFilePath("docs")
-      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).filter { f =>
+      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).asScala.filter { f =>
         (f.getName.startsWith("sql-error-conditions-") && f.getName.endsWith("-error-class.md")) &&
           !subErrorFileNames.contains(f.getName)
       }
       orphans
     }
 
-    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR_TEMP_"))
+    val sqlErrorParentDocContent = errors.toSeq.filter(!_._1.startsWith("_LEGACY_ERROR"))
       .sortBy(_._1).map(error => {
       val name = error._1
       val info = error._2
@@ -267,8 +267,7 @@ class SparkThrowableSuite extends SparkFunSuite {
          |
          |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
          |
-         |$sqlErrorParentDocContent
-         |""".stripMargin
+         |$sqlErrorParentDocContent""".stripMargin
 
     errors.filter(_._2.subClass.isDefined).foreach(error => {
       val name = error._1
@@ -330,7 +329,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
         FileUtils.writeStringToFile(
           parentDocPath.toFile,
-          sqlErrorParentDoc + lineSeparator,
+          sqlErrorParentDoc,
           StandardCharsets.UTF_8)
       }
     } else {

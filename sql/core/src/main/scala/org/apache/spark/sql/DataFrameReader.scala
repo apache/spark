@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable

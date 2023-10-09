@@ -101,13 +101,13 @@ Spark before and run the `start-connect-server.sh` script to start Spark server 
 Spark Connect, like in this example:
 
 {% highlight bash %}
-./sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:{{site.SPARK_VERSION_SHORT}}
+./sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.13:{{site.SPARK_VERSION_SHORT}}
 {% endhighlight %}
 
-Note that we include a Spark Connect package (`spark-connect_2.12:{{site.SPARK_VERSION_SHORT}}`), when starting
+Note that we include a Spark Connect package (`spark-connect_2.13:{{site.SPARK_VERSION_SHORT}}`), when starting
 Spark server. This is required to use Spark Connect. Make sure to use the same version
 of the package as the Spark version you downloaded previously. In this example,
-Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.12.
+Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.
 
 Now Spark server is running and ready to accept Spark Connect sessions from client
 applications. In the next section we will walk through how to use Spark Connect

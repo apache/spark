@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -45,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -110,6 +110,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
       case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
+      case proto.Relation.RelTypeCase.AS_OF_JOIN => transformAsOfJoin(rel.getAsOfJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -164,7 +165,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
         transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
-        transformCollectMetrics(rel.getCollectMetrics)
+        transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
@@ -663,7 +664,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
     } else {
       val mapped = new MapGroups(
-        udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+        udf.function.asInstanceOf[(Any, Iterator[Any]) => IterableOnce[Any]],
         udf.inputDeserializer(ds.groupingAttributes),
         ds.valueDeserializer,
         ds.groupingAttributes,
@@ -720,7 +721,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       rel.getOtherSortingExpressionsList)
 
     val mapped = CoGroup(
-      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
+      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => IterableOnce[Any]],
       // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
       // resolve the `keyDeserializer` based on either of them, here we pick the left one.
       udf.inputDeserializer(left.groupingAttributes),
@@ -1048,12 +1049,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       numPartitionsOpt)
   }
 
-  private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
+  private def transformCollectMetrics(rel: proto.CollectMetrics, planId: Long): LogicalPlan = {
     val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
       Column(transformExpression(expr))
     }
 
-    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput), planId)
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
@@ -1352,8 +1353,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
         transformUnresolvedAttribute(exp.getUnresolvedAttribute)
-      case proto.Expression.ExprTypeCase.GET_COLUMN_BY_ORDINAL =>
-        transformGetColumnByOrdinal(exp.getGetColumnByOrdinal)
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION =>
         transformUnregisteredFunction(exp.getUnresolvedFunction)
           .getOrElse(transformUnresolvedFunction(exp.getUnresolvedFunction))
@@ -1403,16 +1402,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     }
     if (attr.hasIsMetadataColumn && attr.getIsMetadataColumn) {
       expr.setTagValue(LogicalPlan.IS_METADATA_COL, ())
-    }
-    expr
-  }
-
-  private def transformGetColumnByOrdinal(
-      attr: proto.Expression.GetColumnByOrdinal): GetColumnByOrdinal = {
-    // always set dataType field null, since it is not used in Analyzer
-    val expr = GetColumnByOrdinal(attr.getOrdinal, null)
-    if (attr.hasPlanId) {
-      expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
     }
     expr
   }
@@ -1966,6 +1955,18 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         Some(
           CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
+      case "uuid" if fun.getArgumentsCount == 1 =>
+        // Uuid does not have a constructor which accepts Expression typed 'seed'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val seed = extractLong(children(0), "seed")
+        Some(Uuid(Some(seed)))
+
+      case "shuffle" if fun.getArgumentsCount == 2 =>
+        // Shuffle does not have a constructor which accepts Expression typed 'seed'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val seed = extractLong(children(1), "seed")
+        Some(Shuffle(children(0), Some(seed)))
+
       case _ => None
     }
   }
@@ -2002,6 +2003,11 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def extractInteger(expr: Expression, field: String): Int = expr match {
     case Literal(int: Int, IntegerType) => int
     case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
+  }
+
+  private def extractLong(expr: Expression, field: String): Long = expr match {
+    case Literal(long: Long, LongType) => long
+    case other => throw InvalidPlanInput(s"$field should be a literal long, but got $other")
   }
 
   private def extractString(expr: Expression, field: String): String = expr match {
@@ -2256,6 +2262,42 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
       case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
     }
+  }
+
+  private def transformAsOfJoin(rel: proto.AsOfJoin): LogicalPlan = {
+    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
+    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val leftAsOf = Column(transformExpression(rel.getLeftAsOf))
+    val rightAsOf = Column(transformExpression(rel.getRightAsOf))
+    val joinType = rel.getJoinType
+    val tolerance = if (rel.hasTolerance) Column(transformExpression(rel.getTolerance)) else null
+    val allowExactMatches = rel.getAllowExactMatches
+    val direction = rel.getDirection
+
+    val joined = if (rel.getUsingColumnsCount > 0) {
+      val usingColumns = rel.getUsingColumnsList.asScala.toSeq
+      left.joinAsOf(
+        other = right,
+        leftAsOf = leftAsOf,
+        rightAsOf = rightAsOf,
+        usingColumns = usingColumns,
+        joinType = joinType,
+        tolerance = tolerance,
+        allowExactMatches = allowExactMatches,
+        direction = direction)
+    } else {
+      val joinExprs = if (rel.hasJoinExpr) Column(transformExpression(rel.getJoinExpr)) else null
+      left.joinAsOf(
+        other = right,
+        leftAsOf = leftAsOf,
+        rightAsOf = rightAsOf,
+        joinExprs = joinExprs,
+        joinType = joinType,
+        tolerance = tolerance,
+        allowExactMatches = allowExactMatches,
+        direction = direction)
+    }
+    joined.logicalPlan
   }
 
   private def transformSort(sort: proto.Sort): LogicalPlan = {

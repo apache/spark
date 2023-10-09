@@ -26,7 +26,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, MapType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
@@ -169,7 +169,7 @@ class QueryCompilationErrorsSuite
     ).toDF("CustomerName", "CustomerID")
 
     val e = intercept[AnalysisException] {
-      val pythonTestUDF = TestPythonUDF(name = "python_udf")
+      val pythonTestUDF = TestPythonUDF(name = "python_udf", Some(BooleanType))
       df1.join(
         df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }

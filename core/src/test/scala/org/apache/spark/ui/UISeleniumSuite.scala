@@ -721,32 +721,57 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
-          "label=&quot;Stage 0&quot;;\n    subgraph "))
-        assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
-          "0 [labelType=&quot;html&quot; label=&quot;ParallelCollectionRDD [0]"))
-        assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
-          "1 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [1]"))
-        assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "2 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [2]"))
+        assert(stage0.contains("""digraph G {
+                                 |  id=&quot;graph_0&quot;;
+                                 |  subgraph graph_stage_0 {
+                                 |    id=&quot;graph_stage_0&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 0&quot;;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;parallelize&quot;;
+                                 |      0 [id=&quot;node_0&quot;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;map&quot;;
+                                 |      1 [id=&quot;node_1&quot;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;
+                                 |      2 [id=&quot;node_2&quot;""".stripMargin))
 
         val stage1 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=1&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
-          "label=&quot;Stage 1&quot;;\n    subgraph "))
-        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "3 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [3]"))
-        assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
-          "4 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
-        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "5 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [5]"))
+        assert(stage1.contains("""digraph G {
+                                 |  id=&quot;graph_1&quot;;
+                                 |  subgraph graph_stage_1 {
+                                 |    id=&quot;graph_stage_1&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 1&quot;;""".stripMargin))
+        assert(stage1.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;""".stripMargin))
+        assert(stage1.contains(
+          "3 [id=&quot;node_3&quot; labelType=&quot;html&quot; label=&quot;ShuffledRDD"))
+        assert(stage1.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;map&quot;;""".stripMargin))
+        assert(stage1.contains(
+          "4 [id=&quot;node_4&quot; labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
 
         val stage2 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=2&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
-          "label=&quot;Stage 2&quot;;\n    subgraph "))
-        assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "6 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
+        assert(stage2.contains("""digraph G {
+                                 |  id=&quot;graph_2&quot;;
+                                 |  subgraph graph_stage_2 {
+                                 |    id=&quot;graph_stage_2&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 2&quot;;""".stripMargin))
+        assert(stage2.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;""".stripMargin))
+        assert(stage2.contains(
+          "6 [id=&quot;node_6&quot; labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
       }
     }
   }
@@ -856,6 +881,20 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         val encodeTwiceRes = Utils.tryWithResource(Source.fromURL(
           apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeTwiceQuery)))(_.mkString)
         assert(encodeOnceRes.equals(encodeTwiceRes))
+      }
+    }
+  }
+
+  test("SPARK-44895: Add 'daemon', 'priority' for ThreadStackTrace") {
+    withSpark(newSparkContext()) { sc =>
+      val uiThreads = getJson(sc.ui.get, "executors/driver/threads")
+        .children
+        .filter(v => (v \ "threadName").extract[String].matches("SparkUI-\\d+"))
+      val priority = Thread.currentThread().getPriority
+
+      uiThreads.foreach { v =>
+        assert((v \ "isDaemon").extract[Boolean])
+        assert((v \ "priority").extract[Int] === priority)
       }
     }
   }

@@ -78,7 +78,7 @@ abstract class BasePythonUDFRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      pid: Option[Long],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
@@ -152,8 +152,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }
@@ -178,8 +177,7 @@ object PythonUDFRunner {
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command.toArray)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
     }
   }

@@ -19,9 +19,9 @@ package org.apache.spark.storage
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually
 

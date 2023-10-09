@@ -28,6 +28,7 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
+    DataType,
     ByteType,
     ShortType,
     IntegerType,
@@ -1287,6 +1288,17 @@ class TypesTestsMixin:
     def test_calendar_interval_type_with_sf(self):
         schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
         self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("long"), LongType())
+        self.assertEqual(
+            DataType.fromDDL("a: int, b: string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, b string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
 
 
 class DataTypeTests(unittest.TestCase):

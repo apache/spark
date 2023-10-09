@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * For lazy computing, be sure the generator.terminate() called in the very last
  * TODO reusing the CompletionIterator?
  */
-private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
+private[execution] sealed case class LazyIterator(func: () => IterableOnce[InternalRow])
   extends Iterator[InternalRow] {
 
   lazy val results: Iterator[InternalRow] = func().toIterator
@@ -147,7 +147,7 @@ case class GenerateExec(
     }.map(_._2)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
-      case g => codeGenTraversableOnce(ctx, g, requiredInput)
+      case g => codeGenIterableOnce(ctx, g, requiredInput)
     }
   }
 
@@ -239,9 +239,9 @@ case class GenerateExec(
   }
 
   /**
-   * Generate code for a regular [[TraversableOnce]] returning [[Generator]].
+   * Generate code for a regular [[IterableOnce]] returning [[Generator]].
    */
-  private def codeGenTraversableOnce(
+  private def codeGenIterableOnce(
       ctx: CodegenContext,
       e: Expression,
       requiredInput: Seq[ExprCode]): String = {

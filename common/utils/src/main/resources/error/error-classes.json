@@ -75,6 +75,11 @@
       }
     }
   },
+  "AVRO_INCOMPATIBLE_READ_TYPE" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ]
+  },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."
@@ -314,6 +319,18 @@
       "<details>"
     ]
   },
+  "CANNOT_WRITE_STATE_STORE" : {
+    "message" : [
+      "Error writing state store files for provider <providerClass>."
+    ],
+    "subClass" : {
+      "CANNOT_COMMIT" : {
+        "message" : [
+          "Cannot perform commit during state checkpoint."
+        ]
+      }
+    }
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -331,6 +348,11 @@
       "Fail to assign a value of <sourceType> type to the <targetType> type column or variable <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
+    "message" : [
+      "`MapObjects` does not support the class <cls> as resulting collection."
+    ]
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
@@ -859,6 +881,45 @@
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
     ]
+  },
+  "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
+    "message" : [
+      "'<operation>' expects a permanent view but <viewName> is a temp view."
+    ]
+  },
+  "EXPECT_TABLE_NOT_VIEW" : {
+    "message" : [
+      "'<operation>' expects a table but <viewName> is a view."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_VIEW" : {
+        "message" : [
+          "Please use ALTER VIEW instead."
+        ]
+      }
+    }
+  },
+  "EXPECT_VIEW_NOT_TABLE" : {
+    "message" : [
+      "The table <tableName> does not support <operation>."
+    ],
+    "subClass" : {
+      "NO_ALTERNATIVE" : {
+        "message" : [
+          ""
+        ]
+      },
+      "USE_ALTER_TABLE" : {
+        "message" : [
+          "Please use ALTER TABLE instead."
+        ]
+      }
+    }
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -3423,49 +3484,20 @@
         "message" : [
           "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
         ]
+      },
+      "UNSUPPORTED_TABLE_ARGUMENT" : {
+        "message" : [
+          "Table arguments are used in a function where they are not supported<treeNode>."
+        ]
       }
     },
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_TABLE_OPERATION" : {
-    "message" : [
-      "The table <tableName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER TABLE instead."
-        ]
-      }
-    }
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_VIEW_OPERATION" : {
-    "message" : [
-      "The view <viewName> does not support <operation>."
-    ],
-    "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "Please use ALTER VIEW instead."
-        ]
-      }
-    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
@@ -3474,6 +3506,26 @@
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
     ]
+  },
+  "USER_RAISED_EXCEPTION" : {
+    "message" : [
+      "<errorMessage>"
+    ],
+    "sqlState" : "P0001"
+  },
+  "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH" : {
+    "message" : [
+      "The `raise_error()` function was used to raise error class: <errorClass> which expects parameters: <expectedParms>.",
+      "The provided parameters <providedParms> do not match the expected parameters.",
+      "Please make sure to provide all expected parameters."
+    ],
+    "sqlState" : "P0001"
+  },
+  "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS" : {
+    "message" : [
+      "The `raise_error()` function was used to raise an unknown error class: <errorClass>"
+    ],
+    "sqlState" : "P0001"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
@@ -4073,11 +4125,6 @@
   "_LEGACY_ERROR_TEMP_1111" : {
     "message" : [
       "DESCRIBE does not support partition for v2 tables."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1113" : {
-    "message" : [
-      "Table <table> does not support <cmd>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1114" : {
@@ -4930,11 +4977,6 @@
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2018" : {
-    "message" : [
-      "class `<cls>` is not supported by `MapObjects` as resulting collection."
     ]
   },
   "_LEGACY_ERROR_TEMP_2020" : {
@@ -6293,5 +6335,11 @@
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
     ]
+  },
+  "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
+    "message" : [
+      "<errorMessage>"
+    ],
+    "sqlState" : "P0001"
   }
 }

@@ -102,7 +102,7 @@ class SparkContext:
     Parameters
     ----------
     master : str, optional
-        Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+        Cluster URL to connect to (e.g. spark://host:port, local[4]).
     appName : str, optional
         A name for your job, to display on the cluster web UI.
     sparkHome : str, optional
@@ -1908,7 +1908,7 @@ class SparkContext:
         :meth:`SparkContext.addFile`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listFiles()
             )
         )
@@ -2036,7 +2036,7 @@ class SparkContext:
         :meth:`SparkContext.addArchive`
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+            self._jvm.scala.jdk.javaapi.CollectionConverters.asJava(  # type: ignore[union-attr]
                 self._jsc.sc().listArchives()
             )
         )
@@ -2193,6 +2193,14 @@ class SparkContext:
         """
         Add a tag to be assigned to all the jobs started by this thread.
 
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group tag. The application can use :meth:`SparkContext.cancelJobsWithTag` to cancel all
+        running executions with this tag.
+
+        There may be multiple tags present at the same time, so different parts of application may
+        use different tags to perform cancellation at different levels of granularity.
+
         .. versionadded:: 3.5.0
 
         Parameters
@@ -2332,6 +2340,8 @@ class SparkContext:
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
 
+        To remove/unset property simply set `value` to None e.g. sc.setLocalProperty("key", None)
+
         .. versionadded:: 1.0.0
 
         Parameters
@@ -2339,7 +2349,8 @@ class SparkContext:
         key : str
             The key of the local property to set.
         value : str
-            The value of the local property to set.
+            The value of the local property to set. If set to `None` then the
+            property will be removed
 
         See Also
         --------

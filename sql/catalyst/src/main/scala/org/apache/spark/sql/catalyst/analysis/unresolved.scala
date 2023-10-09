@@ -275,13 +275,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
-  override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+  override def eval(input: InternalRow = null): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
-  override def terminate(): TraversableOnce[InternalRow] =
+  override def terminate(): IterableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 
   override protected def withNewChildrenInternal(

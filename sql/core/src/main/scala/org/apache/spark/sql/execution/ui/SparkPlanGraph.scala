@@ -177,20 +177,22 @@ class SparkPlanGraphNode(
         metric.name + ": " + value
       }
     }
-
-    if (values.nonEmpty) {
+    val nodeId = s"node$id"
+    val tooltip = StringEscapeUtils.escapeJava(desc)
+    val labelStr = if (values.nonEmpty) {
       // If there are metrics, display each entry in a separate line.
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "<br><br>"
       builder ++= values.mkString("<br>")
-      val labelStr = StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
-      s"""  $id [labelType="html" label="${labelStr}"];"""
+      StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
     } else {
       // SPARK-30684: when there is no metrics, add empty lines to increase the height of the node,
       // so that there won't be gaps between an edge and a small node.
-      s"""  $id [labelType="html" label="<br><b>$name</b><br><br>"];"""
+      s"<br><b>$name</b><br><br>"
     }
+    s"""  $id [id="$nodeId" labelType="html" label="$labelStr" tooltip="$tooltip"];"""
+
   }
 }
 
@@ -218,10 +220,13 @@ class SparkPlanGraphCluster(
     } else {
       name
     }
+    val clusterId = s"cluster$id"
     s"""
-       |  subgraph cluster${id} {
+       |  subgraph $clusterId {
        |    isCluster="true";
+       |    id="$clusterId";
        |    label="${StringEscapeUtils.escapeJava(labelStr)}";
+       |    tooltip="${StringEscapeUtils.escapeJava(desc)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin

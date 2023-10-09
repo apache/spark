@@ -19,7 +19,7 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector

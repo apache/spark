@@ -1031,10 +1031,10 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaisesRegex(tpe, "too big"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] too big"):
             df.select(F.assert_true(df.id < 2, "too big")).toDF("val").collect()
 
-        with self.assertRaisesRegex(tpe, "2000000"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] 2000000.0"):
             df.select(F.assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1352,6 +1352,17 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
+
+    # SPARK-45216: Fix non-deterministic seeded Dataset APIs
+    def test_non_deterministic_with_seed(self):
+        df = self.spark.createDataFrame([([*range(0, 10, 1)],)], ["a"])
+
+        r = F.rand()
+        r2 = F.randn()
+        r3 = F.shuffle("a")
+        res = df.select(r, r, r2, r2, r3, r3).collect()
+        for i in range(3):
+            self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
