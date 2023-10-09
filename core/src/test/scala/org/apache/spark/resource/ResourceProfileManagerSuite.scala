@@ -138,7 +138,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       rpmanager.isSupported(taskProf)
     }.getMessage
     assert(error === "TaskResourceProfiles are only supported for Standalone " +
-      "and Yarn cluster for now when dynamic allocation is disabled.")
+      "and Yarn and Kubernetes cluster for now when dynamic allocation is disabled.")
 
     // Local cluster: supports task resource profile.
     conf.setMaster("local-cluster[1, 1, 1024]")
@@ -147,6 +147,11 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
 
     // Yarn: supports task resource profile.
     conf.setMaster("yarn")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+
+    // K8s: supports task resource profile.
+    conf.setMaster("k8s://foo")
     rpmanager = new ResourceProfileManager(conf, listenerBus)
     assert(rpmanager.isSupported(taskProf))
   }
