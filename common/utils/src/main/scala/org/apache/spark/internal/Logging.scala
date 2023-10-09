@@ -126,16 +126,18 @@ trait Logging {
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     if (Logging.isLog4j2()) {
-      val rootLogger = LogManager.getRootLogger.asInstanceOf[Log4jLogger]
-      // If Log4j 2 is used but is initialized by default configuration,
-      // load a default properties file
-      // scalastyle:off println
-      if (Logging.islog4j2DefaultConfigured()) {
-        Logging.defaultSparkLog4jConfig = true
+
+      val customConfig = System.getProperty("log4j2configurationFile")
+      val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
+
+      if (customConfig != null) {
+        // Load custom config file
+        context.setConfigLocation(new URI(customConfig))
+      } else {
+        // Load default config
         val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
         Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
-            val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
             context.setConfigLocation(url.toURI)
             if (!silent) {
               System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
