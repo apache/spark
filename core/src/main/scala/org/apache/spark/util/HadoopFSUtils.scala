@@ -345,7 +345,7 @@ private[spark] object HadoopFSUtils extends Logging {
   }
 
   private val underscore: Regex = "/_[^=/]*/".r
-  private val underscoreEnd: Regex = "/_[^/]*$".r
+  private val underscoreEnd: Regex = "/_[^=/]*$".r
 
   /** Checks if we should filter out this path. */
   def shouldFilterOutPath(path: String): Boolean = {

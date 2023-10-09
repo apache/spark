@@ -37,6 +37,8 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(!HadoopFSUtils.shouldFilterOutPath("/abcd/efg"))
     assert(!HadoopFSUtils.shouldFilterOutPath("/year=2023/month=10/day=8/hour=13"))
     assert(!HadoopFSUtils.shouldFilterOutPath("/part=__HIVE_DEFAULT_PARTITION__"))
+    assert(!HadoopFSUtils.shouldFilterOutPath("/_cd=123"))
+    assert(!HadoopFSUtils.shouldFilterOutPath("/_cd=123/1"))
     assert(!HadoopFSUtils.shouldFilterOutPath("/_metadata"))
     assert(!HadoopFSUtils.shouldFilterOutPath("/_metadata/1"))
     assert(!HadoopFSUtils.shouldFilterOutPath("/_common_metadata"))
