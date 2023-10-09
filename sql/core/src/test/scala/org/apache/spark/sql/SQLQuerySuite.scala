@@ -191,9 +191,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "OVER (PARTITION BY b) FROM df"),
         Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row(null) :: Nil)
 
+      checkAnswer(
+        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df"),
+        Row("b,c,c,d") :: Nil)
+
       checkError(
         exception = intercept[AnalysisException] {
-          sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df")
+          sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
         },
         errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
         parameters = Map(

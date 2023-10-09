@@ -2209,22 +2209,22 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitListAgg(ctx: ListAggContext): AnyRef = {
     val column = expression(ctx.aggEpxr)
     val sortOrder = visitSortItem(ctx.sortItem)
-    if (!column.semanticEquals(sortOrder.child)) {
+    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+    if (!column.semanticEquals(sortOrder.child) && isDistinct) {
       throw QueryCompilationErrors.functionAndOrderExpressionMismatchError("LISTAGG", column,
         sortOrder.child)
     }
     val listAgg = if (ctx.delimiter != null) {
       sortOrder.direction match {
-        case Ascending => ListAgg(sortOrder.child, Literal(ctx.delimiter.getText))
-        case Descending => ListAgg(sortOrder.child, Literal(ctx.delimiter.getText), true)
+        case Ascending => ListAgg(column, Literal(ctx.delimiter.getText))
+        case Descending => ListAgg(column, Literal(ctx.delimiter.getText), true)
       }
     } else {
       sortOrder.direction match {
-        case Ascending => ListAgg(sortOrder.child)
-        case Descending => ListAgg(sortOrder.child, Literal(","), true)
+        case Ascending => ListAgg(column)
+        case Descending => ListAgg(column, Literal(","), true)
       }
     }
-    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val aggregateExpression = listAgg.toAggregateExpression(isDistinct)
     ctx.windowSpec match {
       case spec: WindowRefContext =>

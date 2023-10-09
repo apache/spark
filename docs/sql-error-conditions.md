@@ -615,7 +615,7 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 
 SQLSTATE: none assigned
 
-The function `<functionName>` arguments `<functionExpr>` should match the order by expression `<orderExpr>`.
+The function `<functionName>` arguments `<functionExpr>` should match the order by expression `<orderExpr>` when use DISTINCT.
 
 ### GENERATED_COLUMN_WITH_DEFAULT_VALUE
 
