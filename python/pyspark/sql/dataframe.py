@@ -897,10 +897,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        n : int, optional
-            Number of rows to show. Default is 20.
-        truncate : bool or int, optional
-            If set to ``True`` (default), truncate strings longer than 20 chars.
+        n : int, optional, default 20
+            Number of rows to show.
+        truncate : bool or int, optional, default True
+            If set to ``True``, truncate strings longer than 20 chars.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
         vertical : bool, optional
