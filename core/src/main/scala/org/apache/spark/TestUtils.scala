@@ -345,11 +345,13 @@ private[spark] object TestUtils {
   def withHttpConnection[T](
       url: URL,
       method: String = "GET",
-      headers: Seq[(String, String)] = Nil)
+      headers: Seq[(String, String)] = Nil,
+      followRedirect: Boolean = true)
       (fn: HttpURLConnection => T): T = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
+    connection.setInstanceFollowRedirects(followRedirect)
 
     connection match {
       // Disable cert and host name validation for HTTPS tests.

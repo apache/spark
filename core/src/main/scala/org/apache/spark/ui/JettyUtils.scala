@@ -147,8 +147,9 @@ private[spark] object JettyUtils extends Logging {
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
-        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
-        response.sendRedirect(newUrl)
+        val newPath = new URL(new URL(request.getRequestURL.toString),
+          UIUtils.uiRoot(request) + prefixedDestPath).getPath
+        response.sendRedirect(newPath)
       }
       // SPARK-5983 ensure TRACE is not supported
       protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -313,6 +314,9 @@ private[spark] object JettyUtils extends Logging {
       val requestHeaderSize = conf.get(UI_REQUEST_HEADER_SIZE).toInt
       logDebug(s"Using requestHeaderSize: $requestHeaderSize")
       httpConfig.setRequestHeaderSize(requestHeaderSize)
+      if (conf.get(REDIRECT_WITHOUT_HOST)) {
+        httpConfig.setRelativeRedirectAllowed(true)
+      }
 
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
@@ -594,9 +598,7 @@ private class ProxyRedirectHandler(_proxyUri: String) extends HandlerWrapper {
         val target = new URI(location)
         // The target path should already be encoded, so don't re-encode it, just the
         // proxy address part.
-        val proxyBase = UIUtils.uiRoot(req)
-        val proxyPrefix = if (proxyBase.nonEmpty) s"$proxyUri$proxyBase" else proxyUri
-        s"${res.encodeURL(proxyPrefix)}${target.getPath()}"
+        res.encodeURL(proxyUri) + target.getPath()
       } else {
         null
       }
