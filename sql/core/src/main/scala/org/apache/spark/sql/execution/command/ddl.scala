@@ -377,7 +377,10 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    verifyNonPartitionColumn(table, columnName, resolver)
+    // check that the column is not a partition column
+    if (findColumnByName(table.partitionSchema, columnName, resolver).isDefined) {
+        throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
+    }
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
       .getOrElse(
         throw QueryCompilationErrors.cannotFindColumnError(columnName, table.schema.fieldNames))
@@ -422,15 +425,6 @@ case class AlterTableChangeColumnCommand(
       schema: StructType, name: String, resolver: Resolver): Option[StructField] = {
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
-    }
-  }
-
-  private def verifyNonPartitionColumn(
-      table: CatalogTable, columnName: String, resolver: Resolver): Unit = {
-    findColumnByName(table.partitionSchema, columnName, resolver) match {
-      case Some(_) =>
-        throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
-      case None =>
     }
   }
 

@@ -99,8 +99,7 @@
   },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
-      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns.",
-      "<columnName> is a partition column in table <tableName>."
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>"
     ],
     "sqlState" : "428FR"
   },
