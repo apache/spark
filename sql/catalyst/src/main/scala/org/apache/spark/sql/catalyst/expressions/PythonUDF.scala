@@ -159,10 +159,10 @@ abstract class UnevaluableGenerator extends Generator {
  * @param name name of the Python UDTF being called
  * @param func string contents of the Python code in the UDTF, along with other environment state
  * @param elementSchema result schema of the function call
- * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
- *                             contains all metadata returned by the Python UDTF 'analyze' method
- *                             including the result schema of the function call as well as optional
- *                             other information
+ * @param pickledAnalyzeResult if the UDTF defined an 'analyze' method, this contains the pickled
+ *                             'AnalyzeResult' instance from that method, which contains all
+ *                             metadata returned including the result schema of the function call as
+ *                             well as optional other information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
  *                 themeselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
@@ -174,8 +174,6 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
- * @param analyzeResult holds the result of the polymorphic Python UDTF 'analze' method, if the UDTF
- *                      defined one
  */
 case class PythonUDTF(
     name: String,
@@ -258,7 +256,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
-    pickledAnalyzeResult: Option[Array[Byte]]) {
+    pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
    * expression of a UDTF call, throwing an error if any properties of the UDTF call are

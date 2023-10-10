@@ -286,13 +286,11 @@ object UserDefinedPythonTableFunction {
         PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
 
       // Receive the pickled AnalyzeResult buffer, if any.
-      val pickledAnalyzeResult: Option[Array[Byte]] = dataIn.readInt() match {
-        case 0 =>
-          None
+      val pickledAnalyzeResult: Array[Byte] = dataIn.readInt() match {
         case length =>
           val obj = new Array[Byte](length)
           dataIn.readFully(obj)
-          Some(obj)
+          obj
       }
 
       // Receive whether the "with single partition" property is requested.

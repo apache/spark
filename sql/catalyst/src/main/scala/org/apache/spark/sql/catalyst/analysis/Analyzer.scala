@@ -2229,7 +2229,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 analyzeResult.applyToTableArgument(u.name, t)
               case c => c
             }
-            PythonUDTF(u.name, u.func, analyzeResult.schema, analyzeResult.pickledAnalyzeResult,
+            PythonUDTF(
+              u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
               newChildren, u.evalType, u.udfDeterministic, u.resultId)
           }
         }
