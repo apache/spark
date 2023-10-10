@@ -536,7 +536,6 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |class $name:
         |    def __init__(self):
         |        self._count = 0
-        |        # self._count = json.loads(buffer)["initial_count"]
         |        self._sum = 0
         |        self._last = None
         |
