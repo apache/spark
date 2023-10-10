@@ -140,4 +140,15 @@ public class EncryptedMessageWithHeaderSuite {
     headerResult.release();
     assertEquals(0, header.refCnt());
   }
+
+  @Test
+  public void testByteBufIsNotSupported() throws Exception {
+    // Validate that ByteBufs are not supported. This test can be updated
+    // when we add support for them
+    ByteBuf header = Unpooled.copyLong(42);
+    assertThrows(IllegalArgumentException.class, () -> {
+      EncryptedMessageWithHeader msg = new EncryptedMessageWithHeader(
+        null, header, header, 4);
+    });
+  }
 }

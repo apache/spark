@@ -18,6 +18,7 @@
 package org.apache.spark.network.protocol;
 
 import javax.annotation.Nullable;
+import java.io.EOFException;
 import java.io.InputStream;
 
 import com.google.common.base.Preconditions;
@@ -86,17 +87,31 @@ public class EncryptedMessageWithHeader implements ChunkedInput<ByteBuf> {
     } else if (body instanceof InputStream) {
       InputStream stream = (InputStream) body;
       int available = stream.available();
+      if (available <= 0) {
+        available = (int) (length() - totalBytesTransferred);
+      } else {
+        available = (int) Math.min(available, length() - totalBytesTransferred);
+      }
       ByteBuf buffer = allocator.buffer(available);
       int toRead = Math.min(available, buffer.writableBytes());
       int read = buffer.writeBytes(stream, toRead);
-      totalBytesTransferred += read;
-      return buffer;
+      if (read >= 0) {
+        totalBytesTransferred += read;
+        return buffer;
+      } else {
+        throw new EOFException("Unable to read bytes from InputStream");
+      }
     } else if (body instanceof ChunkedStream) {
       ChunkedStream stream = (ChunkedStream) body;
       long old = stream.transferredBytes();
       ByteBuf buffer = stream.readChunk(allocator);
-      totalBytesTransferred += (stream.transferredBytes() - old);
-      return buffer;
+      long read = stream.transferredBytes() - old;
+      if (read >= 0) {
+        totalBytesTransferred += read;
+        return buffer;
+      } else {
+        throw new EOFException("Unable to read bytes from ChunkedStream");
+      }
     } else {
       return null;
     }
