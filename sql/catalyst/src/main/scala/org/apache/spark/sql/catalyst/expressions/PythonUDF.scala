@@ -247,9 +247,9 @@ case class UnresolvedPolymorphicPythonUDTF(
  *                           'analyze' method explicitly indicated that the UDTF call should consume
  *                           the input table rows by
  * @param pickledAnalyzeResult this is the pickled 'AnalyzeResult' instance from the UDTF, which
- *                              contains all metadata returned by the Python UDTF 'analyze' method
- *                              including the result schema of the function call as well as optional
- *                              other information
+ *                             contains all metadata returned by the Python UDTF 'analyze' method
+ *                             including the result schema of the function call as well as optional
+ *                             other information
  */
 case class PythonUDTFAnalyzeResult(
     schema: StructType,
