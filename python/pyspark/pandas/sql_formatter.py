@@ -30,7 +30,7 @@ from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.utils import is_remote
 
 
@@ -207,7 +207,7 @@ def sql(
         if is_remote():
             for obj in kwargs.values():
                 if isinstance(obj, (ps.DataFrame, ps.Series)):
-                    raise PySparkNotImplementedError(
+                    raise PySparkTypeError(
                         error_class="UNSUPPORTED_DATA_TYPE",
                         message_parameters={"data_type": type(obj).__name__},
                     )
