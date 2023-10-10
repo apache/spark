@@ -64,6 +64,9 @@ from pyspark.pandas.utils import (
     spark_column_equals,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.series import Series
+
 # A function to turn given numbers to Spark columns that represent pandas-on-Spark index.
 SPARK_INDEX_NAME_FORMAT = "__index_level_{}__".format
 SPARK_DEFAULT_INDEX_NAME = SPARK_INDEX_NAME_FORMAT(0)
