@@ -27,7 +27,6 @@ from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
 from pyspark import pandas as ps
 from pyspark.sql import SparkSession
-from pyspark.sql.utils import is_remote
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
@@ -59,6 +58,9 @@ def sql(
         * string
 
     Also the method can bind named parameters to SQL literals from `args`.
+
+    .. note::
+        pandas-on-Spark objects are not supported for Spark Connect currently.
 
     Parameters
     ----------
@@ -201,8 +203,7 @@ def sql(
     try:
         sdf = session.sql(formatter.format(query, **kwargs), args)
     finally:
-        if not is_remote():
-            formatter.clear()
+        formatter.clear()
 
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
