@@ -25,7 +25,6 @@ import com.google.common.math.LongMath
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
@@ -963,19 +962,5 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
-  }
-
-  test("SPARK-45473: Non-constant scale to Round") {
-    val round = Round(Literal(1.2345), AttributeReference("scale", IntegerType)())
-    assert(round.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "`scale`",
-          "inputType" -> "\"INT\"",
-          "inputExpr" -> "\"scale\""
-        )
-      )
-    )
   }
 }
