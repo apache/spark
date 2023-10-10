@@ -88,7 +88,8 @@ final case class InvalidCommandInput(
 
 class SparkConnectPlanner(
     val sessionHolder: SessionHolder,
-    val executeHolderOpt: Option[ExecuteHolder] = None) extends Logging {
+    val executeHolderOpt: Option[ExecuteHolder] = None)
+    extends Logging {
 
   def this(executeHolder: ExecuteHolder) = {
     this(executeHolder.sessionHolder, Some(executeHolder))
