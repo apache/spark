@@ -88,7 +88,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val path = s"${dir.getCanonicalPath}/table1"
       val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
       df.write
-        .option("compression", CompressionKind.ZLIB.name())
+        .option("compression", "ZlIb")
         .orc(path)
 
       // Check if this is compressed as ZLIB.

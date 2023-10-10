@@ -257,7 +257,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
     val uncompressedSize = getUncompressedDataSizeByFormat(format, isPartitioned, usingCTAS)
     compressionCodec match {
       case "UNCOMPRESSED" if format == "parquet" => tableSize == uncompressedSize
-      case CompressionKind.NONE.name if format == "orc" => tableSize == uncompressedSize
+      case "NONE" if format == "orc" => tableSize == uncompressedSize
       case _ => tableSize != uncompressedSize
     }
   }
