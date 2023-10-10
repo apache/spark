@@ -62,7 +62,7 @@ def sql(
     Also the method can bind named parameters to SQL literals from `args`.
 
     .. note::
-        pandas-on-Spark objects are not supported for Spark Connect currently.
+        pandas-on-Spark objects are not supported for Spark Connect.
 
     Parameters
     ----------
