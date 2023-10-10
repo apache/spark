@@ -921,6 +921,11 @@
       }
     }
   },
+  "EXPRESSION_DECODING_FAILED" : {
+    "message" : [
+      "Failed to decode a row to a value of the expressions: <expressions>."
+    ]
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -5522,12 +5527,6 @@
   "_LEGACY_ERROR_TEMP_2150" : {
     "message" : [
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2151" : {
-    "message" : [
-      "Error while decoding: <e>",
-      "<expressions>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2152" : {
