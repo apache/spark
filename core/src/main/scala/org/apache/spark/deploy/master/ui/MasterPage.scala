@@ -32,13 +32,17 @@ import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
+  private val jsonFieldPattern = "/json/([a-zA-Z]+).*".r
 
   def getMasterState: MasterStateResponse = {
     master.askSync[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    JsonProtocol.writeMasterState(getMasterState)
+    jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
+      case None => JsonProtocol.writeMasterState(None, getMasterState)
+      case Some(m) => JsonProtocol.writeMasterState(Some(m.group(1)), getMasterState)
+    }
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
