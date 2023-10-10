@@ -1227,7 +1227,8 @@ class SparkConnectClient(object):
                 ):
                     raise SparkConnectException(
                         f"Expected arrow batch to start at row offset {num_records} in results, "
-                        + f"but received arrow batch starting at offset {b.arrow_batch.start_offset}."
+                        + "but received arrow batch starting at offset "
+                        + f"{b.arrow_batch.start_offset}."
                     )
 
                 num_records_in_batch = 0
@@ -1239,7 +1240,8 @@ class SparkConnectClient(object):
 
                 if num_records_in_batch != b.arrow_batch.row_count:
                     raise SparkConnectException(
-                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got {num_records_in_batch}."
+                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
+                        + f"{num_records_in_batch}."
                     )
                 num_records += num_records_in_batch
 
