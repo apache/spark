@@ -108,15 +108,18 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
         def terminate(self) -> Iterator[Any]:
             """
-            Called when the UDTF has processed all input rows.
+            Called when the UDTF has successfully processed all input rows.
 
             This method is optional to implement and is useful for performing any
-            cleanup or finalization operations after the UDTF has finished processing
+            finalization operations after the UDTF has finished processing
             all rows. It can also be used to yield additional rows if needed.
             Table functions that consume all rows in the entire input partition
             and then compute and return the entire output table can do so from
             this method as well (please be mindful of memory usage when doing
             this).
+
+            If any exceptions occur during input row processing, this method
+            won't be called.
 
             Yields
             ------
@@ -128,6 +131,21 @@ To implement a Python UDTF, you first need to define a class implementing the me
             --------
             >>> def terminate(self) -> Iterator[Any]:
             >>>     yield "done", None
+            """
+            ...
+
+        def cleanup(self) -> None:
+            """
+            Invoked after the UDTF completes processing input rows.
+
+            This method is optional to implement and is useful for final cleanup
+            regardless of whether the UDTF processed all input rows successfully
+            or was aborted due to exceptions.
+
+            Examples
+            --------
+            >>> def cleanup(self) -> None:
+            >>>     self.conn.close()
             """
             ...
 
