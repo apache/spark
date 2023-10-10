@@ -56,7 +56,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-    val planner = new SparkConnectPlanner(sessionHolder)
+    val planner = new SparkConnectPlanner(executeHolder)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker
     val dataframe =
       Dataset.ofRows(
