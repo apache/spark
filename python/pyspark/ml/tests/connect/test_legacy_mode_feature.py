@@ -159,7 +159,7 @@ class FeatureTestsMixin:
         assembler1 = ArrayAssembler(
             inputCols=["f1", "f2", "f3", "f4"],
             outputCol="out",
-            inputFeatureSizeList=[3, 1, 1, 1],
+            featureSizes=[3, 1, 1, 1],
             handleInvalid="keep",
         )
         expected_result = [
@@ -181,12 +181,12 @@ class FeatureTestsMixin:
             assembler1.saveToLocal(save_path)
             loaded_assembler = ArrayAssembler.loadFromLocal(save_path)
             assert loaded_assembler.getInputCols() == ["f1", "f2", "f3", "f4"]
-            assert loaded_assembler.getInputFeatureSizeList() == [3, 1, 1, 1]
+            assert loaded_assembler.getFeatureSizes() == [3, 1, 1, 1]
 
         assembler2 = ArrayAssembler(
             inputCols=["f1", "f2", "f3", "f4"],
             outputCol="out",
-            inputFeatureSizeList=[3, 1, 1, 1],
+            featureSizes=[3, 1, 1, 1],
             handleInvalid="error",
         )
 

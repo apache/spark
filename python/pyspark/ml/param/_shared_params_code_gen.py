@@ -358,7 +358,7 @@ if __name__ == "__main__":
             "TypeConverters.toFloat",
         ),
         (
-            "inputFeatureSizeList",
+            "featureSizes",
             "input feature size list for input columns of vector assembler",
             None,
             "TypeConverters.toListInt",

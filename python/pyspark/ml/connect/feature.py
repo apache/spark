@@ -27,7 +27,7 @@ from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
     HasOutputCol,
-    HasInputFeatureSizeList,
+    HasFeatureSizes,
     HasHandleInvalid,
     Param,
     Params,
@@ -272,7 +272,7 @@ class ArrayAssembler(
     Transformer,
     HasInputCols,
     HasOutputCol,
-    HasInputFeatureSizeList,
+    HasFeatureSizes,
     HasHandleInvalid,
     ParamsReadWrite,
 ):
@@ -282,7 +282,7 @@ class ArrayAssembler(
     Parameters
     ----------
     You need to set param `inputCols` for specifying input column names,
-    and set param `inputFeatureSizeList` for specifying corresponding input column
+    and set param `featureSizes` for specifying corresponding input column
     feature size, for scalar type input column, corresponding feature size must be set to 1,
     otherwise, set corresponding feature size to feature array length.
     Output column is "array<double"> type and contains array of assembled features.
@@ -296,7 +296,7 @@ class ArrayAssembler(
 
     Examples
     --------
-    >>> from pyspark.ml.connect.feature import VectorAssembler
+    >>> from pyspark.ml.connect.feature import ArrayAssembler
     >>> import numpy as np
     >>>
     >>> spark_df = spark.createDataFrame(
@@ -306,10 +306,10 @@ class ArrayAssembler(
     ...     ],
     ...     schema=["f1", "f2", "f3", "f4"],
     ... )
-    >>> assembler = VectorAssembler(
+    >>> assembler = ArrayAssembler(
     ...     inputCols=["f1", "f2", "f3", "f4"],
     ...     outputCol="out",
-    ...     inputFeatureSizeList=[3, 1, 1, 1],
+    ...     featureSizes=[3, 1, 1, 1],
     ...     handleInvalid="keep",
     ... )
     >>> assembler.transform(spark_df).select("out").show(truncate=False)
@@ -333,11 +333,11 @@ class ArrayAssembler(
         *,
         inputCols: Optional[List[str]] = None,
         outputCol: Optional[str] = None,
-        inputFeatureSizeList: Optional[List[int]] = None,
+        featureSizes: Optional[List[int]] = None,
         handleInvalid: Optional[str] = "error",
     ) -> None:
         """
-        __init__(self, \\*, inputCols=None, outputCol=None, inputFeatureSizeList=None, handleInvalid="error")
+        __init__(self, \\*, inputCols=None, outputCol=None, featureSizes=None, handleInvalid="error")
         """
         super().__init__()
         kwargs = self._input_kwargs
@@ -351,12 +351,16 @@ class ArrayAssembler(
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[..., Any]:
-        feature_size_list = self.getInputFeatureSizeList()
+        feature_size_list = self.getFeatureSizes()
         if feature_size_list is None or len(feature_size_list) != len(self.getInputCols()):
             raise ValueError(
                 "'feature_size_list' param must be set with an array of integer, and"
                 "its length must be equal to number of input columns."
             )
+        for feature_size in feature_size_list:
+            if feature_size <= 0:
+                raise ValueError("All input feature sizes must be an positive integer.")
+
         assembled_feature_size = sum(feature_size_list)
         handler_invalid = self.getHandleInvalid()
 
@@ -371,6 +375,17 @@ class ArrayAssembler(
             for index, feature in enumerate(feature_list):
                 feature_size = feature_size_list[index]
 
+                if feature is not None:
+                    if np.isscalar(feature) and feature_size != 1:
+                        raise ValueError(
+                            f"The {index + 1}th input feature is a scalar value, but provided "
+                            f"feature size is {feature_size}."
+                        )
+                    if not np.isscalar(feature) and len(feature) != feature_size:
+                        raise ValueError(
+                            f"The {index + 1}th input feature size does not match "
+                            f"with provided feature size {feature_size}."
+                        )
                 if keep_invalid:
                     if feature is None:
                         assembled_array[pos : pos + feature_size] = np.nan

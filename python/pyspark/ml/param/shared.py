@@ -878,23 +878,23 @@ class HasMomentum(Params):
         return self.getOrDefault(self.momentum)
 
 
-class HasInputFeatureSizeList(Params):
+class HasFeatureSizes(Params):
     """
-    Mixin for param inputFeatureSizeList: input feature size list for input columns of vector assembler
+    Mixin for param featureSizes: input feature size list for input columns of vector assembler
     """
 
-    inputFeatureSizeList: "Param[List[int]]" = Param(
+    featureSizes: "Param[List[int]]" = Param(
         Params._dummy(),
-        "inputFeatureSizeList",
+        "featureSizes",
         "input feature size list for input columns of vector assembler",
         typeConverter=TypeConverters.toListInt,
     )
 
     def __init__(self) -> None:
-        super(HasInputFeatureSizeList, self).__init__()
+        super(HasFeatureSizes, self).__init__()
 
-    def getInputFeatureSizeList(self) -> List[int]:
+    def getFeatureSizes(self) -> List[int]:
         """
-        Gets the value of inputFeatureSizeList or its default value.
+        Gets the value of featureSizes or its default value.
         """
-        return self.getOrDefault(self.inputFeatureSizeList)
+        return self.getOrDefault(self.featureSizes)
