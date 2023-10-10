@@ -2251,7 +2251,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     // Create the function call.
-    val name = ctx.functionName.getText
+    val name = if (ctx.IDENTIFIER_KW() != null) { "IDENTIFIER" } else { ctx.functionName.getText }
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
     val arguments = ctx.argument.asScala.map { e =>
@@ -2269,14 +2269,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
 
     // Is this an IDENTIFIER clause instead of a function call?
-    if (name.toLowerCase(Locale.ROOT) == "identifier" && // IDENTIFIER (but not `IDENTIFIER`)
-      ctx.functionName().qualifiedName().start.getText.toLowerCase(Locale.ROOT) == "identifier" &&
-      arguments.length == 1 && // One argument
-      ctx.setQuantifier == null && // No other clause
-      ctx.where == null &&
-      ctx.nullsOption == null &&
-      ctx.windowSpec == null) {
-      ExpressionWithUnresolvedIdentifier(arguments.head, UnresolvedAttribute(_))
+    if (ctx.IDENTIFIER_KW() != null) {
+      if (arguments.length == 1 && // One argument
+          ctx.setQuantifier == null && // No other clause
+          ctx.where == null &&
+          ctx.nullsOption == null &&
+          ctx.windowSpec == null) {
+        ExpressionWithUnresolvedIdentifier(arguments.head, UnresolvedAttribute(_))
+      } else {
+        UnresolvedFunction(Seq("identifier"), arguments, isDistinct, filter, ignoreNulls)
+      }
     } else {
       // It's a function call
       val funcCtx = ctx.functionName
