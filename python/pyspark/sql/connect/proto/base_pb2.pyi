@@ -2844,6 +2844,64 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
         ) -> typing_extensions.Literal["file_name"] | None: ...
 
+    class SparkThrowable(google.protobuf.message.Message):
+        """SparkThrowable defines the schema for SparkThrowable exceptions."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class MessageParametersEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            value: builtins.str
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        ERROR_CLASS_FIELD_NUMBER: builtins.int
+        MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
+        error_class: builtins.str
+        """Succinct, human-readable, unique, and consistent representation of the error category."""
+        @property
+        def message_parameters(
+            self,
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+            """message parameters for the error framework."""
+        def __init__(
+            self,
+            *,
+            error_class: builtins.str | None = ...,
+            message_parameters: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_class", b"_error_class", "error_class", b"error_class"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
+                "error_class",
+                b"error_class",
+                "message_parameters",
+                b"message_parameters",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
+        ) -> typing_extensions.Literal["error_class"] | None: ...
+
     class Error(google.protobuf.message.Message):
         """Error defines the schema for the representing exception."""
 
@@ -2853,6 +2911,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         MESSAGE_FIELD_NUMBER: builtins.int
         STACK_TRACE_FIELD_NUMBER: builtins.int
         CAUSE_IDX_FIELD_NUMBER: builtins.int
+        SPARK_THROWABLE_FIELD_NUMBER: builtins.int
         @property
         def error_type_hierarchy(
             self,
@@ -2871,6 +2930,9 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             """
         cause_idx: builtins.int
         """The index of the cause error in errors."""
+        @property
+        def spark_throwable(self) -> global___FetchErrorDetailsResponse.SparkThrowable:
+            """The structured data of a SparkThrowable exception."""
         def __init__(
             self,
             *,
@@ -2881,11 +2943,19 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             ]
             | None = ...,
             cause_idx: builtins.int | None = ...,
+            spark_throwable: global___FetchErrorDetailsResponse.SparkThrowable | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_cause_idx", b"_cause_idx", "cause_idx", b"cause_idx"
+                "_cause_idx",
+                b"_cause_idx",
+                "_spark_throwable",
+                b"_spark_throwable",
+                "cause_idx",
+                b"cause_idx",
+                "spark_throwable",
+                b"spark_throwable",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -2893,19 +2963,28 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_cause_idx",
                 b"_cause_idx",
+                "_spark_throwable",
+                b"_spark_throwable",
                 "cause_idx",
                 b"cause_idx",
                 "error_type_hierarchy",
                 b"error_type_hierarchy",
                 "message",
                 b"message",
+                "spark_throwable",
+                b"spark_throwable",
                 "stack_trace",
                 b"stack_trace",
             ],
         ) -> None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_cause_idx", b"_cause_idx"]
         ) -> typing_extensions.Literal["cause_idx"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_spark_throwable", b"_spark_throwable"]
+        ) -> typing_extensions.Literal["spark_throwable"] | None: ...
 
     ROOT_ERROR_IDX_FIELD_NUMBER: builtins.int
     ERRORS_FIELD_NUMBER: builtins.int

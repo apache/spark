@@ -16,9 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
-import pandas as pd
-
 from typing import (
     Any,
     Generic,
@@ -30,6 +27,8 @@ from typing import (
     Tuple,
     Callable,
 )
+
+import pandas as pd
 
 from pyspark import since
 from pyspark.ml.common import inherit_doc

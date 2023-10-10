@@ -768,6 +768,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
  * access.
  */
 class FailFormatCheckFileSystem extends RawLocalFileSystem {
+  override def getScheme(): String = "failformatcheck"
   override def getFileStatus(f: Path): FileStatus = {
     if (f.getName == FileStreamSink.metadataDir) {
       throw new IOException("cannot access metadata log")

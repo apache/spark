@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -86,6 +85,8 @@ class NumPyCompatTestsMixin:
             np.left_shift(psdf1, psdf2)
 
     def test_np_spark_compat_series(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -134,6 +135,8 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]

@@ -132,8 +132,7 @@ object PythonUDTFRunner {
       case None =>
         dataOut.writeInt(0)
     }
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

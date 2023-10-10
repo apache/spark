@@ -24,7 +24,6 @@ import time
 from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
-
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -757,6 +756,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 return self._udtf.terminate()
             return iter(())
 
+        def cleanup(self) -> None:
+            if hasattr(self._udtf, "cleanup"):
+                self._udtf.cleanup()
+
         def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
             if len(self._prev_arguments) > 0:
@@ -894,15 +897,19 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         def mapper(_, it):
             try:
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -977,14 +984,18 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
                 for a in it:
                     yield eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
