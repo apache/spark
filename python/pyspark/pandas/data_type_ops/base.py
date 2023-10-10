@@ -381,17 +381,16 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '<')
+            return self.__binary_ops_list_like(left, right, "<")
         else:
             from pyspark.pandas.base import column_op
 
             Column = get_column_class()
             return column_op(Column.__lt__)(left, right)
 
-
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '<=')
+            return self.__binary_ops_list_like(left, right, "<=")
         else:
             from pyspark.pandas.base import column_op
 
@@ -400,7 +399,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '>')
+            return self.__binary_ops_list_like(left, right, ">")
         else:
             from pyspark.pandas.base import column_op
 
@@ -409,7 +408,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '>=')
+            return self.__binary_ops_list_like(left, right, ">=")
         else:
             from pyspark.pandas.base import column_op
 
@@ -418,7 +417,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '==')
+            return self.__binary_ops_list_like(left, right, "==")
         else:
             from pyspark.pandas.base import column_op
 
@@ -427,10 +426,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (list, tuple)):
-            return self.__binary_ops_list_like(left, right, '!=')
+            return self.__binary_ops_list_like(left, right, "!=")
         else:
             from pyspark.pandas.base import column_op
-            
+
             Column = get_column_class()
             return column_op(Column.__ne__)(left, right)
 
@@ -461,19 +460,19 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def __binary_ops_list_like(self, left: IndexOpsLike, right: Any, op: str) -> SeriesOrIndex:
         ops = {
-        '==': lambda x, y: x == y,
-        '<': lambda x, y: x < y,
-        '>': lambda x, y: x > y,
-        '<=': lambda x, y: x <= y,
-        '>=': lambda x, y: x >= y,
-        '!=': lambda x, y: x != y
+            "==": lambda x, y: x == y,
+            "<": lambda x, y: x < y,
+            ">": lambda x, y: x > y,
+            "<=": lambda x, y: x <= y,
+            ">=": lambda x, y: x >= y,
+            "!=": lambda x, y: x != y,
         }
 
         if op not in ops:
             raise ValueError(f"Operator '{op}' not supported")
 
         operation = ops[op]
-        
+
         from pyspark.pandas.series import first_series, scol_for
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
@@ -554,9 +553,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 for index_field in sdf_new.select(index_spark_columns).schema.fields
             ],
             data_fields=[
-                InternalField.from_struct_field(
-                    sdf_new.select(data_spark_columns).schema.fields[0]
-                )
+                InternalField.from_struct_field(sdf_new.select(data_spark_columns).schema.fields[0])
             ],
         )
         return first_series(DataFrame(internal))
