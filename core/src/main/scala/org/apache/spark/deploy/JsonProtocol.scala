@@ -188,7 +188,7 @@ private[deploy] object JsonProtocol {
    * Export the [[MasterStateResponse]] to a Json object. A [[MasterStateResponse]] consists the
    * information of a master node.
    *
-   * @return a Json object containing the following fields:
+   * @return a Json object containing the following fields if `field` is None:
    *         `url` the url of the master node
    *         `workers` a list of Json objects of [[WorkerInfo]] of the workers allocated to the
    *         master
@@ -208,7 +208,9 @@ private[deploy] object JsonProtocol {
    *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
    *         of the master
    *         `status` status of the master,
-   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]]
+   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]].
+   *         If `field` is not None, the Json object will contain the matched field.
+   *         If `field` doesn't match, the Json object `(field -> "")` is returned.
    */
   def writeMasterState(field: Option[String], obj: MasterStateResponse): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
