@@ -50,8 +50,6 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             Notes
             -----
-            - This method does not accept any extra arguments. Only the default
-              constructor is supported.
             - You cannot create or reference the Spark session within the UDTF. Any
               attempt to do so will result in a serialization error.
             - If the below `analyze` method is implemented, it is also possible to define this
@@ -87,15 +85,16 @@ To implement a Python UDTF, you first need to define a class implementing the me
                 is_table: bool
 
             This method returns an instance of the `AnalyzeResult` class which includes the result
-            table's schema as well as other optional metadata about the result table including these
-            fields. If `with_single_partition` is set to True, the query planner will arrange a
-            repartitioning operation from the previous execution stage such that all rows of the
-            input table are consumed by the `eval` method from exactly one instance of the UDTF
-            class. On the other hand, if the `partition_by` list is non-empty, the query planner
-            will arrange a repartitioning such that all rows with each unique combination of values
-            of the partitioning columns are consumed by a separate unique instance of the UDTF
-            class. If `order_by` is non-empty, this specifies the requested ordering of rows within
-            each partition:
+            table's schema as a StructType. If the UDTF accepts an input table argument, then the
+            `AnalyzeResult` can also include a requested way to partition the rows of the input
+            table across several UDTF calls. If `with_single_partition` is set to True, the query
+            planner will arrange a repartitioning operation from the previous execution stage such
+            that all rows of the input table are consumed by the `eval` method from exactly one
+            instance of the UDTF class. On the other hand, if the `partition_by` list is non-empty,
+            the query planner will arrange a repartitioning such that all rows with each unique
+            combination of values of the partitioning columns are consumed by a separate unique
+            instance of the UDTF class. If `order_by` is non-empty, this specifies the requested
+            ordering of rows within each partition.
 
                 schema: StructType
                 with_single_partition: bool = False
