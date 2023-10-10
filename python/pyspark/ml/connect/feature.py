@@ -28,6 +28,9 @@ from pyspark.ml.param.shared import (
     HasOutputCol,
     HasInputFeatureSizeList,
     HasHandleInvalid,
+    Param,
+    Params,
+    TypeConverters,
 )
 from pyspark.ml.connect.base import Estimator, Model, Transformer
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
@@ -313,6 +316,16 @@ class ArrayAssembler(
 
     _input_kwargs: Dict[str, Any]
 
+    # Override doc of handleInvalid param.
+    handleInvalid: Param[str] = Param(
+        Params._dummy(),
+        "handleInvalid",
+        "how to handle invalid entries. Options are 'error' (throw an error), "
+        "or 'keep' (return relevant number of NaN in the output). Default value "
+        "is 'error'",
+        typeConverter=TypeConverters.toString,
+    )
+
     @keyword_only
     def __init__(
         self,
@@ -378,11 +391,3 @@ class ArrayAssembler(
             return pd.Series(assemble_features(*feature_list) for feature_list in zip(*series_list))
 
         return transform_fn
-
-
-# Override doc of VectorAssembler.handleInvalid param.
-VectorAssembler.handleInvalid.doc = (
-    "how to handle invalid entries. Options are 'error' (throw an error), "
-    "or 'keep' (return relevant number of NaN in the output). Default value "
-    "is 'error'"
-)
