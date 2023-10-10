@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.FileNotFoundException
 
 import scala.collection.mutable
+import scala.util.matching.Regex
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -86,11 +87,12 @@ private[spark] object HadoopFSUtils extends Logging {
       filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
     logInfo(s"Listing $path with listFiles API")
     try {
+      val prefixLength = path.toString.length
       val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
       val statues = new Iterator[LocatedFileStatus]() {
         def next(): LocatedFileStatus = remoteIter.next
         def hasNext(): Boolean = remoteIter.hasNext
-      }.filterNot(status => shouldFilterOutPath(status.getPath.toString))
+      }.filterNot(status => shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
         .filter(f => filter.accept(f.getPath))
         .toArray
       Seq((path, statues))
@@ -342,13 +344,24 @@ private[spark] object HadoopFSUtils extends Logging {
     exclude && !include
   }
 
+  private val underscore: Regex = "/_[^=/]*/".r
+  private val underscoreEnd: Regex = "/_[^=/]*$".r
+
   /** Checks if we should filter out this path. */
   def shouldFilterOutPath(path: String): Boolean = {
-    val exclude = (path.contains("/_") && !path.contains("=")) || path.contains("/.")
-    val include = path.contains("/_common_metadata/") ||
-      path.endsWith("/_common_metadata") ||
-      path.contains("/_metadata/") ||
-      path.endsWith("/_metadata")
-    (exclude && !include) || shouldFilterOutPathName(path)
+    if (path.contains("/.") || path.endsWith("._COPYING_")) return true
+    underscoreEnd.findFirstIn(path) match {
+      case Some(dir) if dir.equals("/_metadata") || dir.equals("/_common_metadata") => false
+      case Some(_) => true
+      case None =>
+        underscore.findFirstIn(path) match {
+          case Some(dir) if dir.equals("/_metadata/") =>
+            shouldFilterOutPath(path.replaceFirst("/_metadata", ""))
+          case Some(dir) if dir.equals("/_common_metadata/") =>
+            shouldFilterOutPath(path.replaceFirst("/_common_metadata", ""))
+          case Some(_) => true
+          case None => false
+        }
+    }
   }
 }
