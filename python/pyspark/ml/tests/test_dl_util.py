@@ -18,9 +18,10 @@ from contextlib import contextmanager
 import os
 import textwrap
 from typing import Any, BinaryIO, Callable, Iterator
-
 import unittest
+
 from parameterized import parameterized
+
 from pyspark import cloudpickle
 from pyspark.ml.dl_util import FunctionPickler
 
