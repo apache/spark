@@ -91,8 +91,7 @@ abstract class BasePythonUDFRunner(
         try {
           stream.readInt() match {
             case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              stream.readFully(obj)
+              val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
               obj
             case 0 => Array.emptyByteArray
