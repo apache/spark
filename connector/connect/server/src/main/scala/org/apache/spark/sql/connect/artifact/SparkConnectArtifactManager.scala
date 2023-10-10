@@ -26,6 +26,8 @@ import javax.ws.rs.core.UriBuilder
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
+import io.grpc.Status
+import io.grpc.StatusRuntimeException
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
@@ -82,6 +84,40 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
    */
   def getSparkConnectPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
+  private def areFilesEqual(path1: Path, path2: Path): Boolean = {
+    val size1 = Files.size(path1)
+    val size2 = Files.size(path2)
+
+    if (size1 != size2) {
+      return false // Different file sizes, so they can't be equal
+    }
+
+    val buffer1 = new Array[Byte](4096)
+    val buffer2 = new Array[Byte](4096)
+
+    val stream1 = Files.newInputStream(path1)
+    val stream2 = Files.newInputStream(path2)
+
+    try {
+      var bytesRead1 = 0
+      var bytesRead2 = 0
+
+      do {
+        bytesRead1 = stream1.read(buffer1)
+        bytesRead2 = stream2.read(buffer2)
+
+        if (bytesRead1 != bytesRead2 || !java.util.Arrays.equals(buffer1, buffer2)) {
+          return false // Files have different content
+        }
+      } while (bytesRead1 > 0 && bytesRead2 > 0)
+    } finally {
+      stream1.close()
+      stream2.close()
+    }
+
+    true // Files have the same content
+  }
+
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use.
@@ -125,11 +161,17 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
       Files.createDirectories(target.getParent)
-      // Disallow overwriting non-classfile artifacts
+
+      // Disallow overwriting with modified version
       if (Files.exists(target)) {
-        throw new RuntimeException(
+        // makes the query idempotent
+        if (areFilesEqual(target, serverLocalStagingPath)) {
+          return
+        }
+
+        throw Status.ALREADY_EXISTS.withDescription(
           s"Duplicate Artifact: $remoteRelativePath. " +
-            "Artifacts cannot be overwritten.")
+              "Artifacts cannot be overwritten.").asRuntimeException()
       }
       Files.move(serverLocalStagingPath, target)
 
