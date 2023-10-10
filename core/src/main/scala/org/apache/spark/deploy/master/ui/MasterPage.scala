@@ -40,8 +40,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   override def renderJson(request: HttpServletRequest): JValue = {
     jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
-      case None => JsonProtocol.writeMasterState(None, getMasterState)
-      case Some(m) => JsonProtocol.writeMasterState(Some(m.group(1)), getMasterState)
+      case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
     }
   }
 

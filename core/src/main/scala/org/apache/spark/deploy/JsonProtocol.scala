@@ -212,7 +212,7 @@ private[deploy] object JsonProtocol {
    *         If `field` is not None, the Json object will contain the matched field.
    *         If `field` doesn't match, the Json object `(field -> "")` is returned.
    */
-  def writeMasterState(field: Option[String], obj: MasterStateResponse): JObject = {
+  def writeMasterState(obj: MasterStateResponse, field: Option[String] = None): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
     field match {
       case None =>
