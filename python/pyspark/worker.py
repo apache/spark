@@ -25,7 +25,6 @@ import time
 from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
-
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry

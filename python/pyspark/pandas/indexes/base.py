@@ -53,7 +53,6 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
 from pyspark.pandas.config import get_option, option_context

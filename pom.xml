@@ -115,7 +115,7 @@
     <java.version>17</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.9.4</maven.version>
+    <maven.version>3.9.5</maven.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.5</asm.version>
@@ -2970,9 +2970,6 @@
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
               <arg>-Wconf:cat=other-nullary-override:wv</arg>
-              <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
-              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
-              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite:wv</arg>
               <!--
                 SPARK-33775 Suppress compilation warnings that contain the following contents.
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
