@@ -62,7 +62,7 @@ def sql(
     Also the method can bind named parameters to SQL literals from `args`.
 
     .. note::
-        pandas-on-Spark objects are not supported for Spark Connect.
+        pandas-on-Spark DataFrame is not supported for Spark Connect.
 
     Parameters
     ----------
@@ -203,10 +203,10 @@ def sql(
     session = default_session()
     formatter = PandasSQLStringFormatter(session)
     try:
-        # ps.DataFrame and ps.Series are not supported for Spark Connect currently.
+        # ps.DataFrame are not supported for Spark Connect currently.
         if is_remote():
             for obj in kwargs.values():
-                if isinstance(obj, (ps.DataFrame, ps.Series)):
+                if isinstance(obj, ps.DataFrame):
                     raise PySparkTypeError(
                         error_class="UNSUPPORTED_DATA_TYPE",
                         message_parameters={"data_type": type(obj).__name__},
