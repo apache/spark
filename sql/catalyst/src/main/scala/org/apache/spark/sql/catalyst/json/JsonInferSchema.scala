@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.{CharConversionException, IOException}
+import java.io.{CharConversionException, FileNotFoundException, IOException}
 import java.nio.charset.MalformedInputException
 import java.util.Comparator
 
@@ -100,6 +100,11 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             val wrappedCharException = new CharConversionException(msg)
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
+          case e: FileNotFoundException if options.ignoreMissingFiles =>
+            logWarning(s"Skipped missing file", e)
+            Some(StructType(Nil))
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
           case e: IOException if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))

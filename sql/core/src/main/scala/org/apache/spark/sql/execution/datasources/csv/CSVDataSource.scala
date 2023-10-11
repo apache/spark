@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
 import com.univocity.parsers.csv.CsvParser
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.Logging
@@ -199,6 +199,11 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
           new CsvParser(parsedOptions.asParserSettings),
           encoding = parsedOptions.charset)
       } catch {
+        case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+          logWarning(s"Skipped missing file: ${lines.getPath()}", e)
+          Array.empty[Array[String]]
+        // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+        case e: FileNotFoundException if !parsedOptions.ignoreMissingFiles => throw e
         case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
           logWarning(
             s"Skipped the rest of the content in the corrupted file: ${lines.getPath()}", e)
