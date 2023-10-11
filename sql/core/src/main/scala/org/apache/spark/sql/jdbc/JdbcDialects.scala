@@ -181,7 +181,8 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param statement The Statement object used to execute SQL statements.
    * @param tableName The name of the table to be created.
    * @param strSchema The schema of the table to be created.
-   * @param options The JDBC options. It contains table_options or partition_options.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
