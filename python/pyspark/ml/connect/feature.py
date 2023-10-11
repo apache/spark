@@ -337,7 +337,9 @@ class ArrayAssembler(
         handleInvalid: Optional[str] = "error",
     ) -> None:
         """
-        __init__(self, \\*, inputCols=None, outputCol=None, featureSizes=None, handleInvalid="error")
+        __init__(
+            self, \\*, inputCols=None, outputCol=None, featureSizes=None, handleInvalid="error"
+        )
         """
         super().__init__()
         kwargs = self._input_kwargs
