@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -1562,6 +1563,15 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DEFAULT_CACHE_STORAGE_LEVEL = buildConf("spark.sql.defaultCacheStorageLevel")
+    .doc("The default storage level of `dataset.cache()`, `catalog.cacheTable()` and " +
+      "sql query `CACHE TABLE t`.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(StorageLevelMapper.values.map(_.name()).toSet)
+    .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
@@ -5026,6 +5036,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
+  def defaultCacheStorageLevel: StorageLevel =
+    StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 

@@ -84,7 +84,7 @@ case class BatchEvalPythonUDTFExec(
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).toIterator
+        .array.map(_.asInstanceOf[InternalRow]).iterator
     }
   }
 
