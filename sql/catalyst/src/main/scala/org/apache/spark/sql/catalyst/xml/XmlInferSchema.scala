@@ -230,13 +230,13 @@ private[sql] object XmlInferSchema {
         case _ => // do nothing
       }
     }
-     // A structure object is an attribute-only element
-     // if it only consists of attributes and valueTags.
+    // A structure object is an attribute-only element
+    // if it only consists of attributes and valueTags.
     // If not, we will remove the valueTag field from the schema
     val attributesOnly = nameToDataType.forall {
-       case (fieldName, dataTypes) =>
-         dataTypes.length == 1 &&
-           (fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix))
+      case (fieldName, dataTypes) =>
+        dataTypes.length == 1 &&
+        (fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix))
     }
     if (!attributesOnly) {
       nameToDataType -= options.valueTag

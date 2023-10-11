@@ -1647,7 +1647,6 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45488: root-level value tag for attributes-only object") {
-
     val schema = buildSchema(field("_attr"), field("_VALUE"))
     val results = Seq(
       // user specified schema
@@ -1668,10 +1667,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45488: root-level value tag for attributes-only object - from xml") {
-    val xmlData =
-      """
-         |<ROW attr="attr1">123456</ROW>
-         |""".stripMargin
+    val xmlData = """<ROW attr="attr1">123456</ROW>"""
     val df = Seq((1, xmlData)).toDF("number", "payload")
     val xmlSchema = schema_of_xml(xmlData)
     val schema = buildSchema(

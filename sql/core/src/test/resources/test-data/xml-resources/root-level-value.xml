@@ -6,4 +6,7 @@
         value3
         <!-- this is a comment-->
     </ROW>
+    <ROW>4<tag>5</tag></ROW>
+    <ROW><tag>6</tag>7</ROW>
+    <ROW attr="8"></ROW>
 </ROWSET>
