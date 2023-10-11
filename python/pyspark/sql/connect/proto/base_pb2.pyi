@@ -1202,17 +1202,42 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         ROW_COUNT_FIELD_NUMBER: builtins.int
         DATA_FIELD_NUMBER: builtins.int
+        START_OFFSET_FIELD_NUMBER: builtins.int
         row_count: builtins.int
+        """Count rows in `data`. Must match the number of rows inside `data`."""
         data: builtins.bytes
+        """Serialized Arrow data."""
+        start_offset: builtins.int
+        """If set, row offset of the start of this ArrowBatch in execution results."""
         def __init__(
             self,
             *,
             row_count: builtins.int = ...,
             data: builtins.bytes = ...,
+            start_offset: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_start_offset", b"_start_offset", "start_offset", b"start_offset"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_start_offset",
+                b"_start_offset",
+                "data",
+                b"data",
+                "row_count",
+                b"row_count",
+                "start_offset",
+                b"start_offset",
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_start_offset", b"_start_offset"]
+        ) -> typing_extensions.Literal["start_offset"] | None: ...
 
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
