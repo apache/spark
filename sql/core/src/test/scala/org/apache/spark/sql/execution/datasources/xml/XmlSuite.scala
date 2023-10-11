@@ -1667,7 +1667,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("root-level value tag for attributes-only object - from xml") {
+  test("SPARK-45488: root-level value tag for attributes-only object - from xml") {
     val xmlData =
       """
          |<ROW attr="attr1">123456</ROW>
