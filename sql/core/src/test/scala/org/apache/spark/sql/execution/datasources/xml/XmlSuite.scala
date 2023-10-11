@@ -1666,6 +1666,46 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-45488: root-level value tag for not attributes-only object") {
+    val ATTRIBUTE_NAME = "_attr"
+    val TAG_NAME = "tag"
+    val VALUETAG_NAME = "_VALUE"
+    val schema = buildSchema(
+      field(ATTRIBUTE_NAME),
+      field(TAG_NAME, LongType),
+      field(VALUETAG_NAME))
+    val dfs = Seq(
+      // user specified schema
+      spark.read
+        .schema(schema)
+        .xml(getTestResourcePath(resDir + "root-level-value-none.xml")),
+      // schema inference
+      spark.read
+        .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
+    )
+    dfs.foreach { df =>
+      val result = df.collect()
+      assert(result.length === 5)
+      assert(result(0).get(0) == null && result(0).get(1) == null)
+      assert(
+        result(1).getAs[String](ATTRIBUTE_NAME) == "attr1"
+          && result(1).getAs[Any](TAG_NAME) == null
+      )
+      assert(
+        result(2).getAs[Long](TAG_NAME) == 5L
+          && result(2).getAs[Any](ATTRIBUTE_NAME) == null
+      )
+      assert(
+        result(3).getAs[Long](TAG_NAME) == 6L
+          && result(3).getAs[Any](ATTRIBUTE_NAME) == null
+      )
+      assert(
+        result(4).getAs[String](ATTRIBUTE_NAME) == "8"
+          && result(4).getAs[Any](TAG_NAME) == null
+      )
+    }
+  }
+
   test("SPARK-45488: root-level value tag for attributes-only object - from xml") {
     val xmlData = """<ROW attr="attr1">123456</ROW>"""
     val df = Seq((1, xmlData)).toDF("number", "payload")
