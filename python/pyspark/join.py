@@ -44,7 +44,7 @@ def _do_python_join(rdd, other, numPartitions, dispatch):
 def python_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -57,7 +57,7 @@ def python_join(rdd, other, numPartitions):
 def python_right_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -72,7 +72,7 @@ def python_right_outer_join(rdd, other, numPartitions):
 def python_left_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -87,7 +87,7 @@ def python_left_outer_join(rdd, other, numPartitions):
 def python_full_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:

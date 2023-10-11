@@ -2680,6 +2680,324 @@ Project [f1#x, q1#xL, q2#xL, f1#x, f1#x]
 
 -- !query
 select * from
+   text_tbl t1
+   left join int8_tbl i8
+   on i8.q2 = 123,
+   lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1
+-- !query analysis
+Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
++- Filter (f1#x = f1#x)
+   +- LateralJoin lateral-subquery#x [q1#xL], Inner
+      :  +- SubqueryAlias ss
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(q1#xL) AS q1#xL, f1#x]
+      :              +- SubqueryAlias t2
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- Join LeftOuter, (q2#xL = cast(123 as bigint))
+         :- SubqueryAlias t1
+         :  +- SubqueryAlias text_tbl
+         :     +- View (`TEXT_TBL`, [f1#x])
+         :        +- Project [cast(f1#x as string) AS f1#x]
+         :           +- Project [f1#x]
+         :              +- SubqueryAlias v
+         :                 +- Project [col1#x AS f1#x]
+         :                    +- LocalRelation [col1#x]
+         +- SubqueryAlias i8
+            +- SubqueryAlias int8_tbl
+               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                  +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
+                     +- Project [q1#xL, q2#xL]
+                        +- SubqueryAlias v
+                           +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
+                              +- LocalRelation [col1#xL, col2#xL]
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1
+-- !query analysis
+Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x]
++- Filter (f1#x = f1#x)
+   +- LateralJoin lateral-subquery#x [q1#xL], Inner
+      :  +- SubqueryAlias ss
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(q1#xL) AS q1#xL, f1#x]
+      :              +- SubqueryAlias t2
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- Join LeftOuter, (q2#xL = cast(123 as bigint))
+         :- SubqueryAlias t1
+         :  +- SubqueryAlias text_tbl
+         :     +- View (`TEXT_TBL`, [f1#x])
+         :        +- Project [cast(f1#x as string) AS f1#x]
+         :           +- Project [f1#x]
+         :              +- SubqueryAlias v
+         :                 +- Project [col1#x AS f1#x]
+         :                    +- LocalRelation [col1#x]
+         +- SubqueryAlias i8
+            +- SubqueryAlias int8_tbl
+               +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                  +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
+                     +- Project [q1#xL, q2#xL]
+                        +- SubqueryAlias v
+                           +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
+                              +- LocalRelation [col1#xL, col2#xL]
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1
+-- !query analysis
+Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
++- Filter (f1#x = f1#x)
+   +- LateralJoin lateral-subquery#x [q1#xL && f1#x], Inner
+      :  +- SubqueryAlias ss2
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(q1#xL) AS q1#xL, outer(f1#x) AS f1#x]
+      :              +- SubqueryAlias t3
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- LateralJoin lateral-subquery#x [q1#xL], Inner
+         :  +- SubqueryAlias ss1
+         :     +- GlobalLimit 1
+         :        +- LocalLimit 1
+         :           +- Project [outer(q1#xL) AS q1#xL, f1#x]
+         :              +- SubqueryAlias t2
+         :                 +- SubqueryAlias text_tbl
+         :                    +- View (`TEXT_TBL`, [f1#x])
+         :                       +- Project [cast(f1#x as string) AS f1#x]
+         :                          +- Project [f1#x]
+         :                             +- SubqueryAlias v
+         :                                +- Project [col1#x AS f1#x]
+         :                                   +- LocalRelation [col1#x]
+         +- Join LeftOuter, (q2#xL = cast(123 as bigint))
+            :- SubqueryAlias t1
+            :  +- SubqueryAlias text_tbl
+            :     +- View (`TEXT_TBL`, [f1#x])
+            :        +- Project [cast(f1#x as string) AS f1#x]
+            :           +- Project [f1#x]
+            :              +- SubqueryAlias v
+            :                 +- Project [col1#x AS f1#x]
+            :                    +- LocalRelation [col1#x]
+            +- SubqueryAlias i8
+               +- SubqueryAlias int8_tbl
+                  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                     +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
+                        +- Project [q1#xL, q2#xL]
+                           +- SubqueryAlias v
+                              +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
+                                 +- LocalRelation [col1#xL, col2#xL]
+
+
+-- !query
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1
+-- !query analysis
+Project [f1#x, q1#xL, q2#xL, q1#xL, f1#x, q1#xL, f1#x]
++- Filter (f1#x = f1#x)
+   +- LateralJoin lateral-subquery#x [q1#xL && f1#x], Inner
+      :  +- SubqueryAlias ss2
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(q1#xL) AS q1#xL, outer(f1#x) AS f1#x]
+      :              +- SubqueryAlias t3
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- LateralJoin lateral-subquery#x [q1#xL], Inner
+         :  +- SubqueryAlias ss1
+         :     +- GlobalLimit 1
+         :        +- LocalLimit 1
+         :           +- Project [outer(q1#xL) AS q1#xL, f1#x]
+         :              +- SubqueryAlias t2
+         :                 +- SubqueryAlias text_tbl
+         :                    +- View (`TEXT_TBL`, [f1#x])
+         :                       +- Project [cast(f1#x as string) AS f1#x]
+         :                          +- Project [f1#x]
+         :                             +- SubqueryAlias v
+         :                                +- Project [col1#x AS f1#x]
+         :                                   +- LocalRelation [col1#x]
+         +- Join LeftOuter, (q2#xL = cast(123 as bigint))
+            :- SubqueryAlias t1
+            :  +- SubqueryAlias text_tbl
+            :     +- View (`TEXT_TBL`, [f1#x])
+            :        +- Project [cast(f1#x as string) AS f1#x]
+            :           +- Project [f1#x]
+            :              +- SubqueryAlias v
+            :                 +- Project [col1#x AS f1#x]
+            :                    +- LocalRelation [col1#x]
+            +- SubqueryAlias i8
+               +- SubqueryAlias int8_tbl
+                  +- View (`INT8_TBL`, [q1#xL,q2#xL])
+                     +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
+                        +- Project [q1#xL, q2#xL]
+                           +- SubqueryAlias v
+                              +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]
+                                 +- LocalRelation [col1#xL, col2#xL]
+
+
+-- !query
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0
+-- !query analysis
+Project [1 AS 1#x]
++- Filter (f1#x = c0#x)
+   +- LateralJoin lateral-subquery#x [f1#x], Inner
+      :  +- SubqueryAlias ss1
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(f1#x) AS c0#x]
+      :              +- SubqueryAlias tt5
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- Join LeftOuter, (f1#x = f1#x)
+         :- Join LeftOuter, (f1#x = foo)
+         :  :- Join Inner, (f1#x = foo)
+         :  :  :- SubqueryAlias tt1
+         :  :  :  +- SubqueryAlias text_tbl
+         :  :  :     +- View (`TEXT_TBL`, [f1#x])
+         :  :  :        +- Project [cast(f1#x as string) AS f1#x]
+         :  :  :           +- Project [f1#x]
+         :  :  :              +- SubqueryAlias v
+         :  :  :                 +- Project [col1#x AS f1#x]
+         :  :  :                    +- LocalRelation [col1#x]
+         :  :  +- SubqueryAlias tt2
+         :  :     +- SubqueryAlias text_tbl
+         :  :        +- View (`TEXT_TBL`, [f1#x])
+         :  :           +- Project [cast(f1#x as string) AS f1#x]
+         :  :              +- Project [f1#x]
+         :  :                 +- SubqueryAlias v
+         :  :                    +- Project [col1#x AS f1#x]
+         :  :                       +- LocalRelation [col1#x]
+         :  +- SubqueryAlias tt3
+         :     +- SubqueryAlias text_tbl
+         :        +- View (`TEXT_TBL`, [f1#x])
+         :           +- Project [cast(f1#x as string) AS f1#x]
+         :              +- Project [f1#x]
+         :                 +- SubqueryAlias v
+         :                    +- Project [col1#x AS f1#x]
+         :                       +- LocalRelation [col1#x]
+         +- SubqueryAlias tt4
+            +- SubqueryAlias text_tbl
+               +- View (`TEXT_TBL`, [f1#x])
+                  +- Project [cast(f1#x as string) AS f1#x]
+                     +- Project [f1#x]
+                        +- SubqueryAlias v
+                           +- Project [col1#x AS f1#x]
+                              +- LocalRelation [col1#x]
+
+
+-- !query
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0
+-- !query analysis
+Project [1 AS 1#x]
++- Filter (f1#x = c0#x)
+   +- LateralJoin lateral-subquery#x [f1#x], Inner
+      :  +- SubqueryAlias ss1
+      :     +- GlobalLimit 1
+      :        +- LocalLimit 1
+      :           +- Project [outer(f1#x) AS c0#x]
+      :              +- SubqueryAlias tt5
+      :                 +- SubqueryAlias text_tbl
+      :                    +- View (`TEXT_TBL`, [f1#x])
+      :                       +- Project [cast(f1#x as string) AS f1#x]
+      :                          +- Project [f1#x]
+      :                             +- SubqueryAlias v
+      :                                +- Project [col1#x AS f1#x]
+      :                                   +- LocalRelation [col1#x]
+      +- Join LeftOuter, (f1#x = f1#x)
+         :- Join LeftOuter, (f1#x = foo)
+         :  :- Join Inner, (f1#x = foo)
+         :  :  :- SubqueryAlias tt1
+         :  :  :  +- SubqueryAlias text_tbl
+         :  :  :     +- View (`TEXT_TBL`, [f1#x])
+         :  :  :        +- Project [cast(f1#x as string) AS f1#x]
+         :  :  :           +- Project [f1#x]
+         :  :  :              +- SubqueryAlias v
+         :  :  :                 +- Project [col1#x AS f1#x]
+         :  :  :                    +- LocalRelation [col1#x]
+         :  :  +- SubqueryAlias tt2
+         :  :     +- SubqueryAlias text_tbl
+         :  :        +- View (`TEXT_TBL`, [f1#x])
+         :  :           +- Project [cast(f1#x as string) AS f1#x]
+         :  :              +- Project [f1#x]
+         :  :                 +- SubqueryAlias v
+         :  :                    +- Project [col1#x AS f1#x]
+         :  :                       +- LocalRelation [col1#x]
+         :  +- SubqueryAlias tt3
+         :     +- SubqueryAlias text_tbl
+         :        +- View (`TEXT_TBL`, [f1#x])
+         :           +- Project [cast(f1#x as string) AS f1#x]
+         :              +- Project [f1#x]
+         :                 +- SubqueryAlias v
+         :                    +- Project [col1#x AS f1#x]
+         :                       +- LocalRelation [col1#x]
+         +- SubqueryAlias tt4
+            +- SubqueryAlias text_tbl
+               +- View (`TEXT_TBL`, [f1#x])
+                  +- Project [cast(f1#x as string) AS f1#x]
+                     +- Project [f1#x]
+                        +- SubqueryAlias v
+                           +- Project [col1#x AS f1#x]
+                              +- LocalRelation [col1#x]
+
+
+-- !query
+select * from
   (select 1 as id) as xx
   left join
     (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))

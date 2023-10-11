@@ -22,7 +22,6 @@ import threading
 import os
 import warnings
 from collections.abc import Sized
-from distutils.version import LooseVersion
 from functools import reduce
 from threading import RLock
 from typing import (
@@ -45,12 +44,12 @@ import pandas as pd
 import pyarrow as pa
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
-    is_datetime64tz_dtype,
     is_timedelta64_dtype,
 )
 import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
@@ -180,10 +179,16 @@ class SparkSession:
         def _apply_options(self, session: "SparkSession") -> None:
             with self._lock:
                 for k, v in self._options.items():
-                    try:
-                        session.conf.set(k, v)
-                    except Exception as e:
-                        warnings.warn(str(e))
+                    # the options are applied after session creation,
+                    # so following options always take no effect
+                    if k not in [
+                        "spark.remote",
+                        "spark.master",
+                    ]:
+                        try:
+                            session.conf.set(k, v)
+                        except Exception as e:
+                            warnings.warn(str(e))
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
@@ -413,7 +418,7 @@ class SparkSession:
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
                     TimestampType()
-                    if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
                     else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
                     else None
@@ -552,7 +557,7 @@ class SparkSession:
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:
-            return DataFrame.withPlan(SQL(sqlQuery, args), self)
+            return DataFrame.withPlan(cmd, self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -805,7 +810,6 @@ class SparkSession:
         """
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
-
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master

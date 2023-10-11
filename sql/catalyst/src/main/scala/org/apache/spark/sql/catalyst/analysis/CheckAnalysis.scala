@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
@@ -154,10 +155,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
-      if (refCount == 0) checkAnalysis0(relation.child)
+      try {
+        if (refCount == 0) checkAnalysis0(relation.child)
+      } catch {
+        case e: AnalysisException =>
+          throw new ExtendedAnalysisException(e, relation.child)
+      }
+
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    checkAnalysis0(inlineCTE(plan))
+    val inlinedPlan = inlineCTE(plan)
+    try {
+      checkAnalysis0(inlinedPlan)
+    } catch {
+      case e: AnalysisException =>
+        throw new ExtendedAnalysisException(e, inlinedPlan)
+    }
     plan.setAnalyzed()
   }
 
@@ -484,7 +497,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
-          case CollectMetrics(name, metrics, _) =>
+          case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
                 errorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
@@ -1062,6 +1075,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // allowed by spark.
         checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
+      case _: FunctionTableSubqueryArgumentExpression =>
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+          messageParameters = Map("treeNode" -> planToString(plan)))
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join |
@@ -1084,17 +1102,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * are allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
-    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    val metricsMap = mutable.Map.empty[String, CollectMetrics]
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
-        case metrics @ CollectMetrics(name, _, _) =>
-          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics.canonicalized)
+        case metrics @ CollectMetrics(name, _, _, dataframeId) =>
           metricsMap.get(name) match {
             case Some(other) =>
-              val simplifiedOther = simplifyPlanForCollectedMetrics(other.canonicalized)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (simplifiedMetrics != simplifiedOther) {
+              if (dataframeId != other.dataframeId) {
                 failAnalysis(
                   errorClass = "DUPLICATED_METRICS_NAME",
                   messageParameters = Map("metricName" -> name))
@@ -1114,30 +1130,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   /**
-   * This method is only used for checking collected metrics. This method tries to
-   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
-   * duplicates metric definition.
-   */
-  private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperators {
-      case p: Project if p.projectList.size == p.child.output.size =>
-        val assignExprIdOnly = p.projectList.zipWithIndex.forall {
-          case (Alias(attr: AttributeReference, _), index) =>
-            // The input plan of this method is already canonicalized. The attribute id becomes the
-            // ordinal of this attribute in the child outputs. So an alias-only Project means the
-            // the id of the aliased attribute is the same as its index in the project list.
-            attr.exprId.id == index
-          case _ => false
-        }
-        if (assignExprIdOnly) {
-          p.child
-        } else {
-          p
-        }
-    }
-  }
-
-  /**
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
@@ -1146,9 +1138,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       isScalar: Boolean = false,
       isLateral: Boolean = false): Unit = {
     // Some query shapes are only supported with the DecorrelateInnerQuery framework.
-    // Currently we only use this new framework for scalar and lateral subqueries.
+    // Support for Exists and IN subqueries is subject to a separate config flag
+    // 'decorrelateInnerQueryEnabledForExistsIn'.
     val usingDecorrelateInnerQueryFramework =
-      (isScalar || isLateral) && SQLConf.get.decorrelateInnerQueryEnabled
+      (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn || isScalar || isLateral) &&
+        SQLConf.get.decorrelateInnerQueryEnabled
 
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
@@ -1404,6 +1398,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         case g: Generate if g.requiredChildOutput.nonEmpty =>
           failOnInvalidOuterReference(g)
           checkPlan(g.child, aggregated, canContainOuter)
+
+        // Correlated subquery can have a LIMIT clause
+        case l @ Limit(_, input) =>
+          failOnInvalidOuterReference(l)
+          checkPlan(input, aggregated, canContainOuter)
+
+        case o @ Offset(_, input) =>
+          failOnInvalidOuterReference(o)
+          checkPlan(input, aggregated, canContainOuter)
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only

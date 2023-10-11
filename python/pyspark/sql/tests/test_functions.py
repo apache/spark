@@ -82,48 +82,10 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = {
-            # TODO: XML functions will soon be added and removed from this list
-            # https://issues.apache.org/jira/browse/SPARK-44788
-            "from_xml",
-            "schema_of_xml",
-        }
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
-        )
-
-    def test_public_function(self):
-        inspected_list = {name for (name, value) in getmembers(F, isfunction) if name[0] != "_"}
-
-        public_list = set(F.__all__)
-
-        # check alias: both function 'pow' and its alias 'power' should be included
-        self.assertTrue("pow" in inspected_list)
-        self.assertTrue("power" in inspected_list)
-        self.assertTrue("pow" in public_list)
-        self.assertTrue("power" in public_list)
-
-        inspected_execuded_list = {
-            "get_active_spark_context",  # internal helper function
-            "try_remote_functions",  # internal helper function
-            "to_str",  # internal helper function
-        }
-
-        self.assertEqual(
-            inspected_list - public_list,
-            inspected_execuded_list,
-            "Inspected functions NOT exposed!",
-        )
-
-        public_execuded_list = {
-            "PandasUDFType",  # type, not a function
-        }
-
-        self.assertEqual(
-            public_list - inspected_list,
-            public_execuded_list,
-            "Non-existent functions exposed!",
         )
 
     def test_explode(self):
@@ -1069,10 +1031,10 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaisesRegex(tpe, "too big"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] too big"):
             df.select(F.assert_true(df.id < 2, "too big")).toDF("val").collect()
 
-        with self.assertRaisesRegex(tpe, "2000000"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] 2000000.0"):
             df.select(F.assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1319,6 +1281,27 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 
+    def test_schema_of_xml(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.schema_of_xml(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": "int"},
+        )
+
+    def test_from_xml(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.from_xml(df.id, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
     def test_greatest(self):
         df = self.spark.range(10)
         with self.assertRaises(PySparkValueError) as pe:
@@ -1369,6 +1352,17 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
+
+    # SPARK-45216: Fix non-deterministic seeded Dataset APIs
+    def test_non_deterministic_with_seed(self):
+        df = self.spark.createDataFrame([([*range(0, 10, 1)],)], ["a"])
+
+        r = F.rand()
+        r2 = F.randn()
+        r3 = F.shuffle("a")
+        res = df.select(r, r, r2, r2, r3, r3).collect()
+        for i in range(3):
+            self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

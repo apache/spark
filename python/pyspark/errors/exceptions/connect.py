@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import pyspark.sql.connect.proto as pb2
 import json
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 
 from pyspark.errors.exceptions.base import (
@@ -45,14 +46,22 @@ class SparkConnectException(PySparkException):
     """
 
 
-def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
+def convert_exception(
+    info: "ErrorInfo", truncated_message: str, resp: Optional[pb2.FetchErrorDetailsResponse]
+) -> SparkConnectException:
     classes = []
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
 
-    if "stackTrace" in info.metadata:
-        stackTrace = info.metadata["stackTrace"]
-        message += f"\n\nJVM stacktrace:\n{stackTrace}"
+    if resp is not None and resp.HasField("root_error_idx"):
+        message = resp.errors[resp.root_error_idx].message
+        stacktrace = _extract_jvm_stacktrace(resp)
+    else:
+        message = truncated_message
+        stacktrace = info.metadata["stackTrace"] if "stackTrace" in info.metadata else ""
+
+    if len(stacktrace) > 0:
+        message += f"\n\nJVM stacktrace:\n{stacktrace}"
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(message)
@@ -87,6 +96,33 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
         )
     else:
         return SparkConnectGrpcException(message, reason=info.reason)
+
+
+def _extract_jvm_stacktrace(resp: pb2.FetchErrorDetailsResponse) -> str:
+    if len(resp.errors[resp.root_error_idx].stack_trace) == 0:
+        return ""
+
+    lines: List[str] = []
+
+    def format_stacktrace(error: pb2.FetchErrorDetailsResponse.Error) -> None:
+        message = f"{error.error_type_hierarchy[0]}: {error.message}"
+        if len(lines) == 0:
+            lines.append(message)
+        else:
+            lines.append(f"Caused by: {message}")
+        for elem in error.stack_trace:
+            lines.append(
+                f"\tat {elem.declaring_class}.{elem.method_name}"
+                f"({elem.file_name}:{elem.line_number})"
+            )
+
+        # If this error has a cause, format that recursively
+        if error.HasField("cause_idx"):
+            format_stacktrace(resp.errors[error.cause_idx])
+
+    format_stacktrace(resp.errors[resp.root_error_idx])
+
+    return "\n".join(lines)
 
 
 class SparkConnectGrpcException(SparkConnectException):

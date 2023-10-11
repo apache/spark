@@ -57,7 +57,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         Supports Spark Connect.
 
     .. versionchanged:: 4.0.0
-        Supports keyword-arguments in SCALAR type.
+        Supports keyword-arguments in SCALAR and GROUPED_AGG type.
 
     Parameters
     ----------
@@ -267,6 +267,24 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         |  2|        6.0|
         +---+-----------+
 
+        This type of Pandas UDF can use keyword arguments:
+
+        >>> @pandas_udf("double")
+        ... def weighted_mean_udf(v: pd.Series, w: pd.Series) -> float:
+        ...     import numpy as np
+        ...     return np.average(v, weights=w)
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ...     ("id", "v", "w"))
+        >>> df.groupby("id").agg(weighted_mean_udf(w=df["w"], v=df["v"])).show()
+        +---+---------------------------------+
+        | id|weighted_mean_udf(w => w, v => v)|
+        +---+---------------------------------+
+        |  1|               1.6666666666666667|
+        |  2|                7.166666666666667|
+        +---+---------------------------------+
+
         This UDF can also be used as window functions as below:
 
         >>> from pyspark.sql import Window
@@ -397,7 +415,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         None,
     ]:  # None means it should infer the type from type hints.
-
         raise PySparkTypeError(
             error_class="INVALID_PANDAS_UDF_TYPE",
             message_parameters={

@@ -77,6 +77,7 @@ __all__ = [
     "LongType",
     "DayTimeIntervalType",
     "YearMonthIntervalType",
+    "CalendarIntervalType",
     "Row",
     "ShortType",
     "ArrayType",
@@ -137,6 +138,54 @@ class DataType:
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+    @classmethod
+    def fromDDL(cls, ddl: str) -> "DataType":
+        """
+        Creates :class:`DataType` for a given DDL-formatted string.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        ddl : str
+            DDL-formatted string representation of types, e.g.
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct
+            type can omit the ``struct<>`` for the compatibility reason with
+            ``spark.createDataFrame`` and Python UDFs.
+
+        Returns
+        -------
+        :class:`DataType`
+
+        Examples
+        --------
+        Create a StructType by the corresponding DDL formatted string.
+
+        >>> from pyspark.sql.types import DataType
+        >>> DataType.fromDDL("b string, a int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+
+        Create a single DataType by the corresponding DDL formatted string.
+
+        >>> DataType.fromDDL("decimal(10,10)")
+        DecimalType(10,10)
+
+        Create a StructType by the legacy string format.
+
+        >>> DataType.fromDDL("b: string, a: int")
+        StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
+        """
+        from pyspark.sql import SparkSession
+        from pyspark.sql.functions import udf
+
+        # Intentionally uses SparkSession so one implementation can be shared with/without
+        # Spark Connect.
+        schema = (
+            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+        )
+        assert len(schema) == 1
+        return schema[0].dataType
 
 
 # This singleton pattern does not work with pickle, you will get
@@ -491,6 +540,20 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
+
+
+class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
+    """The data type representing calendar intervals.
+
+    The calendar interval is stored internally in three components:
+    - an integer value representing the number of `months` in this interval.
+    - an integer value representing the number of `days` in this interval.
+    - a long value representing the number of `microseconds` in this interval.
+    """
+
+    @classmethod
+    def typeName(cls) -> str:
+        return "interval"
 
 
 class ArrayType(DataType):
@@ -1402,6 +1465,8 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif json_value == "interval":
+            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1564,6 +1629,8 @@ def _infer_type(
         return DayTimeIntervalType()
     if dataType is YearMonthIntervalType:
         return YearMonthIntervalType()
+    if dataType is CalendarIntervalType:
+        return CalendarIntervalType()
     elif dataType is not None:
         return dataType()
 

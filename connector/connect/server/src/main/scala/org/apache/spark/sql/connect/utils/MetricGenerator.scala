@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.utils
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.DataFrame

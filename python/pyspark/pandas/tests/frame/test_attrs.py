@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from datetime import datetime
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -124,39 +123,20 @@ class FrameAttrsMixin:
         pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
         psmidx = ps.from_pandas(pmidx)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
-        else:
-            expected = pd.Series([np.dtype("int64"), np.dtype("O")], index=["number", "color"])
-            self.assert_eq(psmidx.dtypes, expected)
+        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
         # multiple labels
         pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
         psmidx = ps.from_pandas(pmidx)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            if LooseVersion(pd.__version__) not in (LooseVersion("1.4.1"), LooseVersion("1.4.2")):
-                self.assert_eq(psmidx.dtypes, pmidx.dtypes)
-        else:
-            expected = pd.Series(
-                [np.dtype("int64"), np.dtype("O")],
-                index=pd.Index([("zero", "first"), ("one", "second")]),
-            )
-            self.assert_eq(psmidx.dtypes, expected)
+        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
     def test_multi_index_dtypes_not_unique_name(self):
         # Regression test for https://github.com/pandas-dev/pandas/issues/45174
         pmidx = pd.MultiIndex.from_arrays([[1], [2]], names=[1, 1])
         psmidx = ps.from_pandas(pmidx)
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
-            expected = pd.Series(
-                [np.dtype("int64"), np.dtype("int64")],
-                index=[1, 1],
-            )
-            self.assert_eq(psmidx.dtypes, expected)
-        else:
-            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
     def test_dtype(self):
         pdf = pd.DataFrame(
@@ -201,14 +181,7 @@ class FrameAttrsMixin:
         psdf["a"] = psdf["a"] + 10
 
         self.assert_eq(psdf, pdf)
-        # SPARK-38946: Since Spark 3.4, df.__setitem__ generate a new dataframe to follow
-        # pandas 1.4 behaviors
-        if LooseVersion(pd.__version__) >= LooseVersion("1.4.0"):
-            self.assert_eq(psser, pser)
-        else:
-            # Follow pandas latest behavior
-            with self.assertRaisesRegex(AssertionError, "Series are different"):
-                self.assert_eq(psser, pser)
+        self.assert_eq(psser, pser)
 
     def test_dataframe_multiindex_columns(self):
         pdf = pd.DataFrame(

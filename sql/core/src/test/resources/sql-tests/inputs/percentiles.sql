@@ -374,4 +374,8 @@ SELECT
   percentile_disc(1.0) WITHIN GROUP (ORDER BY a) as p10
 FROM VALUES (0), (1), (2), (3), (4) AS v(a);
 
+SELECT
+  percentile_cont(b) WITHIN GROUP (ORDER BY a DESC) as p0
+FROM values (12, 0.25), (13, 0.25), (22, 0.25) as v(a, b);
+
 SET spark.sql.legacy.percentileDiscCalculation = false;

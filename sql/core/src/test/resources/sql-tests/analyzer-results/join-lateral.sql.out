@@ -2847,7 +2847,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"outer(spark_catalog.default.t1.c1)\"",
-    "inputName" : "n",
+    "inputName" : "`n`",
     "inputType" : "\"INT\"",
     "sqlExpr" : "\"stack(outer(spark_catalog.default.t1.c1), outer(spark_catalog.default.t1.c2))\""
   },
@@ -2859,6 +2859,161 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "stack(c1, c2)"
   } ]
 }
+
+
+-- !query
+select * from t1 join lateral (select * from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2 limit 1)
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 1
+   :        +- LocalLimit 1
+   :           +- Project [c1#x, c2#x]
+   :              +- Filter ((outer(c1#x) = c1#x) AND (outer(c2#x) < c2#x))
+   :                 +- SubqueryAlias spark_catalog.default.t2
+   :                    +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
+   :                       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                          +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 join lateral (select * from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 10)
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- LateralJoin lateral-subquery#x [c1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 10
+   :        +- LocalLimit 10
+   :           +- Sort [c2#x ASC NULLS FIRST], true
+   :              +- Project [c1#x, c2#x]
+   :                 +- Filter (outer(c1#x) <= c1#x)
+   :                    +- SubqueryAlias spark_catalog.default.t4
+   :                       +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                             +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2
+                               group by t2.c1
+                               order by m)
+-- !query analysis
+Project [c1#x, c2#x, c1#x, m#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Sort [m#x ASC NULLS FIRST], true
+   :        +- Aggregate [c1#x], [c1#x, min(c2#x) AS m#x]
+   :           +- Filter ((outer(c1#x) = c1#x) AND (outer(c2#x) < c2#x))
+   :              +- SubqueryAlias spark_catalog.default.t2
+   :                 +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])
+   :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                       +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t4 where t1.c1 = t4.c1
+                               group by t4.c1
+                               limit 1)
+-- !query analysis
+Project [c1#x, c2#x, c1#x, m#x]
++- LateralJoin lateral-subquery#x [c1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 1
+   :        +- LocalLimit 1
+   :           +- Aggregate [c1#x], [c1#x, min(c2#x) AS m#x]
+   :              +- Filter (outer(c1#x) = c1#x)
+   :                 +- SubqueryAlias spark_catalog.default.t4
+   :                    +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :                       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                          +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 join lateral
+  ((select t4.c2 from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 1)
+   union all
+   (select t4.c1 from t4 where t1.c1 = t4.c1 order by t4.c1 limit 3))
+-- !query analysis
+Project [c1#x, c2#x, c2#x]
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Union false, false
+   :        :- GlobalLimit 1
+   :        :  +- LocalLimit 1
+   :        :     +- Sort [c2#x ASC NULLS FIRST], true
+   :        :        +- Project [c2#x]
+   :        :           +- Filter (outer(c1#x) <= c1#x)
+   :        :              +- SubqueryAlias spark_catalog.default.t4
+   :        :                 +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :        :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        :                       +- LocalRelation [col1#x, col2#x]
+   :        +- GlobalLimit 3
+   :           +- LocalLimit 3
+   :              +- Sort [c1#x ASC NULLS FIRST], true
+   :                 +- Project [c1#x]
+   :                    +- Filter (outer(c1#x) = c1#x)
+   :                       +- SubqueryAlias spark_catalog.default.t4
+   :                          +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :                             +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                                +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 join lateral
+  (select * from
+   ((select t4.c2 as t from t4 where t1.c1 <= t4.c1)
+   union all
+   (select t4.c1 as t from t4 where t1.c1 = t4.c1)) as foo
+   order by foo.t limit 5)
+-- !query analysis
+Project [c1#x, c2#x, t#x]
++- LateralJoin lateral-subquery#x [c1#x && c1#x], Inner
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- GlobalLimit 5
+   :        +- LocalLimit 5
+   :           +- Sort [t#x ASC NULLS FIRST], true
+   :              +- Project [t#x]
+   :                 +- SubqueryAlias foo
+   :                    +- Union false, false
+   :                       :- Project [c2#x AS t#x]
+   :                       :  +- Filter (outer(c1#x) <= c1#x)
+   :                       :     +- SubqueryAlias spark_catalog.default.t4
+   :                       :        +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :                       :           +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                       :              +- LocalRelation [col1#x, col2#x]
+   :                       +- Project [c1#x AS t#x]
+   :                          +- Filter (outer(c1#x) = c1#x)
+   :                             +- SubqueryAlias spark_catalog.default.t4
+   :                                +- View (`spark_catalog`.`default`.`t4`, [c1#x,c2#x])
+   :                                   +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                                      +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
 
 
 -- !query

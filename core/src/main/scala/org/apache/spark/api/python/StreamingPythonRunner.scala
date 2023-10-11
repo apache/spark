@@ -19,7 +19,7 @@ package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -108,10 +108,30 @@ private[spark] class StreamingPythonRunner(
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    pythonWorker.foreach { worker =>
+    logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
+
+    try {
       pythonWorkerFactory.foreach { factory =>
-        factory.stopWorker(worker)
-        factory.stop()
+        pythonWorker.foreach { worker =>
+          factory.stopWorker(worker)
+          factory.stop()
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logError("Exception when trying to kill worker", e)
+    }
+  }
+
+  /**
+   * Returns whether the Python worker has been stopped.
+   * @return Some(true) if the Python worker has been stopped.
+   *         None if either the Python worker or the Python worker factory is not initialized.
+   */
+  def isWorkerStopped(): Option[Boolean] = {
+    pythonWorkerFactory.flatMap { factory =>
+      pythonWorker.map { worker =>
+        factory.isWorkerStopped(worker)
       }
     }
   }

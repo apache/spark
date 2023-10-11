@@ -57,7 +57,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
           exception = intercept[AnalysisException] {
             sql(s"SHOW PARTITIONS $view")
           },
-          errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> s"`spark_catalog`.`default`.`view1`",
             "operation" -> "SHOW PARTITIONS"
@@ -80,9 +80,9 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         exception = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $viewName")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> "`test_view`",
+          "viewName" -> "`test_view`",
           "operation" -> "SHOW PARTITIONS"
         ),
         context = ExpectedContext(
@@ -124,9 +124,9 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         exception = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $viewName")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> "`test_view`",
+          "viewName" -> "`test_view`",
           "operation" -> "SHOW PARTITIONS"
         ),
         context = ExpectedContext(

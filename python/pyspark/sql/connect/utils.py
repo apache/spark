@@ -16,6 +16,7 @@
 #
 import sys
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 
@@ -38,8 +39,6 @@ def check_dependencies(mod_name: str) -> None:
 def require_minimum_grpc_version() -> None:
     """Raise ImportError if minimum version of grpc is not installed"""
     minimum_grpc_version = "1.48.1"
-
-    from distutils.version import LooseVersion
 
     try:
         import grpc

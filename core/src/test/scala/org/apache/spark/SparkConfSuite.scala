@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo

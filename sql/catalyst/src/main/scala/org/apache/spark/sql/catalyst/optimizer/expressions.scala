@@ -283,7 +283,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case In(v, list) if list.isEmpty =>
         // IN (empty list) is always false under current behavior.
         // Under legacy behavior it's null if the left side is null, otherwise false (SPARK-44550).
-        if (!SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)) {
+        if (!SQLConf.get.legacyNullInEmptyBehavior) {
           FalseLiteral
         } else {
           If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
@@ -845,20 +845,20 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // If the list is empty, transform the In expression to false literal.
       case In(_, list)
-        if list.isEmpty && !SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR) =>
+        if list.isEmpty && !SQLConf.get.legacyNullInEmptyBehavior =>
         Literal.create(false, BooleanType)
       // If the value expression is NULL (and the list is non-empty), then transform the
       // In expression to null literal.
       // If the legacy flag is set, then it becomes null even if the list is empty (which is
       // incorrect legacy behavior)
       case In(Literal(null, _), list)
-        if list.nonEmpty || SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+        if list.nonEmpty || SQLConf.get.legacyNullInEmptyBehavior
       => Literal.create(null, BooleanType)
       case InSubquery(Seq(Literal(null, _)), _)
-        if SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR) =>
+        if SQLConf.get.legacyNullInEmptyBehavior =>
         Literal.create(null, BooleanType)
       case InSubquery(Seq(Literal(null, _)), ListQuery(sub, _, _, _, conditions, _))
-        if !SQLConf.get.getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR)
+        if !SQLConf.get.legacyNullInEmptyBehavior
         && conditions.isEmpty =>
         If(Exists(sub), Literal(null, BooleanType), FalseLiteral)
 

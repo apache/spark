@@ -20,7 +20,7 @@ import java.io.StringReader
 import javax.xml.stream.{XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events.Attribute
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfterAll
 

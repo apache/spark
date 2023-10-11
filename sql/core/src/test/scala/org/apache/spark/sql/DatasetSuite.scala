@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -32,8 +33,9 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -45,6 +47,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1869,14 +1872,21 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
-    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
-      val data = Seq("\u0020\u0021\u0023", "abc")
-      val df = data.toDF()
-      val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
-      val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
-      val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
-      checkAnswer(rlike1, rlike2)
-      assert(rlike3.count() == 0)
+    Seq(
+      true ->
+        ("value rlike '^\\x20[\\x20-\\x23]+$'", "value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'"),
+      false ->
+        ("value rlike r'^\\x20[\\x20-\\x23]+$'", "value rlike r'^\\\\x20[\\\\x20-\\\\x23]+$'")
+    ).foreach { case (escaped, (filter1, filter3)) =>
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString) {
+        val data = Seq("\u0020\u0021\u0023", "abc")
+        val df = data.toDF()
+        val rlike1 = df.filter(filter1)
+        val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+        val rlike3 = df.filter(filter3)
+        checkAnswer(rlike1, rlike2)
+        assert(rlike3.count() == 0)
+      }
     }
   }
 
@@ -2560,6 +2570,45 @@ class DatasetSuite extends QueryTest
     val ds = Seq(Tuple1(ValueClass(1)), Tuple1(ValueClass(2))).toDS()
 
     checkDataset(ds.filter(f(col("_1"))), Tuple1(ValueClass(2)))
+  }
+
+  test("CLASS_UNSUPPORTED_BY_MAP_OBJECTS when creating dataset") {
+    withSQLConf(
+      // Set CODEGEN_FACTORY_MODE to default value to reproduce CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      // Create our own encoder to cover the default encoder from spark.implicits._
+      implicit val im: ExpressionEncoder[Array[Int]] = ExpressionEncoder(
+        AgnosticEncoders.IterableEncoder(
+          ClassTag(classOf[Array[Int]]), BoxedIntEncoder, false, false))
+
+      val df = spark.createDataset(Seq(Array(1)))
+      val exception = intercept[org.apache.spark.SparkRuntimeException] {
+        df.collect()
+      }
+      val expressions = im.resolveAndBind(df.queryExecution.logical.output,
+        spark.sessionState.analyzer)
+        .createDeserializer().expressions
+
+      // Expression decoding error
+      checkError(
+        exception = exception,
+        errorClass = "_LEGACY_ERROR_TEMP_2151",
+        parameters = Map(
+          "e" -> exception.getCause.toString(),
+          "expressions" -> expressions.map(
+            _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
+      )
+      // class unsupported by map objects
+      checkError(
+        exception = exception.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException],
+        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        parameters = Map("cls" -> classOf[Array[Int]].getName))
+    }
+  }
+
+  test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
+    val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
+    assert(ds.count() == 2)
   }
 }
 

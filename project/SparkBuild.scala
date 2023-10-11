@@ -17,13 +17,13 @@
 
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, StandardOpenOption}
+import java.nio.file.Files
 import java.util.Locale
 
 import scala.io.Source
 import scala.util.Properties
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import sbt._
 import sbt.Classpaths.publishOrSkip
@@ -64,10 +64,10 @@ object BuildCommons {
     "tags", "sketch", "kvstore", "common-utils", "sql-api"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
-  val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
+  val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
-    Seq("kubernetes", "mesos", "yarn",
+    Seq("kubernetes", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
@@ -223,72 +223,49 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  // Silencer: Scala compiler plugin for warning suppression
-  // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
-  // depends on scala version:
-  // <2.13.2 - silencer 1.7.13 and compiler settings to enable fatal warnings
-  // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
-    libraryDependencies ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.13"
-        Seq(
-          "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
-          "com.github.ghik" % "silencer-lib" % silencerVersion % Provided cross CrossVersion.full
-        )
-      } else {
-        Seq.empty
-      }
-    },
     (Compile / scalacOptions) ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        Seq(
-          "-Xfatal-warnings",
-          "-deprecation",
-          "-Ywarn-unused-import",
-          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and suppress them
-        )
-      } else {
-        Seq(
-          // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
-          // verbose warning on deprecation, error on all others
-          // see `scalac -Wconf:help` for details
-          "-Wconf:cat=deprecation:wv,any:e",
-          // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          "-Wunused:imports",
-          "-Wconf:cat=lint-multiarg-infix:wv",
-          "-Wconf:cat=other-nullary-override:wv",
-          "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
-          // SPARK-33775 Suppress compilation warnings that contain the following contents.
-          // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
-          //  fixed.
-          "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
-          "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
-          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-          "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
-          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-          // 1. `The outer reference in this type test cannot be checked at run time`
-          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
-          //    has type parameters eliminated by erasure`
-          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-          "-Wconf:cat=unchecked&msg=outer reference:s",
-          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
-          // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-          // from the corresponding files when Scala 2.12 is no longer supported.
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
-        )
-      }
+      Seq(
+        // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
+        // verbose warning on deprecation, error on all others
+        // see `scalac -Wconf:help` for details
+        "-Wconf:cat=deprecation:wv,any:e",
+        // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
+        "-Wunused:imports",
+        "-Wconf:cat=lint-multiarg-infix:wv",
+        "-Wconf:cat=other-nullary-override:wv",
+        "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite:wv",
+        "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
+        // SPARK-33775 Suppress compilation warnings that contain the following contents.
+        // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
+        //  fixed.
+        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+        "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
+        "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
+        "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
+        "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+        // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+        "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+        // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+        // 1. `The outer reference in this type test cannot be checked at run time`
+        // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+        //    has type parameters eliminated by erasure`
+        // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+        //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+        // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+        "-Wconf:cat=unchecked&msg=outer reference:s",
+        "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+        "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
+        // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+        "-Wconf:msg=Implicit definition should have explicit type:s",
+        // SPARK-45331 Upgrade Scala to 2.13.12 and suppress "In Scala 2, symbols inherited
+        // from a superclass shadow symbols defined in an outer scope. Such references are
+        // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
+        // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
+        "-Wconf:msg=legacy-binding:s"
+      )
     }
   )
 
@@ -364,7 +341,7 @@ object SparkBuild extends PomBuild {
     ),
 
     (Compile / scalacOptions) ++= Seq(
-      s"-target:jvm-${javaVersion.value}",
+      s"-target:${javaVersion.value}",
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -380,18 +357,11 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    ) ++ {
-      // Do not attempt to scaladoc javadoc comments under 2.12 since it can't handle inner classes
-      if (scalaBinaryVersion.value == "2.12") Seq("-no-java-comments") else Seq.empty
-    },
+    ),
 
     // disable Mima check for all modules,
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
-
-    // To prevent intermittent compilation failures, see also SPARK-33297
-    // Apparently we can remove this when we use JDK 11.
-    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
 
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
@@ -415,8 +385,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
-      commonUtils, sqlApi
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient
     ).contains(x)
   }
 
@@ -765,13 +734,7 @@ object SparkConnectCommon {
 object SparkConnect {
   import BuildCommons.protoVersion
 
-  val rewriteJavaFile = TaskKey[Unit]("rewriteJavaFile",
-    "Rewrite the generated Java PB files.")
-  val genPBAndRewriteJavaFile = TaskKey[Unit]("genPBAndRewriteJavaFile",
-    "Generate Java PB files and overwrite their contents.")
-
   lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
@@ -801,42 +764,6 @@ object SparkConnect {
         "com.google.protobuf" % "protobuf-java" % protoVersion
       )
     },
-
-    // SPARK-43646: The following 3 statements are used to make the connect module use the
-    // Spark-proto assembly jar when compiling and testing using SBT, which can be keep same
-    // behavior of Maven testing.
-    (Test / unmanagedJars) += (LocalProject("protobuf") / assembly).value,
-    (Test / fullClasspath) :=
-      (Test / fullClasspath).value.filterNot { f => f.toString.contains("spark-protobuf") },
-    (Test / fullClasspath) += (LocalProject("protobuf") / assembly).value,
-
-    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
-
-    (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources",
-    ),
-
-    // SPARK-43646: Create a custom task to replace all `com.google.protobuf.` with
-    // `org.sparkproject.spark_protobuf.protobuf.` in the generated Java PB files.
-    // This is to generate Java files that can be used to test spark-protobuf functions
-    // in `ProtoToParsedPlanTestSuite`.
-    rewriteJavaFile := {
-      val protobufDir = target.value / "generated-test-sources"/"org"/"apache"/"spark"/"sql"/"protobuf"/"protos"
-      protobufDir.listFiles().foreach { f =>
-        if (f.getName.endsWith(".java")) {
-          val contents = Files.readAllLines(f.toPath, UTF_8)
-          val replaced = contents.asScala.map { line =>
-            line.replaceAll("com.google.protobuf.", "org.sparkproject.spark_protobuf.protobuf.")
-          }
-          Files.write(f.toPath, replaced.asJava, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
-        }
-      }
-    },
-    // SPARK-43646: `genPBAndRewriteJavaFile` is used to specify the execution order of `PB.generate`
-    // and `rewriteJavaFile`, and makes `Test / compile` dependent on `genPBAndRewriteJavaFile`
-    // being executed first.
-    genPBAndRewriteJavaFile := Def.sequential(Test / PB.generate, rewriteJavaFile).value,
-    (Test / compile) := (Test / compile).dependsOn(genPBAndRewriteJavaFile).value,
 
     (assembly / test) := { },
 
@@ -883,16 +810,7 @@ object SparkConnect {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
-      Seq(
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq.empty
-    }
-  }
+  )
 }
 
 object SparkConnectClient {
@@ -1047,8 +965,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
   )
 }
 
@@ -1152,7 +1069,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.3")
 }
 
 /**
@@ -1727,7 +1644,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.github.sbt" % "junit-interface" % "0.13.3" % "test",
+    libraryDependencies += "net.aichler" % "jupiter-interface" % "0.11.1" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

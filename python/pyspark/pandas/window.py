@@ -587,6 +587,10 @@ class Rolling(RollingLike[FrameLike]):
         ----------
         quantile : float
             Value between 0 and 1 providing the quantile to compute.
+
+            .. deprecated:: 4.0.0
+                This will be renamed to ‘q’ in a future version.
+
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
             The relative error can be deduced by 1.0 / accuracy.

@@ -99,7 +99,6 @@ class LocalDataToArrowConversion:
             return lambda value: None
 
         elif isinstance(dataType, StructType):
-
             field_names = dataType.fieldNames()
             dedup_field_names = _dedup_names(dataType.names)
 
@@ -140,7 +139,6 @@ class LocalDataToArrowConversion:
             return convert_struct
 
         elif isinstance(dataType, ArrayType):
-
             element_conv = LocalDataToArrowConversion._create_converter(dataType.elementType)
 
             def convert_array(value: Any) -> Any:
@@ -153,7 +151,6 @@ class LocalDataToArrowConversion:
             return convert_array
 
         elif isinstance(dataType, MapType):
-
             key_conv = LocalDataToArrowConversion._create_converter(dataType.keyType)
             value_conv = LocalDataToArrowConversion._create_converter(dataType.valueType)
 
@@ -260,7 +257,6 @@ class LocalDataToArrowConversion:
             return convert_udt
 
         else:
-
             return lambda value: value
 
     @staticmethod
@@ -349,7 +345,6 @@ class ArrowTableToRowsConversion:
             return lambda value: None
 
         elif isinstance(dataType, StructType):
-
             field_names = dataType.names
             dedup_field_names = _dedup_names(field_names)
 
@@ -372,7 +367,6 @@ class ArrowTableToRowsConversion:
             return convert_struct
 
         elif isinstance(dataType, ArrayType):
-
             element_conv = ArrowTableToRowsConversion._create_converter(dataType.elementType)
 
             def convert_array(value: Any) -> Any:
@@ -385,7 +379,6 @@ class ArrowTableToRowsConversion:
             return convert_array
 
         elif isinstance(dataType, MapType):
-
             key_conv = ArrowTableToRowsConversion._create_converter(dataType.keyType)
             value_conv = ArrowTableToRowsConversion._create_converter(dataType.valueType)
 
@@ -446,7 +439,6 @@ class ArrowTableToRowsConversion:
             return convert_udt
 
         else:
-
             return lambda value: value
 
     @staticmethod

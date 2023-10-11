@@ -19,8 +19,8 @@ package org.apache.spark.executor
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi

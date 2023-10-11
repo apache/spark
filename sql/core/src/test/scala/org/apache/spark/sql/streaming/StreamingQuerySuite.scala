@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.InputPartition
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
@@ -230,9 +230,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       private def dataAdded: Boolean = currentOffset.offset != -1
 
       // latestOffset should take 50 ms the first time it is called after data is added
-      override def latestOffset(): OffsetV2 = synchronized {
+      override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = synchronized {
         if (dataAdded) clock.waitTillTime(1050)
-        super.latestOffset()
+        super.latestOffset(startOffset, limit)
       }
 
       // getBatch should take 100 ms the first time it is called
@@ -329,10 +329,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.processedRowsPerSecond === 4.0)
 
         assert(progress.durationMs.get("latestOffset") === 50)
-        assert(progress.durationMs.get("queryPlanning") === 100)
+        assert(progress.durationMs.get("queryPlanning") === 0)
         assert(progress.durationMs.get("walCommit") === 0)
         assert(progress.durationMs.get("commitOffsets") === 0)
-        assert(progress.durationMs.get("addBatch") === 350)
+        assert(progress.durationMs.get("addBatch") === 450)
         assert(progress.durationMs.get("triggerExecution") === 500)
 
         assert(progress.sources.length === 1)
