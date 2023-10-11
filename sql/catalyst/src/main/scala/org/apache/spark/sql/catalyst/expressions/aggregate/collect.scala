@@ -19,15 +19,18 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.generic.Growable
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
@@ -244,4 +247,100 @@ case class CollectTopK(
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the concatenated input values," +
+    " separated by the delimiter string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);
+       a,b,c
+      > SELECT _FUNC_(col) FROM VALUES (NULL), ('a'), ('b') AS tab(col);
+       a,b
+      > SELECT _FUNC_(col) FROM VALUES ('a'), ('a') AS tab(col);
+       a,a
+      > SELECT _FUNC_(DISTINCT col) FROM VALUES ('a'), ('a'), ('b') AS tab(col);
+       a,b
+      > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
+       a|b
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "4.0.0")
+case class ListAgg(
+    child: Expression,
+    delimiter: Expression = Literal.create(",", StringType),
+    orderExpression: Option[Expression] = Option.empty,
+    reverse: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
+
+  def this(child: Expression) =
+    this(child, Literal.create(",", StringType), Option.empty, false, 0, 0)
+  def this(child: Expression, delimiter: Expression) =
+    this(child, delimiter, Option.empty, false, 0, 0)
+
+  override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+
+  override protected lazy val bufferElementType: DataType = {
+    if (orderExpression.isDefined) {
+      ArrayType(StructType(Seq(
+        StructField("value", child.dataType),
+        StructField("sortOrder", orderExpression.get.dataType))), containsNull = false)
+    } else {
+      child.dataType
+    }
+  }
+
+  override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
+    if (buffer.nonEmpty) {
+      val sortedCounts = if (orderExpression.isDefined) {
+        val ordering = PhysicalDataType.ordering(orderExpression.get.dataType)
+        if (reverse) {
+          buffer.asInstanceOf[mutable.ArrayBuffer[(Any, Any)]].toSeq.sortBy(_._2)(ordering
+            .asInstanceOf[Ordering[Any]].reverse).map(_._1)
+        } else {
+          buffer.asInstanceOf[mutable.ArrayBuffer[(Any, Any)]].toSeq.sortBy(_._2)(ordering
+            .asInstanceOf[Ordering[Any]]).map(_._1)
+        }
+      } else {
+        buffer.toSeq
+      }
+      UTF8String.fromString(sortedCounts.map(_.toString)
+        .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
+    } else {
+      UTF8String.fromString("")
+    }
+  }
+
+  override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
+    val value = child.eval(input)
+    if (value != null) {
+      if (orderExpression.isDefined) {
+        buffer += ((convertToBufferElement(value),
+          convertToBufferElement(orderExpression.get.eval(input))))
+      } else {
+        buffer += convertToBufferElement(value)
+      }
+    }
+    buffer
+  }
+
+  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int) : ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = StringType
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }

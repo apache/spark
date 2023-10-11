@@ -989,7 +989,7 @@ primaryExpression
         WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
         (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
     | LISTAGG LEFT_PAREN setQuantifier? aggEpxr=expression (COMMA delimiter=stringLit)? RIGHT_PAREN
-        WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN ( OVER windowSpec)?              #listAgg
+        WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN (OVER windowSpec)?              #listAgg
     ;
 
 literalType

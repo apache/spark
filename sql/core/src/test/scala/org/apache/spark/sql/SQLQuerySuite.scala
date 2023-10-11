@@ -164,11 +164,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         .createOrReplaceTempView("df")
       checkAnswer(
         sql("select listagg(b) from df group by a"),
-        Row("b,c") :: Row("c,d") :: Row(null) :: Nil)
+        Row("") :: Row("b,c") :: Row("c,d") :: Nil)
+
+      checkAnswer(
+        sql("select listagg(b) from df where 1 != 1"),
+        Row("") :: Nil)
 
       checkAnswer(
         sql("select listagg(b, '|') from df group by a"),
-        Row("b|c") :: Row("c|d") :: Row(null) :: Nil)
+        Row("b|c") :: Row("c|d") :: Row("") :: Nil)
 
       checkAnswer(
         sql("SELECT LISTAGG(a) FROM df"),
@@ -189,7 +193,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a DESC) " +
           "OVER (PARTITION BY b) FROM df"),
-        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row(null) :: Nil)
+        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row("") :: Nil)
 
       checkAnswer(
         sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df"),
