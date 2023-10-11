@@ -538,7 +538,7 @@ class DataFrameReader(OptionUtils):
 
         Read a Parquet file with a specific column.
 
-        >>> with tempfile.TemporaryDirectory as d:
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     df.write.mode("overwrite").format("parquet").save(d)
         ...
         ...     # Read the Parquet file with only the 'name' column.
