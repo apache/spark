@@ -33,6 +33,15 @@ private[spark] object PythonWorkerUtils extends Logging {
    */
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
+    writeBytes(bytes, dataOut)
+  }
+
+  /**
+   * Write a byte array.
+   *
+   * It will be read by `FramedSerializer._read_with_length` in Python.
+   */
+  def writeBytes(bytes: Array[Byte], dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -134,8 +143,7 @@ private[spark] object PythonWorkerUtils extends Logging {
    * Write PythonFunction to the worker.
    */
   def writePythonFunction(func: PythonFunction, dataOut: DataOutputStream): Unit = {
-    dataOut.writeInt(func.command.length)
-    dataOut.write(func.command.toArray)
+    writeBytes(func.command.toArray, dataOut)
   }
 
   /**
@@ -149,9 +157,27 @@ private[spark] object PythonWorkerUtils extends Logging {
    * Read a string in UTF-8 charset with the given byte length.
    */
   def readUTF(length: Int, dataIn: DataInputStream): String = {
-    val obj = new Array[Byte](length)
-    dataIn.readFully(obj)
-    new String(obj, StandardCharsets.UTF_8)
+    new String(readBytes(length, dataIn), StandardCharsets.UTF_8)
+  }
+
+  /**
+   * Read a byte array.
+   */
+  def readBytes(dataIn: DataInputStream): Array[Byte] = {
+    readBytes(dataIn.readInt(), dataIn)
+  }
+
+  /**
+   * Read a byte array with the given byte length.
+   */
+  def readBytes(length: Int, dataIn: DataInputStream): Array[Byte] = {
+    if (length == 0) {
+      Array.emptyByteArray
+    } else {
+      val obj = new Array[Byte](length)
+      dataIn.readFully(obj)
+      obj
+    }
   }
 
   /**
@@ -163,9 +189,7 @@ private[spark] object PythonWorkerUtils extends Logging {
       maybeAccumulator: Option[PythonAccumulatorV2], dataIn: DataInputStream): Unit = {
     val numAccumulatorUpdates = dataIn.readInt()
     (1 to numAccumulatorUpdates).foreach { _ =>
-      val updateLen = dataIn.readInt()
-      val update = new Array[Byte](updateLen)
-      dataIn.readFully(update)
+      val update = readBytes(dataIn)
       maybeAccumulator.foreach(_.add(update))
     }
   }

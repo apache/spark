@@ -252,8 +252,7 @@ object UserDefinedPythonTableFunction {
         if (expr.foldable) {
           dataOut.writeBoolean(true)
           val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
-          dataOut.writeInt(obj.length)
-          dataOut.write(obj)
+          PythonWorkerUtils.writeBytes(obj, dataOut)
         } else {
           dataOut.writeBoolean(false)
         }
