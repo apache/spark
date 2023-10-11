@@ -2369,7 +2369,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass
         class AnalyzeResultWithBuffer(AnalyzeResult):
-            buffer: str
+            buffer: str = ""
 
         @udtf
         class TestUDTF:
