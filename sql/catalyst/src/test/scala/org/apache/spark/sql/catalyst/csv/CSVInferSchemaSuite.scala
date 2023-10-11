@@ -263,4 +263,14 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
   }
+
+  test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
+    " with only one row") {
+    val options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    val inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2884-06-24T02:45:51.138") == StringType)
+  }
 }
