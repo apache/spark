@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -536,7 +536,7 @@ private[spark] class BlockManager(
       logInfo(s"external shuffle service port = $externalShuffleServicePort")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
-      if (!isDriver) {
+      if (!isDriver && !(Utils.isTesting && conf.get(Tests.TEST_SKIP_ESS_REGISTER))) {
         registerWithExternalShuffleServer()
       }
     }
@@ -876,7 +876,10 @@ private[spark] class BlockManager(
     val storageLevel = status.storageLevel
     val inMemSize = Math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
-    master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
+    // Yet `blockId` could only be `ShuffleIndexBlockId` or `ShuffleDataBlockId` when it's a
+    // shuffle block because of decommission.
+    val bmId = if (blockId.isShuffle) shuffleServerId else blockManagerId
+    master.updateBlockInfo(bmId, blockId, storageLevel, inMemSize, onDiskSize)
   }
 
   /**
