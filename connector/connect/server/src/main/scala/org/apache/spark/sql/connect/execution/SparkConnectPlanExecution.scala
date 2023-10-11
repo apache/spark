@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 import com.google.protobuf.ByteString
@@ -110,26 +110,27 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
-    var totalNumRows: Long = 0
-    def sendBatch(bytes: Array[Byte], count: Long): Unit = {
+    def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
       val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
         .setRowCount(count)
         .setData(ByteString.copyFrom(bytes))
+        .setStartOffset(startOffset)
         .build()
       response.setArrowBatch(batch)
       responseObserver.onNext(response.build())
       numSent += 1
-      totalNumRows += count
     }
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
+        executePlan.eventsManager.postFinished(Some(rows.length))
+        var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count)
+          sendBatch(bytes, count, offset)
+          offset += count
         }
-        executePlan.eventsManager.postFinished(Some(totalNumRows))
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           val rows = dataframe.queryExecution.executedPlan.execute()
@@ -142,6 +143,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
             val signal = new Object
             val partitions = new Array[Array[Batch]](numPartitions)
+            var numFinishedPartitions = 0
+            var totalNumRows: Long = 0
             var error: Option[Throwable] = None
 
             // This callback is executed by the DAGScheduler thread.
@@ -150,6 +153,12 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
               signal.synchronized {
                 partitions(partitionId) = partition
+                totalNumRows += partition.map(_._2).sum
+                numFinishedPartitions += 1
+                if (numFinishedPartitions == numPartitions) {
+                  // Execution is finished, when all partitions returned results.
+                  executePlan.eventsManager.postFinished(Some(totalNumRows))
+                }
                 signal.notify()
               }
               ()
@@ -179,6 +188,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
             // tasks not related to scheduling. This is particularly important if there are
             // multiple users or clients running code at the same time.
             var currentPartitionId = 0
+            var currentOffset = 0L
             while (currentPartitionId < numPartitions) {
               val partition = signal.synchronized {
                 var part = partitions(currentPartitionId)
@@ -195,15 +205,15 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               }
 
               partition.foreach { case (bytes, count) =>
-                sendBatch(bytes, count)
+                sendBatch(bytes, count, currentOffset)
+                currentOffset += count
               }
 
               currentPartitionId += 1
             }
             ThreadUtils.awaitReady(future, Duration.Inf)
-            executePlan.eventsManager.postFinished(Some(totalNumRows))
           } else {
-            executePlan.eventsManager.postFinished(Some(totalNumRows))
+            executePlan.eventsManager.postFinished(Some(0))
           }
         }
     }
@@ -215,6 +225,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           schema,
           timeZoneId,
           errorOnDuplicatedFieldNames = false),
+        0L,
         0L)
     }
   }

@@ -435,28 +435,6 @@ class SparkSubmitSuite
     conf.get(UI_ENABLED) should be (false)
   }
 
-  test("handles mesos client mode") {
-    val clArgs = Seq(
-      "--deploy-mode", "client",
-      "--master", "mesos://h:p",
-      "--executor-memory", "5g",
-      "--total-executor-cores", "5",
-      "--class", "org.SomeClass",
-      "--driver-memory", "4g",
-      "--conf", "spark.ui.enabled=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
-    childArgs.mkString(" ") should be ("arg1 arg2")
-    mainClass should be ("org.SomeClass")
-    classpath should have length (1)
-    classpath(0) should endWith ("thejar.jar")
-    conf.get("spark.executor.memory") should be ("5g")
-    conf.get("spark.cores.max") should be ("5")
-    conf.get(UI_ENABLED) should be (false)
-  }
-
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",

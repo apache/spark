@@ -23,11 +23,11 @@ import java.nio.file.Paths
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
@@ -670,12 +670,49 @@ class ClientSuite extends SparkFunSuite
     assertUserClasspathUrls(cluster = true, replacementRootPath)
   }
 
+  test("SPARK-44306: test directoriesToBePreloaded") {
+    val sparkConf = new SparkConf()
+      .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 3)
+    val client = createClient(sparkConf, args = Array("--jar", USER))
+    val directories = client.directoriesToBePreloaded(Seq(
+      "hdfs:/valid/a.jar",
+      "hdfs:/valid/b.jar",
+      "hdfs:/valid/c.jar",
+      "s3:/valid/a.jar",
+      "s3:/valid/b.jar",
+      "s3:/valid/c.jar",
+      "hdfs:/glob/*",
+      "hdfs:/fewer/a.jar",
+      "hdfs:/fewer/b.jar",
+      "local:/local/a.jar",
+      "local:/local/b.jar",
+      "local:/local/c.jar"))
+    assert(directories.size == 2 && directories.contains(new URI("hdfs:/valid"))
+      && directories.contains(new URI("s3:/valid")))
+  }
+
+  test("SPARK-44306: test statCachePreload") {
+    val sparkConf = new SparkConf()
+      .set(YARN_CLIENT_STAT_CACHE_PRELOAD_PER_DIRECTORY_THRESHOLD, 2)
+      .set(JARS_TO_DISTRIBUTE, Seq("hdfs:/valid/a.jar", "hdfs:/valid/sub/../b.jar"))
+    val client = createClient(sparkConf, args = Array("--jar", USER))
+    val mockFileSystem = mock(classOf[FileSystem])
+    val mockFsLookup: URI => FileSystem = _ => mockFileSystem
+    when(mockFileSystem.listStatus(any[Path], any[PathFilter])).thenReturn(Seq(
+      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/a.jar")),
+      new FileStatus(1, false, 1, 1, 1L, new Path("hdfs:/valid/b.jar")),
+      new FileStatus(1, true, 1, 1, 1L, new Path("hdfs:/valid/c"))).toArray)
+    // Expect only a.jar and b.jar to be preloaded
+    assert(client.getPreloadedStatCache(sparkConf.get(JARS_TO_DISTRIBUTE), mockFsLookup).size === 2)
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
     ("files URI match test3", "file://host/file1", "file://host/file2"),
     ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
-    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+    ("hdfs URI match test1", "hdfs:/path1", "hdfs:/path1"),
+    ("hdfs URI match test2", "hdfs://localhost:8080", "hdfs://127.0.0.1:8080")
   )
 
   matching.foreach { t =>
@@ -691,7 +728,7 @@ class ClientSuite extends SparkFunSuite
     ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
     ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
     ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
-    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("s3 URI unmatch test", "s3a://user:pass@bucket1/", "s3a://user2:pass2@bucket1/"),
     ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
     ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
   )

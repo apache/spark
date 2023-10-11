@@ -20,8 +20,8 @@ package org.apache.spark.streaming.ui
 import java.util.{LinkedHashMap, Map => JMap, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Queue}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{StreamingConf, StreamingContext, Time}

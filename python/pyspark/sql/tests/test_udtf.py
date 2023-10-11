@@ -406,6 +406,62 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+    def test_udtf_cleanup_with_exception_in_eval(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "file.txt")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def __init__(self):
+                    self.path = path
+
+                def eval(self, x: int):
+                    raise Exception("eval error")
+
+                def terminate(self):
+                    with open(self.path, "a") as f:
+                        f.write("terminate")
+
+                def cleanup(self):
+                    with open(self.path, "a") as f:
+                        f.write("cleanup")
+
+            with self.assertRaisesRegex(PythonException, "eval error"):
+                TestUDTF(lit(1)).show()
+
+            with open(path, "r") as f:
+                data = f.read()
+
+            # Only cleanup method should be called.
+            self.assertEqual(data, "cleanup")
+
+    def test_udtf_cleanup_with_exception_in_terminate(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "file.txt")
+
+            @udtf(returnType="x: int")
+            class TestUDTF:
+                def __init__(self):
+                    self.path = path
+
+                def eval(self, x: int):
+                    yield (x,)
+
+                def terminate(self):
+                    raise Exception("terminate error")
+
+                def cleanup(self):
+                    with open(self.path, "a") as f:
+                        f.write("cleanup")
+
+            with self.assertRaisesRegex(PythonException, "terminate error"):
+                TestUDTF(lit(1)).show()
+
+            with open(path, "r") as f:
+                data = f.read()
+
+            self.assertEqual(data, "cleanup")
+
     def test_init_with_exception(self):
         @udtf(returnType="x: int")
         class TestUDTF:
@@ -2009,6 +2065,10 @@ class BaseUDTFTestsMixin:
                 self._partition_col = None
 
             def eval(self, row: Row):
+                # Make sure that the PARTITION BY expressions were projected out.
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 self._sum += row["input"]
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:
                     # Make sure that all values of the partitioning column are the same
@@ -2092,6 +2152,10 @@ class BaseUDTFTestsMixin:
                 self._partition_col = None
 
             def eval(self, row: Row, partition_col: str):
+                # Make sure that the PARTITION BY and ORDER BY expressions were projected out.
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 # Make sure that all values of the partitioning column are the same
                 # for each row consumed by this method for this instance of the class.
                 if self._partition_col is not None and self._partition_col != row[partition_col]:
@@ -2247,6 +2311,10 @@ class BaseUDTFTestsMixin:
                 )
 
             def eval(self, row: Row):
+                # Make sure that the PARTITION BY and ORDER BY expressions were projected out.
+                assert len(row.asDict().items()) == 2
+                assert "partition_col" in row
+                assert "input" in row
                 # Make sure that all values of the partitioning column are the same
                 # for each row consumed by this method for this instance of the class.
                 if self._partition_col is not None and self._partition_col != row["partition_col"]:

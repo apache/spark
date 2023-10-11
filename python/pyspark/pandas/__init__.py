@@ -23,7 +23,6 @@
 import os
 import sys
 import warnings
-from distutils.version import LooseVersion
 from typing import Any
 
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
@@ -40,13 +39,7 @@ except ImportError as e:
     else:
         raise
 
-
-import pyarrow
-
-if (
-    LooseVersion(pyarrow.__version__) >= LooseVersion("2.0.0")
-    and "PYARROW_IGNORE_TIMEZONE" not in os.environ
-):
+if "PYARROW_IGNORE_TIMEZONE" not in os.environ:
     warnings.warn(
         "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
         "set this environment variable to '1' in both driver and executor sides if you use "

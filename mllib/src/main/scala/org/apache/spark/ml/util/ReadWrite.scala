@@ -20,8 +20,8 @@ package org.apache.spark.ml.util
 import java.io.IOException
 import java.util.{Locale, ServiceLoader}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path

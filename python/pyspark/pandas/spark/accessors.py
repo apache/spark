@@ -25,11 +25,8 @@ from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame
 from pyspark.sql.types import DataType, StructType
-
 from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
-
-# For Supporting Spark Connect
 from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:

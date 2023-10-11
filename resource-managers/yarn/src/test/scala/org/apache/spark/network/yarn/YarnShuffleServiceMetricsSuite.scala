@@ -16,8 +16,8 @@
  */
 package org.apache.spark.network.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.metrics2.{MetricsInfo, MetricsRecordBuilder}
 import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}

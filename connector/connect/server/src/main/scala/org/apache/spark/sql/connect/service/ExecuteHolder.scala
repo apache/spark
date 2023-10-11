@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
@@ -181,6 +181,16 @@ private[connect] class ExecuteHolder(
         lastAttachedRpcTime = Some(System.currentTimeMillis())
       }
     }
+  }
+
+  // For testing.
+  private[connect] def setGrpcResponseSendersDeadline(deadlineMs: Long) = synchronized {
+    grpcResponseSenders.foreach(_.setDeadline(deadlineMs))
+  }
+
+  // For testing
+  private[connect] def interruptGrpcResponseSenders() = synchronized {
+    grpcResponseSenders.foreach(_.interrupt())
   }
 
   /**

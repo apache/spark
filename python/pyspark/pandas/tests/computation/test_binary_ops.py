@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
+
 import unittest
 
 import numpy as np
@@ -193,13 +193,7 @@ class FrameBinaryOpsMixin:
         psdf = ps.from_pandas(pdf)
         psdf1, psdf2 = psdf["X"], psdf["Y"]
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
-        else:
-            # pandas < 1.2.0 returns unexpected dtypes,
-            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+        self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
 
     def test_dot(self):
         psdf = self.psdf

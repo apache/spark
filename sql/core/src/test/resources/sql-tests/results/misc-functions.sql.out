@@ -68,8 +68,14 @@ SELECT assert_true(false)
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'false' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'false' is not true!"
+  }
+}
 
 
 -- !query
@@ -77,8 +83,14 @@ SELECT assert_true(boolean(0))
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'cast(0 as boolean)' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'cast(0 as boolean)' is not true!"
+  }
+}
 
 
 -- !query
@@ -86,8 +98,14 @@ SELECT assert_true(null)
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'null' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'null' is not true!"
+  }
+}
 
 
 -- !query
@@ -95,8 +113,14 @@ SELECT assert_true(boolean(null))
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'cast(null as boolean)' is not true!
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "'cast(null as boolean)' is not true!"
+  }
+}
 
 
 -- !query
@@ -104,8 +128,14 @@ SELECT assert_true(false, 'custom error message')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-custom error message
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "custom error message"
+  }
+}
 
 
 -- !query
@@ -121,8 +151,14 @@ SELECT raise_error('error message')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-error message
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "error message"
+  }
+}
 
 
 -- !query
@@ -130,5 +166,163 @@ SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 -- !query schema
 struct<>
 -- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorMessage" : "too big: 8"
+  }
+}
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v`"
+  }
+}
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOund', Map('relationName', '`v`'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v`"
+  }
+}
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOund', Map('relationNAME', '`v`'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
+    "providedParms" : "'relationNAME'"
+  }
+}
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
+    "providedParms" : ""
+  }
+}
+
+
+-- !query
+SELECT raise_error('VIEW_NOT_FOUND', Map('relationName', '`v`', 'totallymadeup', '5'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION_PARAMETER_MISMATCH",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorClass" : "'VIEW_NOT_FOUND'",
+    "expectedParms" : "'relationName'",
+    "providedParms" : "'relationName','totallymadeup'"
+  }
+}
+
+
+-- !query
+SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', Map())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED"
+}
+
+
+-- !query
+SELECT raise_error('ALL_PARTITION_COLUMNS_NOT_ALLOWED', NULL)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED"
+}
+
+
+-- !query
+SELECT raise_error(NULL, NULL)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS",
+  "sqlState" : "P0001",
+  "messageParameters" : {
+    "errorClass" : "'null'"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.raiseErrorWithoutErrorClass=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.raiseErrorWithoutErrorClass	true
+
+
+-- !query
+SELECT assert_true(false)
+-- !query schema
+struct<>
+-- !query output
 java.lang.RuntimeException
-too big: 8
+'false' is not true!
+
+
+-- !query
+SELECT raise_error('hello')
+-- !query schema
+struct<>
+-- !query output
+java.lang.RuntimeException
+hello
+
+
+-- !query
+SET spark.sql.legacy.raiseErrorWithoutErrorClass=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.raiseErrorWithoutErrorClass	false

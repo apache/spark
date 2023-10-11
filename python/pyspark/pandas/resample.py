@@ -19,7 +19,6 @@
 A wrapper for ResampledData to behave like pandas Resampler.
 """
 from abc import ABCMeta, abstractmethod
-from distutils.version import LooseVersion
 from functools import partial
 from typing import (
     Any,
@@ -30,16 +29,8 @@ from typing import (
 )
 
 import numpy as np
-
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
-
-if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
-else:
-    from pandas.core.base import SelectionMixin
-
-    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
@@ -48,7 +39,6 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DataType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame

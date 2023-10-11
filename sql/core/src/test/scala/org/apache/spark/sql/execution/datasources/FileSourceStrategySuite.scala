@@ -774,6 +774,8 @@ class TestFileFormat extends TextBasedFileFormat {
 class LocalityTestFileSystem extends RawLocalFileSystem {
   private val invocations = new AtomicInteger(0)
 
+  override def getScheme(): String = "localitytest"
+
   override def getFileBlockLocations(
       file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
     require(!file.isDirectory, "The file path can not be a directory.")
