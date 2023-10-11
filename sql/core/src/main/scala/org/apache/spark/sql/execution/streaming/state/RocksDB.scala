@@ -109,6 +109,7 @@ class RocksDB(
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
+  dbOptions.setAllowFAllocate(conf.allowFAllocate)
 
   if (conf.boundedMemoryUsage) {
     dbOptions.setWriteBufferManager(writeBufferManager)
@@ -674,7 +675,8 @@ case class RocksDBConf(
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
-    compressionCodec: String)
+    compressionCodec: String,
+    allowFAllocate: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -757,6 +759,14 @@ object RocksDBConf {
   private val HIGH_PRIORITY_POOL_RATIO_CONF = SQLConfEntry(HIGH_PRIORITY_POOL_RATIO_CONF_KEY,
     "0.1")
 
+  // Allow files to be pre-allocated on disk using fallocate
+  // Disabling may slow writes, but can solve an issue where
+  // significant quantities of disk are wasted if there are
+  // many smaller concurrent state-stores running with the
+  // spark context
+  val ALLOW_FALLOCATE_CONF_KEY = "allowFAllocate"
+  private val ALLOW_FALLOCATE_CONF = SQLConfEntry(ALLOW_FALLOCATE_CONF_KEY, "true")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -834,7 +844,8 @@ object RocksDBConf {
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
-      storeConf.compressionCodec)
+      storeConf.compressionCodec,
+      getBooleanConf(ALLOW_FALLOCATE_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
