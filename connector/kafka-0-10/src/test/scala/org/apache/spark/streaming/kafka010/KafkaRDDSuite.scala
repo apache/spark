@@ -24,12 +24,14 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import kafka.log.{CleanerConfig, LogCleaner, LogConfig, ProducerStateManagerConfig, UnifiedLog}
-import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
+import kafka.log.{LogCleaner, UnifiedLog}
+import kafka.server.BrokerTopicStats
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.storage.internals.log.{CleanerConfig, LogConfig, LogDirFailureChannel, ProducerStateManagerConfig}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -90,13 +92,13 @@ class KafkaRDDSuite extends SparkFunSuite {
     val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
     val logProps = new ju.Properties()
-    logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
-    logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
+    logProps.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)
+    logProps.put(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
     val producerIdExpirationMs = Int.MaxValue
-    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs)
-    val logConfig = LogConfig(logProps)
+    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs, false)
+    val logConfig = new LogConfig(logProps)
     val log = UnifiedLog(
       dir,
       logConfig,
@@ -120,7 +122,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     log.roll()
     logs.put(topicPartition, log)
 
-    val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
+    val cleaner = new LogCleaner(new CleanerConfig(false), Array(dir), logs, logDirFailureChannel)
     cleaner.startup()
     cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
 
