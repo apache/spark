@@ -221,9 +221,9 @@ Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically ena
 `spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
 upgrading Spark versions.
 
-The SSL encryption support supersedes the authentication and encryption settings mentioned
-earlier. If both are enabled, the SSL settings take precedence and the prior settings will be 
-disabled at runtime, and a warning message will be emitted.
+The SSL encryption support supersedes the encryption settings mentioned earlier. If both are
+enabled, the SSL settings take precedence and the prior settings will be disabled at runtime,
+and a warning message will be emitted.
 
 # Local Storage Encryption
 
@@ -636,15 +636,6 @@ replaced with one of the above namespaces.
       This setting is only applicable to the `rpc` namespace.
     </td>
   </tr>
-  <tr>
-    <td><code>${ns}.dangerouslyFallbackIfKeysNotPresent</code></td>
-    <td>false</td>
-    <td>
-      Whether we should fall back to unencrypted connections if SSL is enabled but the required
-      key files are not present on the file system (instead of throwing a fatal error).
-      This setting is only applicable to the `rpc` namespace. This is a dangerous option and 
-      should only be used under exceptional circumstances.
-    </td>
 </table>
 
 Spark also supports retrieving `${ns}.keyPassword`, `${ns}.keyStorePassword` and `${ns}.trustStorePassword` from
