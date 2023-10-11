@@ -191,7 +191,7 @@ object ExpressionEncoder {
    * thread-safe. Note that multiple calls to `apply(..)` return the same actual [[InternalRow]]
    * object.  Thus, the caller should copy the result before making another call if required.
    */
-  class Serializer[T](private val expressions: Seq[Expression])
+  class Serializer[T](val expressions: Seq[Expression])
     extends (T => InternalRow) with Serializable {
     @transient
     private[this] var inputRow: GenericInternalRow = _

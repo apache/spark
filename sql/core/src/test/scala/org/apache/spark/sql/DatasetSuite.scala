@@ -2605,6 +2605,21 @@ class DatasetSuite extends QueryTest
     }
   }
 
+  test("Some(null) is unsupported when creating dataset") {
+    // Create our own encoder to avoid multiple encoders with different suffixes
+    implicit val enc: ExpressionEncoder[Option[String]] = ExpressionEncoder()
+    val exception = intercept[org.apache.spark.SparkRuntimeException] {
+      spark.createDataset(Seq(Some(""), None, Some(null)))
+    }
+    checkError(
+      exception = exception,
+      errorClass = "EXPRESSION_ENCODING_FAILED",
+      parameters = Map(
+        "expressions" -> enc.serializer.map(
+          _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
+    )
+  }
+
   test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
     val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
     assert(ds.count() == 2)
