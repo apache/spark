@@ -16,9 +16,6 @@
  */
 package org.apache.spark.network.ssl;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -31,10 +28,16 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.common.annotations.VisibleForTesting;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
 /**
  * A {@link TrustManager} implementation that reloads its configuration when
  * the truststore file on disk changes.
- * This implementation is based entirely on the
+ * This implementation is based off of the
  * org.apache.hadoop.security.ssl.ReloadingX509TrustManager class in the Apache Hadoop Encrypted
  * Shuffle implementation.
  *
@@ -45,12 +48,18 @@ public final class ReloadingX509TrustManager
 
   private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
-  private String type;
-  private File file;
-  private String password;
+  private final String type;
+  private final File file;
+  // The file being pointed to by `file` if it's a link
+  private String canonicalPath;
+  private final String password;
   private long lastLoaded;
-  private long reloadInterval;
-  private AtomicReference<X509TrustManager> trustManagerRef;
+  private final long reloadInterval;
+  @VisibleForTesting
+  protected volatile int reloadCount;
+  @VisibleForTesting
+  protected volatile int needsReloadCheckCounts;
+  private final AtomicReference<X509TrustManager> trustManagerRef;
 
   private volatile boolean running;
   private Thread reloader;
@@ -73,11 +82,14 @@ public final class ReloadingX509TrustManager
       String type, File trustStore, String password, long reloadInterval)
       throws IOException, GeneralSecurityException {
     this.type = type;
-    file = trustStore;
+    this.file = trustStore;
+    this.canonicalPath = this.file.getCanonicalPath();
     this.password = password;
-    trustManagerRef = new AtomicReference<X509TrustManager>();
-    trustManagerRef.set(loadTrustManager());
+    this.trustManagerRef = new AtomicReference<X509TrustManager>();
+    this.trustManagerRef.set(loadTrustManager());
     this.reloadInterval = reloadInterval;
+    this.reloadCount = 0;
+    this.needsReloadCheckCounts = 0;
   }
 
   /**
@@ -93,9 +105,10 @@ public final class ReloadingX509TrustManager
   /**
    * Stops the reloader thread.
    */
-  public void destroy() {
+  public void destroy() throws InterruptedException {
     running = false;
     reloader.interrupt();
+    reloader.join();
   }
 
   /**
@@ -115,7 +128,7 @@ public final class ReloadingX509TrustManager
       tm.checkClientTrusted(chain, authType);
     } else {
       throw new CertificateException("Unknown client chain certificate: " +
-        chain[0].toString());
+        chain[0].toString() + ". Please ensure the correct trust store is specified in the config");
     }
   }
 
@@ -127,7 +140,7 @@ public final class ReloadingX509TrustManager
       tm.checkServerTrusted(chain, authType);
     } else {
       throw new CertificateException("Unknown server chain certificate: " +
-              chain[0].toString());
+        chain[0].toString() + ". Please ensure the correct trust store is specified in the config");
     }
   }
 
@@ -143,10 +156,13 @@ public final class ReloadingX509TrustManager
     return issuers;
   }
 
-  boolean needsReload() {
+  boolean needsReload() throws IOException {
     boolean reload = true;
-    if (file.exists()) {
-      if (file.lastModified() == lastLoaded) {
+    File latestCanonicalFile = file.getCanonicalFile();
+    if (file.exists() && latestCanonicalFile.exists()) {
+      // `file` can be a symbolic link. We need to reload if it points to another file,
+      // or if the file has been modified
+      if (latestCanonicalFile.getPath().equals(canonicalPath) && latestCanonicalFile.lastModified() == lastLoaded) {
         reload = false;
       }
     } else {
@@ -159,13 +175,12 @@ public final class ReloadingX509TrustManager
           throws IOException, GeneralSecurityException {
     X509TrustManager trustManager = null;
     KeyStore ks = KeyStore.getInstance(type);
-    lastLoaded = file.lastModified();
-    FileInputStream in = new FileInputStream(file);
-    try {
+    File latestCanonicalFile = file.getCanonicalFile();
+    canonicalPath = latestCanonicalFile.getPath();
+    lastLoaded = latestCanonicalFile.lastModified();
+    try (FileInputStream in = new FileInputStream(latestCanonicalFile)) {
       ks.load(in, password.toCharArray());
       logger.debug("Loaded truststore '" + file + "'");
-    } finally {
-      in.close();
     }
 
     TrustManagerFactory trustManagerFactory =
@@ -189,13 +204,19 @@ public final class ReloadingX509TrustManager
       } catch (InterruptedException e) {
         //NOP
       }
-      if (running && needsReload()) {
-        try {
-          trustManagerRef.set(loadTrustManager());
-        } catch (Exception ex) {
-          logger.warn("Could not load truststore (keep using existing one) : " + ex.toString(), ex);
+      try {
+        if (running && needsReload()) {
+          try {
+            trustManagerRef.set(loadTrustManager());
+            this.reloadCount += 1;
+          } catch (Exception ex) {
+            logger.warn("Could not load truststore (keep using existing one) : " + ex.toString(), ex);
+          }
         }
+      } catch (IOException ex) {
+       logger.warn("Could not check whether truststore needs reloading: " + ex.toString(), ex);
       }
+      needsReloadCheckCounts++;
     }
   }
 }

@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
@@ -27,10 +28,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
-
-
 
 import static org.apache.spark.network.ssl.SslSampleConfigs.*;
 
@@ -38,6 +39,57 @@ import static org.apache.spark.network.ssl.SslSampleConfigs.*;
  *
  */
 public class ReloadingX509TrustManagerSuite {
+
+  private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManagerSuite.class);
+
+  /**
+   * Waits until reload count hits the requested value, sleeping 100ms at a time.
+   * If the maximum number of attempts is hit, throws a RuntimeException
+   * @param tm the trust manager to wait for
+   * @param count The count to wait for
+   * @param attempts The number of attempts to wait for
+   */
+  private void waitForReloadCount(ReloadingX509TrustManager tm, int count, int attempts)
+          throws InterruptedException {
+    if (tm.reloadCount > count) {
+      throw new RuntimeException(
+        "Passed invalid count " + count + " to waitForReloadCount, already have " + tm.reloadCount);
+    }
+    for (int i = 0; i < attempts; i++) {
+      if (tm.reloadCount >= count) {
+        return;
+      }
+      // Adapted from SystemClock.waitTillTime
+      long startTime = System.currentTimeMillis();
+      long targetTime = startTime + 100;
+      long currentTime = startTime;
+      while (currentTime < targetTime) {
+        long sleepTime = Math.min(10, targetTime - currentTime);
+        Thread.sleep(sleepTime);
+        currentTime = System.currentTimeMillis();
+      }
+    }
+    throw new RuntimeException("Trust store not reloaded after " + attempts + " attempts!");
+  }
+
+  /**
+   * Waits until we make some number of attempts to reload, and verifies
+   * that the actual reload count did not change
+   *
+   * @param tm the trust manager to wait for
+   * @param attempts The number of attempts to wait for
+   */
+  private void waitForNoReload(ReloadingX509TrustManager tm, int attempts)
+          throws InterruptedException {
+    int oldReloadCount = tm.reloadCount;
+    int checkCount = tm.needsReloadCheckCounts;
+    int target = checkCount + 10;
+    while (checkCount < target) {
+      Thread.sleep(100);
+      checkCount = tm.needsReloadCheckCounts;
+    }
+    assertEquals(oldReloadCount, tm.reloadCount);
+  }
 
   /**
    * Tests to ensure that loading a missing trust-store fails
@@ -88,11 +140,13 @@ public class ReloadingX509TrustManagerSuite {
         tm.init();
       } finally {
         tm.destroy();
+        corruptStore.delete();
       }
     });
   }
 
   /**
+   * Tests that we successfully reload when a file is updated
    * @throws Exception
    */
   @Test
@@ -105,13 +159,14 @@ public class ReloadingX509TrustManagerSuite {
     createTrustStore(trustStore, "password", "cert1", cert1);
 
     ReloadingX509TrustManager tm =
-      new ReloadingX509TrustManager("jks", trustStore, "password", 10);
+      new ReloadingX509TrustManager("jks", trustStore, "password", 1);
+    assertEquals(1, tm.getReloadInterval());
+    assertEquals(0, tm.reloadCount);
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
-
-      // Wait so that the file modification time is different
-      Thread.sleep((tm.getReloadInterval() + 1000));
+      // At this point we haven't reloaded, just the initial load
+      assertEquals(0, tm.reloadCount);
 
       // Add another cert
       Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
@@ -119,41 +174,41 @@ public class ReloadingX509TrustManagerSuite {
       certs.put("cert2", cert2);
       createTrustStore(trustStore, "password", certs);
 
-      // and wait to be sure reload has taken place
-      assertEquals(10, tm.getReloadInterval());
-
-      // Wait so that the file modification time is different
-      Thread.sleep((tm.getReloadInterval() + 200));
+      // Wait until we reload
+      waitForReloadCount(tm, 1, 10);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
     } finally {
       tm.destroy();
+      trustStore.delete();
     }
   }
 
   /**
+   * Tests that we keep old certs if the trust store goes missing
+   *
    * @throws Exception
    */
   @Test
   public void testReloadMissingTrustStore() throws Exception {
     KeyPair kp = generateKeyPair("RSA");
     X509Certificate cert1 = generateCertificate("CN=Cert1", kp, 30, "SHA1withRSA");
-    X509Certificate cert2 = generateCertificate("CN=Cert2", kp, 30, "SHA1withRSA");
     File trustStore = new File("testmissing.jks");
     trustStore.deleteOnExit();
     assertFalse(trustStore.exists());
     createTrustStore(trustStore, "password", "cert1", cert1);
 
     ReloadingX509TrustManager tm =
-      new ReloadingX509TrustManager("jks", trustStore, "password", 10);
+      new ReloadingX509TrustManager("jks", trustStore, "password", 1);
+    assertEquals(0, tm.reloadCount);
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
       X509Certificate cert = tm.getAcceptedIssuers()[0];
       trustStore.delete();
 
-      // Wait so that the file modification time is different
-      Thread.sleep((tm.getReloadInterval() + 200));
+      // Wait until for at least a few attempts - we should *not* reload
+      waitForNoReload(tm, 10);
 
       assertEquals(1, tm.getAcceptedIssuers().length);
       assertEquals(cert, tm.getAcceptedIssuers()[0]);
@@ -163,19 +218,20 @@ public class ReloadingX509TrustManagerSuite {
   }
 
   /**
+   * Tests that we keep old certs if the new truststore is corrupt
    * @throws Exception
    */
   @Test
   public void testReloadCorruptTrustStore() throws Exception {
     KeyPair kp = generateKeyPair("RSA");
     X509Certificate cert1 = generateCertificate("CN=Cert1", kp, 30, "SHA1withRSA");
-    X509Certificate cert2 = generateCertificate("CN=Cert2", kp, 30, "SHA1withRSA");
     File corruptStore = File.createTempFile("truststore-corrupt", "jks");
     corruptStore.deleteOnExit();
     createTrustStore(corruptStore, "password", "cert1", cert1);
 
     ReloadingX509TrustManager tm =
-      new ReloadingX509TrustManager("jks", corruptStore, "password", 10);
+      new ReloadingX509TrustManager("jks", corruptStore, "password", 1);
+    assertEquals(0, tm.reloadCount);
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
@@ -186,13 +242,79 @@ public class ReloadingX509TrustManagerSuite {
       os.close();
       corruptStore.setLastModified(System.currentTimeMillis() - 1000);
 
-      // Wait so that the file modification time is different
-      Thread.sleep((tm.getReloadInterval() + 200));
+      // Wait until for at least a few attempts - we should *not* reload
+      waitForNoReload(tm, 10);
 
       assertEquals(1, tm.getAcceptedIssuers().length);
       assertEquals(cert, tm.getAcceptedIssuers()[0]);
     } finally {
       tm.destroy();
+      corruptStore.delete();
+    }
+  }
+
+  /**
+   * Tests that we successfully reload when the trust store is a symlink
+   * and we update the contents of the pointed-to file or we update the file it points to.
+   * @throws Exception
+   */
+  @Test
+  public void testReloadSymlink() throws Exception {
+    KeyPair kp = generateKeyPair("RSA");
+    X509Certificate cert1 = generateCertificate("CN=Cert1", kp, 30, "SHA1withRSA");
+    X509Certificate cert2 = generateCertificate("CN=Cert2", kp, 30, "SHA1withRSA");
+    X509Certificate cert3 = generateCertificate("CN=Cert3", kp, 30, "SHA1withRSA");
+
+    File trustStore1 = File.createTempFile("testreload", "jks");
+    trustStore1.deleteOnExit();
+    createTrustStore(trustStore1, "password", "cert1", cert1);
+
+    File trustStore2 = File.createTempFile("testreload", "jks");
+    Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
+    certs.put("cert1", cert1);
+    certs.put("cert2", cert2);
+    createTrustStore(trustStore2, "password", certs);
+
+    File trustStoreSymlink = File.createTempFile("testreloadsymlink", "jks");
+    trustStoreSymlink.delete();
+    Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore1.toPath());
+
+    ReloadingX509TrustManager tm =
+            new ReloadingX509TrustManager("jks", trustStoreSymlink, "password", 1);
+    assertEquals(1, tm.getReloadInterval());
+    assertEquals(0, tm.reloadCount);
+    logger.info("TRUST STORE 1 IS" + trustStore1);
+    logger.info("TRUST STORE 2 IS " + trustStore2);
+    try {
+      tm.init();
+      assertEquals(1, tm.getAcceptedIssuers().length);
+      // At this point we haven't reloaded, just the initial load
+      assertEquals(0, tm.reloadCount);
+
+      // Repoint to trustStore2, which has another cert
+      logger.info("REPOINTING SYMLINK!!!");
+      trustStoreSymlink.delete();
+      Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore2.toPath());
+      logger.info("REPOINTED!!!");
+
+      // Wait until we reload
+      waitForReloadCount(tm, 1, 10);
+
+      assertEquals(2, tm.getAcceptedIssuers().length);
+
+      // Add another cert
+      certs.put("cert3", cert3);
+      createTrustStore(trustStore2, "password", certs);
+
+      // Wait until we reload
+      waitForReloadCount(tm, 2, 10);
+
+      assertEquals(3, tm.getAcceptedIssuers().length);
+    } finally {
+      tm.destroy();
+      trustStore1.delete();
+      trustStore2.delete();
+      trustStoreSymlink.delete();
     }
   }
 }
