@@ -137,10 +137,7 @@ object PythonUDTFRunner {
     }
     // Write the pickled AnalyzeResult buffer from the UDTF "analyze" method, if any.
     dataOut.writeBoolean(udtf.pickledAnalyzeResult.nonEmpty)
-    udtf.pickledAnalyzeResult.map { p =>
-      dataOut.writeInt(p.length)
-      dataOut.write(p)
-    }
+    udtf.pickledAnalyzeResult.foreach(PythonWorkerUtils.writeBytes(_, dataOut))
     // Write the contents of the Python script itself.
     PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
     // Write the result schema of the UDTF call.
