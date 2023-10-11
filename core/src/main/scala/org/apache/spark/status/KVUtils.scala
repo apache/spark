@@ -95,7 +95,9 @@ private[spark] object KVUtils extends Logging {
 
     val kvSerializer = serializer(conf, live)
     val db = backend(conf, live) match {
-      case LEVELDB => new LevelDB(path, kvSerializer)
+      case LEVELDB =>
+        logWarning("The LEVELDB is deprecated. Please use ROCKSDB instead.")
+        new LevelDB(path, kvSerializer)
       case ROCKSDB => new RocksDB(path, kvSerializer)
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)

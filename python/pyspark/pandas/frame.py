@@ -59,14 +59,14 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset, to_offset
 
-from pyspark.errors import PySparkValueError
-
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
 from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
+
+from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
@@ -86,7 +86,6 @@ from pyspark.sql.types import (
     NullType,
 )
 from pyspark.sql.window import Window
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import (
     Axis,
@@ -150,8 +149,6 @@ from pyspark.pandas.typedef.typehints import (
     create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-
-# For supporting Spark Connect
 from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:

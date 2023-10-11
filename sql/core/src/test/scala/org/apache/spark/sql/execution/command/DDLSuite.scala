@@ -2417,6 +2417,8 @@ object FakeLocalFsFileSystem {
 class FakeLocalFsFileSystem extends RawLocalFileSystem {
   import FakeLocalFsFileSystem._
 
+  override def getScheme(): String = "fakelocalfs"
+
   override def delete(f: Path, recursive: Boolean): Boolean = {
     aclStatus = new AclStatus.Builder().build()
     super.delete(f, recursive)

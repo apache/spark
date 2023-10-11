@@ -169,7 +169,6 @@ class DataFrame:
 
     @property
     def write(self) -> "DataFrameWriter":
-        assert self._plan is not None
         return DataFrameWriter(self._plan, self._session)
 
     write.__doc__ = PySparkDataFrame.write.__doc__
@@ -259,7 +258,7 @@ class DataFrame:
     count.__doc__ = PySparkDataFrame.count.__doc__
 
     def crossJoin(self, other: "DataFrame") -> "DataFrame":
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
@@ -267,7 +266,7 @@ class DataFrame:
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
 
-    def checkSameSparkSession(self, other: "DataFrame") -> None:
+    def _check_same_session(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
             raise SessionNotSameException(
                 error_class="SESSION_NOT_SAME",
@@ -578,9 +577,9 @@ class DataFrame:
         on: Optional[Union[str, List[str], Column, List[Column]]] = None,
         how: Optional[str] = None,
     ) -> "DataFrame":
+        self._check_same_session(other)
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
@@ -600,6 +599,7 @@ class DataFrame:
         allowExactMatches: bool = True,
         direction: str = "backward",
     ) -> "DataFrame":
+        self._check_same_session(other)
         if how is None:
             how = "inner"
         assert isinstance(how, str), "how should be a string"
@@ -1089,17 +1089,13 @@ class DataFrame:
     show.__doc__ = PySparkDataFrame.show.__doc__
 
     def union(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return self.unionAll(other)
 
     union.__doc__ = PySparkDataFrame.union.__doc__
 
     def unionAll(self, other: "DataFrame") -> "DataFrame":
-        if other._plan is None:
-            raise PySparkValueError(
-                error_class="MISSING_VALID_PLAN",
-                message_parameters={"operator": "Union"},
-            )
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -1107,7 +1103,7 @@ class DataFrame:
     unionAll.__doc__ = PySparkDataFrame.unionAll.__doc__
 
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
-        self.checkSameSparkSession(other)
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,
@@ -1122,6 +1118,7 @@ class DataFrame:
     unionByName.__doc__ = PySparkDataFrame.unionByName.__doc__
 
     def subtract(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=False),
             session=self._session,
@@ -1130,6 +1127,7 @@ class DataFrame:
     subtract.__doc__ = PySparkDataFrame.subtract.__doc__
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "except", is_all=True), session=self._session
         )
@@ -1137,6 +1135,7 @@ class DataFrame:
     exceptAll.__doc__ = PySparkDataFrame.exceptAll.__doc__
 
     def intersect(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=False),
             session=self._session,
@@ -1145,6 +1144,7 @@ class DataFrame:
     intersect.__doc__ = PySparkDataFrame.intersect.__doc__
 
     def intersectAll(self, other: "DataFrame") -> "DataFrame":
+        self._check_same_session(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "intersect", is_all=True),
             session=self._session,
@@ -2024,8 +2024,6 @@ class DataFrame:
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def foreach(self, f: Callable[[Row], None]) -> None:
-        assert self._plan is not None
-
         def foreach_func(row: Any) -> None:
             f(row)
 
@@ -2036,8 +2034,6 @@ class DataFrame:
     foreach.__doc__ = PySparkDataFrame.foreach.__doc__
 
     def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
-        assert self._plan is not None
-
         schema = self.schema
         field_converters = [
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
@@ -2063,14 +2059,12 @@ class DataFrame:
 
     @property
     def writeStream(self) -> DataStreamWriter:
-        assert self._plan is not None
         return DataStreamWriter(plan=self._plan, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
-        assert self._plan is not None
-        assert other._plan is not None
+        self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
             other=other._plan.to_proto(other._session.client),
@@ -2079,7 +2073,6 @@ class DataFrame:
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
 
     def semanticHash(self) -> int:
-        assert self._plan is not None
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),
         )
@@ -2087,7 +2080,6 @@ class DataFrame:
     semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        assert self._plan is not None
         return DataFrameWriterV2(self._plan, self._session, table)
 
     writeTo.__doc__ = PySparkDataFrame.writeTo.__doc__

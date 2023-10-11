@@ -23,6 +23,7 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.scalatest.BeforeAndAfterAll
@@ -291,8 +292,10 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       tableCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"),
       sessionCompressCodecs = List("SNAPPY", "GZIP", "SNAPPY"))
     checkForTableWithCompressProp("orc",
-      tableCompressCodecs = List("NONE", "SNAPPY", "ZLIB"),
-      sessionCompressCodecs = List("SNAPPY", "ZLIB", "SNAPPY"))
+      tableCompressCodecs =
+        List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name),
+      sessionCompressCodecs =
+        List(CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name, CompressionKind.SNAPPY.name))
   }
 
   test("table-level compression is not set but session-level compressions is set ") {
@@ -301,7 +304,8 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       sessionCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs = List.empty,
-      sessionCompressCodecs = List("NONE", "SNAPPY", "ZLIB"))
+      sessionCompressCodecs =
+        List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name))
   }
 
   def checkTableWriteWithCompressionCodecs(format: String, compressCodecs: List[String]): Unit = {
@@ -336,6 +340,8 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
 
   test("test table containing mixed compression codec") {
     checkTableWriteWithCompressionCodecs("parquet", List("UNCOMPRESSED", "SNAPPY", "GZIP"))
-    checkTableWriteWithCompressionCodecs("orc", List("NONE", "SNAPPY", "ZLIB"))
+    checkTableWriteWithCompressionCodecs(
+      "orc",
+      List(CompressionKind.NONE.name, CompressionKind.SNAPPY.name, CompressionKind.ZLIB.name))
   }
 }
