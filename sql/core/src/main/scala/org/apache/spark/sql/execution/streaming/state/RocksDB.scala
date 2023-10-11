@@ -109,6 +109,8 @@ class RocksDB(
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
+  dbOptions.getEnv().lowerThreadPoolCPUPriority(Priority.HIGH)
+  dbOptions.getEnv().lowerThreadPoolCPUPriority(Priority.LOW)
 
   if (conf.boundedMemoryUsage) {
     dbOptions.setWriteBufferManager(writeBufferManager)
