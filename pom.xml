@@ -3010,7 +3010,6 @@
                 Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
               -->
               <arg>-Wconf:msg=legacy-binding:s</arg>
-
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
