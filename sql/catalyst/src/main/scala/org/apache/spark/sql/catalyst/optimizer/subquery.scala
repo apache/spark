@@ -366,7 +366,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // have a count bug. These cases are simple and already handled by
         // [[RewriteCorrelatedScalarSubquery]]. Handling these cases in [[DecorrelateInnerQuery]]
         // will introduce redundant left outer joins.
-        val shouldHandleCountBug = !(plan match {
+        val shouldHandleCountBug = !(sub match {
           case a: Aggregate =>
             a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
               case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
