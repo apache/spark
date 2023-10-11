@@ -290,10 +290,8 @@ function setupSelectionForSparkPlanNode(g) {
 
   linkedNodes.forEach((linkedNodes, selectNode) => {
     d3.select("#" + selectNode).on("click", () => {
-      planVizContainer()
-        .selectAll("*")
-        .classed("selected", false)
-        .classed("linked", false);
+      planVizContainer().selectAll(".selected").classed("selected", false);
+      planVizContainer().selectAll(".linked").classed("linked", false);
       d3.select("#" + selectNode + " rect").classed("selected", true);
       linkedNodes.forEach((linkedNode) => {
         d3.select("#" + linkedNode + " rect").classed("linked", true);
