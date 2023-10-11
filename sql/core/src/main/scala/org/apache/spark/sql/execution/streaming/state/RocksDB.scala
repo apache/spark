@@ -102,6 +102,7 @@ class RocksDB(
   if (conf.maxWriteBufferNumber > 0L) {
     columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
   }
+  columnFamilyOptions.setCompressionType(CompressionType.LZ4_COMPRESSION)
 
   private val dbOptions =
     new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
