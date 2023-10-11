@@ -1646,7 +1646,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
     assert(df.collect().length === 37)
   }
 
-  test("root-level value tag for attributes-only object") {
+  test("SPARK-45488: root-level value tag for attributes-only object") {
 
     val schema = buildSchema(field("_attr"), field("_VALUE"))
     val results = Seq(
