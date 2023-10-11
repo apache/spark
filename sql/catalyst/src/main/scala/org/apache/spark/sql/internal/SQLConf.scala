@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -1570,10 +1570,8 @@ object SQLConf {
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(Set("NONE", "DISK_ONLY", "DISK_ONLY_2", "DISK_ONLY_3", "MEMORY_ONLY",
-      "MEMORY_ONLY_2", "MEMORY_ONLY_SER", "MEMORY_ONLY_SER_2", "MEMORY_AND_DISK",
-      "MEMORY_AND_DISK_2", "MEMORY_AND_DISK_SER", "MEMORY_AND_DISK_SER_2", "OFF_HEAP"))
-    .createWithDefault("MEMORY_AND_DISK")
+    .checkValues(StorageLevelMapper.values.map(_.name()).toSet)
+    .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
