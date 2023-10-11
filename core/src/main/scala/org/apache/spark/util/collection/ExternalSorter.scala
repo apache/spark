@@ -842,7 +842,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): ((Int, K), C) = {
       val r = cur
