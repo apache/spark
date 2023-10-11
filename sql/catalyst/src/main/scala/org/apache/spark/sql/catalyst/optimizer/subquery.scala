@@ -360,7 +360,21 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
         if children.nonEmpty =>
-        val (newPlan, newCond) = decorrelate(sub, plan)
+        // We want to handle count bug for scalar subqueries in [[DecorrelateInnerQuery]], because
+        // it has better count bug detection logic than in [[RewriteCorrelatedScalarSubquery]]. The
+        // only exception are cases where the subquery is a simple top level Aggregate which can
+        // have a count bug. These cases are simple and already handled by
+        // [[RewriteCorrelatedScalarSubquery]]. Handling these cases in [[DecorrelateInnerQuery]]
+        // will introduce redundant left outer joins.
+        val shouldHandleCountBug = !(plan match {
+          case a: Aggregate =>
+            a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
+              case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
+              case _ => false
+            })
+          case _ => false
+        })
+        val (newPlan, newCond) = decorrelate(sub, plan, shouldHandleCountBug)
         val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
           // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
           // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
