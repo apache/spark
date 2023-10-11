@@ -387,45 +387,8 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-45468 redirect without proxyRedirectUri preserves uiRoot") {
+  test("SPARK-45468 redirect to path without host if proxyRedirectUri is not set") {
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
-
-    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
-    try {
-      val serverAddr = s"http://$localhost:${serverInfo.boundPort}"
-
-      val redirect = JettyUtils.createRedirectHandler("/src", "/dst")
-      serverInfo.addHandler(redirect, securityMgr)
-
-      // Test with a URL handled by the added redirect handler, and also including a path prefix.
-      val headers = Seq("X-Forwarded-Context" -> "/prefix")
-      TestUtils.withHttpConnection(
-          new URL(s"$serverAddr/src/"),
-          headers = headers,
-          followRedirect = false) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
-        val location = Option(conn.getHeaderFields().get("Location"))
-          .map(_.get(0)).orNull
-        assert(location === s"$serverAddr/prefix/dst")
-      }
-
-      // Not really used by Spark, but test with a relative redirect.
-      val relative = JettyUtils.createRedirectHandler("/rel", "root")
-      serverInfo.addHandler(relative, securityMgr)
-      TestUtils.withHttpConnection(new URL(s"$serverAddr/rel/"), followRedirect = false) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
-        val location = Option(conn.getHeaderFields().get("Location"))
-          .map(_.get(0)).orNull
-        assert(location === s"$serverAddr/rel/root")
-      }
-    } finally {
-      stopServer(serverInfo)
-    }
-  }
-
-  test("SPARK-45468 redirect without host") {
-    val (conf, securityMgr, sslOptions) = sslDisabledConf()
-    conf.set(UI.REDIRECT_WITHOUT_HOST, true)
 
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     try {
@@ -454,44 +417,6 @@ class UISuite extends SparkFunSuite {
         val location = Option(conn.getHeaderFields().get("Location"))
           .map(_.get(0)).orNull
         assert(location === "/rel/root")
-      }
-    } finally {
-      stopServer(serverInfo)
-    }
-  }
-
-  test("SPARK-45468 redirect without host is disabled if proxyRedirectUri is set") {
-    val proxyRoot = "https://proxy.example.com:443/prefix"
-    val (conf, securityMgr, sslOptions) = sslDisabledConf()
-    conf.set(UI.PROXY_REDIRECT_URI, proxyRoot)
-    conf.set(UI.REDIRECT_WITHOUT_HOST, true)
-
-    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
-    try {
-      val serverAddr = s"http://$localhost:${serverInfo.boundPort}"
-
-      val redirect = JettyUtils.createRedirectHandler("/src", "/dst")
-      serverInfo.addHandler(redirect, securityMgr)
-
-      // Test with a URL handled by the added redirect handler, and also including a path prefix.
-      val headers = Seq("X-Forwarded-Context" -> "/prefix")
-      TestUtils.withHttpConnection(
-          new URL(s"$serverAddr/src/"),
-          headers = headers) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
-        val location = Option(conn.getHeaderFields().get("Location"))
-          .map(_.get(0)).orNull
-        assert(location === s"$proxyRoot/prefix/dst")
-      }
-
-      // Not really used by Spark, but test with a relative redirect.
-      val relative = JettyUtils.createRedirectHandler("/rel", "root")
-      serverInfo.addHandler(relative, securityMgr)
-      TestUtils.withHttpConnection(new URL(s"$serverAddr/rel/")) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
-        val location = Option(conn.getHeaderFields().get("Location"))
-          .map(_.get(0)).orNull
-        assert(location === s"$proxyRoot/rel/root")
       }
     } finally {
       stopServer(serverInfo)

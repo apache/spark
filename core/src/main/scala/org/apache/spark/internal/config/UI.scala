@@ -206,15 +206,6 @@ private[spark] object UI {
     .stringConf
     .createWithDefault("org.apache.spark.security.ShellBasedGroupsMappingProvider")
 
-  val REDIRECT_WITHOUT_HOST = ConfigBuilder("spark.ui.redirectWithoutHost")
-    .doc("Use path without host for HTTP redirects so that proxies become transparent in the " +
-      "same way as other hyperlinks. When a proxy prefix exists, X-Forwarded-Context HTTP header " +
-      "or spark.ui.proxyBase system property still needs to be set. This option does not take " +
-      "effect if spark.ui.proxyRedirectUri is set.")
-    .version("4.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val PROXY_REDIRECT_URI = ConfigBuilder("spark.ui.proxyRedirectUri")
     .doc("Proxy address to use when responding with HTTP redirects.")
     .version("3.0.0")

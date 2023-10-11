@@ -655,11 +655,11 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       assert(code === 302, s"Unexpected status code $code for $url")
       attemptId match {
         case None =>
-          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
+          assert(location.stripSuffix("/") === lastAttemptUrl.getPath)
         case _ =>
-          assert(location.stripSuffix("/") === url.toString)
+          assert(location.stripSuffix("/") === url.getPath)
       }
-      HistoryServerSuite.getUrl(new URL(location))
+      HistoryServerSuite.getUrl(new URL(s"http://$localhost:$port$location"))
     }
   }
 
@@ -706,7 +706,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     conn.setInstanceFollowRedirects(false)
     conn.connect()
     assert(conn.getResponseCode === 302)
-    assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
+    assert(conn.getHeaderField("Location") === s"/")
   }
 }
 
