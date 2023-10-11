@@ -371,7 +371,7 @@ class ArrayAssembler(
 
         keep_invalid = handler_invalid == "keep"
 
-        def assemble_features(*feature_list: Any):
+        def assemble_features(*feature_list: Any) -> Any:
             assembled_array = np.empty(assembled_feature_size, dtype=np.float64)
             pos = 0
             for index, feature in enumerate(feature_list):
