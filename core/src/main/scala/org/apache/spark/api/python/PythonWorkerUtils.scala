@@ -171,9 +171,13 @@ private[spark] object PythonWorkerUtils extends Logging {
    * Read a byte array with the given byte length.
    */
   def readBytes(length: Int, dataIn: DataInputStream): Array[Byte] = {
-    val obj = new Array[Byte](length)
-    dataIn.readFully(obj)
-    obj
+    if (length == 0) {
+      Array.emptyByteArray
+    } else {
+      val obj = new Array[Byte](length)
+      dataIn.readFully(obj)
+      obj
+    }
   }
 
   /**

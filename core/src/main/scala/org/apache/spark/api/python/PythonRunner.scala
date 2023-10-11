@@ -842,9 +842,8 @@ private[spark] class PythonRunner(
         }
         try {
           stream.readInt() match {
-            case length if length > 0 =>
+            case length if length >= 0 =>
               PythonWorkerUtils.readBytes(length, stream)
-            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
