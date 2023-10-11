@@ -2415,7 +2415,7 @@ class BaseUDTFTestsMixin:
                 FROM test_udtf("abc", TABLE(t))
                 """
             ).collect(),
-            [Row(count=23, buffer="abc")],
+            [Row(count=20, buffer="abc")],
         )
 
 
