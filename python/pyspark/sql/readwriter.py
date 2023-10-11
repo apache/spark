@@ -565,11 +565,11 @@ class DataFrameReader(OptionUtils):
         +-----+----+------+
         | name| age|height|
         +-----+----+------+
-        |Alice|null|    70|
-        |Alice|  10|  null|
-        |  Bob|null|    80|
-        |  Bob|  15|  null|
-        |  Tom|  20|  null|
+        |Alice|NULL|    70|
+        |Alice|  10|  NULL|
+        |  Bob|NULL|    80|
+        |  Bob|  15|  NULL|
+        |  Tom|  20|  NULL|
         +-----+----+------+
         """
         mergeSchema = options.get("mergeSchema", None)
