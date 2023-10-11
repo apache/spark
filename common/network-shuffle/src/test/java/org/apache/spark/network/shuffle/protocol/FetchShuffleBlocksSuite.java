@@ -19,10 +19,10 @@ package org.apache.spark.network.shuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class FetchShuffleBlocksSuite {
 
@@ -30,9 +30,9 @@ public class FetchShuffleBlocksSuite {
   public void testFetchShuffleBlockEncodeDecode() {
     FetchShuffleBlocks fetchShuffleBlocks =
       new FetchShuffleBlocks("app0", "exec1", 0, new long[] {0}, new int[][] {{0, 1}}, false);
-    Assert.assertEquals(2, fetchShuffleBlocks.getNumBlocks());
+    Assertions.assertEquals(2, fetchShuffleBlocks.getNumBlocks());
     int len = fetchShuffleBlocks.encodedLength();
-    Assert.assertEquals(50, len);
+    Assertions.assertEquals(50, len);
     ByteBuf buf = Unpooled.buffer(len);
     fetchShuffleBlocks.encode(buf);
 

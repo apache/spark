@@ -22,7 +22,7 @@ import java.util.jar.JarFile
 import java.util.logging.Level
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 

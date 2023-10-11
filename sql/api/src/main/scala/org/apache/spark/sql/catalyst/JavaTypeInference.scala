@@ -21,7 +21,7 @@ import java.lang.reflect.{ParameterizedType, Type, TypeVariable}
 import java.util.{List => JList, Map => JMap}
 import javax.annotation.Nonnull
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
@@ -130,10 +130,13 @@ object JavaTypeInference {
       // TODO: we should only collect properties that have getter and setter. However, some tests
       //   pass in scala case class as java bean class which doesn't have getter and setter.
       val properties = getJavaBeanReadableProperties(c)
+      // add type variables from inheritance hierarchy of the class
+      val classTV = JavaTypeUtils.getTypeArguments(c, classOf[Object]).asScala.toMap ++
+        typeVariables
       // Note that the fields are ordered by name.
       val fields = properties.map { property =>
         val readMethod = property.getReadMethod
-        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, typeVariables)
+        val encoder = encoderFor(readMethod.getGenericReturnType, seenTypeSet + c, classTV)
         // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
         val hasNonNull = readMethod.isAnnotationPresent(classOf[Nonnull])
         EncoderField(

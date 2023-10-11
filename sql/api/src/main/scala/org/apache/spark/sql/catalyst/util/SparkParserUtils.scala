@@ -38,14 +38,11 @@ trait SparkParserUtils {
     def appendEscapedChar(n: Char): Unit = {
       n match {
         case '0' => sb.append('\u0000')
-        case '\'' => sb.append('\'')
-        case '"' => sb.append('\"')
         case 'b' => sb.append('\b')
         case 'n' => sb.append('\n')
         case 'r' => sb.append('\r')
         case 't' => sb.append('\t')
         case 'Z' => sb.append('\u001A')
-        case '\\' => sb.append('\\')
         // The following 2 lines are exactly what MySQL does TODO: why do we do this?
         case '%' => sb.append("\\%")
         case '_' => sb.append("\\_")

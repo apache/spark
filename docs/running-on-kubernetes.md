@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.24 with access configured to it using
+* A running Kubernetes cluster at version >= 1.26 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -394,6 +394,13 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
 ```
 
+To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the followings. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
+
+```
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data/spark-x/executor-x
+spark.shuffle.sort.io.plugin.class=org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIO
+```
+
 If no volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations. When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `spark.local.dir` or the environment variable `SPARK_LOCAL_DIRS` .  If no directories are explicitly specified then a default directory is created and configured appropriately.
 
 `emptyDir` volumes use the ephemeral storage feature of Kubernetes and do not persist beyond the life of the pod.
@@ -433,6 +440,19 @@ $ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
+
+Since Apache Spark 4.0.0, Driver UI provides a way to see driver logs via a new configuration.
+
+```
+spark.driver.log.localDir=/tmp
+```
+
+Then, the Spark driver UI can be accessed on `http://localhost:4040/logs/`.
+Optionally, the layout of log is configured by the following.
+
+```
+spark.driver.log.layout="%m%n%ex"
+```
 
 ### Debugging
 

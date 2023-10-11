@@ -38,7 +38,6 @@ some_global_variable = 0
 
 
 class UtilsTestsMixin:
-
     # a dummy to_html version with an extra parameter that pandas does not support
     # used in test_validate_arguments_and_invoke_function
     def to_html(self, max_rows=None, unsupported_param=None):

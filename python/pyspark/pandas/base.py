@@ -27,9 +27,9 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
@@ -505,7 +505,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.DataFrame({}, index=list('abc')).index.empty
         False
         """
-        return self._internal.resolved_copy.spark_frame.rdd.isEmpty()
+        return self._internal.resolved_copy.spark_frame.isEmpty()
 
     @property
     def hasnans(self) -> bool:
@@ -978,7 +978,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         NA values, such as None or numpy.NaN, get mapped to True values.
         Everything else gets mapped to False values. Characters such as empty strings '' or
         numpy.inf are not considered NA values
-        (unless you set pandas.options.mode.use_inf_as_na = True).
 
         Returns
         -------
@@ -1012,7 +1011,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Return a boolean same-sized object indicating if the values are not NA.
         Non-missing values get mapped to True.
         Characters such as empty strings '' or numpy.inf are not considered NA values
-        (unless you set pandas.options.mode.use_inf_as_na = True).
         NA values, such as None or numpy.NaN, get mapped to False values.
 
         Returns
@@ -1317,26 +1315,29 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> df = ps.DataFrame({'x':[0, 0, 1, 1, 1, np.nan]})
         >>> df.x.value_counts()  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    3
         0.0    2
-        Name: x, dtype: int64
+        Name: count, dtype: int64
 
         With `normalize` set to `True`, returns the relative frequency by
         dividing all values by the sum of values.
 
         >>> df.x.value_counts(normalize=True)  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    0.6
         0.0    0.4
-        Name: x, dtype: float64
+        Name: proportion, dtype: float64
 
         **dropna**
         With `dropna` set to `False` we can also see NaN index values.
 
         >>> df.x.value_counts(dropna=False)  # doctest: +NORMALIZE_WHITESPACE
+        x
         1.0    3
         0.0    2
         NaN    1
-        Name: x, dtype: int64
+        Name: count, dtype: int64
 
         For Index
 
@@ -1349,7 +1350,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2.0    1
         3.0    2
         4.0    1
-        dtype: int64
+        Name: count, dtype: int64
 
         **sort**
 
@@ -1360,7 +1361,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2.0    1
         3.0    2
         4.0    1
-        dtype: int64
+        Name: count, dtype: int64
 
         **normalize**
 
@@ -1372,7 +1373,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         2.0    0.2
         3.0    0.4
         4.0    0.2
-        dtype: float64
+        Name: proportion, dtype: float64
 
         **dropna**
 
@@ -1411,7 +1412,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (falcon, length)    2
         (falcon, weight)    1
         (lama, weight)      3
-        dtype: int64
+        Name: count, dtype: int64
 
         >>> s.index.value_counts(normalize=True).sort_index()
         (cow, length)       0.111111
@@ -1419,31 +1420,37 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (falcon, length)    0.222222
         (falcon, weight)    0.111111
         (lama, weight)      0.333333
-        dtype: float64
+        Name: proportion, dtype: float64
 
         If Index has name, keep the name up.
 
         >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='pandas-on-Spark')
         >>> idx.value_counts().sort_index()
+        pandas-on-Spark
         0    3
         1    2
         2    1
         3    1
-        Name: pandas-on-Spark, dtype: int64
+        Name: count, dtype: int64
         """
-        from pyspark.pandas.series import first_series, Series
-
-        if isinstance(self, Series):
-            warnings.warn(
-                "The resulting Series will have a fixed name of 'count' from 4.0.0.",
-                FutureWarning,
-            )
+        from pyspark.pandas.series import first_series
+        from pyspark.pandas.indexes.multi import MultiIndex
 
         if bins is not None:
             raise NotImplementedError("value_counts currently does not support bins")
 
         if dropna:
-            sdf_dropna = self._internal.spark_frame.select(self.spark.column).dropna()
+            if isinstance(self, MultiIndex):
+                # If even one StructField is null, that row should be dropped.
+                index_spark_column_names = self._internal.index_spark_column_names
+                spark_column = self.spark.column
+                cond = F.lit(False)
+                for index_spark_column_name in index_spark_column_names:
+                    cond = cond | spark_column.getItem(index_spark_column_name).isNull()
+                sdf = self._internal.spark_frame.select(spark_column)
+                sdf_dropna = sdf.filter(~cond)
+            else:
+                sdf_dropna = self._internal.spark_frame.select(self.spark.column).dropna()
         else:
             sdf_dropna = self._internal.spark_frame.select(self.spark.column)
         index_name = SPARK_DEFAULT_INDEX_NAME
@@ -1456,13 +1463,17 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 sdf = sdf.orderBy(F.col("count").desc())
 
         if normalize:
+            result_column_name = "proportion"
             drop_sum = sdf_dropna.count()
             sdf = sdf.withColumn("count", F.col("count") / F.lit(drop_sum))
+        else:
+            result_column_name = "count"
 
         internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, index_name)],
-            column_labels=self._internal.column_labels,
+            index_names=self._internal.column_labels,
+            column_labels=[(result_column_name,)],
             data_spark_columns=[scol_for(sdf, "count")],
             column_label_names=self._internal.column_label_names,
         )
@@ -1693,16 +1704,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             if len(categories) == 0:
                 scol = F.lit(None)
             else:
-                kvs = list(
-                    chain(
-                        *[
-                            (F.lit(code), F.lit(category))
-                            for code, category in enumerate(categories)
-                        ]
-                    )
-                )
-                map_scol = F.create_map(*kvs)
-                scol = map_scol[self.spark.column]
+                scol = F.lit(None)
+                for code, category in reversed(list(enumerate(categories))):
+                    scol = F.when(self.spark.column == F.lit(code), F.lit(category)).otherwise(scol)
+
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
             ).factorize(use_na_sentinel=use_na_sentinel)
@@ -1750,9 +1755,16 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = F.lit(na_sentinel_code)
         else:
-            map_scol = F.create_map(*kvs)
             null_scol = F.when(self.isnull().spark.column, F.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol[self.spark.column])
+            mapped_scol = None
+            for i in range(0, len(kvs), 2):
+                key = kvs[i]
+                value = kvs[i + 1]
+                if mapped_scol is None:
+                    mapped_scol = F.when(self.spark.column == key, value)
+                else:
+                    mapped_scol = mapped_scol.when(self.spark.column == key, value)
+            new_scol = null_scol.otherwise(mapped_scol)
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 

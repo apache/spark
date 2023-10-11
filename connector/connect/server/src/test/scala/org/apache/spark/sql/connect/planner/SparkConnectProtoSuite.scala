@@ -18,10 +18,9 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
@@ -31,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Observation, 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -695,8 +694,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -724,8 +721,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create and using") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -763,8 +758,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with append") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -796,8 +789,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwrite") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -851,8 +842,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwritePartitions") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -1078,7 +1067,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
+    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan transform {
+      case cm: CollectMetrics => cm.copy(dataframeId = 0)
+    }
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(connectAnalyzed, sparkPlan, false)
+    comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
   }
 }

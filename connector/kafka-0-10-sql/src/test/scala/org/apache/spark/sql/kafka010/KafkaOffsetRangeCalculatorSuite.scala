@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.common.TopicPartition
 

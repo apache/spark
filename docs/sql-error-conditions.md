@@ -79,6 +79,12 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 `<message>`.`<alternative>` If necessary set `<config>` to "false" to bypass this error.
 
+### ASSIGNMENT_ARITY_MISMATCH
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The number of columns or variables assigned or aliased: `<numTarget>` does not match the number of source expressions: `<numExpr>`.
+
 ### [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
 SQLSTATE: none assigned
@@ -87,17 +93,11 @@ Invalid as-of join.
 
 For more details see [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
-### AVRO_INCORRECT_TYPE
+### AVRO_INCOMPATIBLE_READ_TYPE
 
 SQLSTATE: none assigned
 
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: `<key>`.
-
-### AVRO_LOWER_PRECISION
-
-SQLSTATE: none assigned
-
-Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: `<key>`.
+Cannot convert Avro `<avroPath>` to SQL `<sqlPath>` because the original encoded data type is `<avroType>`, however you're trying to read the field as `<sqlType>`, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: "spark.sql.legacy.avro.allowIncompatibleSchema".
 
 ### BATCH_METADATA_NOT_FOUND
 
@@ -277,6 +277,14 @@ SQLSTATE: none assigned
 Cannot up cast `<expression>` from `<sourceType>` to `<targetType>`.
 `<details>`
 
+### [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
+SQLSTATE: none assigned
+
+Error writing state store files for provider `<providerClass>`.
+
+For more details see [CANNOT_WRITE_STATE_STORE](sql-error-conditions-cannot-write-state-store-error-class.html)
+
 ### CAST_INVALID_INPUT
 
 [SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -293,7 +301,13 @@ The value `<value>` of the type `<sourceType>` cannot be cast to `<targetType>` 
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Fail to insert a value of `<sourceType>` type into the `<targetType>` type column `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+Fail to assign a value of `<sourceType>` type to the `<targetType>` type column or variable `<columnName>` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
+
+### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
+
+SQLSTATE: none assigned
+
+`MapObjects` does not support the class `<cls>` as resulting collection.
 
 ### CODEC_NOT_AVAILABLE
 
@@ -422,6 +436,13 @@ Decimal precision `<precision>` exceeds max precision `<maxPrecision>`.
 
 Default database `<defaultDatabase>` does not exist, please create it first or change default database to ``<defaultDatabase>``.
 
+### DEFAULT_PLACEMENT_INVALID
+
+[SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.
+For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed.
+
 ### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
 
 SQLSTATE: none assigned
@@ -451,6 +472,12 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 SQLSTATE: none assigned
 
 The metric name is not unique: `<metricName>`. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins).
+
+### DUPLICATE_ASSIGNMENTS
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The columns or variables `<nameList>` appear more than once as assignment targets.
 
 ### DUPLICATE_CLAUSES
 
@@ -501,6 +528,34 @@ The event time `<eventName>` has the invalid type `<eventType>`, but expected "T
 SQLSTATE: none assigned
 
 Exceeds char/varchar type length limitation: `<limit>`.
+
+### EXPECT_PERMANENT_VIEW_NOT_TEMP
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a permanent view but `<viewName>` is a temp view.
+
+### [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+SQLSTATE: none assigned
+
+'`<operation>`' expects a table but `<viewName>` is a view.
+
+For more details see [EXPECT_TABLE_NOT_VIEW](sql-error-conditions-expect-table-not-view-error-class.html)
+
+### [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
+
+SQLSTATE: none assigned
+
+The table `<tableName>` does not support `<operation>`.
+
+For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
+
+### EXPRESSION_DECODING_FAILED
+
+SQLSTATE: none assigned
+
+Failed to decode a row to a value of the expressions: `<expressions>`.
 
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
@@ -567,6 +622,12 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 SQLSTATE: none assigned
 
 A column cannot have both a default value and a generation expression but column `<colName>` has default value: (`<defaultValue>`) and generation expression: (`<genExpr>`).
+
+### GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION
+
+SQLSTATE: none assigned
+
+Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version.
 
 ### GRAPHITE_SINK_INVALID_PROTOCOL
 
@@ -774,6 +835,14 @@ For more details see [INSUFFICIENT_TABLE_PROPERTY](sql-error-conditions-insuffic
 
 `<message>`
 
+### [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+An object in the metadata catalog has been corrupted:
+
+For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-internal-error-metadata-catalog-error-class.html)
+
 ### INTERNAL_ERROR_NETWORK
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -866,7 +935,7 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 
 SQLSTATE: none assigned
 
-Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
+Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -950,7 +1019,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 SQLSTATE: none assigned
 
-Cannot create the table `<tableName>` having the nested column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -1092,7 +1161,7 @@ Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include 
 
 SQLSTATE: none assigned
 
-The argument `<name>` of `sql()` is invalid. Consider to replace it by a SQL literal.
+The argument `<name>` of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-syntax-error-class.html)
 
@@ -1283,6 +1352,12 @@ Cannot call function `<functionName>` because named argument references are not 
 [SQLSTATE: 42607](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
+
+### NON_FOLDABLE_ARGUMENT
+
+[SQLSTATE: 22024](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The function `<funcName>` requires the parameter `<paramName>` to be a foldable expression of the type `<paramType>`, but the actual argument is a non-foldable.
 
 ### NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION
 
@@ -1610,6 +1685,12 @@ The function `<routineName>` cannot be found. Verify the spelling and correctnes
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
 
+### ROW_SUBQUERY_TOO_MANY_ROWS
+
+[SQLSTATE: 21000](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+More than one row returned by a subquery used as a row.
+
 ### RULE_ID_NOT_FOUND
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1731,6 +1812,18 @@ SQLSTATE: none assigned
 
 Failed to analyze the Python user defined table function: `<msg>`
 
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata `<requestedMetadata>`, but the function call `<invalidFunctionCallProperty>`.
+
+### TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to evaluate the table function `<functionName>` because its table metadata was invalid; `<reason>`.
+
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
 SQLSTATE: none assigned
@@ -1790,7 +1883,7 @@ Unable to infer schema for `<format>`. It must be specified manually.
 
 [SQLSTATE: 42P02](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to a SQL literal.
+Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`.
 
 ### UNCLOSED_BRACKETED_COMMENT
 
@@ -1868,7 +1961,7 @@ Cannot infer grouping columns for GROUP BY ALL based on the select clause. Pleas
 
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A column or function parameter with name `<objectName>` cannot be resolved.
+A column, variable, or function parameter with name `<objectName>` cannot be resolved.
 
 For more details see [UNRESOLVED_COLUMN](sql-error-conditions-unresolved-column-error-class.html)
 
@@ -1899,6 +1992,12 @@ Cannot resolve function `<routineName>` on search path `<searchPath>`.
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 USING column `<colName>` cannot be resolved on the `<side>` side of the join. The `<side>`-side columns: [`<suggestion>`].
+
+### UNRESOLVED_VARIABLE
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve variable `<variableName>` on search path `<searchPath>`.
 
 ### UNSET_NONEXISTENT_PROPERTIES
 
@@ -2056,12 +2155,53 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
 
+### USER_RAISED_EXCEPTION
+
+SQLSTATE: P0001
+
+`<errorMessage>`
+
+### USER_RAISED_EXCEPTION_PARAMETER_MISMATCH
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise error class: `<errorClass>` which expects parameters: `<expectedParms>`.
+The provided parameters `<providedParms>` do not match the expected parameters.
+Please make sure to provide all expected parameters.
+
+### USER_RAISED_EXCEPTION_UNKNOWN_ERROR_CLASS
+
+SQLSTATE: P0001
+
+The `raise_error()` function was used to raise an unknown error class: `<errorClass>`
+
+### VARIABLE_ALREADY_EXISTS
+
+[SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot create the variable `<variableName>` because it already exists.
+Choose a different name, or drop or replace the existing variable.
+
+### VARIABLE_NOT_FOUND
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
 ### VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot create view `<relationName>` because it already exists.
 Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects.
+
+### VIEW_EXCEED_MAX_NESTED_DEPTH
+
+SQLSTATE: none assigned
+
+The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 
@@ -2102,5 +2242,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 
-import pandas as pd
 from typing import Any, Union, List, Tuple, Callable, Iterable
+
+import pandas as pd
 
 from pyspark import cloudpickle
 from pyspark.sql import DataFrame
@@ -147,6 +148,7 @@ def transform_dataframe_column(
         output_col_name, spark_udf_return_type = output_cols[0]
 
     if isinstance(dataframe, pd.DataFrame):
+        dataframe = dataframe.copy(deep=False)
         result_data = transform_fn(*[dataframe[col_name] for col_name in input_cols])
         if isinstance(result_data, pd.Series):
             assert len(output_cols) == 1

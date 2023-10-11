@@ -514,151 +514,160 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
    * Verifies that the plan for `df` contains `expected` number of Exchange operators.
    */
   private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      df.collect()
+    }
     assert(
       collect(df.queryExecution.executedPlan) { case e: ShuffleExchangeExec => e }.size == expected)
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
-    val table3x = testData.union(testData).union(testData)
-    table3x.createOrReplaceTempView("testData3x")
+    // Set MAX_SINGLE_PARTITION_BYTES to Long.MaxValue to avoid inserting Exchange node
+    withSQLConf(SQLConf.MAX_SINGLE_PARTITION_BYTES.key -> Long.MaxValue.toString) {
+      val table3x = testData.union(testData).union(testData)
+      table3x.createOrReplaceTempView("testData3x")
 
-    sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView("orderedTable")
-    spark.catalog.cacheTable("orderedTable")
-    assertCached(spark.table("orderedTable"))
-    // Should not have an exchange as the query is already sorted on the group by key.
-    verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
-    checkAnswer(
-      sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
-      sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
-    uncacheTable("orderedTable")
-    spark.catalog.dropTempView("orderedTable")
+      sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView("orderedTable")
+      spark.catalog.cacheTable("orderedTable")
+      assertCached(spark.table("orderedTable"))
+      // Should not have an exchange as the query is already sorted on the group by key.
+      verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
+      checkAnswer(
+        sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
+        sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
+      uncacheTable("orderedTable")
+      spark.catalog.dropTempView("orderedTable")
 
-    // Set up two tables distributed in the same way. Try this with the data distributed into
-    // different number of partitions.
-    for (numPartitions <- 1 until 10 by 4) {
+      // Set up two tables distributed in the same way. Try this with the data distributed into
+      // different number of partitions.
+      for (numPartitions <- 1 until 10 by 4) {
+        withTempView("t1", "t2") {
+          testData.repartition(numPartitions, $"key").createOrReplaceTempView("t1")
+          testData2.repartition(numPartitions, $"a").createOrReplaceTempView("t2")
+          spark.catalog.cacheTable("t1")
+          spark.catalog.cacheTable("t2")
+
+          // Joining them should result in no exchanges.
+          verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
+          checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+            sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
+
+          // Grouping on the partition key should result in no exchanges
+          verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
+          checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
+            sql("SELECT count(*) FROM testData GROUP BY key"))
+
+          uncacheTable("t1")
+          uncacheTable("t2")
+        }
+      }
+
+      // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
       withTempView("t1", "t2") {
-        testData.repartition(numPartitions, $"key").createOrReplaceTempView("t1")
-        testData2.repartition(numPartitions, $"a").createOrReplaceTempView("t2")
+        testData.repartition(6, $"key").createOrReplaceTempView("t1")
+        testData2.repartition(3, $"a").createOrReplaceTempView("t2")
         spark.catalog.cacheTable("t1")
         spark.catalog.cacheTable("t2")
 
-        // Joining them should result in no exchanges.
-        verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
-        checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
-          sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
-
-        // Grouping on the partition key should result in no exchanges
-        verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
-        checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
-          sql("SELECT count(*) FROM testData GROUP BY key"))
-
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
         uncacheTable("t1")
         uncacheTable("t2")
       }
-    }
 
-    // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"key").createOrReplaceTempView("t1")
-      testData2.repartition(3, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // One side of join is not partitioned in the desired way. Need to shuffle one side.
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(6, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    // One side of join is not partitioned in the desired way. Need to shuffle one side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(6, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(12, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 12)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(12, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // One side of join is not partitioned in the desired way. We'll only shuffle this side.
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(3, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).
-        outputPartitioning.numPartitions === 12)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    // One side of join is not partitioned in the desired way. We'll only shuffle this side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(3, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // repartition's column ordering is different from group by column ordering.
+      // But they use the same set of columns.
+      withTempView("t1") {
+        testData.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
+        spark.catalog.cacheTable("t1")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT value, key from t1 group by key, value")
+        verifyNumExchanges(query, 0)
+        checkAnswer(
+          query,
+          testData.distinct().select($"value", $"key"))
+        uncacheTable("t1")
+      }
 
-    // repartition's column ordering is different from group by column ordering.
-    // But they use the same set of columns.
-    withTempView("t1") {
-      testData.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
-      spark.catalog.cacheTable("t1")
+      // repartition's column ordering is different from join condition's column ordering.
+      // We will still shuffle because hashcodes of a row depend on the column ordering.
+      // If we do not shuffle, we may actually partition two tables in totally two different way.
+      // See PartitioningSuite for more details.
+      withTempView("t1", "t2") {
+        val df1 = testData
+        df1.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
+        val df2 = testData2.select($"a", $"b".cast("string"))
+        df2.repartition(6, $"a", $"b").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT value, key from t1 group by key, value")
-      verifyNumExchanges(query, 0)
-      checkAnswer(
-        query,
-        testData.distinct().select($"value", $"key"))
-      uncacheTable("t1")
-    }
-
-    // repartition's column ordering is different from join condition's column ordering.
-    // We will still shuffle because hashcodes of a row depend on the column ordering.
-    // If we do not shuffle, we may actually partition two tables in totally two different way.
-    // See PartitioningSuite for more details.
-    withTempView("t1", "t2") {
-      val df1 = testData
-      df1.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
-      val df2 = testData2.select($"a", $"b".cast("string"))
-      df2.repartition(6, $"a", $"b").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
-
-      val query =
-        sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
+        val query =
+          sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
     }
   }
 
@@ -1662,12 +1671,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
             assert(spark.table("t1").rdd.partitions.length == 2)
             sql("CACHE TABLE t2")
-            assert(spark.table("t2").rdd.partitions.length == 1)
+            assert(spark.table("t2").rdd.partitions.length == 2)
           }
 
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
             assert(spark.table("t1").rdd.partitions.length == 2)
-            assert(spark.table("t2").rdd.partitions.length == 1)
+            assert(spark.table("t2").rdd.partitions.length == 2)
             sql("CACHE TABLE t3")
             assert(spark.table("t3").rdd.partitions.length == 2)
           }

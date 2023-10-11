@@ -27,7 +27,7 @@ import com.google.common.io.Closeables;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -125,7 +125,7 @@ public class TestShuffleDataContext {
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
     File file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename));
-    Assert.assertFalse("this test file has been already generated", file.exists());
+    Assertions.assertFalse(file.exists(), "this test file has been already generated");
     try {
       dataStream = new FileOutputStream(
         new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename)));

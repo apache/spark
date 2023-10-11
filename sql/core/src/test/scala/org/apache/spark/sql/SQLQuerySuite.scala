@@ -4542,8 +4542,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         .parquet(dir.getCanonicalPath)
       checkAnswer(res,
         Seq(
-          Row(1, false, mutable.WrappedArray.make(binary1)),
-          Row(2, true, mutable.WrappedArray.make(binary2))
+          Row(1, false, mutable.ArraySeq.make(binary1)),
+          Row(2, true, mutable.ArraySeq.make(binary2))
         ))
     }
   }
@@ -4667,6 +4667,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |  z(r) AS (SELECT * FROM x)
         |SELECT * FROM z
         |""".stripMargin).collect()
+  }
+
+  test("SPARK-44763: Do not promote strings in binary arithmetic with intervals") {
+    val df = sql("SELECT concat(DATE'2020-12-31', ' 09:03:00') +" +
+      " (INTERVAL '03' HOUR)")
+    checkAnswer(df, Row("2020-12-31 12:03:00"))
   }
 
   test("SPARK-43979: CollectedMetrics should be treated as the same one for self-join") {

@@ -23,7 +23,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
@@ -816,7 +816,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-43380: Fix Avro data type conversion" +
-      " of decimal type to avoid producing incorrect results") {
+    " of decimal type to avoid producing incorrect results") {
     withTempPath { path =>
       val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
@@ -829,12 +829,11 @@ abstract class AvroSuite
           case ex: AnalysisException =>
             checkError(
               exception = ex,
-              errorClass = "AVRO_LOWER_PRECISION",
+              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> "\"DECIMAL\\(4,3\\)\"",
-                "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
               matchPVals = true
             )
           case other =>
@@ -880,12 +879,11 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>
@@ -923,12 +921,11 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>

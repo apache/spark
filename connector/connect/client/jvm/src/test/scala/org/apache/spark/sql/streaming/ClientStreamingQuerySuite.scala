@@ -20,19 +20,20 @@ package org.apache.spark.sql.streaming
 import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
+import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession, SQLHelper}
-import org.apache.spark.sql.connect.client.util.QueryTest
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.functions.window
+import org.apache.spark.sql.{DataFrame, ForeachWriter, Row, SparkSession}
+import org.apache.spark.sql.functions.{col, udf, window}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.util.SparkFileUtils
 
 class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
@@ -174,6 +175,45 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
     }
   }
 
+  test("throw exception in streaming") {
+    // Disable spark.sql.pyspark.jvmStacktrace.enabled to avoid hitting the
+    // netty header limit.
+    withSQLConf("spark.sql.pyspark.jvmStacktrace.enabled" -> "false") {
+      val session = spark
+      import session.implicits._
+
+      val checkForTwo = udf((value: Int) => {
+        if (value == 2) {
+          throw new RuntimeException("Number 2 encountered!")
+        }
+        value
+      })
+
+      val query = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "1")
+        .load()
+        .select(checkForTwo($"value").as("checkedValue"))
+        .writeStream
+        .outputMode("append")
+        .format("console")
+        .start()
+
+      val exception = intercept[StreamingQueryException] {
+        query.awaitTermination()
+      }
+
+      assert(exception.getErrorClass != null)
+      assert(!exception.getMessageParameters.isEmpty)
+      assert(exception.getCause.isInstanceOf[SparkException])
+      assert(exception.getCause.getCause.isInstanceOf[SparkException])
+      assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])
+      assert(
+        exception.getCause.getCause.getCause.getMessage
+          .contains("java.lang.RuntimeException: Number 2 encountered!"))
+    }
+  }
+
   test("foreach Row") {
     val writer = new TestForeachWriter[Row]
 
@@ -268,6 +308,8 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
 
     q.stop()
     assert(!q1.isActive)
+
+    assert(spark.streams.get(q.id) == null)
   }
 
   test("streaming query listener") {
@@ -410,11 +452,13 @@ class EventCollector extends StreamingQueryListener {
   }
 }
 
-class ForeachBatchFn(val viewName: String) extends ((DataFrame, Long) => Unit) with Serializable {
-  override def apply(df: DataFrame, batchId: Long): Unit = {
+class ForeachBatchFn(val viewName: String)
+    extends VoidFunction2[DataFrame, java.lang.Long]
+    with Serializable {
+  override def call(df: DataFrame, batchId: java.lang.Long): Unit = {
     val count = df.count()
     df.sparkSession
-      .createDataFrame(Seq((batchId, count)))
+      .createDataFrame(Seq((batchId.toLong, count)))
       .createOrReplaceGlobalTempView(viewName)
   }
 }

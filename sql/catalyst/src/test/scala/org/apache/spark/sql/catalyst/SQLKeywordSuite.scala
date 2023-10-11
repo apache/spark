@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -160,7 +160,9 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     val documentedKeywords = keywordsInDoc.map(_.head).toSet
     if (allCandidateKeywords != documentedKeywords) {
       val undocumented = (allCandidateKeywords -- documentedKeywords).toSeq.sorted
-      fail("Some keywords are not documented: " + undocumented.mkString(", "))
+      val overdocumented = (documentedKeywords -- allCandidateKeywords).toSeq.sorted
+      fail("Some keywords are not documented: " + undocumented.mkString(", ") +
+        " Extras: " + overdocumented.mkString(", "))
     }
   }
 

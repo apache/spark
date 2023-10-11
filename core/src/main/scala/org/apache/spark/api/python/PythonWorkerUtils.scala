@@ -18,7 +18,6 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, File}
-import java.net.Socket
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkFiles}
@@ -34,6 +33,15 @@ private[spark] object PythonWorkerUtils extends Logging {
    */
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
+    writeBytes(bytes, dataOut)
+  }
+
+  /**
+   * Write a byte array.
+   *
+   * It will be read by `FramedSerializer._read_with_length` in Python.
+   */
+  def writeBytes(bytes: Array[Byte], dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)
   }
@@ -76,7 +84,7 @@ private[spark] object PythonWorkerUtils extends Logging {
    */
   def writeBroadcasts(
       broadcastVars: Seq[Broadcast[PythonBroadcast]],
-      worker: Socket,
+      worker: PythonWorker,
       env: SparkEnv,
       dataOut: DataOutputStream): Unit = {
     // Broadcast variables
@@ -117,9 +125,6 @@ private[spark] object PythonWorkerUtils extends Logging {
         dataOut.writeLong(id)
       }
       dataOut.flush()
-      logTrace("waiting for python to read decrypted broadcast data from server")
-      server.waitTillBroadcastDataSent()
-      logTrace("done sending decrypted data to python")
     } else {
       sendBidsToRemove()
       for (broadcast <- broadcastVars) {
@@ -135,6 +140,47 @@ private[spark] object PythonWorkerUtils extends Logging {
   }
 
   /**
+   * Write PythonFunction to the worker.
+   */
+  def writePythonFunction(func: PythonFunction, dataOut: DataOutputStream): Unit = {
+    writeBytes(func.command.toArray, dataOut)
+  }
+
+  /**
+   * Read a string in UTF-8 charset.
+   */
+  def readUTF(dataIn: DataInputStream): String = {
+    readUTF(dataIn.readInt(), dataIn)
+  }
+
+  /**
+   * Read a string in UTF-8 charset with the given byte length.
+   */
+  def readUTF(length: Int, dataIn: DataInputStream): String = {
+    new String(readBytes(length, dataIn), StandardCharsets.UTF_8)
+  }
+
+  /**
+   * Read a byte array.
+   */
+  def readBytes(dataIn: DataInputStream): Array[Byte] = {
+    readBytes(dataIn.readInt(), dataIn)
+  }
+
+  /**
+   * Read a byte array with the given byte length.
+   */
+  def readBytes(length: Int, dataIn: DataInputStream): Array[Byte] = {
+    if (length == 0) {
+      Array.emptyByteArray
+    } else {
+      val obj = new Array[Byte](length)
+      dataIn.readFully(obj)
+      obj
+    }
+  }
+
+  /**
    * Receive accumulator updates from the worker.
    *
    * The updates are sent by `worker_util.send_accumulator_updates`.
@@ -143,9 +189,7 @@ private[spark] object PythonWorkerUtils extends Logging {
       maybeAccumulator: Option[PythonAccumulatorV2], dataIn: DataInputStream): Unit = {
     val numAccumulatorUpdates = dataIn.readInt()
     (1 to numAccumulatorUpdates).foreach { _ =>
-      val updateLen = dataIn.readInt()
-      val update = new Array[Byte](updateLen)
-      dataIn.readFully(update)
+      val update = readBytes(dataIn)
       maybeAccumulator.foreach(_.add(update))
     }
   }

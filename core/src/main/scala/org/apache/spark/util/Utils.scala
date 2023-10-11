@@ -34,10 +34,10 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
@@ -857,17 +857,7 @@ private[spark] object Utils
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
-    } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {
-      // Mesos already creates a directory per Mesos task. Spark should use that directory
-      // instead so all temporary files are automatically cleaned up when the Mesos task ends.
-      // Note that we don't want this if the shuffle service is enabled because we want to
-      // continue to serve shuffle files after the executors that wrote them have already exited.
-      Array(conf.getenv("MESOS_SANDBOX"))
     } else {
-      if (conf.getenv("MESOS_SANDBOX") != null && shuffleServiceEnabled) {
-        logInfo("MESOS_SANDBOX available but not using provided Mesos sandbox because " +
-          s"${config.SHUFFLE_SERVICE_ENABLED.key} is enabled.")
-      }
       // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
       // configuration to point to a secure directory. So create a subdirectory with restricted
       // permissions under each listed directory.
@@ -926,7 +916,7 @@ private[spark] object Utils
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
+  def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
     randomizeInPlace(seq.toArray)
   }
 
@@ -992,8 +982,7 @@ private[spark] object Utils
   private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
-   * Allow setting a custom host name because when we run on Mesos we need to use the same
-   * hostname it reports to the master.
+   * Allow setting a custom host name
    */
   def setCustomHostname(hostname: String): Unit = {
     // DEBUG code
@@ -1785,7 +1774,17 @@ private[spark] object Utils
   /**
    * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
+  def getIteratorSize(iterator: Iterator[_]): Long = {
+    if (iterator.knownSize >= 0) iterator.knownSize.toLong
+    else {
+      var count = 0L
+      while (iterator.hasNext) {
+        count += 1L
+        iterator.next()
+      }
+      count
+    }
+  }
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
@@ -2108,10 +2107,8 @@ private[spark] object Utils
   private implicit class Lock(lock: LockInfo) {
     def lockString: String = {
       lock match {
-        case monitor: MonitorInfo =>
-          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
-        case _ =>
-          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+        case monitor: MonitorInfo => s"Monitor(${monitor.toString})"
+        case _ => s"Lock(${lock.toString})"
       }
     }
   }
@@ -2141,8 +2138,7 @@ private[spark] object Utils
 
   /** Return a heap dump. Used to capture dumps for the web UI */
   def getHeapHistogram(): Array[String] = {
-    // From Java 9+, we can use 'ProcessHandle.current().pid()'
-    val pid = getProcessName().split("@").head
+    val pid = String.valueOf(ProcessHandle.current().pid())
     val jmap = System.getProperty("java.home") + "/bin/jmap"
     val builder = new ProcessBuilder(jmap, "-histo:live", pid)
     val p = builder.start()
@@ -2169,29 +2165,40 @@ private[spark] object Utils
   }
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
-    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
-      monitors.get(frame) match {
-        case Some(monitor) =>
-          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
-        case None =>
-          frame.toString
-      }
+    val threadState = threadInfo.getThreadState
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackDepth -> m.toString).toMap
+    val stackTrace = StackTrace(threadInfo.getStackTrace.zipWithIndex.map { case (frame, idx) =>
+      val locked = if (idx == 0 && threadInfo.getLockInfo != null) {
+        threadState match {
+          case Thread.State.BLOCKED =>
+            s"\t-  blocked on ${threadInfo.getLockInfo}\n"
+          case Thread.State.WAITING | Thread.State.TIMED_WAITING =>
+            s"\t-  waiting on ${threadInfo.getLockInfo}\n"
+          case _ => ""
+        }
+      } else ""
+      val locking = monitors.get(idx).map(mi => s"\t-  locked $mi\n").getOrElse("")
+      s"${frame.toString}\n$locked$locking"
     })
 
-    // use a set to dedup re-entrant locks that are held at multiple places
-    val heldLocks =
-      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
-
+    val synchronizers = threadInfo.getLockedSynchronizers.map(_.toString)
+    val monitorStrs = monitors.values.toSeq
     ThreadStackTrace(
-      threadId = threadInfo.getThreadId,
-      threadName = threadInfo.getThreadName,
-      threadState = threadInfo.getThreadState,
-      stackTrace = stackTrace,
-      blockedByThreadId =
-        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
-      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
-      holdingLocks = heldLocks.toSeq)
+      threadInfo.getThreadId,
+      threadInfo.getThreadName,
+      threadState,
+      stackTrace,
+      if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      synchronizers ++ monitorStrs,
+      synchronizers,
+      monitorStrs,
+      Option(threadInfo.getLockName),
+      Option(threadInfo.getLockOwnerName),
+      threadInfo.isSuspended,
+      threadInfo.isInNative,
+      threadInfo.isDaemon,
+      threadInfo.getPriority)
   }
 
   /**
@@ -2883,34 +2890,6 @@ private[spark] object Utils
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
-  }
-
-  /**
-   * Returns true if and only if the underlying class is a member class.
-   *
-   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
-   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
-   * we can remove this helper method safely if we drop the support of jdk8u.
-   */
-  def isMemberClass(cls: Class[_]): Boolean = {
-    try {
-      cls.isMemberClass
-    } catch {
-      case _: InternalError =>
-        // We emulate jdk8u `Class.isMemberClass` below:
-        //   public boolean isMemberClass() {
-        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
-        //   }
-        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
-        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
-        // if a given class is not a local or an anonymous class, so we replace it with
-        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
-        // only in either case (JVM Spec 4.8.6).
-        //
-        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
-        // we reorder the conditions to follow it.
-        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
-    }
   }
 
   /**

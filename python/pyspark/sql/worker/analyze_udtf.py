@@ -18,8 +18,7 @@
 import inspect
 import os
 import sys
-import traceback
-from typing import List, IO
+from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
@@ -33,7 +32,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import try_simplify_traceback
+from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -69,11 +68,12 @@ def read_udtf(infile: IO) -> type:
     return handler
 
 
-def read_arguments(infile: IO) -> List[AnalyzeArgument]:
+def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, AnalyzeArgument]]:
     """Reads the arguments for `analyze` static method."""
     # Receive arguments
     num_args = read_int(infile)
     args: List[AnalyzeArgument] = []
+    kwargs: Dict[str, AnalyzeArgument] = {}
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
         if read_bool(infile):  # is foldable
@@ -83,8 +83,15 @@ def read_arguments(infile: IO) -> List[AnalyzeArgument]:
         else:
             value = None
         is_table = read_bool(infile)  # is table argument
-        args.append(AnalyzeArgument(data_type=dt, value=value, is_table=is_table))
-    return args
+        argument = AnalyzeArgument(data_type=dt, value=value, is_table=is_table)
+
+        is_named_arg = read_bool(infile)
+        if is_named_arg:
+            name = utf8_deserializer.loads(infile)
+            kwargs[name] = argument
+        else:
+            args.append(argument)
+    return args, kwargs
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -107,9 +114,9 @@ def main(infile: IO, outfile: IO) -> None:
         _accumulatorRegistry.clear()
 
         handler = read_udtf(infile)
-        args = read_arguments(infile)
+        args, kwargs = read_arguments(infile)
 
-        result = handler.analyze(*args)  # type: ignore[attr-defined]
+        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
 
         if not isinstance(result, AnalyzeResult):
             raise PySparkValueError(
@@ -119,26 +126,26 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
-    except BaseException as e:
-        try:
-            exc_info = None
-            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-                tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
-                if tb is not None:
-                    e.__cause__ = None
-                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
-            if exc_info is None:
-                exc_info = traceback.format_exc()
+        # Return whether the "with single partition" property is requested.
+        write_int(1 if result.with_single_partition else 0, outfile)
+        # Return the list of partitioning columns, if any.
+        write_int(len(result.partition_by), outfile)
+        for partitioning_col in result.partition_by:
+            write_with_length(partitioning_col.name.encode("utf-8"), outfile)
+        # Return the requested input table ordering, if any.
+        write_int(len(result.order_by), outfile)
+        for ordering_col in result.order_by:
+            write_with_length(ordering_col.name.encode("utf-8"), outfile)
+            write_int(1 if ordering_col.ascending else 0, outfile)
+            if ordering_col.overrideNullsFirst is None:
+                write_int(0, outfile)
+            elif ordering_col.overrideNullsFirst:
+                write_int(1, outfile)
+            else:
+                write_int(2, outfile)
 
-            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info.encode("utf-8"), outfile)
-        except IOError:
-            # JVM close the socket
-            pass
-        except BaseException:
-            # Write the error to stderr if it happened while serializing
-            print("PySpark worker failed with exception:", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
+    except BaseException as e:
+        handle_worker_exception(e, outfile)
         sys.exit(-1)
 
     send_accumulator_updates(outfile)
@@ -157,7 +164,4 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
     main(sock_file, sock_file)

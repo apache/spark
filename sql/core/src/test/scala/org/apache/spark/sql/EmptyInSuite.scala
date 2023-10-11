@@ -49,14 +49,32 @@ with SharedSparkSession {
         withSQLConf(
           SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules,
           SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> legacyNullInBehavior.toString) {
-          // We still get legacy behavior with disableOptimizeIn until execution is also fixed
           val expectedResultForNullInEmpty =
-            if (legacyNullInBehavior || disableOptimizeIn) null else false
+            if (legacyNullInBehavior) null else false
           val df = t.select(col("a"), col("a").isin(emptylist: _*))
           checkAnswer(
             df,
             Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
         }
+      }
+    }
+  }
+
+  test("IN empty list behavior conf defaults") {
+    // Currently the fixed behavior is enabled when ANSI is on, and the legacy behavior when
+    // ANSI is off.
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val legacyNullInBehavior = !ansiEnabled
+        assert(SQLConf.get.legacyNullInEmptyBehavior == legacyNullInBehavior)
+
+        val emptylist = Seq.empty[Literal]
+        val df = t.select(col("a"), col("a").isin(emptylist: _*))
+        val expectedResultForNullInEmpty =
+          if (legacyNullInBehavior) null else false
+        checkAnswer(
+          df,
+          Row(1, false) :: Row(null, expectedResultForNullInEmpty) :: Nil)
       }
     }
   }

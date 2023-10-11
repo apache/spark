@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, Spa
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.client.util.Cleaner
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -134,8 +134,6 @@ class SparkSession private[sql] (
         } else {
           val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
-            .setUserId(client.userId)
-            .setSessionId(client.sessionId)
             .setHash(hash)
         }
       } else {
@@ -237,8 +235,9 @@ class SparkSession private[sql] (
    *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
    *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
    *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
-   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of literal expression, in that
-   *   case it is taken as is.
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of a literal or collection
+   *   constructor functions such as `map()`, `array()`, `struct()`, in that case it is taken as
+   *   is.
    *
    * @since 3.5.0
    */
@@ -250,7 +249,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -274,7 +273,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -294,7 +294,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -307,7 +308,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -674,6 +675,22 @@ class SparkSession private[sql] (
   /**
    * Add a tag to be assigned to all the operations started by this thread in this session.
    *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
    * @param tag
    *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
    *
@@ -714,6 +731,12 @@ class SparkSession private[sql] (
   def clearTags(): Unit = {
     client.clearTags()
   }
+
+  /**
+   * We cannot deserialize a connect [[SparkSession]] because of a class clash on the server side.
+   * We null out the instance for now.
+   */
+  private def writeReplace(): Any = null
 }
 
 // The minimal builder needed to create a spark session.
@@ -779,8 +802,12 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    private val builder = SparkConnectClient.builder()
+    // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
+    // by default, if it exists. The connection string can be overridden using
+    // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
+    private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
+    private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
@@ -804,11 +831,95 @@ object SparkSession extends Logging {
       this
     }
 
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: String): Builder = synchronized {
+      options += key -> value
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Long): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Double): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to the
+     * Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config a map of options. Options set using this method are automatically propagated
+     * to the Spark Connect session. Only runtime options are supported.
+     *
+     * @since 3.5.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach { kv: (String, Any) =>
+        {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to both
+     * `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.5.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
+    }
+
+    @deprecated("enableHiveSupport does not work in Spark Connect")
+    def enableHiveSupport(): Builder = this
+
+    @deprecated("master does not work in Spark Connect, please use remote instead")
+    def master(master: String): Builder = this
+
+    @deprecated("appName does not work in Spark Connect")
+    def appName(name: String): Builder = this
+
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
         Option(new SparkSession(client, cleaner, planIdGenerator))
       } else {
         None
+      }
+    }
+
+    private def applyOptions(session: SparkSession): Unit = {
+      options.foreach { case (key, value) =>
+        session.conf.set(key, value)
       }
     }
 
@@ -833,6 +944,7 @@ object SparkSession extends Logging {
       val session = tryCreateSessionFromClient()
         .getOrElse(SparkSession.this.create(builder.configuration))
       setDefaultAndActiveSession(session)
+      applyOptions(session)
       session
     }
 
@@ -842,7 +954,9 @@ object SparkSession extends Logging {
      * If a session exist with the same configuration that is returned instead of creating a new
      * session.
      *
-     * This method will update the default and/or active session if they are not set.
+     * This method will update the default and/or active session if they are not set. This method
+     * will always set the specified configuration options on the session, even when it is not
+     * newly created.
      *
      * @since 3.5.0
      */
@@ -850,6 +964,7 @@ object SparkSession extends Logging {
       val session = tryCreateSessionFromClient()
         .getOrElse(sessions.get(builder.configuration))
       setDefaultAndActiveSession(session)
+      applyOptions(session)
       session
     }
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.common
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{ByteString, Message}
 import com.google.protobuf.Descriptors.FieldDescriptor
@@ -84,7 +84,7 @@ private[connect] object ProtoUtils {
 
   // Because Spark Connect operation tags are also set as SparkContext Job tags, they cannot contain
   // SparkContext.SPARK_JOB_TAGS_SEP
-  private var SPARK_JOB_TAGS_SEP = ',' // SparkContext.SPARK_JOB_TAGS_SEP
+  private val SPARK_JOB_TAGS_SEP = ',' // SparkContext.SPARK_JOB_TAGS_SEP
 
   /**
    * Validate if a tag for ExecutePlanRequest.tags is valid. Throw IllegalArgumentException if

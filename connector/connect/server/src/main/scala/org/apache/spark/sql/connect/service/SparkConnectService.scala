@@ -201,6 +201,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
+  override def fetchErrorDetails(
+      request: proto.FetchErrorDetailsRequest,
+      responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]): Unit = {
+    try {
+      new SparkConnectFetchErrorDetailsHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "getErrorInfo",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
   private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
       : MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
@@ -278,6 +292,8 @@ object SparkConnectService extends Logging {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] lazy val executionManager = new SparkConnectExecutionManager()
+
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache()
 
@@ -347,10 +363,23 @@ object SparkConnectService extends Logging {
   }
 
   /**
+   * If there are no executions, return Left with System.currentTimeMillis of last active
+   * execution. Otherwise return Right with list of ExecuteInfo of all executions.
+   */
+  def listActiveExecutions: Either[Long, Seq[ExecuteInfo]] = executionManager.listActiveExecutions
+
+  /**
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
     userSessionMapping.invalidateAll()
+  }
+
+  /**
+   * Used for testing.
+   */
+  private[connect] def putSessionForTesting(sessionHolder: SessionHolder): Unit = {
+    userSessionMapping.put((sessionHolder.userId, sessionHolder.sessionId), sessionHolder)
   }
 
   private def newIsolatedSession(): SparkSession = {
@@ -414,6 +443,8 @@ object SparkConnectService extends Logging {
         server.shutdownNow()
       }
     }
+    streamingSessionManager.shutdown()
+    executionManager.shutdown()
     userSessionMapping.invalidateAll()
     uiTab.foreach(_.detach())
   }

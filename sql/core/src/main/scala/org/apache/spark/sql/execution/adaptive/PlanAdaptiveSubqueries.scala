@@ -45,7 +45,7 @@ case class PlanAdaptiveSubqueries(
           )
         }
         val subquery = SubqueryExec(s"subquery#${exprId.id}", subqueryMap(exprId.id))
-        InSubqueryExec(expr, subquery, exprId, shouldBroadcast = true)
+        InSubqueryExec(expr, subquery, exprId, isDynamicPruning = false)
       case expressions.DynamicPruningSubquery(value, buildPlan,
           buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
         val name = s"dynamicpruning#${exprId.id}"

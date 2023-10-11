@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
+import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -450,7 +450,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     UpdateTable(aliasedTable, assignments, predicate)
   }
 
-  private def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
+  protected def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
     withOrigin(assignCtx) {
       assignCtx.assignment().asScala.map { assign =>
         Assignment(UnresolvedAttribute(visitMultipartIdentifier(assign.key)),
@@ -2099,7 +2099,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER =>
+        case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
@@ -2118,12 +2118,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
         val cast = Cast(expression(ctx.expression), dataType)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
 
       case SqlBaseParser.TRY_CAST =>
         val cast = Cast(expression(ctx.expression), dataType, evalMode = EvalMode.TRY)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
     }
   }
@@ -2812,8 +2812,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   private def createUnresolvedTable(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTable(_, commandName, relationTypeMismatchHint))
+      suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedTable(_, commandName, suggestAlternative))
   }
 
   /**
@@ -2823,8 +2823,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx: IdentifierReferenceContext,
       commandName: String,
       allowTemp: Boolean = true,
-      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, relationTypeMismatchHint))
+      suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(ctx, UnresolvedView(_, commandName, allowTemp, suggestAlternative))
   }
 
   /**
@@ -3154,7 +3154,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     ctx.asScala.headOption.map(visitLocationSpec)
   }
 
-  private def verifyAndGetExpression(exprCtx: ExpressionContext, place: String): String = {
+  private def getDefaultExpression(
+      exprCtx: ExpressionContext,
+      place: String): DefaultValueExpression = {
     // Make sure it can be converted to Catalyst expressions.
     val expr = expression(exprCtx)
     if (expr.containsPattern(PARAMETER)) {
@@ -3166,7 +3168,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     // get the text from the underlying char stream instead.
     val start = exprCtx.getStart.getStartIndex
     val end = exprCtx.getStop.getStopIndex
-    exprCtx.getStart.getInputStream.getText(new Interval(start, end))
+    val originalSQL = exprCtx.getStart.getInputStream.getText(new Interval(start, end))
+    DefaultValueExpression(expr, originalSQL)
   }
 
   /**
@@ -3174,7 +3177,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression(), "DEFAULT")
+      getDefaultExpression(ctx.expression(), "DEFAULT").originalSQL
+    }
+
+  /**
+   * Create `DefaultValueExpression` for a SQL variable.
+   */
+  override def visitVariableDefaultExpression(
+      ctx: VariableDefaultExpressionContext): DefaultValueExpression =
+    withOrigin(ctx) {
+      getDefaultExpression(ctx.expression(), "DEFAULT")
     }
 
   /**
@@ -3182,7 +3194,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
     withOrigin(ctx) {
-      verifyAndGetExpression(ctx.expression(), "GENERATED")
+      getDefaultExpression(ctx.expression(), "GENERATED").originalSQL
     }
 
   /**
@@ -4347,14 +4359,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = alterViewTypeMismatchHint),
+          suggestAlternative = true),
         cleanedTableProperties)
     } else {
       SetTableProperties(
         createUnresolvedTable(
           ctx.identifierReference,
           "ALTER TABLE ... SET TBLPROPERTIES",
-          alterTableTypeMismatchHint),
+          true),
         cleanedTableProperties)
     }
   }
@@ -4380,7 +4392,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           ctx.identifierReference,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = alterViewTypeMismatchHint),
+          suggestAlternative = true),
         cleanedProperties,
         ifExists)
     } else {
@@ -4388,7 +4400,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         createUnresolvedTable(
           ctx.identifierReference,
           "ALTER TABLE ... UNSET TBLPROPERTIES",
-          alterTableTypeMismatchHint),
+          true),
         cleanedProperties,
         ifExists)
     }
@@ -4406,8 +4418,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     SetTableLocation(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... SET LOCATION ...",
-        alterTableTypeMismatchHint),
+        "ALTER TABLE ... SET LOCATION ..."),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
@@ -4703,8 +4714,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     RecoverPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... RECOVER PARTITIONS",
-        alterTableTypeMismatchHint))
+        "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
   /**
@@ -4733,8 +4743,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     AddPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... ADD PARTITION ...",
-        alterTableTypeMismatchHint),
+        "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -4752,8 +4761,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     RenamePartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... RENAME TO PARTITION",
-        alterTableTypeMismatchHint),
+        "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.to)))
   }
@@ -4781,8 +4789,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     DropPartitions(
       createUnresolvedTable(
         ctx.identifierReference,
-        "ALTER TABLE ... DROP PARTITION ...",
-        alterTableTypeMismatchHint),
+        "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null)
@@ -4803,7 +4810,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       createUnresolvedTable(
         ctx.identifierReference,
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
-        alterTableTypeMismatchHint),
+        true),
       Option(ctx.stringLit).map(x => string(visitStringLit(x))),
       Option(ctx.propertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
@@ -4996,10 +5003,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       ctx.EXISTS != null)
   }
 
-  private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
-
-  private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
-
   /**
    * Create a TimestampAdd expression.
    */
@@ -5043,5 +5046,84 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
     PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
+  }
+
+  /**
+   * Create a [[CreateVariable]] command.
+   *
+   * For example:
+   * {{{
+   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   [dataType] [defaultExpression];
+   * }}}
+   *
+   * We will add CREATE VARIABLE for persisted variable definitions to this, hence the name.
+   */
+  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
+    val dataTypeOpt = Option(ctx.dataType()).map(typedVisit[DataType])
+    val defaultExpression = if (ctx.variableDefaultExpression() == null) {
+      if (dataTypeOpt.isEmpty) {
+        throw new ParseException(
+          errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+          messageParameters = Map.empty,
+          ctx.identifierReference)
+      }
+      DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
+    } else {
+      val default = visitVariableDefaultExpression(ctx.variableDefaultExpression())
+      dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
+    }
+    CreateVariable(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      defaultExpression,
+      ctx.REPLACE() != null
+    )
+  }
+
+  /**
+   * Create a [[DropVariable]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP TEMPORARY VARIABLE [IF EXISTS] variable;
+   * }}}
+   */
+  override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
+    DropVariable(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      ctx.EXISTS() != null
+    )
+  }
+
+  /**
+   * Create a [[SetVariable]] command.
+   *
+   * For example:
+   * {{{
+   *   SET VARIABLE var1 = v1, var2 = v2, ...
+   *   SET VARIABLE (var1, var2, ...) = (SELECT ...)
+   * }}}
+   */
+  override def visitSetVariable(ctx: SetVariableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.query() != null) {
+      // The SET variable source is a query
+      val variables = ctx.multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
+        val varName = visitMultipartIdentifier(variableIdent)
+        UnresolvedAttribute(varName)
+      }.toSeq
+      SetVariable(variables, visitQuery(ctx.query()))
+    } else {
+      // The SET variable source is list of expressions.
+      val (variables, values) = ctx.assignmentList().assignment().asScala.map { assign =>
+        val varIdent = visitMultipartIdentifier(assign.key)
+        val varExpr = expression(assign.value)
+        val varNamedExpr = varExpr match {
+          case n: NamedExpression => n
+          case e => Alias(e, varIdent.last)()
+        }
+        (UnresolvedAttribute(varIdent), varNamedExpr)
+      }.toSeq.unzip
+      SetVariable(variables, Project(values, OneRowRelation()))
+    }
   }
 }

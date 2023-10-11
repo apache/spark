@@ -20,7 +20,7 @@ import java.io.InputStream
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
@@ -30,7 +30,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
-import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.test.ConnectFunSuite
 
 class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 

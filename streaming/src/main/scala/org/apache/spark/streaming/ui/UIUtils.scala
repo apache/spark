@@ -21,8 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.ui.{ UIUtils => SparkUIUtils }
 
 private[streaming] object UIUtils {
@@ -96,14 +94,7 @@ private[streaming] object UIUtils {
       failureReason: String,
       rowspan: Int = 1,
       includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
+    val (failureReasonSummary, isMultiline) = SparkUIUtils.errorSummary(failureReason)
     val failureDetails =
       if (isMultiline && !includeFirstLineInExpandDetails) {
         // Skip the first line

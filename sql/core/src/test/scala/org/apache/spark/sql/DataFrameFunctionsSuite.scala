@@ -764,7 +764,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> """"array_sort\(a, lambdafunction\(\(x_\d+ - y_\d+\), x_\d+, y_\d+\)\)"""",
+        "sqlExpr" -> """"array_sort\(a, lambdafunction\(`-`\(x_\d+, y_\d+\), x_\d+, y_\d+\)\)"""",
         "paramIndex" -> "1",
         "requiredType" -> "\"ARRAY\"",
         "inputSql" -> "\"a\"",
@@ -970,7 +970,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       val qualifiedDF = df.as("foo")
 
       // Fields are UnresolvedAttribute
-      val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
+      val zippedDF1 =
+        qualifiedDF.select(Column(ArraysZip(Seq($"foo.val1".expr, $"foo.val2".expr))) as "zipped")
       val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
       assert(maybeAlias1.isInstanceOf[Alias])
       val maybeArraysZip1 = maybeAlias1.children.head
@@ -984,7 +985,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames1.toSeq === Seq("val1", "val2"))
 
       // Fields are resolved NamedExpression
-      val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
+      val zippedDF2 =
+        df.select(Column(ArraysZip(Seq(df("val1").expr, df("val2").expr))) as "zipped")
       val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
       assert(maybeAlias2.isInstanceOf[Alias])
       val maybeArraysZip2 = maybeAlias2.children.head
@@ -999,7 +1001,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames2.toSeq === Seq("val1", "val2"))
 
       // Fields are unresolved NamedExpression
-      val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
+      val zippedDF3 = df.select(
+        Column(ArraysZip(Seq(($"val1" as "val3").expr, ($"val2" as "val4").expr))) as "zipped")
       val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
       assert(maybeAlias3.isInstanceOf[Alias])
       val maybeArraysZip3 = maybeAlias3.children.head
@@ -1013,7 +1016,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames3.toSeq === Seq("val3", "val4"))
 
       // Fields are neither UnresolvedAttribute nor NamedExpression
-      val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
+      val zippedDF4 = df.select(
+        Column(ArraysZip(Seq(array_sort($"val1").expr, array_sort($"val2").expr))) as "zipped")
       val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
       assert(maybeAlias4.isInstanceOf[Alias])
       val maybeArraysZip4 = maybeAlias4.children.head
@@ -3399,7 +3403,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(null))
     )
     checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
-    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, 3, 2, 5, 1, 2))))
+
+    withSQLConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT.key -> "true") {
+      checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+    }
   }
 
   test("transform function - array for primitive type not containing null") {
@@ -3738,7 +3746,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
-        "sqlExpr" -> """"map_filter\(i, lambdafunction\(\(x_\d+ > y_\d+\), x_\d+, y_\d+\)\)"""",
+        "sqlExpr" -> """"map_filter\(i, lambdafunction\(`>`\(x_\d+, y_\d+\), x_\d+, y_\d+\)\)"""",
         "paramIndex" -> "1",
         "inputSql" -> "\"i\"",
         "inputType" -> "\"INT\"",
@@ -5223,7 +5231,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         matchPVals = true,
         parameters = Map(
           "sqlExpr" ->
-            """"transform_values\(x, lambdafunction\(\(x_\d+ \+ 1\), x_\d+, y_\d+\)\)"""",
+              """"transform_values\(x, lambdafunction\(`\+`\(x_\d+, 1\), x_\d+, y_\d+\)\)"""",
           "paramIndex" -> "1",
           "inputSql" -> "\"x\"",
           "inputType" -> "\"ARRAY<INT>\"",
@@ -5878,11 +5886,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("CURRENT_SCHEMA()"), df.select(current_schema()))
   }
 
-  test("function current_user, user") {
+  test("function current_user, user, session_user") {
     val df = Seq((1, 2), (3, 1)).toDF("a", "b")
 
     checkAnswer(df.selectExpr("CURRENT_USER()"), df.select(current_user()))
     checkAnswer(df.selectExpr("USER()"), df.select(user()))
+    checkAnswer(df.selectExpr("SESSION_USER()"), df.select(session_user()))
   }
 
   test("named_struct function") {
@@ -5945,7 +5954,7 @@ object DataFrameFunctionsSuite {
   case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
     override def nullable: Boolean = child.nullable
     override def dataType: DataType = child.dataType
-    override lazy val resolved = true
+    override lazy val resolved = child.resolved
     override def eval(input: InternalRow): Any = child.eval(input)
     override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpr =
       copy(child = newChild)

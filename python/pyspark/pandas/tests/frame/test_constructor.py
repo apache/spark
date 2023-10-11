@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from datetime import datetime, timedelta
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -490,14 +489,6 @@ class FrameConstructorMixin:
             # test ps.DataFrame with pd.MultiIndex
             ps.DataFrame(data=psdf, index=pdf.index)
 
-    def _check_extension(self, psdf, pdf):
-        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(psdf, pdf, check_exact=False)
-            for dtype in psdf.dtypes:
-                self.assertTrue(isinstance(dtype, extension_dtypes))
-        else:
-            self.assert_eq(psdf, pdf)
-
     @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
     def test_extension_dtypes(self):
         pdf = pd.DataFrame(
@@ -510,8 +501,8 @@ class FrameConstructorMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self._check_extension(psdf, pdf)
-        self._check_extension(psdf + psdf, pdf + pdf)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psdf + psdf, pdf + pdf)
 
     @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
     def test_astype_extension_dtypes(self):
@@ -527,7 +518,7 @@ class FrameConstructorMixin:
 
         astype = {"a": "Int8", "b": "Int16", "c": "Int32", "d": "Int64"}
 
-        self._check_extension(psdf.astype(astype), pdf.astype(astype))
+        self.assert_eq(psdf.astype(astype), pdf.astype(astype))
 
     @unittest.skipIf(
         not extension_object_dtypes_available, "pandas extension object dtypes are not available"
@@ -541,7 +532,7 @@ class FrameConstructorMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self._check_extension(psdf, pdf)
+        self.assert_eq(psdf, pdf)
 
     @unittest.skipIf(
         not extension_object_dtypes_available, "pandas extension object dtypes are not available"
@@ -552,7 +543,7 @@ class FrameConstructorMixin:
 
         astype = {"a": "string", "b": "boolean"}
 
-        self._check_extension(psdf.astype(astype), pdf.astype(astype))
+        self.assert_eq(psdf.astype(astype), pdf.astype(astype))
 
     @unittest.skipIf(
         not extension_float_dtypes_available, "pandas extension float dtypes are not available"
@@ -566,9 +557,9 @@ class FrameConstructorMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self._check_extension(psdf, pdf)
-        self._check_extension(psdf + 1, pdf + 1)
-        self._check_extension(psdf + psdf, pdf + pdf)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psdf + 1, pdf + 1)
+        self.assert_eq(psdf + psdf, pdf + pdf)
 
     @unittest.skipIf(
         not extension_float_dtypes_available, "pandas extension float dtypes are not available"
@@ -579,7 +570,7 @@ class FrameConstructorMixin:
 
         astype = {"a": "Float32", "b": "Float64"}
 
-        self._check_extension(psdf.astype(astype), pdf.astype(astype))
+        self.assert_eq(psdf.astype(astype), pdf.astype(astype))
 
 
 class FrameConstructorTests(FrameConstructorMixin, ComparisonTestBase, SQLTestUtils):

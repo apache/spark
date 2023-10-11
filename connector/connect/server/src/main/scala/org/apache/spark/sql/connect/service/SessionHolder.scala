@@ -19,21 +19,25 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{JobArtifactSet, SparkException, SparkSQLException}
-import org.apache.spark.connect.proto
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
+
+import org.apache.spark.{JobArtifactSet, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
+import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
+import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.util.{SystemClock}
+import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
 
 /**
@@ -42,8 +46,17 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val executions: ConcurrentMap[String, ExecuteHolder] =
+  private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
+
+  // The cache that maps an error id to a throwable. The throwable in cache is independent to
+  // each other.
+  private[connect] val errorIdToError = CacheBuilder
+    .newBuilder()
+    .ticker(Ticker.systemTicker())
+    .maximumSize(ERROR_CACHE_SIZE)
+    .expireAfterAccess(ERROR_CACHE_TIMEOUT_SEC, TimeUnit.SECONDS)
+    .build[String, Throwable]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
@@ -56,23 +69,27 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val listenerCache: ConcurrentMap[String, StreamingQueryListener] =
     new ConcurrentHashMap()
 
-  private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
-    val executeHolder = new ExecuteHolder(request, this)
+  // Handles Python process clean up for streaming queries. Initialized on first use in a query.
+  private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
+    new StreamingForeachBatchHelper.CleanerCache(this)
+
+  /** Add ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
-      throw new SparkSQLException(
-        errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-        messageParameters = Map("handle" -> executeHolder.operationId))
+      // the existance of this should alrady be checked by SparkConnectExecutionManager
+      throw new IllegalStateException(
+        s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
     }
-    executeHolder
+  }
+
+  /** Remove ExecuteHolder to this session. Called only by SparkConnectExecutionManager. */
+  private[service] def removeExecuteHolder(operationId: String): Unit = {
+    executions.remove(operationId)
   }
 
   private[connect] def executeHolder(operationId: String): Option[ExecuteHolder] = {
     Option(executions.get(operationId))
-  }
-
-  private[connect] def removeExecuteHolder(operationId: String): Unit = {
-    executions.remove(operationId)
   }
 
   /**
@@ -80,7 +97,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptAll(): Seq[String] = {
+  private[service] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.interrupt()) {
@@ -95,7 +112,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions
    */
-  private[connect] def interruptTag(tag: String): Seq[String] = {
+  private[service] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     executions.asScala.values.foreach { execute =>
       if (execute.sparkSessionTags.contains(tag)) {
@@ -112,7 +129,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @return
    *   list of operationIds of interrupted executions (one element or empty)
    */
-  private[connect] def interruptOperation(operationId: String): Seq[String] = {
+  private[service] def interruptOperation(operationId: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
     Option(executions.get(operationId)).foreach { execute =>
       if (execute.interrupt()) {
@@ -154,9 +171,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
     eventManager.postClosed()
-
     // Clean up running queries
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
+    streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+    removeAllListeners() // removes all listener and stop python listener processes if necessary.
   }
 
   /**
@@ -233,11 +251,21 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * Spark Connect PythonStreamingQueryListener.
    */
   private[connect] def removeCachedListener(id: String): Unit = {
-    listenerCache.get(id) match {
-      case pyListener: PythonStreamingQueryListener => pyListener.stopListenerProcess()
+    Option(listenerCache.remove(id)) match {
+      case Some(pyListener: PythonStreamingQueryListener) => pyListener.stopListenerProcess()
       case _ => // do nothing
     }
-    listenerCache.remove(id)
+  }
+
+  /**
+   * Stop all streaming listener threads, and removes all python process if applicable. Only
+   * called when session is expired.
+   */
+  private def removeAllListeners(): Unit = {
+    listenerCache.forEach((id, listener) => {
+      session.streams.removeListener(listener)
+      removeCachedListener(id)
+    })
   }
 
   /**
@@ -250,8 +278,20 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
 object SessionHolder {
 
+  // The maximum number of distinct errors in the cache.
+  private val ERROR_CACHE_SIZE = 20
+
+  // The maximum time for an error to stay in the cache.
+  private val ERROR_CACHE_TIMEOUT_SEC = 60
+
   /** Creates a dummy session holder for use in tests. */
   def forTesting(session: SparkSession): SessionHolder = {
-    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = session)
+    val ret =
+      SessionHolder(
+        userId = "testUser",
+        sessionId = UUID.randomUUID().toString,
+        session = session)
+    SparkConnectService.putSessionForTesting(ret)
+    ret
   }
 }

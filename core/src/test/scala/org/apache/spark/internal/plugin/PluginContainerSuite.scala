@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
 import com.google.common.io.Files

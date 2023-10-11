@@ -152,6 +152,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
+  }
+
   override def newStoreProvider(numPrefixCols: Int): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols)
   }
@@ -159,11 +163,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   def newStoreProvider(
       storeId: StateStoreId,
       numColsPrefixKey: Int,
-      sqlConf: Option[SQLConf] = None): RocksDBStateStoreProvider = {
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), new Configuration)
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }
 
