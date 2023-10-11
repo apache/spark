@@ -1669,7 +1669,7 @@ class XmlSuite extends QueryTest with SharedSparkSession {
 
   test("root-level value tag for attributes-only object - from xml") {
     val xmlData =
-      s"""
+      """
          |<ROW attr="attr1">123456</ROW>
          |""".stripMargin
     val df = Seq((1, xmlData)).toDF("number", "payload")
