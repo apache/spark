@@ -56,18 +56,22 @@ CREATE OR REPLACE VIEW t1(a1, a2) as values (0, 1), (1, 2);
 CREATE OR REPLACE VIEW t2(b1, b2) as values (0, 2), (0, 3);
 CREATE OR REPLACE VIEW t3(c1, c2) as values (0, 2), (0, 3);
 
+-- test for count bug in correlated scalar subqueries
+select ( select sum(cnt) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a from t1 order by a desc;
+select ( select count(*) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a from t1 order by a desc;
+
 -- test for count bug in correlated scalar subqueries with multiple count aggregates
 select (
   select SUM(l.cnt + r.cnt)
   from (select count(*) cnt from t2 where t1.a1 = t2.b1 having cnt = 0) l
   join (select count(*) cnt from t3 where t1.a1 = t3.c1 having cnt = 0) r
   on l.cnt = r.cnt
-) from t1;
+) a from t1 order by a desc;
 
 -- same as above, without HAVING clause
 select (
   select sum(l.cnt + r.cnt)
-  from (select count(*) cnt from t2 where t1.a1 = t2.b1 ) l
-  join (select count(*) cnt from t3 where t1.a1 = t3.c1 ) r
+  from (select count(*) cnt from t2 where t1.a1 = t2.b1) l
+  join (select count(*) cnt from t3 where t1.a1 = t3.c1) r
   on l.cnt = r.cnt
-) from t1;
+) a from t1 order by a desc;
