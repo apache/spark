@@ -1342,9 +1342,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2151",
+      errorClass = "EXPRESSION_DECODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -2774,5 +2773,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           messageParameters = errorParmsMap)
       }
     }
+  }
+
+  def bitPositionRangeError(funcName: String, pos: Int, size: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("pos"),
+        "functionName" -> toSQLId(funcName),
+        "upper" -> size.toString,
+        "invalidValue" -> pos.toString))
   }
 }

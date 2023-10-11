@@ -35,6 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.streaming.StreamingQueryException
 
 /**
  * GrpcExceptionConverter handles the conversion of StatusRuntimeExceptions into Spark exceptions.
@@ -178,6 +179,12 @@ private object GrpcExceptionConverter {
   }
 
   private val errorFactory = Map(
+    errorConstructor(params =>
+      new StreamingQueryException(
+        params.message,
+        params.cause.orNull,
+        params.errorClass.orNull,
+        params.messageParameters)),
     errorConstructor(params =>
       new ParseException(
         None,

@@ -289,7 +289,7 @@ case class BroadcastNestedLoopJoinExec(
     def notMatchedBroadcastRows: RDD[InternalRow] = {
       getMatchedBroadcastRowsBitSetRDD(streamRdd, relation)
         .repartition(1)
-        .mapPartitions(iter => Seq(iter.fold(new BitSet(relation.value.length))(_ | _)).toIterator)
+        .mapPartitions(iter => Seq(iter.fold(new BitSet(relation.value.length))(_ | _)).iterator)
         .flatMap { matchedBroadcastRows =>
           val nulls = new GenericInternalRow(streamed.output.size)
           val buf: CompactBuffer[InternalRow] = new CompactBuffer()

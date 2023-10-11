@@ -18,7 +18,6 @@ import pyspark.sql.connect.proto as pb2
 import json
 from typing import Dict, List, Optional, TYPE_CHECKING
 
-
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,

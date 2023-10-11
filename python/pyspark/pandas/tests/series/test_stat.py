@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 import unittest
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
-from decimal import Decimal
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase

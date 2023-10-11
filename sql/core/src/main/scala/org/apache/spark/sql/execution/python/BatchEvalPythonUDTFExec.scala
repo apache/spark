@@ -84,7 +84,7 @@ case class BatchEvalPythonUDTFExec(
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).toIterator
+        .array.map(_.asInstanceOf[InternalRow]).iterator
     }
   }
 
@@ -132,8 +132,7 @@ object PythonUDTFRunner {
       case None =>
         dataOut.writeInt(0)
     }
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }
