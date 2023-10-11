@@ -85,7 +85,6 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         field => "-D" + field + "=" + secret
       ))
 
-    conf.set(SecurityManager.SPARK_AUTH_CONF, "true")
     val cmd = CommandUtils invokePrivate buildLocalCommand(
       command, new SecurityManager(conf), (t: String) => t, Seq(), Map())
     SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.foreach(

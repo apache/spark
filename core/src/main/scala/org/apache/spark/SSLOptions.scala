@@ -60,9 +60,6 @@ import org.apache.spark.network.util.MapConfigProvider
  *                            requires certChain and keyFile arguments
  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
  * @param enabledAlgorithms   a set of encryption algorithms that may be used
- * @param dangerouslyFallbackIfKeysNotPresent If SSL is enabled but key files are not present,
- *                                            fall back to unencrypted communication. This is an
- *                                            advanced option and not recommended for normal use.
  */
 private[spark] case class SSLOptions(
     namespace: Option[String] = None,
@@ -82,8 +79,7 @@ private[spark] case class SSLOptions(
     trustStoreReloadIntervalMs: Int = 10000,
     openSslEnabled: Boolean = false,
     protocol: Option[String] = None,
-    enabledAlgorithms: Set[String] = Set.empty,
-    dangerouslyFallbackIfKeysNotPresent: Boolean = false)
+    enabledAlgorithms: Set[String] = Set.empty)
     extends Logging {
 
   /**
@@ -157,10 +153,6 @@ private[spark] case class SSLOptions(
     supported
   }
 
-  /**
-   *
-   * @return
-   */
   def createConfigProvider(conf: SparkConf): ConfigProvider = {
     val nsp = namespace.getOrElse("spark.ssl")
     val confMap: Map[String, String] = new HashMap[String, String]
@@ -178,8 +170,6 @@ private[spark] case class SSLOptions(
     trustStorePassword.foreach(confMap.put(s"$nsp.trustStorePassword", _))
     protocol.foreach(confMap.put(s"$nsp.protocol", _))
     confMap.put(s"$nsp.enabledAlgorithms", enabledAlgorithms.mkString(","))
-    confMap.put(
-      s"$nsp.dangerouslyFallbackIfKeysNotPresent", dangerouslyFallbackIfKeysNotPresent.toString)
 
     new MapConfigProvider(confMap)
   }
@@ -193,8 +183,7 @@ private[spark] case class SSLOptions(
       s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"trustStoreReloadIntervalMs=$trustStoreReloadIntervalMs, " +
       s"trustStoreReloadingEnabled=$trustStoreReloadingEnabled, openSSLEnabled=$openSslEnabled, " +
-      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}, " +
-      s"dangerouslyFallbackIfKeysNotPresent=$dangerouslyFallbackIfKeysNotPresent"
+      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
 }
 
 private[spark] object SSLOptions extends Logging {
@@ -224,8 +213,6 @@ private[spark] object SSLOptions extends Logging {
    * (if available on host system), requires certChain and keyFile arguments
    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
-   * $ - `[ns].dangerouslyFallbackIfKeysNotPresent` - whether to fallback to unencrypted
-   *                                                  communication if keys are not present.
    *
    * For a list of protocols and ciphers supported by particular Java versions, you may go to
    * <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">
@@ -315,10 +302,6 @@ private[spark] object SSLOptions extends Logging {
         .orElse(defaults.map(_.enabledAlgorithms))
         .getOrElse(Set.empty)
 
-    val dangerouslyFallbackIfKeysNotPresent =
-        conf.getBoolean(s"$ns.dangerouslyFallbackIfKeysNotPresent",
-            defaultValue = defaults.exists(_.dangerouslyFallbackIfKeysNotPresent))
-
     new SSLOptions(
       Some(ns),
       enabled,
@@ -337,8 +320,7 @@ private[spark] object SSLOptions extends Logging {
       trustStoreReloadIntervalMs,
       openSslEnabled,
       protocol,
-      enabledAlgorithms,
-      dangerouslyFallbackIfKeysNotPresent)
+      enabledAlgorithms)
   }
 
   // Config names and environment variables for propagating SSL passwords

@@ -86,7 +86,7 @@ private[spark] class SecurityManager(
 
   private var secretKey: String = _
 
-  private val isSslRPCEnabled = sparkConf.getBoolean(
+  private val sslRpcEnabled = sparkConf.getBoolean(
     "spark.ssl.rpc.enabled", false)
 
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
@@ -99,7 +99,7 @@ private[spark] class SecurityManager(
     (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
     "; groups with modify permissions: " +
     (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY") +
-    "; RPC SSL " + (if (isSslRPCEnabled) "enabled" else "disabled"))
+    "; RPC SSL " + (if (sslRpcEnabled) "enabled" else "disabled"))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
@@ -266,29 +266,10 @@ private[spark] class SecurityManager(
   }
 
   /**
-   * Check to see if authentication is enabled and SSL for RPC is disabled (as they are mutually
-   * exclusive)
-   * @return Whether authentication is enabled and SSL for RPC is disabled
-   */
-  private def isAuthenticationEnabledAndSslRpcDisabled(): Boolean = {
-    if (sparkConf.get(NETWORK_AUTH_ENABLED)) {
-      if (rpcSSLOptions.enabled) {
-        logWarning("Network auth disabled as RPC SSL encryption is enabled")
-        false
-      } else {
-        true
-      }
-    } else {
-      false
-    }
-  }
-
-
-  /**
    * Check to see if authentication for the Spark communication protocols is enabled
    * @return true if authentication is enabled, otherwise false
    */
-  def isAuthenticationEnabled(): Boolean = isAuthenticationEnabledAndSslRpcDisabled
+  def isAuthenticationEnabled(): Boolean = authOn
 
   /**
    * Checks whether network encryption should be enabled.
@@ -308,6 +289,12 @@ private[spark] class SecurityManager(
   }
 
   /**
+   * Checks whether RPC SSL is enabled or not
+   * @return Whether RPC SSL is enabled or not
+   */
+  def isSslRpcEnabled(): Boolean = sslRpcEnabled
+
+  /**
    * Gets the user used for authenticating SASL connections.
    * For now use a single hardcoded user.
    * @return the SASL user as a String
@@ -319,7 +306,7 @@ private[spark] class SecurityManager(
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
   def getSecretKey(): String = {
-    if (authOn) {
+    if (isAuthenticationEnabled) {
       val creds = UserGroupInformation.getCurrentUser().getCredentials()
       Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
         .map { bytes => new String(bytes, UTF_8) }
@@ -353,7 +340,7 @@ private[spark] class SecurityManager(
   def initializeAuth(): Unit = {
     import SparkMasterRegex._
 
-    if (!authOn) {
+    if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
     }
 
