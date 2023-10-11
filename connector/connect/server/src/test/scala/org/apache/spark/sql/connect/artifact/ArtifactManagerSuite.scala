@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.connect.artifact
 
-
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.UUID

@@ -169,9 +169,10 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
           return
         }
 
-        throw Status.ALREADY_EXISTS.withDescription(
-          s"Duplicate Artifact: $remoteRelativePath. " +
-              "Artifacts cannot be overwritten.").asRuntimeException()
+        throw Status.ALREADY_EXISTS
+          .withDescription(s"Duplicate Artifact: $remoteRelativePath. " +
+            "Artifacts cannot be overwritten.")
+          .asRuntimeException()
       }
       Files.move(serverLocalStagingPath, target)
 
