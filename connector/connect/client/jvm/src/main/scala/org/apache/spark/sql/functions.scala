@@ -7326,7 +7326,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.json), options.asScala.toIterator)
+    from_xml(e, lit(schema.json), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
 
