@@ -557,9 +557,11 @@ class DataFrameReader(OptionUtils):
         ...     df.write.mode("overwrite").format("parquet").save(d1)
         ...     df2.write.mode("overwrite").format("parquet").save(d2)
         ...
-        ...     spark.read.option("mergeSchema", "true") \\
-        ...         .parquet(d1, d2).select("name", "age", "height") \\
-        ...         .orderBy("name", "age").show()
+        ...     spark.read.option(
+        ...         "mergeSchema", "true"
+        ...     ).parquet(d1, d2).select(
+        ...         "name", "age", "height"
+        ...     ).orderBy("name", "age").show()
         +-----+----+------+
         | name| age|height|
         +-----+----+------+
