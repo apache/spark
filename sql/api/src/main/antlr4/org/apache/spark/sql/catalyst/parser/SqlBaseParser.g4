@@ -1195,6 +1195,7 @@ qualifiedNameList
 
 functionName
     : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | identFunc=IDENTIFIER_KW  // IDENTIFIER itself is also a valid function name.
     | qualifiedName
     | FILTER
     | LEFT

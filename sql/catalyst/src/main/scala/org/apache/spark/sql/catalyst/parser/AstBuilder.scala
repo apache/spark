@@ -2269,8 +2269,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
 
     // Is this an IDENTIFIER clause instead of a function call?
-    if (name.toLowerCase(Locale.ROOT) == "identifier" && // IDENTIFIER (but not `IDENTIFIER`)
-      ctx.functionName().qualifiedName().start.getText.toLowerCase(Locale.ROOT) == "identifier" &&
+    if (ctx.functionName.identFunc != null &&
       arguments.length == 1 && // One argument
       ctx.setQuantifier == null && // No other clause
       ctx.where == null &&
