@@ -162,7 +162,8 @@ public final class ReloadingX509TrustManager
     if (file.exists() && latestCanonicalFile.exists()) {
       // `file` can be a symbolic link. We need to reload if it points to another file,
       // or if the file has been modified
-      if (latestCanonicalFile.getPath().equals(canonicalPath) && latestCanonicalFile.lastModified() == lastLoaded) {
+      if (latestCanonicalFile.getPath().equals(canonicalPath) &&
+          latestCanonicalFile.lastModified() == lastLoaded) {
         reload = false;
       }
     } else {
@@ -210,7 +211,10 @@ public final class ReloadingX509TrustManager
             trustManagerRef.set(loadTrustManager());
             this.reloadCount += 1;
           } catch (Exception ex) {
-            logger.warn("Could not load truststore (keep using existing one) : " + ex.toString(), ex);
+            logger.warn(
+              "Could not load truststore (keep using existing one) : " + ex.toString(),
+              ex
+            );
           }
         }
       } catch (IOException ex) {
