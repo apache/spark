@@ -27,7 +27,6 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import io.grpc.Status
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
