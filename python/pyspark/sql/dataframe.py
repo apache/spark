@@ -887,7 +887,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jdf.isEmpty()
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
-        """Prints the first ``n`` rows to the console.
+        """
+        Prints the first ``n`` rows of the DataFrame to the console.
 
         .. versionadded:: 1.3.0
 
@@ -896,20 +897,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        n : int, optional
+        n : int, optional, default 20
             Number of rows to show.
-        truncate : bool or int, optional
-            If set to ``True``, truncate strings longer than 20 chars by default.
+        truncate : bool or int, optional, default True
+            If set to ``True``, truncate strings longer than 20 chars.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
         vertical : bool, optional
-            If set to ``True``, print output rows vertically (one line
-            per column value).
+            If set to ``True``, print output rows vertically (one line per column value).
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        ...     (14, "Tom"), (23, "Alice"), (16, "Bob"), (19, "This is a super long name")],
+        ...     ["age", "name"])
+
+        Show :class:`DataFrame`
+
+        >>> df.show()
+        +---+--------------------+
+        |age|                name|
+        +---+--------------------+
+        | 14|                 Tom|
+        | 23|               Alice|
+        | 16|                 Bob|
+        | 19|This is a super l...|
+        +---+--------------------+
 
         Show only top 2 rows.
 
@@ -922,6 +935,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         only showing top 2 rows
 
+        Show full column content without truncation.
+
+        >>> df.show(truncate=False)
+        +---+-------------------------+
+        |age|name                     |
+        +---+-------------------------+
+        |14 |Tom                      |
+        |23 |Alice                    |
+        |16 |Bob                      |
+        |19 |This is a super long name|
+        +---+-------------------------+
+
         Show :class:`DataFrame` where the maximum number of characters is 3.
 
         >>> df.show(truncate=3)
@@ -931,20 +956,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 14| Tom|
         | 23| Ali|
         | 16| Bob|
+        | 19| Thi|
         +---+----+
 
         Show :class:`DataFrame` vertically.
 
         >>> df.show(vertical=True)
-        -RECORD 0-----
+        -RECORD 0--------------------
         age  | 14
         name | Tom
-        -RECORD 1-----
+        -RECORD 1--------------------
         age  | 23
         name | Alice
-        -RECORD 2-----
+        -RECORD 2--------------------
         age  | 16
         name | Bob
+        -RECORD 3--------------------
+        age  | 19
+        name | This is a super l...
         """
 
         if not isinstance(n, int) or isinstance(n, bool):

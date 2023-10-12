@@ -126,6 +126,8 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
+        # Return the pickled 'AnalyzeResult' class instance.
+        pickleSer._write_with_length(result, outfile)
         # Return whether the "with single partition" property is requested.
         write_int(1 if result.with_single_partition else 0, outfile)
         # Return the list of partitioning columns, if any.

@@ -161,7 +161,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2))
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2))
 -- !query schema
 struct<count:int,total:int,last:int>
 -- !query output
@@ -169,7 +169,15 @@ struct<count:int,total:int,last:int>
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)
+SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2))
+-- !query schema
+struct<count:int,total:int,last:int>
+-- !query output
+3	6	3
+
+
+-- !query
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)
 -- !query schema
 struct<>
 -- !query output
@@ -186,14 +194,14 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 70,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION)"
+    "stopIndex" : 73,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION)"
   } ]
 }
 
 
 -- !query
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query schema
 struct<>
 -- !query output
@@ -210,8 +218,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 75,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 78,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 
@@ -220,7 +228,7 @@ org.apache.spark.sql.AnalysisException
 SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
-    UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)
+    UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)
 -- !query schema
 struct<>
 -- !query output
@@ -237,8 +245,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 66,
-    "stopIndex" : 126,
-    "fragment" : "UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col)"
+    "stopIndex" : 129,
+    "fragment" : "UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col)"
   } ]
 }
 

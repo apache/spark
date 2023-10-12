@@ -47,13 +47,14 @@ SELECT * FROM
 --           order_by=[
 --               OrderingColumn("input"),
 --               OrderingColumn("partition_col")])
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2));
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) WITH SINGLE PARTITION);
-SELECT * FROM UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2));
+SELECT * FROM UDTFWithSinglePartition(1, TABLE(t2));
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) WITH SINGLE PARTITION);
+SELECT * FROM UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col);
 SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
-    UDTFWithSinglePartition(TABLE(t2) PARTITION BY partition_col);
+    UDTFWithSinglePartition(0, TABLE(t2) PARTITION BY partition_col);
 -- As a reminder, the UDTFPartitionByOrderBy function returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()
