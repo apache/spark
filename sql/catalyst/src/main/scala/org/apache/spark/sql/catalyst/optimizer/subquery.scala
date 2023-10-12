@@ -368,11 +368,14 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           })
         }
 
-        // We want to handle count bug for scalar subqueries, except for the cases where the
-        // subquery is a simple top level Aggregate which can have a count bug (note: the below
-        // logic also takes into account nested COUNTs). This is because for these cases, we don't
-        // want to introduce redundant left outer joins in [[DecorrelateInnerQuery]], when the
-        // necessary left outer join will be added in [[RewriteCorrelatedScalarSubquery]].
+        // The below logic controls handling count bug for scalar subqueries in
+        // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
+        // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
+        // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
+        // constructLeftJoins is an optimization. We want to handle count bugs in constructLeftJoins
+        // only if the subquery plan is a simple top level Aggregate which can have a count bug
+        // (no nested Aggs). This is because for these cases, we don't want to introduce additional,
+        // redundant left outer joins.
         val shouldHandleCountBug = !(sub match {
           case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
