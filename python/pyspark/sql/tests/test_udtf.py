@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import dataclass
 from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
@@ -2363,6 +2364,58 @@ class BaseUDTFTestsMixin:
             ).collect(),
             [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
             + [Row(partition_col=42, count=3, total=3, last=None)],
+        )
+
+    def test_udtf_with_prepare_string_from_analyze(self):
+        @dataclass
+        class AnalyzeResultWithBuffer(AnalyzeResult):
+            buffer: str = ""
+
+        @udtf
+        class TestUDTF:
+            def __init__(self, analyze_result=None):
+                self._total = 0
+                if analyze_result is not None:
+                    self._buffer = analyze_result.buffer
+                else:
+                    self._buffer = ""
+
+            @staticmethod
+            def analyze(argument, _):
+                if (
+                    argument.value is None
+                    or argument.is_table
+                    or not isinstance(argument.value, str)
+                    or len(argument.value) == 0
+                ):
+                    raise Exception("The first argument must be non-empty string")
+                assert argument.data_type == StringType()
+                assert not argument.is_table
+                return AnalyzeResultWithBuffer(
+                    schema=StructType().add("total", IntegerType()).add("buffer", StringType()),
+                    with_single_partition=True,
+                    buffer=argument.value,
+                )
+
+            def eval(self, argument, row: Row):
+                self._total += 1
+
+            def terminate(self):
+                yield self._total, self._buffer
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(1, 21)
+                )
+                SELECT total, buffer
+                FROM test_udtf("abc", TABLE(t))
+                """
+            ).collect(),
+            [Row(count=20, buffer="abc")],
         )
 
 

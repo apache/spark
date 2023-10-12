@@ -1041,7 +1041,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"${genInputData.value}.size()",
-          s"scala.collection.Iterator $it = ${genInputData.value}.toIterator();",
+          s"scala.collection.Iterator $it = ${genInputData.value}.iterator();",
           s"$it.next()"
         )
       case ObjectType(cls) if cls.isArray =>
@@ -1067,7 +1067,7 @@ case class MapObjects private(
         val it = ctx.freshName("it")
         (
           s"$seq == null ? $array.length : $seq.size()",
-          s"scala.collection.Iterator $it = $seq == null ? null : $seq.toIterator();",
+          s"scala.collection.Iterator $it = $seq == null ? null : $seq.iterator();",
           s"$it == null ? $array[$loopIndex] : $it.next()"
         )
     }

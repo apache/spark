@@ -321,10 +321,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
                       barrierAndServe(requestMethod, sock)
                     case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
-                      val length = input.readInt()
-                      val message = new Array[Byte](length)
-                      input.readFully(message)
-                      barrierAndServe(requestMethod, sock, new String(message, UTF_8))
+                      val message = PythonWorkerUtils.readUTF(input)
+                      barrierAndServe(requestMethod, sock, message)
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -844,11 +842,8 @@ private[spark] class PythonRunner(
         }
         try {
           stream.readInt() match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              stream.readFully(obj)
-              obj
-            case 0 => Array.emptyByteArray
+            case length if length >= 0 =>
+              PythonWorkerUtils.readBytes(length, stream)
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
