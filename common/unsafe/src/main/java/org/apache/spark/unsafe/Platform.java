@@ -118,6 +118,11 @@ public final class Platform {
     }
   }
 
+  // Visible for testing
+  public static boolean cleanerCreateMethodIsDefined() {
+    return CLEANER_CREATE_METHOD != null;
+  }
+
   /**
    * @return true when running JVM is having sun's Unsafe package available in it and underlying
    *         system having unaligned-access capability.
