@@ -2871,7 +2871,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
     class QueryContext(google.protobuf.message.Message):
         """QueryContext defines the schema for the query context of a SparkThrowable.
-        It helps users understand where error occur while executing queries.
+        It helps users understand where the error occurs while executing queries.
         """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2960,7 +2960,7 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___FetchErrorDetailsResponse.QueryContext
         ]:
-            """The query context of a SparkThrowable"""
+            """The query context of a SparkThrowable."""
         def __init__(
             self,
             *,
