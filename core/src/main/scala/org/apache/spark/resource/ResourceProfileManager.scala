@@ -69,7 +69,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
       if ((notRunningUnitTests || testExceptionThrown) &&
         !(isStandaloneOrLocalCluster || isYarn || isK8s)) {
-        throw new SparkException("TaskResourceProfiles are only supported for Standalone and " +
+        throw new SparkException("TaskResourceProfiles are only supported for Standalone, " +
           "Yarn and Kubernetes cluster for now when dynamic allocation is disabled.")
       }
     } else {
