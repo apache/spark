@@ -360,22 +360,31 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
         if children.nonEmpty =>
-        // We want to handle count bug for scalar subqueries in [[DecorrelateInnerQuery]], because
-        // it has better count bug detection logic than in [[RewriteCorrelatedScalarSubquery]]. The
-        // only exception are cases where the subquery is a simple top level Aggregate which can
-        // have a count bug. These cases are simple and already handled by
-        // [[RewriteCorrelatedScalarSubquery]]. Handling these cases in [[DecorrelateInnerQuery]]
-        // will introduce redundant left outer joins.
+
+        def mayHaveCountBugAgg(a: Aggregate): Boolean = {
+          a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
+            case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
+            case _ => false
+          })
+        }
+
+        // We want to handle count bug for scalar subqueries, except for the cases where the
+        // subquery is a simple top level Aggregate which can have a count bug (note: the below
+        // logic also takes into account nested COUNTs). This is because for these cases, we don't
+        // want to introduce redundant left outer joins in [[DecorrelateInnerQuery]], when the
+        // necessary left outer join will be added in [[RewriteCorrelatedScalarSubquery]].
         val shouldHandleCountBug = !(sub match {
-          case a: Aggregate =>
-            a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
-              case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
-              case _ => false
-            })
+          case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.exists {
+            case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
+            case _ => false
+          }
           case _ => false
         })
         val (newPlan, newCond) = decorrelate(sub, plan, shouldHandleCountBug)
-        val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
+        val mayHaveCountBug = if (shouldHandleCountBug) {
+          // Count bug was already handled in the above decorrelate function call.
+          false
+        } else if (mayHaveCountBugOld.isEmpty) {
           // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
           // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
           // no COUNT bug.

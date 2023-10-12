@@ -237,7 +237,7 @@ select ( select count(*) from (select count(*) cnt from t2 where t1.a1 = t2.b1) 
 struct<a:bigint>
 -- !query output
 1
-0
+1
 
 
 -- !query

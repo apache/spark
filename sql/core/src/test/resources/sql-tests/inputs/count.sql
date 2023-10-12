@@ -58,6 +58,8 @@ CREATE OR REPLACE VIEW t3(c1, c2) as values (0, 2), (0, 3);
 
 -- test for count bug in correlated scalar subqueries
 select ( select sum(cnt) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a from t1 order by a desc;
+
+-- test for count bug in correlated scalar subqueries with nested counts
 select ( select count(*) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a from t1 order by a desc;
 
 -- test for count bug in correlated scalar subqueries with multiple count aggregates
