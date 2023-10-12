@@ -70,7 +70,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
     workerMemoryMb.foreach { memoryMb =>
-      envVars.put("PYSPARK_UDTF_ANALYZER_MEMORY_MB", memoryMb.toString)
+      envVars.put("PYSPARK_PLANNER_MEMORY_MB", memoryMb.toString)
     }
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
