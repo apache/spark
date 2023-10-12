@@ -31,8 +31,8 @@ import org.apache.spark.util.MavenUtils.MavenCoordinate
 private[spark] object IvyTestUtils {
 
   /**
-   * Create the path for the jar and pom from the maven coordinate. Extension should be `jar`
-   * or `pom`.
+   * Create the path for the jar and pom from the maven coordinate. Extension should be `jar` or
+   * `pom`.
    */
   private[spark] def pathFromCoordinate(
       artifact: MavenCoordinate,
@@ -122,7 +122,10 @@ private[spark] object IvyTestUtils {
         |export("myfunc")
       """.stripMargin
     val nameFile = writeFile(rFilesDir, "NAMESPACE", namespace)
-    Seq(("R/pkg/R/mylib.R", source), ("R/pkg/DESCRIPTION", descFile), ("R/pkg/NAMESPACE", nameFile))
+    Seq(
+      ("R/pkg/R/mylib.R", source),
+      ("R/pkg/DESCRIPTION", descFile),
+      ("R/pkg/NAMESPACE", nameFile))
   }
 
   /** Create a simple testable Class. */
@@ -181,12 +184,16 @@ private[spark] object IvyTestUtils {
                     |   <modelVersion>4.0.0</modelVersion>
                   """.stripMargin.trim
     content += pomArtifactWriter(artifact)
-    content += dependencies.map { deps =>
-      val inside = deps.map { dep =>
-        "\t<dependency>" + pomArtifactWriter(dep, 3) + "\n\t</dependency>"
-      }.mkString("\n")
-      "\n  <dependencies>\n" + inside + "\n  </dependencies>"
-    }.getOrElse("")
+    content += dependencies
+      .map { deps =>
+        val inside = deps
+          .map { dep =>
+            "\t<dependency>" + pomArtifactWriter(dep, 3) + "\n\t</dependency>"
+          }
+          .mkString("\n")
+        "\n  <dependencies>\n" + inside + "\n  </dependencies>"
+      }
+      .getOrElse("")
     content += "\n</project>"
     writeFile(dir, artifactName(artifact, false, ".pom"), content.trim)
   }
@@ -222,10 +229,12 @@ private[spark] object IvyTestUtils {
         |               conf="master"/>
         |  </publications>
       """.stripMargin.trim
-    content += dependencies.map { deps =>
-      val inside = deps.map(ivyArtifactWriter).mkString("\n")
-      "\n  <dependencies>\n" + inside + "\n  </dependencies>"
-    }.getOrElse("")
+    content += dependencies
+      .map { deps =>
+        val inside = deps.map(ivyArtifactWriter).mkString("\n")
+        "\n  <dependencies>\n" + inside + "\n  </dependencies>"
+      }
+      .getOrElse("")
     content += "\n</ivy-module>"
     writeFile(dir, "ivy.xml", content.trim)
   }
@@ -273,15 +282,21 @@ private[spark] object IvyTestUtils {
 
   /**
    * Creates a jar and pom file, mocking a Maven repository. The root path can be supplied with
-   * `tempDir`, dependencies can be created into the same repo, and python files can also be packed
-   * inside the jar.
+   * `tempDir`, dependencies can be created into the same repo, and python files can also be
+   * packed inside the jar.
    *
-   * @param artifact The maven coordinate to generate the jar and pom for.
-   * @param dependencies List of dependencies this artifact might have to also create jars and poms.
-   * @param tempDir The root folder of the repository
-   * @param useIvyLayout whether to mock the Ivy layout for local repository testing
-   * @param withPython Whether to pack python files inside the jar for extensive testing.
-   * @return Root path of the repository
+   * @param artifact
+   *   The maven coordinate to generate the jar and pom for.
+   * @param dependencies
+   *   List of dependencies this artifact might have to also create jars and poms.
+   * @param tempDir
+   *   The root folder of the repository
+   * @param useIvyLayout
+   *   whether to mock the Ivy layout for local repository testing
+   * @param withPython
+   *   Whether to pack python files inside the jar for extensive testing.
+   * @return
+   *   Root path of the repository
    */
   private def createLocalRepository(
       artifact: MavenCoordinate,
@@ -326,12 +341,18 @@ private[spark] object IvyTestUtils {
 
   /**
    * Creates a suite of jars and poms, with or without dependencies, mocking a maven repository.
-   * @param artifact The main maven coordinate to generate the jar and pom for.
-   * @param dependencies List of dependencies this artifact might have to also create jars and poms.
-   * @param rootDir The root folder of the repository (like `~/.m2/repositories`)
-   * @param useIvyLayout whether to mock the Ivy layout for local repository testing
-   * @param withPython Whether to pack python files inside the jar for extensive testing.
-   * @return Root path of the repository. Will be `rootDir` if supplied.
+   * @param artifact
+   *   The main maven coordinate to generate the jar and pom for.
+   * @param dependencies
+   *   List of dependencies this artifact might have to also create jars and poms.
+   * @param rootDir
+   *   The root folder of the repository (like `~/.m2/repositories`)
+   * @param useIvyLayout
+   *   whether to mock the Ivy layout for local repository testing
+   * @param withPython
+   *   Whether to pack python files inside the jar for extensive testing.
+   * @return
+   *   Root path of the repository. Will be `rootDir` if supplied.
    */
   private[spark] def createLocalRepositoryForTests(
       artifact: MavenCoordinate,
@@ -342,21 +363,29 @@ private[spark] object IvyTestUtils {
       withR: Boolean = false): File = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
     val mainRepo = createLocalRepository(artifact, deps, rootDir, useIvyLayout, withPython, withR)
-    deps.foreach { seq => seq.foreach { dep =>
-      createLocalRepository(dep, None, Some(mainRepo), useIvyLayout, withPython = false)
-    }}
+    deps.foreach { seq =>
+      seq.foreach { dep =>
+        createLocalRepository(dep, None, Some(mainRepo), useIvyLayout, withPython = false)
+      }
+    }
     mainRepo
   }
 
   /**
    * Creates a repository for a test, and cleans it up afterwards.
    *
-   * @param artifact The main maven coordinate to generate the jar and pom for.
-   * @param dependencies List of dependencies this artifact might have to also create jars and poms.
-   * @param rootDir The root folder of the repository (like `~/.m2/repositories`)
-   * @param useIvyLayout whether to mock the Ivy layout for local repository testing
-   * @param withPython Whether to pack python files inside the jar for extensive testing.
-   * @return Root path of the repository. Will be `rootDir` if supplied.
+   * @param artifact
+   *   The main maven coordinate to generate the jar and pom for.
+   * @param dependencies
+   *   List of dependencies this artifact might have to also create jars and poms.
+   * @param rootDir
+   *   The root folder of the repository (like `~/.m2/repositories`)
+   * @param useIvyLayout
+   *   whether to mock the Ivy layout for local repository testing
+   * @param withPython
+   *   Whether to pack python files inside the jar for extensive testing.
+   * @return
+   *   Root path of the repository. Will be `rootDir` if supplied.
    */
   private[spark] def withRepository(
       artifact: MavenCoordinate,
@@ -368,8 +397,13 @@ private[spark] object IvyTestUtils {
       ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
     purgeLocalIvyCache(artifact, deps, ivySettings)
-    val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
-      withPython, withR)
+    val repo = createLocalRepositoryForTests(
+      artifact,
+      dependencies,
+      rootDir,
+      useIvyLayout,
+      withPython,
+      withR)
     try {
       f(repo.toURI.toString)
     } finally {
@@ -377,7 +411,8 @@ private[spark] object IvyTestUtils {
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2")) {
         val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
         FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
-        deps.foreach { _.foreach { dep =>
+        deps.foreach {
+          _.foreach { dep =>
             FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
           }
         }
@@ -395,7 +430,8 @@ private[spark] object IvyTestUtils {
       ivySettings: IvySettings): Unit = {
     // delete the artifact from the cache as well if it already exists
     FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
-    dependencies.foreach { _.foreach { dep =>
+    dependencies.foreach {
+      _.foreach { dep =>
         FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
       }
     }

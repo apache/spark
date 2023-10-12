@@ -33,9 +33,8 @@ trait SparkTestUtils {
     URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
   }
 
-
   private[spark] class JavaSourceFromString(val name: String, val code: String)
-    extends SimpleJavaFileObject(createURI(name), SOURCE) {
+      extends SimpleJavaFileObject(createURI(name), SOURCE) {
     override def getCharContent(ignoreEncodingErrors: Boolean): String = code
   }
 
@@ -50,9 +49,13 @@ trait SparkTestUtils {
     // Calling this outputs a class file in pwd. It's easier to just rename the files than
     // build a custom FileManager that controls the output location.
     val options = if (classpathUrls.nonEmpty) {
-      Seq("-classpath", classpathUrls.map {
-        _.getFile
-      }.mkString(File.pathSeparator))
+      Seq(
+        "-classpath",
+        classpathUrls
+          .map {
+            _.getFile
+          }
+          .mkString(File.pathSeparator))
     } else {
       Seq.empty
     }
@@ -85,7 +88,8 @@ trait SparkTestUtils {
     val implementsText =
       "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
     val packageText = packageName.map(p => s"package $p;\n").getOrElse("")
-    val sourceFile = new JavaSourceFromString(className,
+    val sourceFile = new JavaSourceFromString(
+      className,
       s"""
          |$packageText
          |public class $className $extendsText $implementsText {

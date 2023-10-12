@@ -265,9 +265,8 @@ private[spark] object MavenUtils extends Logging {
    * @return
    *   An IvySettings object
    */
-  def buildIvySettings(
-      remoteRepos: Option[String],
-      ivyPath: Option[String])(implicit printStream: PrintStream): IvySettings = {
+  def buildIvySettings(remoteRepos: Option[String], ivyPath: Option[String])(implicit
+      printStream: PrintStream): IvySettings = {
     val ivySettings: IvySettings = new IvySettings
     processIvyPathArg(ivySettings, ivyPath)
 
@@ -299,10 +298,8 @@ private[spark] object MavenUtils extends Logging {
    * @return
    *   An IvySettings object
    */
-  def loadIvySettings(
-      settingsFile: String,
-      remoteRepos: Option[String],
-      ivyPath: Option[String])(implicit printStream: PrintStream): IvySettings = {
+  def loadIvySettings(settingsFile: String, remoteRepos: Option[String], ivyPath: Option[String])(
+      implicit printStream: PrintStream): IvySettings = {
     val uri = new URI(settingsFile)
     val file = Option(uri.getScheme).getOrElse("file") match {
       case "file" => new File(uri.getPath)
@@ -334,9 +331,8 @@ private[spark] object MavenUtils extends Logging {
   }
 
   /* Add any optional additional remote repositories */
-  private def processRemoteRepoArg(
-      ivySettings: IvySettings,
-      remoteRepos: Option[String])(implicit printStream: PrintStream): Unit = {
+  private def processRemoteRepoArg(ivySettings: IvySettings, remoteRepos: Option[String])(implicit
+      printStream: PrintStream): Unit = {
     remoteRepos.filterNot(_.trim.isEmpty).map(_.split(",")).foreach { repositoryList =>
       val cr = new ChainResolver
       cr.setName("user-list")
@@ -354,7 +350,7 @@ private[spark] object MavenUtils extends Logging {
         cr.add(brr)
         // scalastyle:off println
         printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
-        // scalastyle:on println
+      // scalastyle:on println
       }
 
       ivySettings.addResolver(cr)
@@ -365,8 +361,8 @@ private[spark] object MavenUtils extends Logging {
   /** A nice function to use in tests as well. Values are dummy strings. */
   private[util] def getModuleDescriptor: DefaultModuleDescriptor =
     DefaultModuleDescriptor.newDefaultInstance(ModuleRevisionId
-    // Include UUID in module name, so multiple clients resolving maven coordinate at the same time
-    // do not modify the same resolution file concurrently.
+      // Include UUID in module name, so multiple clients resolving maven coordinate at the same time
+      // do not modify the same resolution file concurrently.
       .newInstance("org.apache.spark", s"spark-submit-parent-${UUID.randomUUID.toString}", "1.0"))
 
   /**
@@ -492,24 +488,25 @@ private[spark] object MavenUtils extends Logging {
   }
 
   /**
-   * Parse URI query string's parameter value of `transitive` and `exclude`.
-   * Other invalid parameters will be ignored.
+   * Parse URI query string's parameter value of `transitive` and `exclude`. Other invalid
+   * parameters will be ignored.
    *
-   * @param uri Ivy URI need to be downloaded.
-   * @return Tuple value of parameter `transitive` and `exclude` value.
+   * @param uri
+   *   Ivy URI need to be downloaded.
+   * @return
+   *   Tuple value of parameter `transitive` and `exclude` value.
    *
-   *         1. transitive: whether to download dependency jar of Ivy URI, default value is true
-   *            and this parameter value is case-insensitive. This mimics Hive's behaviour for
-   *            parsing the transitive parameter. Invalid value will be treat as false.
-   *            Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
-   *            Output:  true
+   *   1. transitive: whether to download dependency jar of Ivy URI, default value is true and
+   *      this parameter value is case-insensitive. This mimics Hive's behaviour for parsing the
+   *      transitive parameter. Invalid value will be treat as false. Example: Input:
+   *      exclude=org.mortbay.jetty:jetty&transitive=true Output: true
    *
-   *         2. exclude: comma separated exclusions to apply when resolving transitive dependencies,
-   *            consists of `group:module` pairs separated by commas.
-   *            Example: Input:  excludeorg.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
-   *            Output:  [org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http]
+   * 2. exclude: comma separated exclusions to apply when resolving transitive dependencies,
+   * consists of `group:module` pairs separated by commas. Example: Input:
+   * excludeorg.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http Output:
+   * [org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http]
    */
-   def parseQueryParams(uri: URI): (Boolean, String) = {
+  def parseQueryParams(uri: URI): (Boolean, String) = {
     val uriQuery = uri.getQuery
     if (uriQuery == null) {
       (true, "")
@@ -524,33 +521,42 @@ private[spark] object MavenUtils extends Logging {
       // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is true
       val transitiveParams = groupedParams.get("transitive")
       if (transitiveParams.map(_.size).getOrElse(0) > 1) {
-        logWarning("It's best to specify `transitive` parameter in ivy URI query only once." +
-          " If there are multiple `transitive` parameter, we will select the last one")
+        logWarning(
+          "It's best to specify `transitive` parameter in ivy URI query only once." +
+            " If there are multiple `transitive` parameter, we will select the last one")
       }
       val transitive =
-        transitiveParams.flatMap(_.takeRight(1).map(_._2.equalsIgnoreCase("true")).headOption)
+        transitiveParams
+          .flatMap(_.takeRight(1).map(_._2.equalsIgnoreCase("true")).headOption)
           .getOrElse(true)
 
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
       // in an Ivy URI. When download Ivy URI jar, Spark won't download transitive jar
       // in a excluded list.
-      val exclusionList = groupedParams.get("exclude").map { params =>
-        params.map(_._2).flatMap { excludeString =>
-          val excludes = excludeString.split(",")
-          if (excludes.map(_.split(":")).exists(MavenUtils.isInvalidQueryString)) {
-            throw new IllegalArgumentException(
-              s"Invalid exclude string in Ivy URI ${uri.toString}:" +
-                " expected 'org:module,org:module,..', found " + excludeString)
-          }
-          excludes
-        }.mkString(",")
-      }.getOrElse("")
+      val exclusionList = groupedParams
+        .get("exclude")
+        .map { params =>
+          params
+            .map(_._2)
+            .flatMap { excludeString =>
+              val excludes = excludeString.split(",")
+              if (excludes.map(_.split(":")).exists(MavenUtils.isInvalidQueryString)) {
+                throw new IllegalArgumentException(
+                  s"Invalid exclude string in Ivy URI ${uri.toString}:" +
+                    " expected 'org:module,org:module,..', found " + excludeString)
+              }
+              excludes
+            }
+            .mkString(",")
+        }
+        .getOrElse("")
 
       val validParams = Set("transitive", "exclude")
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
-        logWarning(s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
-          s"in Ivy URI query `$uriQuery`.")
+        logWarning(
+          s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
+            s"in Ivy URI query `$uriQuery`.")
       }
 
       (transitive, exclusionList)

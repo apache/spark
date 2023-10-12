@@ -29,10 +29,10 @@ private[spark] trait SparkStreamUtils {
    * transferToEnabled should be configured by spark.file.transferTo = [true|false].
    */
   def copyStream(
-                  in: InputStream,
-                  out: OutputStream,
-                  closeStreams: Boolean = false,
-                  transferToEnabled: Boolean = false): Long = {
+      in: InputStream,
+      out: OutputStream,
+      closeStreams: Boolean = false,
+      transferToEnabled: Boolean = false): Long = {
     tryWithSafeFinally {
       (in, out) match {
         case (input: FileInputStream, output: FileOutputStream) if transferToEnabled =>
@@ -67,10 +67,10 @@ private[spark] trait SparkStreamUtils {
   }
 
   def copyFileStreamNIO(
-                         input: FileChannel,
-                         output: WritableByteChannel,
-                         startPosition: Long,
-                         bytesToCopy: Long): Unit = {
+      input: FileChannel,
+      output: WritableByteChannel,
+      startPosition: Long,
+      bytesToCopy: Long): Unit = {
     val outputInitialState = output match {
       case outputFileChannel: FileChannel =>
         Some((outputFileChannel.position(), outputFileChannel))
@@ -106,4 +106,4 @@ private[spark] trait SparkStreamUtils {
   }
 }
 
-private [spark] object SparkStreamUtils extends SparkStreamUtils
+private[spark] object SparkStreamUtils extends SparkStreamUtils

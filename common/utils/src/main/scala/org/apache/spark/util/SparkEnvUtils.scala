@@ -17,6 +17,7 @@
 package org.apache.spark.util
 
 private[spark] trait SparkEnvUtils {
+
   /**
    * Indicates whether Spark is currently running unit tests.
    */
