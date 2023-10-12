@@ -121,7 +121,7 @@ The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
 [SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`
+ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
 
 ### CANNOT_CAST_DATATYPE
 
