@@ -266,3 +266,27 @@ struct<a:bigint>
 -- !query output
 4
 0
+
+
+-- !query
+DROP VIEW t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t3
+-- !query schema
+struct<>
+-- !query output
+
