@@ -147,7 +147,26 @@ Note that when using files, Spark will not mount these files into the containers
 you to ensure that the secret files are deployed securely into your containers and that the driver's
 secret file agrees with the executors' secret file.
 
-## Encryption
+# Network Encryption
+
+Spark supports two mutually exclusive forms of encryption for RPC connections.
+
+The first is an AES-based encryption which relies on a shared secret, and thus requires
+RPC authentication to also be enabled.
+
+The second is an SSL based encryption mechanism utilizing Netty's support for SSL. This requires
+keys and certificates to be properly configured. It can be used with or without the authentication
+mechanism discussed earlier.
+
+One may prefer to use the SSL based encryption in scenarios where compliance mandates the usage
+of specific protocols; or to leverage the security of a more standard encryption library. However,
+the AES based encryption is simpler to configure and may be preferred if the only requirement
+is that data be encrypted in transit.
+
+If both options are enabled in the configuration, the SSL based RPC encryption takes precedence
+and the AES based encryption will not be used (and a warning message will be emitted).
+
+## AES based Encryption
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
 authentication must also be enabled and properly configured. AES encryption uses the
@@ -220,10 +239,6 @@ different set of options.
 Unlike the other SSL settings for the UI, the RPC SSL is *not* automatically enabled if 
 `spark.ssl.enabled` is set. It must be explicitly enabled, to ensure a safe migration path for users
 upgrading Spark versions.
-
-The SSL encryption support supersedes the encryption settings mentioned earlier. If both are
-enabled, the SSL settings take precedence and the prior settings will be disabled at runtime,
-and a warning message will be emitted.
 
 # Local Storage Encryption
 
