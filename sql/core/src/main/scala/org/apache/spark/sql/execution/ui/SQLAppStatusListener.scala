@@ -112,7 +112,7 @@ class SQLAppStatusListener(
     // Record the accumulator IDs and metric types for the stages of this job, so that the code
     // that keeps track of the metrics knows which accumulators to look at.
     val accumIdsAndType = exec.metricAccumulatorIdToMetricType
-    if (!accumIdsAndType.isEmpty) {
+    if (accumIdsAndType.nonEmpty) {
       event.stageInfos.foreach { stage =>
         stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
           stage.numTasks, accumIdsAndType))
@@ -495,7 +495,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   // This mapping is shared across all LiveStageMetrics instances associated with
   // this LiveExecutionData, helping to reduce memory overhead by avoiding waste
   // from separate immutable maps with largely overlapping sets of entries.
-  val metricAccumulatorIdToMetricType = new ConcurrentHashMap[Long, String]()
+  val metricAccumulatorIdToMetricType = new mutable.HashMap[Long, String]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
   var errorMessage: Option[String] = None
@@ -539,7 +539,7 @@ private class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumIdsToMetricType: ConcurrentHashMap[Long, String]) {
+    val accumIdsToMetricType: mutable.Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
@@ -586,7 +586,7 @@ private class LiveStageMetrics(
     }
 
     accumUpdates
-      .filter { acc => acc.update.isDefined && accumIdsToMetricType.containsKey(acc.id) }
+      .filter { acc => acc.update.isDefined && accumIdsToMetricType.contains(acc.id) }
       .foreach { acc =>
         // In a live application, accumulators have Long values, but when reading from event
         // logs, they have String values. For now, assume all accumulators are Long and convert
@@ -600,7 +600,7 @@ private class LiveStageMetrics(
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(Option(accumIdsToMetricType.get(acc.id)).get)) {
+        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 
