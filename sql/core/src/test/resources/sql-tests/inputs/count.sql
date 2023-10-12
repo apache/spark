@@ -77,3 +77,7 @@ select (
   join (select count(*) cnt from t3 where t1.a1 = t3.c1) r
   on l.cnt = r.cnt
 ) a from t1 order by a desc;
+
+DROP VIEW t1;
+DROP VIEW t2;
+DROP VIEW t3;
