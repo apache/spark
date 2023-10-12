@@ -214,27 +214,32 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         }
         val subqueriesReferencingLeft = subqueriesWithJoinInputReferenceInfo.filter(_._2).map(_._1)
         val subqueriesReferencingRight = subqueriesWithJoinInputReferenceInfo.filter(_._3).map(_._1)
-        var newCondition = j.condition.get
-        val newLeft = subqueriesReferencingLeft.foldLeft(j.left) {
-          case (p, e) =>
-            val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
-            // Update the join condition to rewrite the subquery expression
-            newCondition = newCondition.transform {
-              case expr if expr.fastEquals(e) => newCond.get
-            }
-            newInputPlan
+        if (subqueriesReferencingLeft.isEmpty && subqueriesReferencingRight.isEmpty) {
+          j
+        } else {
+          var newCondition = j.condition.get
+          val newLeft = subqueriesReferencingLeft.foldLeft(j.left) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          val newRight = subqueriesReferencingRight.foldLeft(j.right) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          // Remove unwanted exists columns from new existence joins with new Project
+          Project(j.output, j.copy(left = newLeft, right = newRight,
+            condition = Some(newCondition)))
         }
-        val newRight = subqueriesReferencingRight.foldLeft(j.right) {
-          case (p, e) =>
-            val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
-            // Update the join condition to rewrite the subquery expression
-            newCondition = newCondition.transform {
-              case expr if expr.fastEquals(e) => newCond.get
-            }
-            newInputPlan
-        }
-        // Remove unwanted exists columns from new existence joins with new Project
-        Project(j.output, j.copy(left = newLeft, right = newRight, condition = Some(newCondition)))
       }
 
     case u: UnaryNode if u.expressions.exists(
