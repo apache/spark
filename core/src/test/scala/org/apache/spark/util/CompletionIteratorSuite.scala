@@ -64,6 +64,6 @@ class CompletionIteratorSuite extends SparkFunSuite {
       }
     }
     assert(ref.refersTo(null))
-    assert(refQueue.remove() === ref)
+    assert(refQueue.remove(1000) === ref)
   }
 }
