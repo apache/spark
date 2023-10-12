@@ -177,10 +177,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * To allow certain options to append when create a new table, which can be
    * table_options or partition_options.
    * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-   * @param statement
-   * @param tableName
-   * @param strSchema
-   * @param options
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
