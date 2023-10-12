@@ -52,9 +52,13 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
+    ArrayType,
     BinaryType,
+    DataType,
+    MapType,
     Row,
     StringType,
+    StructField,
     StructType,
     _create_row,
     _parse_datatype_json_string,
@@ -841,6 +845,74 @@ def read_udtf(pickleSer, infile, eval_type):
             "the query again."
         )
 
+    # Computes the set of UDTF result columns whose types are not nullable.
+    non_nullable_result_cols = set()
+    for column_index, return_field in enumerate(return_type):
+        def check_for_nullable_column_type(struct_field: StructField) -> None:
+            nonlocal column_index, non_nullable_result_cols
+            if not struct_field.nullable:
+                non_nullable_result_cols.add(column_index)
+            elif type(struct_field.dataType) == ArrayType:
+                if not struct_field.dataType.containsNull:
+                    non_nullable_result_cols.add(column_index)
+                else:
+                    check_for_nullable_column_type(
+                        StructField('element_type', struct_field.dataType.elementType, False))
+            elif type(struct_field.dataType) == StructType:
+                for subfield in struct_field.dataType.fields:
+                    check_for_nullable_column_type(subfield)
+            elif type(struct_field.dataType) == MapType:
+                check_for_nullable_column_type(
+                    StructField('key_type', struct_field.dataType.keyType, False))
+                if not struct_field.dataType.valueContainsNull:
+                    non_nullable_result_cols.add(column_index)
+                else:
+                    check_for_nullable_column_type(
+                        StructField('value_type', struct_field.dataType.valueType, False))
+        check_for_nullable_column_type(return_field)
+
+    # Checks that the UDTF does not return None values for these columns below.
+    def check_for_none_in_non_nullable_columns(row: Any) -> None:
+        nonlocal non_nullable_result_cols, return_type
+        for result_column_index in non_nullable_result_cols:
+            def check_for_none_in_non_nullable_column(value: Any, data_type: DataType) -> None:
+                if value is None:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={
+                            "method_name": "eval' or 'terminate",
+                            "error": f"Column {result_column_index} within a returned row had a "
+                                     f"value of None, either directly or within array/struct/map "
+                                     f"subfields, but the corresponding column type was declared "
+                                     f"as non-nullable; please update the UDTF to return a "
+                                     f"non-None value at this location or otherwise declare the "
+                                     f"column type as nullable.",
+                        },
+                    )
+                elif (isinstance(data_type, ArrayType) and isinstance(value, list)
+                      and not data_type.containsNull):
+                    for sub_value in value:
+                        check_for_none_in_non_nullable_column(sub_value, data_type.elementType)
+                elif isinstance(data_type, StructType) and isinstance(value, Row):
+                    for field_name, field_value in value.asDict().items():
+                        subfield: StructField = data_type[field_name]
+                        if not subfield.nullable:
+                            check_for_none_in_non_nullable_column(field_value, subfield.dataType)
+                elif isinstance(data_type, MapType):
+                    if isinstance(value, dict):
+                        items = value.items()
+                    elif isinstance(value, Row):
+                        items = value.asDict().items()
+                    else:
+                        items = []
+                    for map_key, map_value in items:
+                        check_for_none_in_non_nullable_column(map_key, data_type.keyType)
+                        if not data_type.valueContainsNull:
+                            check_for_none_in_non_nullable_column(map_value, data_type.valueType)
+            column_value = list(row)[result_column_index]
+            column_data_type = return_type[result_column_index].dataType
+            check_for_none_in_non_nullable_column(column_value, column_data_type)
+
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
         def wrap_arrow_udtf(f, return_type):
@@ -902,6 +974,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             "func": f.__name__,
                         },
                     )
+                check_for_none_in_non_nullable_columns(res)
 
             def evaluate(*args: pd.Series):
                 if len(args) == 0:
@@ -973,6 +1046,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             },
                         )
 
+                check_for_none_in_non_nullable_columns(result)
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.

@@ -541,19 +541,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         case _: AnalyzerTest =>
           val (_, output) =
             handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
-          // We might need to do some query canonicalization in the future.
+          // We do some query canonicalization now.
           AnalyzerOutput(
             sql = sql,
             schema = None,
-            output = output.mkString("\n").replaceAll("\\s+$", ""))
+            output = normalizeTestResults(output.mkString("\n")))
         case _ =>
           val (schema, output) =
             handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
-          // We might need to do some query canonicalization in the future.
+          // We do some query canonicalization now.
           val executionOutput = ExecutionOutput(
             sql = sql,
             schema = Some(schema),
-            output = output.mkString("\n").replaceAll("\\s+$", ""))
+            output = normalizeTestResults(output.mkString("\n")))
           if (testCase.isInstanceOf[CTETest]) {
             expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
           }
@@ -651,7 +651,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           TestPythonUDTFWithSinglePartition,
           TestPythonUDTFPartitionBy,
           TestPythonUDTFInvalidPartitionByAndWithSinglePartition,
-          TestPythonUDTFInvalidOrderByWithoutPartitionBy
+          TestPythonUDTFInvalidOrderByWithoutPartitionBy,
+          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType,
+          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType,
+          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
+          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType,
+          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType,
+          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType,
+          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType,
+          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
+          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType,
+          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType
         ))).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)
@@ -848,17 +858,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"Expected $numSegments blocks in result file but got " +
           s"${segments.size}. Try regenerate the result files.")
       var curSegment = 0
+
       outputs.map { output =>
         val result = if (output.numSegments == 3) {
           makeOutput(
             segments(curSegment + 1).trim, // SQL
             Some(segments(curSegment + 2).trim), // Schema
-            segments(curSegment + 3).replaceAll("\\s+$", "")) // Output
+            normalizeTestResults(segments(curSegment + 3))) // Output
         } else {
           makeOutput(
             segments(curSegment + 1).trim, // SQL
             None, // Schema
-            segments(curSegment + 2).replaceAll("\\s+$", "")) // Output
+            normalizeTestResults(segments(curSegment + 2))) // Output
         }
         curSegment += output.numSegments
         result
@@ -883,6 +894,22 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         output.output
       }
     }
+  }
+
+  /** This is a helper function to normalize non-deterministic Python error stacktraces. */
+  def normalizeTestResults(output: String): String = {
+    val strippedPythonErrors: String = {
+      var traceback = false
+      output.split("\n").filter { line: String =>
+        if (line == "Traceback (most recent call last):") {
+          traceback = true
+        } else if (!line.startsWith(" ")) {
+          traceback = false
+        }
+        !traceback
+      }.mkString("\n")
+    }
+    strippedPythonErrors.replaceAll("\\s+$", "")
   }
 
   /** A single SQL query's output. */

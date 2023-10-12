@@ -104,6 +104,19 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
+-- The following UDTF calls should fail because the UDTF's 'eval' or 'terminate' method returns None
+-- to a non-nullable column, either directly or within an array/struct/map subfield.
+SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(
+    TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;
