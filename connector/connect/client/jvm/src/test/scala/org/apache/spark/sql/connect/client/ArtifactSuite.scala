@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client
 
 import java.io.InputStream
+import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
@@ -267,5 +268,14 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
     assert(receivedRequests.size == 1)
+  }
+
+  test("resolve ivy") {
+    val artifacts = Artifact.newIvyArtifacts(
+      URI.create("ivy://org.apache.hive:hive-storage-api:2.7.0"))
+    assert(artifacts.exists(
+      _.path.toString.contains("jars/org.apache.hive_hive-storage-api-2.7.0.jar")))
+    // transitive dependency
+    assert(artifacts.exists(_.path.toString.contains("jars/commons-lang_commons-lang-2.6.jar")))
   }
 }
