@@ -51,7 +51,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
     val reuseWorker = env.conf.get(PYTHON_WORKER_REUSE)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
-    val workerMemoryMb = SQLConf.get.pythonUDTFAnalyzerMemory
+    val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
