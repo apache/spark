@@ -34,11 +34,12 @@ fi
 
 rm -f .connect-mima-check-result
 
-echo "Download maven's corrupted file"
-build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=geny_2.13 -Dversion=0.7.1 -Dtransitive=false --no-transfer-progress
+# echo "Download maven's corrupted file"
+# build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=com.lihaoyi -DartifactId=geny_2.13 -Dversion=0.7.1 -Dtransitive=false --no-transfer-progress
 
 echo "Build required modules..."
-build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
+# build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
+build/sbt "set csrConfiguration := csrConfiguration.value.withCachePolicies(Vector(lmcoursier.definitions.CachePolicy.Update));sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
 
 CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
 SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
