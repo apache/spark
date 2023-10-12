@@ -273,12 +273,10 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {
-    switch (name) {
-      case "<=>":
-        return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
-      default:
-        return l + " " + name + " " + r;
+    if (name.equals("<=>")) {
+      return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
     }
+    return l + " " + name + " " + r;
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {
