@@ -35,9 +35,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.network.ssl.SslSampleConfigs.*;
 
-/**
- *
- */
 public class ReloadingX509TrustManagerSuite {
 
   private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManagerSuite.class);
@@ -52,7 +49,7 @@ public class ReloadingX509TrustManagerSuite {
   private void waitForReloadCount(ReloadingX509TrustManager tm, int count, int attempts)
           throws InterruptedException {
     if (tm.reloadCount > count) {
-      throw new RuntimeException(
+      throw new IllegalStateException(
         "Passed invalid count " + count + " to waitForReloadCount, already have " + tm.reloadCount);
     }
     for (int i = 0; i < attempts; i++) {
@@ -69,7 +66,7 @@ public class ReloadingX509TrustManagerSuite {
         currentTime = System.currentTimeMillis();
       }
     }
-    throw new RuntimeException("Trust store not reloaded after " + attempts + " attempts!");
+    throw new IllegalStateException("Trust store not reloaded after " + attempts + " attempts!");
   }
 
   /**
@@ -83,7 +80,7 @@ public class ReloadingX509TrustManagerSuite {
           throws InterruptedException {
     int oldReloadCount = tm.reloadCount;
     int checkCount = tm.needsReloadCheckCounts;
-    int target = checkCount + 10;
+    int target = checkCount + attempts;
     while (checkCount < target) {
       Thread.sleep(100);
       checkCount = tm.needsReloadCheckCounts;
@@ -174,8 +171,8 @@ public class ReloadingX509TrustManagerSuite {
       certs.put("cert2", cert2);
       createTrustStore(trustStore, "password", certs);
 
-      // Wait until we reload
-      waitForReloadCount(tm, 1, 10);
+      // Wait up to 5s until we reload
+      waitForReloadCount(tm, 1, 50);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
     } finally {
@@ -207,8 +204,8 @@ public class ReloadingX509TrustManagerSuite {
       X509Certificate cert = tm.getAcceptedIssuers()[0];
       trustStore.delete();
 
-      // Wait until for at least a few attempts - we should *not* reload
-      waitForNoReload(tm, 10);
+      // Wait for up to 5s - we should *not* reload
+      waitForNoReload(tm, 50);
 
       assertEquals(1, tm.getAcceptedIssuers().length);
       assertEquals(cert, tm.getAcceptedIssuers()[0]);
@@ -242,8 +239,8 @@ public class ReloadingX509TrustManagerSuite {
       os.close();
       corruptStore.setLastModified(System.currentTimeMillis() - 1000);
 
-      // Wait until for at least a few attempts - we should *not* reload
-      waitForNoReload(tm, 10);
+      // Wait for up to 5s - we should *not* reload
+      waitForNoReload(tm, 50);
 
       assertEquals(1, tm.getAcceptedIssuers().length);
       assertEquals(cert, tm.getAcceptedIssuers()[0]);
@@ -297,8 +294,8 @@ public class ReloadingX509TrustManagerSuite {
       Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore2.toPath());
       logger.info("REPOINTED!!!");
 
-      // Wait until we reload
-      waitForReloadCount(tm, 1, 10);
+      // Wait up to 5s until we reload
+      waitForReloadCount(tm, 1, 50);
 
       assertEquals(2, tm.getAcceptedIssuers().length);
 
@@ -306,8 +303,8 @@ public class ReloadingX509TrustManagerSuite {
       certs.put("cert3", cert3);
       createTrustStore(trustStore2, "password", certs);
 
-      // Wait until we reload
-      waitForReloadCount(tm, 2, 10);
+      // Wait up to 5s until we reload
+      waitForReloadCount(tm, 2, 50);
 
       assertEquals(3, tm.getAcceptedIssuers().length);
     } finally {
