@@ -940,7 +940,8 @@
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "EXPECT_TABLE_NOT_VIEW" : {
     "message" : [
@@ -957,7 +958,8 @@
           "Please use ALTER VIEW instead."
         ]
       }
-    }
+    },
+    "sqlState" : "42809"
   },
   "EXPECT_VIEW_NOT_TABLE" : {
     "message" : [
@@ -974,17 +976,20 @@
           "Please use ALTER TABLE instead."
         ]
       }
-    }
+    },
+    "sqlState" : "42809"
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
-    ]
+    ],
+    "sqlState" : "42822"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
@@ -1007,7 +1012,8 @@
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
     "message" : [
       "Failed to register classes with Kryo."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -1018,12 +1024,14 @@
   "FAILED_RENAME_TEMP_FILE" : {
     "message" : [
       "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
-    ]
+    ],
+    "sqlState" : "42710"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -1040,22 +1048,26 @@
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
-    ]
+    ],
+    "sqlState" : "42623"
   },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
       "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
-    ]
+    ],
+    "sqlState" : "56038"
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "GRAPHITE_SINK_PROPERTY_MISSING" : {
     "message" : [
       "Graphite sink requires '<property>' property."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
@@ -1096,22 +1108,26 @@
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
-    ]
+    ],
+    "sqlState" : "42822"
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
-    ]
+    ],
+    "sqlState" : "22546"
   },
   "HLL_INVALID_LG_K" : {
     "message" : [
       "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
-    ]
+    ],
+    "sqlState" : "22546"
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
       "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
-    ]
+    ],
+    "sqlState" : "22000"
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -1134,7 +1150,8 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
-    ]
+    ],
+    "sqlState" : "56038"
   },
   "INCOMPATIBLE_DATA_FOR_TABLE" : {
     "message" : [
@@ -1204,7 +1221,8 @@
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
       "Please try to re-create the view by running: <suggestion>."
-    ]
+    ],
+    "sqlState" : "51024"
   },
   "INCOMPLETE_TYPE_DEFINITION" : {
     "message" : [
@@ -1237,40 +1255,34 @@
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter.",
+          "1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0.",
+          "2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
+          "Fail to parse <datetime> in the new parser.",
+          "You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "READ_ANCIENT_DATETIME" : {
         "message" : [
-          "Spark >= 3.0:",
-          "reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
-          "from <format> files can be ambiguous, as the files may be written by",
-          "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar",
-          "that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
-          "See more details in SPARK-31404. You can set the SQL config <config> or",
-          "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
-          "w.r.t. the calendar difference during reading. To read the datetime values",
-          "as it is, set the SQL config or the datasource option to \"CORRECTED\"."
+          "Spark >= 3.0: reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from <format> files can be ambiguous, as the files may be written by",
+          "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set the SQL config <config> or the datasource option <option> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during reading.",
+          "To read the datetime values as it is, set the SQL config or the datasource option to \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
         "message" : [
           "Spark >= 3.0:",
-          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
-          "into <format> files can be dangerous, as the files may be read by Spark 2.x",
-          "or legacy versions of Hive later, which uses a legacy hybrid calendar that",
-          "is different from Spark 3.0+'s Proleptic Gregorian calendar. See more",
-          "details in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the",
-          "datetime values w.r.t. the calendar difference during writing, to get maximum",
-          "interoperability. Or set the config to \"CORRECTED\" to write the datetime",
-          "values as it is, if you are sure that the written files will only be read by",
-          "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
+          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into <format> files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set <config> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during writing, to get maximum interoperability.",
+          "Or set the config to \"CORRECTED\" to write the datetime values as it is, if you are sure that the written files will only be read by Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
       }
     },
@@ -1346,7 +1358,8 @@
           "<key>, <totalAmountOfParts> parts are expected."
         ]
       }
-    }
+    },
+    "sqlState" : "XXKUC"
   },
   "INTERNAL_ERROR" : {
     "message" : [
@@ -1473,17 +1486,20 @@
           "Expected the value is '0', '<longMinValue>', '[<intMinValue>, <intMaxValue>]'."
         ]
       }
-    }
+    },
+    "sqlState" : "22003"
   },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "INVALID_BYTE_STRING" : {
     "message" : [
       "The expected format is ByteString, but was <unsupported> (<class>)."
-    ]
+    ],
+    "sqlState" : "22P03"
   },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
@@ -1545,11 +1561,13 @@
           "which fails to resolve as a valid expression."
         ]
       }
-    }
+    },
+    "sqlState" : "42623"
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "System memory <systemMemory> must be at least <minSystemMemory>.",
+      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
   },
@@ -1562,16 +1580,19 @@
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
-    ]
+    ],
+    "sqlState" : "42604"
   },
   "INVALID_ESCAPE_CHAR" : {
     "message" : [
       "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
-    ]
+    ],
+    "sqlState" : "42604"
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
   },
@@ -1709,7 +1730,8 @@
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
       "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ]
+    ],
+    "sqlState" : "42K05"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -1748,7 +1770,8 @@
           "Inline table expected <expectedNumCols> columns but found <actualNumCols> columns in row <rowIndex>."
         ]
       }
-    }
+    },
+    "sqlState" : "42000"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -1788,7 +1811,8 @@
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0D"
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
@@ -1821,17 +1845,20 @@
           "The <name> expression must evaluate to a constant value."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_NUMERIC_LITERAL_RANGE" : {
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_OBSERVED_METRICS" : {
     "message" : [
@@ -1840,12 +1867,12 @@
     "subClass" : {
       "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
         "message" : [
-          "Aggregate expression with distinct are not allowed in observed metrics, but found: <expr>."
+          "Aggregate expressions with DISTINCT are not allowed in observed metrics, but found: <expr>."
         ]
       },
       "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED" : {
         "message" : [
-          "Aggregate expression with filter predicate are not allowed in observed metrics, but found: <expr>."
+          "Aggregate expression with FILTER predicate are not allowed in observed metrics, but found: <expr>."
         ]
       },
       "MISSING_NAME" : {
@@ -1873,7 +1900,8 @@
           "Window expressions are not allowed in observed metrics, but found: <expr>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_OPTIONS" : {
     "message" : [
@@ -1972,7 +2000,8 @@
           "Table <name> is not partitioned."
         ]
       }
-    }
+    },
+    "sqlState" : "42601"
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
@@ -2141,7 +2170,8 @@
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
-    ]
+    ],
+    "sqlState" : "42K0F"
   },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
@@ -2163,7 +2193,8 @@
           "Must be evaluable."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
@@ -2173,13 +2204,15 @@
   },
   "INVALID_UDF_IMPLEMENTATION" : {
     "message" : [
-      "Function <funcName> does not implement ScalarFunction or AggregateFunction."
-    ]
+      "Function <funcName> does not implement a ScalarFunction or AggregateFunction."
+    ],
+    "sqlState" : "38000"
   },
   "INVALID_URL" : {
     "message" : [
       "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ]
+    ],
+    "sqlState" : "22P02"
   },
   "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
@@ -2190,7 +2223,8 @@
   "INVALID_VIEW_TEXT" : {
     "message" : [
       "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
-    ]
+    ],
+    "sqlState" : "XX000"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -2202,7 +2236,8 @@
   "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
     "message" : [
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
@@ -2224,27 +2259,32 @@
           "The advisory partition size can't be specified with unspecified distribution."
         ]
       }
-    }
+    },
+    "sqlState" : "42000"
   },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
-    ]
+    ],
+    "sqlState" : "54006"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
       "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -2255,12 +2295,14 @@
   "MALFORMED_CSV_RECORD" : {
     "message" : [
       "Malformed CSV record: <badRecord>"
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
-    ]
+    ],
+    "sqlState" : "XX000"
   },
   "MALFORMED_RECORD_IN_PARSING" : {
     "message" : [
@@ -2316,7 +2358,8 @@
           ""
         ]
       }
-    }
+    },
+    "sqlState" : "XX000"
   },
   "MISSING_GROUP_BY" : {
     "message" : [
@@ -2332,7 +2375,8 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
@@ -2342,8 +2386,11 @@
   },
   "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
-      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
-    ]
+      "Cannot call function <functionName> because named argument references are not enabled here.",
+      "In this case, the named argument reference was <argument>.",
+      "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ],
+    "sqlState" : "0A000"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2389,8 +2436,10 @@
   },
   "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
     "message" : [
-      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
-    ]
+      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets.",
+      "Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
+    ],
+    "sqlState" : "42KDE"
   },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
@@ -2412,7 +2461,8 @@
           "UNPIVOT together with PIVOT."
         ]
       }
-    }
+    },
+    "sqlState" : "42601"
   },
   "NOT_A_CONSTANT_STRING" : {
     "message" : [
@@ -2440,7 +2490,8 @@
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -2463,18 +2514,20 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."
     ],
-    "sqlState" : "46110"
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
     "message" : [
       "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
     "message" : [
@@ -2492,7 +2545,7 @@
         ]
       }
     },
-    "sqlState" : "46110"
+    "sqlState" : "0A000"
   },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
@@ -2503,17 +2556,20 @@
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
-    ]
+    ],
+    "sqlState" : "42000"
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
       "Cannot find <catalystFieldPath> in Protobuf schema."
-    ]
+    ],
+    "sqlState" : "42S22"
   },
   "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface."
-    ]
+    ],
+    "sqlState" : "38000"
   },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
@@ -2553,8 +2609,10 @@
   },
   "NUM_TABLE_VALUE_ALIASES_MISMATCH" : {
     "message" : [
-      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
-    ]
+      "Number of given aliases does not match number of output columns.",
+      "Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ],
+    "sqlState" : "42826"
   },
   "OPERATION_CANCELED" : {
     "message" : [
@@ -2616,12 +2674,14 @@
   "PLAN_VALIDATION_FAILED_RULE_EXECUTOR" : {
     "message" : [
       "The input plan of <ruleExecutor> is invalid: <reason>"
-    ]
+    ],
+    "sqlState" : "XXKD0"
   },
   "PLAN_VALIDATION_FAILED_RULE_IN_BATCH" : {
     "message" : [
       "Rule <rule> in batch <batch> generated an invalid plan: <reason>"
-    ]
+    ],
+    "sqlState" : "XXKD0"
   },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
@@ -3616,7 +3676,8 @@
   },
   "VIEW_EXCEED_MAX_NESTED_DEPTH" : {
     "message" : [
-      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
+      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>).",
+      " Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
     ]
   },
   "VIEW_NOT_FOUND" : {
@@ -3645,7 +3706,8 @@
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
