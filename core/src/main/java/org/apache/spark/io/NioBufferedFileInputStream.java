@@ -150,9 +150,10 @@ public final class NioBufferedFileInputStream extends InputStream {
     public void run() {
       try {
         fileChannel.close();
-        StorageUtils.dispose(byteBuffer);
       } catch (IOException e) {
         throw new UncheckedIOException(e);
+      } finally {
+        StorageUtils.dispose(byteBuffer);
       }
     }
   }
