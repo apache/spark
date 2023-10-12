@@ -113,7 +113,7 @@ Unable to find batch `<batchMetadataFile>`.
 
 ### CALL_ON_STREAMING_DATASET_UNSUPPORTED
 
-SQLSTATE: none assigned
+SQLSTATE: 42KDE
 
 The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
