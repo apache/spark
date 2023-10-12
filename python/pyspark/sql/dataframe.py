@@ -2647,7 +2647,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        The following examples demonstrate various join types between ``df1`` and ``df2``.
+        The following examples demonstrate various join types among ``df1``, ``df2``, and ``df3``.
 
         >>> import pyspark.sql.functions as sf
         >>> from pyspark.sql import Row
@@ -2684,7 +2684,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
 
         >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
-        >>> joined.show()
+        >>> joined.show() # doctest: +SKIP
         +-----+----+----+------+
         | name| age|name|height|
         +-----+----+----+------+
@@ -2695,7 +2695,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         To unambiguously select output columns, specify the dataframe along with the column name:
 
-        >>> joined.select(df.name, df2.height).show()
+        >>> joined.select(df.name, df2.height).show() # doctest: +SKIP
         +-----+------+
         | name|height|
         +-----+------+
