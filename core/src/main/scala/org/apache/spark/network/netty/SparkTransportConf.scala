@@ -31,13 +31,13 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
-   * @param _conf          the [[SparkConf]]
-   * @param module         the module name
+   * @param _conf the [[SparkConf]]
+   * @param module the module name
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
    * @param role           optional role, could be driver, executor, worker and master. Default is
-   *                       [[None]], means no role specific configurations.
+   *                      [[None]], means no role specific configurations.
    * @param sslOptions SSL config options
    */
   def fromSparkConf(

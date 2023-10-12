@@ -276,15 +276,13 @@ private[spark] class SecurityManager(
    * @return Whether to enable encryption when connecting to services that support it.
    */
   def isEncryptionEnabled(): Boolean = {
-    if (sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)) {
-      if (rpcSSLOptions.enabled) {
-        logWarning("Network encryption disabled as RPC SSL encryption is enabled")
-        false
-      } else {
-        true
-      }
-    } else {
+    val encryptionEnabled = sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) ||
+      sparkConf.get(SASL_ENCRYPTION_ENABLED)
+    if (encryptionEnabled && sslRpcEnabled) {
+      logWarning("Network encryption disabled as RPC SSL encryption is enabled")
       false
+    } else {
+      encryptionEnabled
     }
   }
 
