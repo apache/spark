@@ -383,6 +383,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "2",
     "funcName" : "`explode`",
@@ -512,6 +513,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`inline`",
@@ -677,6 +679,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`posexplode`",
@@ -856,6 +859,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`json_tuple`",
@@ -953,6 +957,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`stack`",
