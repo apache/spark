@@ -372,13 +372,18 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
         // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
         // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
-        // constructLeftJoins is an optimization. We want to handle count bugs in constructLeftJoins
-        // only if the subquery plan is a simple top level Aggregate which can have a count bug
-        // (no nested Aggs). This is because for these cases, we don't want to introduce additional,
-        // redundant left outer joins.
+        // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
+        // not introduced.
         val handleCountBugInDecorrelate = !conf.getConf(
           SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
-          case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.child.exists {
+          // Handle count bug only if there exists lower level Aggs with count bugs. It does not
+          // matter if the top level agg is count bug vulnerable or not, because:
+          // 1. If the top level agg is count bug vulnerable, it can be handled in
+          // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
+          // E.g. COUNT(COUNT + COUNT)
+          // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
+          // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+          case agg: Aggregate => !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
           }
