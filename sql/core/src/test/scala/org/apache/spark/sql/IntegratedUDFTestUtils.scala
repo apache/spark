@@ -524,8 +524,15 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFWithSinglePartition"
     val pythonScript: String =
       s"""
+        |import json
+        |from dataclasses import dataclass
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
+        |
+        |@dataclass
+        |class AnalyzeResultWithBuffer(AnalyzeResult):
+        |    buffer: str = ""
+        |
         |class $name:
         |    def __init__(self):
         |        self._count = 0
@@ -533,8 +540,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |        self._last = None
         |
         |    @staticmethod
-        |    def analyze(self):
-        |        return AnalyzeResult(
+        |    def analyze(initial_count, input_table):
+        |        buffer = ""
+        |        if initial_count.value is not None:
+        |            assert(not initial_count.is_table)
+        |            assert(initial_count.data_type == IntegerType())
+        |            count = initial_count.value
+        |            buffer = json.dumps({"initial_count": count})
+        |        return AnalyzeResultWithBuffer(
         |            schema=StructType()
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
@@ -542,9 +555,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            with_single_partition=True,
         |            order_by=[
         |                OrderingColumn("input"),
-        |                OrderingColumn("partition_col")])
+        |                OrderingColumn("partition_col")],
+        |            buffer=buffer)
         |
-        |    def eval(self, row: Row):
+        |    def eval(self, initial_count, row):
         |        self._count += 1
         |        self._last = row["input"]
         |        self._sum += row["input"]
@@ -691,6 +705,48 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String =
       "Python UDTF exporting invalid input table ordering requirement from 'analyze' " +
         "without a corresponding partitioning table requirement"
+  }
+
+  object TestPythonUDTFForwardStateFromAnalyze extends TestUDTF {
+    val name: String = "TestPythonUDTFForwardStateFromAnalyze"
+    val pythonScript: String =
+      s"""
+         |from dataclasses import dataclass
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import StringType, StructType
+         |
+         |@dataclass
+         |class AnalyzeResultWithBuffer(AnalyzeResult):
+         |    buffer: str = ""
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(argument):
+         |        assert(argument.data_type == StringType())
+         |        return AnalyzeResultWithBuffer(
+         |            schema=StructType()
+         |                .add("result", StringType()),
+         |            buffer=argument.value)
+         |
+         |    def eval(self, argument):
+         |        pass
+         |
+         |    def terminate(self):
+         |        yield self._analyze_result.buffer,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF whose 'analyze' method sets state and reads it later"
   }
 
   /**

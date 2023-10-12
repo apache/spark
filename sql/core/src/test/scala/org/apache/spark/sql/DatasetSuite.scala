@@ -1220,7 +1220,7 @@ class DatasetSuite extends QueryTest
 
     val message = intercept[RuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getMessage
+    }.getCause.getMessage
 
     assert(message.contains("Null value appeared in non-nullable field"))
   }
@@ -2592,9 +2592,8 @@ class DatasetSuite extends QueryTest
       // Expression decoding error
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_2151",
+        errorClass = "EXPRESSION_DECODING_FAILED",
         parameters = Map(
-          "e" -> exception.getCause.toString(),
           "expressions" -> expressions.map(
             _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
       )

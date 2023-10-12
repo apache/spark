@@ -898,7 +898,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
+    repartitionedDF.foreachPartition { iterator => savePartition(
       table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }

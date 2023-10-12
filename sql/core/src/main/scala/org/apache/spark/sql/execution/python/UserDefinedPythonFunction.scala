@@ -129,6 +129,7 @@ case class UserDefinedPythonTableFunction(
           name = name,
           func = func,
           elementSchema = rt,
+          pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic)
@@ -252,8 +253,7 @@ object UserDefinedPythonTableFunction {
         if (expr.foldable) {
           dataOut.writeBoolean(true)
           val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
-          dataOut.writeInt(obj.length)
-          dataOut.write(obj)
+          PythonWorkerUtils.writeBytes(obj, dataOut)
         } else {
           dataOut.writeBoolean(false)
         }
@@ -283,6 +283,9 @@ object UserDefinedPythonTableFunction {
 
       val schema = DataType.fromJson(
         PythonWorkerUtils.readUTF(length, dataIn)).asInstanceOf[StructType]
+
+      // Receive the pickled AnalyzeResult buffer, if any.
+      val pickledAnalyzeResult: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
 
       // Receive whether the "with single partition" property is requested.
       val withSinglePartition = dataIn.readInt() == 1
@@ -325,7 +328,8 @@ object UserDefinedPythonTableFunction {
         schema = schema,
         withSinglePartition = withSinglePartition,
         partitionByExpressions = partitionByColumns.toSeq,
-        orderByExpressions = orderBy.toSeq)
+        orderByExpressions = orderBy.toSeq,
+        pickledAnalyzeResult = pickledAnalyzeResult)
     } catch {
       case eof: EOFException =>
         throw new SparkException("Python worker exited unexpectedly (crashed)", eof)

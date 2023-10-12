@@ -448,7 +448,12 @@ jobs:
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
+        if [ ! -z "$PYTHON_TO_TEST" ]; then
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
+        else
+          # For branch-3.5 and below, it uses the default Python versions.
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+        fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@v2
@@ -460,13 +465,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
@@ -545,7 +550,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
   breaking-changes-buf:
@@ -911,13 +916,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-tpcds--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-tpcds--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
@@ -978,13 +983,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: test-results-docker-integration--8-${{ inputs.hadoop }}-hive2.3
+        name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v3
       with:
-        name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
+        name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   k8s-integration-tests:

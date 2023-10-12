@@ -760,13 +760,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Caches the specified table or view in-memory.
+   * Persist the specified table or view with the default storage level,
    *
    * @group cachemgmt
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    cacheTable(tableName, sparkSession.sessionState.conf.defaultCacheStorageLevel)
   }
 
   /**

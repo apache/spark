@@ -195,11 +195,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     val responseObserver = executeHolder.responseObserver
 
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(executeHolder.sessionHolder)
-    planner.process(
-      command = command,
-      responseObserver = responseObserver,
-      executeHolder = executeHolder)
+    val planner = new SparkConnectPlanner(executeHolder)
+    planner.process(command = command, responseObserver = responseObserver)
   }
 
   private def requestString(request: Message) = {

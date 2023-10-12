@@ -551,6 +551,12 @@ The table `<tableName>` does not support `<operation>`.
 
 For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-not-table-error-class.html)
 
+### EXPRESSION_DECODING_FAILED
+
+SQLSTATE: none assigned
+
+Failed to decode a row to a value of the expressions: `<expressions>`.
+
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
 SQLSTATE: none assigned

@@ -172,7 +172,7 @@ class EncoderResolutionSuite extends PlanTest {
     val e = intercept[RuntimeException] {
       fromRow(InternalRow(new GenericArrayData(Array(1, null))))
     }
-    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
   }
 
   test("the real number of fields doesn't match encoder schema: tuple encoder") {
