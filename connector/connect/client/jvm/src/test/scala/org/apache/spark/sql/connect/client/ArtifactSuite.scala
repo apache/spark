@@ -271,10 +271,11 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("resolve ivy") {
-    val artifacts = Artifact.newIvyArtifacts(
-      URI.create("ivy://org.apache.hive:hive-storage-api:2.7.0"))
-    assert(artifacts.exists(
-      _.path.toString.contains("jars/org.apache.hive_hive-storage-api-2.7.0.jar")))
+    val artifacts =
+      Artifact.newIvyArtifacts(URI.create("ivy://org.apache.hive:hive-storage-api:2.7.0"))
+    assert(
+      artifacts.exists(
+        _.path.toString.contains("jars/org.apache.hive_hive-storage-api-2.7.0.jar")))
     // transitive dependency
     assert(artifacts.exists(_.path.toString.contains("jars/commons-lang_commons-lang-2.6.jar")))
   }

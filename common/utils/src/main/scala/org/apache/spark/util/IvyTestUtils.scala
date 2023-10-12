@@ -95,7 +95,7 @@ private[spark] object IvyTestUtils {
       className: String,
       packageName: String): Seq[(String, File)] = {
     val rFilesDir = new File(dir, "R" + File.separator + "pkg")
-    new File(rFilesDir, "R" + File.separator + "mylib.R").mkdirs()
+    new File(rFilesDir, "R").mkdirs()
     val contents =
       s"""myfunc <- function(x) {
         |  SparkR:::callJStatic("$packageName.$className", "myFunc", x)
@@ -150,11 +150,11 @@ private[spark] object IvyTestUtils {
       useIvyLayout: Boolean): File = {
     if (useIvyLayout) {
       val ivyXmlPath = pathFromCoordinate(artifact, tempPath, "ivy", true)
-      new File(ivyXmlPath, "dummy").mkdirs()
+      ivyXmlPath.mkdirs()
       createIvyDescriptor(ivyXmlPath, artifact, dependencies)
     } else {
       val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
-      new File(pomPath, "dummy").mkdirs()
+      pomPath.mkdirs()
       createPom(pomPath, artifact, dependencies)
     }
   }
@@ -296,10 +296,10 @@ private[spark] object IvyTestUtils {
     tempPath.mkdirs()
     // Where to create temporary class files and such
     val root = new File(tempPath, tempPath.hashCode().toString)
-    new File(root, "dummy").mkdirs()
+    root.mkdirs()
     try {
       val jarPath = pathFromCoordinate(artifact, tempPath, "jar", useIvyLayout)
-      new File(jarPath, "dummy").mkdirs()
+      jarPath.mkdirs()
       val className = "MyLib"
 
       val javaClass = createJavaClass(root, className, artifact.groupId)
