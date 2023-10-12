@@ -460,10 +460,6 @@
           <groupId>io.netty</groupId>
           <artifactId>*</artifactId>
         </exclusion>
-        <exclusion>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-collection-compat_2.13</artifactId>
-        </exclusion>
       </exclusions>
       <scope>test</scope>
     </dependency>
@@ -1327,10 +1323,6 @@
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-collection-compat_2.13</artifactId>
           </exclusion>
         </exclusions>
         <scope>test</scope>
