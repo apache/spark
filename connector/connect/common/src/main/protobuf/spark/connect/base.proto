@@ -850,7 +850,7 @@ message FetchErrorDetailsResponse {
     // The message parameters for the error framework.
     map<string, string> message_parameters = 2;
 
-    // The query context of a SparkThrowable
+    // The query context of a SparkThrowable.
     repeated QueryContext query_contexts = 3;
   }
 
