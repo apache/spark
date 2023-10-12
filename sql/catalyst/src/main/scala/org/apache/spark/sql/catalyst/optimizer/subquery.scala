@@ -378,7 +378,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // redundant left outer joins.
         val handleCountBugInDecorrelate = !conf.getConf(
           SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
-          case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.exists {
+          case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
           }
