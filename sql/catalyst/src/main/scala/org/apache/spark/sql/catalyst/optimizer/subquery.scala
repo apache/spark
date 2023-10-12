@@ -376,15 +376,16 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // only if the subquery plan is a simple top level Aggregate which can have a count bug
         // (no nested Aggs). This is because for these cases, we don't want to introduce additional,
         // redundant left outer joins.
-        val shouldHandleCountBug = !(sub match {
+        val handleCountBugInDecorrelate = !conf.getConf(
+          SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
           case agg: Aggregate => mayHaveCountBugAgg(agg) && !agg.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
           }
           case _ => false
         })
-        val (newPlan, newCond) = decorrelate(sub, plan, shouldHandleCountBug)
-        val mayHaveCountBug = if (shouldHandleCountBug) {
+        val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        val mayHaveCountBug = if (handleCountBugInDecorrelate) {
           // Count bug was already handled in the above decorrelate function call.
           false
         } else if (mayHaveCountBugOld.isEmpty) {
