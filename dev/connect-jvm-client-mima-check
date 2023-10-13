@@ -40,7 +40,6 @@ build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-down
 
 echo "Build required modules..."
 build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
-# build/sbt "set csrConfiguration := csrConfiguration.value.withCachePolicies(Vector(lmcoursier.definitions.CachePolicy.Update));sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
 
 CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
 SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"

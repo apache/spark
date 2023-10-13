@@ -49,10 +49,6 @@
           <groupId>org.ow2.asm</groupId>
           <artifactId>*</artifactId>
         </exclusion>
-        <exclusion>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-collection-compat_2.13</artifactId>
-        </exclusion>
       </exclusions>
       <version>1.5.1</version>
     </dependency>

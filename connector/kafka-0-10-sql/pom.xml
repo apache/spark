@@ -116,10 +116,6 @@
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-annotations</artifactId>
         </exclusion>
-        <exclusion>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-collection-compat_2.13</artifactId>
-        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -136,7 +132,7 @@
     <dependency>
       <groupId>net.sf.jopt-simple</groupId>
       <artifactId>jopt-simple</artifactId>
-      <version>5.0.4</version>
+      <version>3.2</version>
       <scope>test</scope>
     </dependency>
      <dependency>
