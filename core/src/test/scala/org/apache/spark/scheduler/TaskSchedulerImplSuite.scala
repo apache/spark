@@ -2301,9 +2301,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
-    // make an offer on the excluded executor.  We won't schedule anything, and set the abort
-    // timer to expire if no new executors could be acquired. We kill the existing idle excluded
-    // executor and try to acquire a new one.
     assert(taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1, resourceProfileId = profileId),
       WorkerOffer("executor1", "host0", 1, resourceProfileId =
