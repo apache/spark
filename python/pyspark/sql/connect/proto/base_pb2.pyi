@@ -2869,6 +2869,59 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
         ) -> typing_extensions.Literal["file_name"] | None: ...
 
+    class QueryContext(google.protobuf.message.Message):
+        """QueryContext defines the schema for the query context of a SparkThrowable.
+        It helps users understand where the error occurs while executing queries.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        OBJECT_TYPE_FIELD_NUMBER: builtins.int
+        OBJECT_NAME_FIELD_NUMBER: builtins.int
+        START_INDEX_FIELD_NUMBER: builtins.int
+        STOP_INDEX_FIELD_NUMBER: builtins.int
+        FRAGMENT_FIELD_NUMBER: builtins.int
+        object_type: builtins.str
+        """The object type of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+        """
+        object_name: builtins.str
+        """The object name of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the object name. For example, a view name "V1".
+        """
+        start_index: builtins.int
+        """The starting index in the query text which throws the exception. The index starts from 0."""
+        stop_index: builtins.int
+        """The stopping index in the query which throws the exception. The index starts from 0."""
+        fragment: builtins.str
+        """The corresponding fragment of the query which throws the exception."""
+        def __init__(
+            self,
+            *,
+            object_type: builtins.str = ...,
+            object_name: builtins.str = ...,
+            start_index: builtins.int = ...,
+            stop_index: builtins.int = ...,
+            fragment: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "fragment",
+                b"fragment",
+                "object_name",
+                b"object_name",
+                "object_type",
+                b"object_type",
+                "start_index",
+                b"start_index",
+                "stop_index",
+                b"stop_index",
+            ],
+        ) -> None: ...
+
     class SparkThrowable(google.protobuf.message.Message):
         """SparkThrowable defines the schema for SparkThrowable exceptions."""
 
@@ -2893,18 +2946,30 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
 
         ERROR_CLASS_FIELD_NUMBER: builtins.int
         MESSAGE_PARAMETERS_FIELD_NUMBER: builtins.int
+        QUERY_CONTEXTS_FIELD_NUMBER: builtins.int
         error_class: builtins.str
         """Succinct, human-readable, unique, and consistent representation of the error category."""
         @property
         def message_parameters(
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-            """message parameters for the error framework."""
+            """The message parameters for the error framework."""
+        @property
+        def query_contexts(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___FetchErrorDetailsResponse.QueryContext
+        ]:
+            """The query context of a SparkThrowable."""
         def __init__(
             self,
             *,
             error_class: builtins.str | None = ...,
             message_parameters: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            query_contexts: collections.abc.Iterable[
+                global___FetchErrorDetailsResponse.QueryContext
+            ]
+            | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -2921,6 +2986,8 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
                 b"error_class",
                 "message_parameters",
                 b"message_parameters",
+                "query_contexts",
+                b"query_contexts",
             ],
         ) -> None: ...
         def WhichOneof(

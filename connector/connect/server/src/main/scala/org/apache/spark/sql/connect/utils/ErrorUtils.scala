@@ -115,6 +115,17 @@ private[connect] object ErrorUtils extends Logging {
           if (sparkThrowable.getErrorClass != null) {
             sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
           }
+          for (queryCtx <- sparkThrowable.getQueryContext) {
+            sparkThrowableBuilder.addQueryContexts(
+              FetchErrorDetailsResponse.QueryContext
+                .newBuilder()
+                .setObjectType(queryCtx.objectType())
+                .setObjectName(queryCtx.objectName())
+                .setStartIndex(queryCtx.startIndex())
+                .setStopIndex(queryCtx.stopIndex())
+                .setFragment(queryCtx.fragment())
+                .build())
+          }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
