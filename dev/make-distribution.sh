@@ -167,7 +167,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m}
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
 BUILD_COMMAND=("$MVN" clean package \
-    -DskipTests \
+    -Dmaven.test.skip=true \
     -Dmaven.javadoc.skip=true \
     -Dmaven.scaladoc.skip=true \
     -Dmaven.source.skip \

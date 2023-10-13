@@ -432,14 +432,14 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+    $MVN --settings $tmp_settings -Dmaven.test.skip=true $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
     if [[ $SPARK_VERSION < "4.0" ]]; then
       ./dev/change-scala-version.sh 2.13
     fi
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+    $MVN --settings $tmp_settings -Dmaven.test.skip=true $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
   rm $tmp_settings
@@ -473,13 +473,13 @@ if [[ "$1" == "publish-release" ]]; then
     if [[ $SPARK_VERSION < "4.0" ]]; then
       ./dev/change-scala-version.sh 2.13
     fi
-    $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
+    $MVN -Dmaven.repo.local=$tmp_repo -Dmaven.test.skip=true \
       $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
-    $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
+    $MVN -Dmaven.repo.local=$tmp_repo -Dmaven.test.skip=true \
       $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean install
   fi
 

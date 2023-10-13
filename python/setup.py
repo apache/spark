@@ -55,7 +55,7 @@ If you are installing pyspark from spark source, you must first build Spark and
 run sdist.
 
     To build Spark with maven you can run:
-      ./build/mvn -DskipTests clean package
+      ./build/mvn -Dmaven.test.skip=true clean package
     Building the source dist is done in the Python directory:
       cd python
       python setup.py sdist
