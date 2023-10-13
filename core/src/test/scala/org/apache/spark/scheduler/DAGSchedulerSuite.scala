@@ -3169,12 +3169,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       makeMapStatus("hostB",
         2)))
 
-    // The second task of the  shuffle map stage 1 from 1st attempt succeeds
+    // The second task of the shuffle map stage 1 from 1st attempt succeeds
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1),
       Success,
       makeMapStatus("hostC",
         2)))
+
+    // Above task completion should not mark the partition 1 complete from 2nd attempt
+    assert(!tasksMarkedAsCompleted.contains(taskSets(3).tasks(1)))
 
     // This task completion should get ignored and partition 1 should be missing
     // for shuffle map stage 1
