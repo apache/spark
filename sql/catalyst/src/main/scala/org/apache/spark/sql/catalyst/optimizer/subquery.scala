@@ -374,8 +374,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
         // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
         // not introduced.
-        val handleCountBugInDecorrelate = !conf.getConf(
-          SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+        val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
           // Handle count bug only if there exists lower level Aggs with count bugs. It does not
           // matter if the top level agg is count bug vulnerable or not, because:
           // 1. If the top level agg is count bug vulnerable, it can be handled in
