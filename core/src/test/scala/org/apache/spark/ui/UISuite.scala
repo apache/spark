@@ -230,16 +230,28 @@ class UISuite extends SparkFunSuite {
 
   test("verify rewriting location header for reverse proxy") {
     val clientRequest = mock(classOf[HttpServletRequest])
-    var headerValue = s"http://$localhost:4040/jobs"
     val targetUri = URI.create(s"http://$localhost:4040")
     when(clientRequest.getScheme()).thenReturn("http")
     when(clientRequest.getHeader("host")).thenReturn(s"$localhost:8080")
     when(clientRequest.getPathInfo()).thenReturn("/proxy/worker-id/jobs")
+    when(clientRequest.getRequestURL()).thenReturn(
+      new StringBuffer(s"http://$localhost:8080/proxy/worker-id/jobs"))
+
+    var headerValue = s"http://$localhost:4040/jobs"
     var newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
-    assert(newHeader.toString() === s"http://$localhost:8080/proxy/worker-id/jobs")
+    assert(newHeader === s"http://$localhost:8080/proxy/worker-id/jobs")
+
     headerValue = s"http://$localhost:4041/jobs"
     newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
     assert(newHeader === null)
+
+    headerValue = "/jobs"
+    newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
+    assert(newHeader === s"http://$localhost:8080/proxy/worker-id/jobs")
+
+    headerValue = "a/b/../c/"
+    newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
+    assert(newHeader === s"http://$localhost:8080/proxy/worker-id/a/c/")
   }
 
   test("add and remove handlers with custom user filter") {

@@ -420,11 +420,10 @@ private[spark] object JettyUtils extends Logging {
       headerValue: String,
       clientRequest: HttpServletRequest,
       targetUri: URI): String = {
-    val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority()
-    if (headerValue.startsWith(toReplace)) {
+    val uri = targetUri.resolve(headerValue)
+    if (uri.getScheme == targetUri.getScheme && uri.getAuthority == targetUri.getAuthority) {
       val id = clientRequest.getPathInfo.substring("/proxy/".length).takeWhile(_ != '/')
-      val headerPath = headerValue.substring(toReplace.length)
-
+      val headerPath = uri.getPath
       s"${clientRequest.getScheme}://${clientRequest.getHeader("host")}/proxy/$id$headerPath"
     } else {
       null
