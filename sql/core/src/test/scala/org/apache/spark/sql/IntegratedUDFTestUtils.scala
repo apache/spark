@@ -30,7 +30,7 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
 
@@ -217,6 +217,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
     binaryPythonUDTF
   }
 
+  private def createPythonDataSource(dataSourceName: String, pythonScript: String): Array[Byte] = {
+    if (!shouldTestPythonUDFs) {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+    var binaryPythonDataSource: Array[Byte] = null
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              s"ds = $dataSourceName(options=dict());" +
+              "f.write(CloudPickleSerializer().dumps(ds))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPythonDataSource = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPythonDataSource != null)
+    binaryPythonDataSource
+  }
+
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
@@ -395,6 +421,23 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Regular Python UDF"
+  }
+
+  def createUserDefinedPythonDataSource(
+      name: String,
+      pythonScript: String,
+      schema: StructType): UserDefinedPythonDataSource = {
+    UserDefinedPythonDataSource(
+      dataSource = SimplePythonFunction(
+        command = createPythonDataSource(name, pythonScript),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      schema = schema
+    )
   }
 
   def createUserDefinedPythonTableFunction(
