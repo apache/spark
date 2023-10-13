@@ -17,9 +17,9 @@
  */
 package org.apache.spark.network.protocol;
 
-import javax.annotation.Nullable;
 import java.io.EOFException;
 import java.io.InputStream;
+import javax.annotation.Nullable;
 
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
