@@ -220,7 +220,20 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
+        Set a single option using the `option` method:
+
         >>> spark.read.option("key", "value")
+        <...readwriter.DataFrameReader object ...>
+
+        Set multiple options using key value pairs:
+
+        >>> spark.read.options(key1=value1, key2=value2)
+        <...readwriter.DataFrameReader object ...>
+
+        Set multiple options using a dictionary:
+
+        >>> options_dict = {"key1": "value1", "key2": "value2"}
+        >>> spark.read.options(**options_dict)
         <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
@@ -1172,7 +1185,20 @@ class DataFrameWriter(OptionUtils):
 
         Examples
         --------
+        Set a single option using the `option` method:
+
         >>> spark.range(1).write.option("key", "value")
+        <...readwriter.DataFrameWriter object ...>
+
+        Set multiple options using key value pairs:
+
+        >>> spark.range(1).write.options(key1=value1, key2=value2)
+        <...readwriter.DataFrameWriter object ...>
+
+        Set multiple options using a dictionary:
+
+        >>> options_dict = {"key1": "value1", "key2": "value2"}
+        >>> spark.range(1).write.options(**options_dict)
         <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
