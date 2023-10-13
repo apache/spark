@@ -25,4 +25,5 @@ Spark SQL
 
    arrow_pandas
    python_udtf
+   type_conversions
 
