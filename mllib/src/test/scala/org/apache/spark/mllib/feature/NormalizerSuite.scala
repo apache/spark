@@ -43,7 +43,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data1 = data.map(l1Normalizer.transform)
     val data1RDD = l1Normalizer.transform(dataRDD)
 
-    assert((data, data1, data1RDD.collect()).zipped.forall {
+    assert(data.lazyZip(data1).lazyZip(data1RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
@@ -70,7 +70,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data2 = data.map(l2Normalizer.transform)
     val data2RDD = l2Normalizer.transform(dataRDD)
 
-    assert((data, data2, data2RDD.collect()).zipped.forall {
+    assert(data.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
@@ -97,7 +97,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val dataInf = data.map(lInfNormalizer.transform)
     val dataInfRDD = lInfNormalizer.transform(dataRDD)
 
-    assert((data, dataInf, dataInfRDD.collect()).zipped.forall {
+    assert(data.lazyZip(dataInf).lazyZip(dataInfRDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
