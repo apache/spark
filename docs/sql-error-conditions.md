@@ -239,7 +239,7 @@ SQLSTATE: KD001
 
 Could not read footer for file: `<file>`. Please ensure that the file is in either ORC or Parquet format.
 If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.
- If it is, you can choose to either ignore it or fix the corruption.
+If it is, you can choose to either ignore it or fix the corruption.
 
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
@@ -2225,7 +2225,7 @@ Choose a different name, drop or replace the existing object, or add the IF NOT 
 SQLSTATE: none assigned
 
 The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`).
- Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
+Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
 
 ### VIEW_NOT_FOUND
 
