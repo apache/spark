@@ -36,8 +36,7 @@ public class CustomType1 {
 
   @Override
   public boolean equals(Object o) {
-    if (o instanceof CustomType1) {
-      CustomType1 other = (CustomType1) o;
+    if (o instanceof CustomType1 other) {
       return id.equals(other.id) && name.equals(other.name);
     }
     return false;

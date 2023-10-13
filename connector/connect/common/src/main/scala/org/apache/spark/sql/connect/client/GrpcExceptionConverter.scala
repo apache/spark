@@ -27,7 +27,7 @@ import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{QueryContext, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
 import org.apache.spark.internal.Logging
@@ -167,10 +167,12 @@ private object GrpcExceptionConverter {
   private case class ErrorParams(
       message: String,
       cause: Option[Throwable],
-      // errorClass will only be set if the error is enriched and SparkThrowable.
+      // errorClass will only be set if the error is both enriched and SparkThrowable.
       errorClass: Option[String],
-      // messageParameters will only be set if the error is enriched and SparkThrowable.
-      messageParameters: Map[String, String])
+      // messageParameters will only be set if the error is both enriched and SparkThrowable.
+      messageParameters: Map[String, String],
+      // queryContext will only be set if the error is both enriched and SparkThrowable.
+      queryContext: Array[QueryContext])
 
   private def errorConstructor[T <: Throwable: ClassTag](
       throwableCtr: ErrorParams => T): (String, ErrorParams => Throwable) = {
@@ -192,13 +194,15 @@ private object GrpcExceptionConverter {
         Origin(),
         Origin(),
         errorClass = params.errorClass,
-        messageParameters = params.messageParameters)),
+        messageParameters = params.messageParameters,
+        queryContext = params.queryContext)),
     errorConstructor(params =>
       new AnalysisException(
         params.message,
         cause = params.cause,
         errorClass = params.errorClass,
-        messageParameters = params.messageParameters)),
+        messageParameters = params.messageParameters,
+        context = params.queryContext)),
     errorConstructor(params => new NamespaceAlreadyExistsException(params.message)),
     errorConstructor(params => new TableAlreadyExistsException(params.message, params.cause)),
     errorConstructor(params => new TempTableAlreadyExistsException(params.message, params.cause)),
@@ -221,7 +225,8 @@ private object GrpcExceptionConverter {
         message = params.message,
         cause = params.cause.orNull,
         errorClass = params.errorClass,
-        messageParameters = params.messageParameters)))
+        messageParameters = params.messageParameters,
+        context = params.queryContext)))
 
   /**
    * errorsToThrowable reconstructs the exception based on a list of protobuf messages
@@ -247,16 +252,35 @@ private object GrpcExceptionConverter {
     val causeOpt =
       if (error.hasCauseIdx) Some(errorsToThrowable(error.getCauseIdx, errors)) else None
 
+    val errorClass = if (error.hasSparkThrowable && error.getSparkThrowable.hasErrorClass) {
+      Some(error.getSparkThrowable.getErrorClass)
+    } else None
+
+    val messageParameters = if (error.hasSparkThrowable) {
+      error.getSparkThrowable.getMessageParametersMap.asScala.toMap
+    } else Map.empty[String, String]
+
+    val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
+      new QueryContext {
+        override def objectType(): String = queryCtx.getObjectType
+
+        override def objectName(): String = queryCtx.getObjectName
+
+        override def startIndex(): Int = queryCtx.getStartIndex
+
+        override def stopIndex(): Int = queryCtx.getStopIndex
+
+        override def fragment(): String = queryCtx.getFragment
+      }
+    }.toArray
+
     val exception = constructor(
       ErrorParams(
         message = error.getMessage,
         cause = causeOpt,
-        errorClass = if (error.hasSparkThrowable && error.getSparkThrowable.hasErrorClass) {
-          Some(error.getSparkThrowable.getErrorClass)
-        } else None,
-        messageParameters = if (error.hasSparkThrowable) {
-          error.getSparkThrowable.getMessageParametersMap.asScala.toMap
-        } else Map.empty))
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        queryContext = queryContext))
 
     if (!error.getStackTraceList.isEmpty) {
       exception.setStackTrace(error.getStackTraceList.asScala.toArray.map { stackTraceElement =>

@@ -3751,7 +3751,8 @@ def collect_list(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list')).show()
+    >>> df = df.groupBy("name").agg(sf.sort_array(sf.collect_list('id')).alias('sorted_list'))
+    >>> df.orderBy(sf.desc("name")).show()
     +----+-----------+
     |name|sorted_list|
     +----+-----------+
@@ -3842,7 +3843,8 @@ def collect_set(col: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, "John"), (2, "John"), (3, "Ana")], ("id", "name"))
-    >>> df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set')).show()
+    >>> df = df.groupBy("name").agg(sf.sort_array(sf.collect_set('id')).alias('sorted_set'))
+    >>> df.orderBy(sf.desc("name")).show()
     +----+----------+
     |name|sorted_set|
     +----+----------+
@@ -8717,11 +8719,11 @@ def current_database() -> Column:
     Examples
     --------
     >>> spark.range(1).select(current_database()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_database")
 
@@ -8736,11 +8738,11 @@ def current_schema() -> Column:
     --------
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.current_schema()).show()
-    +------------------+
-    |current_database()|
-    +------------------+
-    |           default|
-    +------------------+
+    +----------------+
+    |current_schema()|
+    +----------------+
+    |         default|
+    +----------------+
     """
     return _invoke_function("current_schema")
 

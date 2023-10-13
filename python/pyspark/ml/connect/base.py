@@ -134,10 +134,10 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
+    def _get_transform_fn(self) -> Callable[..., Any]:
         """
-        Return a transformation function that accepts an instance of `pd.Series` as input and
-        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
+        Return a transformation function that accepts one or more `pd.Series` instances as inputs
+        and returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
         If there's only one output column, the transformed result must be an
         instance of `pd.Series`, if there are multiple output columns, the transformed result
         must be an instance of `pd.DataFrame` with column names matching output schema
