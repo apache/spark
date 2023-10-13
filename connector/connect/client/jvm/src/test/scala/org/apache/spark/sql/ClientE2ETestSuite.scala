@@ -129,6 +129,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(!ex.messageParameters.isEmpty)
         assert(ex.getSqlState != null)
         assert(!ex.isInternalError)
+        assert(ex.getQueryContext.length == 1)
+        assert(ex.getQueryContext.head.startIndex() == 7)
+        assert(ex.getQueryContext.head.stopIndex() == 7)
+        assert(ex.getQueryContext.head.fragment() == "x")
         assert(
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))

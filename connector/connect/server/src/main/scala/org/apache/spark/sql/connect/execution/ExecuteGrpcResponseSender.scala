@@ -63,15 +63,15 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   /**
    * Interrupt this sender and make it exit.
    */
-  def interrupt(): Unit = executionObserver.synchronized {
+  def interrupt(): Unit = {
     interrupted = true
-    executionObserver.notifyAll()
+    wakeUp()
   }
 
   // For testing
-  private[connect] def setDeadline(deadlineMs: Long) = executionObserver.synchronized {
+  private[connect] def setDeadline(deadlineMs: Long) = {
     deadlineTimeMillis = deadlineMs
-    executionObserver.notifyAll()
+    wakeUp()
   }
 
   def run(lastConsumedStreamIndex: Long): Unit = {
@@ -152,9 +152,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         s"lastConsumedStreamIndex=$lastConsumedStreamIndex")
     val startTime = System.nanoTime()
 
-    // register to be notified about available responses.
-    executionObserver.attachConsumer(this)
-
     var nextIndex = lastConsumedStreamIndex + 1
     var finished = false
 
@@ -191,7 +188,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         sentResponsesSize > maximumResponseSize || deadlineTimeMillis < System.currentTimeMillis()
 
       logTrace(s"Trying to get next response with index=$nextIndex.")
-      executionObserver.synchronized {
+      executionObserver.responseLock.synchronized {
         logTrace(s"Acquired executionObserver lock.")
         val sleepStart = System.nanoTime()
         var sleepEnd = 0L
@@ -208,7 +205,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           if (response.isEmpty) {
             val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
-            executionObserver.wait(timeout)
+            executionObserver.responseLock.wait(timeout)
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
           }
@@ -337,6 +334,17 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           false
         }
       }
+    }
+  }
+
+  private def wakeUp(): Unit = {
+    // Can be sleeping on either of these two locks, wake them up.
+    // (Neither of these locks is ever taken for extended period of time, so this won't block)
+    executionObserver.responseLock.synchronized {
+      executionObserver.responseLock.notifyAll()
+    }
+    grpcCallObserverReadySignal.synchronized {
+      grpcCallObserverReadySignal.notifyAll()
     }
   }
 }

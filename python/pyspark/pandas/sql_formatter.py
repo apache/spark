@@ -30,6 +30,8 @@ from pyspark.sql import SparkSession
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
+from pyspark.errors import PySparkTypeError
+from pyspark.sql.utils import is_remote
 
 
 __all__ = ["sql"]
@@ -58,6 +60,9 @@ def sql(
         * string
 
     Also the method can bind named parameters to SQL literals from `args`.
+
+    .. note::
+        pandas-on-Spark DataFrame is not supported for Spark Connect.
 
     Parameters
     ----------
@@ -198,6 +203,14 @@ def sql(
     session = default_session()
     formatter = PandasSQLStringFormatter(session)
     try:
+        # ps.DataFrame are not supported for Spark Connect currently.
+        if is_remote():
+            for obj in kwargs.values():
+                if isinstance(obj, ps.DataFrame):
+                    raise PySparkTypeError(
+                        error_class="UNSUPPORTED_DATA_TYPE",
+                        message_parameters={"data_type": type(obj).__name__},
+                    )
         sdf = session.sql(formatter.format(query, **kwargs), args)
     finally:
         formatter.clear()
