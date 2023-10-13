@@ -70,11 +70,9 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
       return true;
     }
 
-    if (!(other instanceof CountMinSketchImpl)) {
+    if (!(other instanceof CountMinSketchImpl that)) {
       return false;
     }
-
-    CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     return
       this.depth == that.depth &&
@@ -268,13 +266,11 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
       throw new IncompatibleMergeException("Cannot merge null estimator");
     }
 
-    if (!(other instanceof CountMinSketchImpl)) {
+    if (!(other instanceof CountMinSketchImpl that)) {
       throw new IncompatibleMergeException(
           "Cannot merge estimator of class " + other.getClass().getName()
       );
     }
-
-    CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     if (this.depth != that.depth) {
       throw new IncompatibleMergeException("Cannot merge estimators of different depth");
