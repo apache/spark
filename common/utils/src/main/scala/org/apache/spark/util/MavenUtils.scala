@@ -361,8 +361,8 @@ private[spark] object MavenUtils extends Logging {
   /** A nice function to use in tests as well. Values are dummy strings. */
   private[util] def getModuleDescriptor: DefaultModuleDescriptor =
     DefaultModuleDescriptor.newDefaultInstance(ModuleRevisionId
-      // Include UUID in module name, so multiple clients resolving maven coordinate at the same time
-      // do not modify the same resolution file concurrently.
+      // Include UUID in module name, so multiple clients resolving maven coordinate at the
+      // same time do not modify the same resolution file concurrently.
       .newInstance("org.apache.spark", s"spark-submit-parent-${UUID.randomUUID.toString}", "1.0"))
 
   /**
