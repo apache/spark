@@ -220,7 +220,12 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.read.option("key", "value")
+        >>> spark.read.options(key="value")
+        <...readwriter.DataFrameReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.read.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
@@ -1172,7 +1177,12 @@ class DataFrameWriter(OptionUtils):
 
         Examples
         --------
-        >>> spark.range(1).write.option("key", "value")
+        >>> spark.range(1).write.options(key="value")
+        <...readwriter.DataFrameWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.range(1).write.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
