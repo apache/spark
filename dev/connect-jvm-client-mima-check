@@ -37,6 +37,7 @@ rm -f .connect-mima-check-result
 echo "Download maven's corrupted file"
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-epoll -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-handler-proxy -Dversion=4.1.60.Final -Dtransitive=false --quiet
+build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec-socks -Dversion=4.1.60.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport-native-kqueue -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-codec-http -Dversion=4.1.96.Final -Dtransitive=false --quiet
 build/mvn dependency:get -DremoteRepositories=https://maven-central.storage-download.googleapis.com/maven2/ -DgroupId=io.netty -DartifactId=netty-transport -Dversion=4.1.96.Final -Dtransitive=false --quiet
