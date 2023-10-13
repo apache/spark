@@ -97,6 +97,7 @@ public class EncryptedMessageWithHeader implements ChunkedInput<ByteBuf> {
       int read = buffer.writeBytes(stream, toRead);
       if (read >= 0) {
         totalBytesTransferred += read;
+        assert(totalBytesTransferred <= length());
         return buffer;
       } else {
         throw new EOFException("Unable to read bytes from InputStream");
@@ -108,6 +109,7 @@ public class EncryptedMessageWithHeader implements ChunkedInput<ByteBuf> {
       long read = stream.transferredBytes() - old;
       if (read >= 0) {
         totalBytesTransferred += read;
+        assert(totalBytesTransferred <= length());
         return buffer;
       } else {
         throw new EOFException("Unable to read bytes from ChunkedStream");
