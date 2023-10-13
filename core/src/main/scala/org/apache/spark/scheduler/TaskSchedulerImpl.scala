@@ -162,6 +162,8 @@ private[spark] class TaskSchedulerImpl(
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
 
+  private val executorToProfile = new HashMap[String, Int]
+
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
   protected val executorIdToHost = new HashMap[String, String]
@@ -528,6 +530,7 @@ private[spark] class TaskSchedulerImpl(
       }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
+        executorToProfile(o.executorId) = o.resourceProfileId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
@@ -624,7 +627,12 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
+
+          val hostToExecutorsForTaskSet = hostToExecutors.map{ case (host, execsOnHost) =>
+            (host, execsOnHost.filter(taskSet.taskSet.resourceProfileId == executorToProfile(_)))
+          }
+
+          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutorsForTaskSet).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
               // schedule a task within the timeout will abort the taskSet if we were unable to
@@ -640,7 +648,9 @@ private[spark] class TaskSchedulerImpl(
               // If there are no idle executors and dynamic allocation is enabled, then we would
               // notify ExecutorAllocationManager to allocate more executors to schedule the
               // unschedulable tasks else we will abort immediately.
-              executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
+              executorIdToRunningTaskIds
+                .filter(x => taskSet.taskSet.resourceProfileId == executorToProfile(x._1))
+                .find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     healthTrackerOpt.foreach(blt => blt.killExcludedIdleExecutor(executorId))
@@ -1137,6 +1147,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
+    executorToProfile -= (executorId)
 
     executorsPendingDecommission.remove(executorId)
       .foreach(executorsRemovedByDecom.put(executorId, _))

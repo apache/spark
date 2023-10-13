@@ -2269,6 +2269,57 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
+  test("test") {
+    val taskCpus = 1
+    val taskGpus = 1
+    val executorCpus = 1
+
+    val taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString,
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
+
+    val ereqs = new ExecutorResourceRequests().cores(1).offHeapMemory("2g")
+    val treqs = new TaskResourceRequests().cpus(1)
+    val rp = new ResourceProfile(ereqs.requests, treqs.requests)
+    val profileId = rp.id
+    taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, profileId)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1, resourceProfileId = profileId)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the excluded executor.  We won't schedule anything, and set the abort
+    // timer to expire if no new executors could be acquired. We kill the existing idle excluded
+    // executor and try to acquire a new one.
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1, resourceProfileId = profileId),
+      WorkerOffer("executor1", "host0", 1, resourceProfileId =
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+    )).flatten.size === 0)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+    assert(!tsm.isZombie)
+
+    // Offer a new executor which should be accepted
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor2", "host0", 1, resourceProfileId = profileId)
+    )).flatten.size === 1)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+    assert(!tsm.isZombie)
+  }
+
   /**
    * Used by tests to simulate a task failure. This calls the failure handler explicitly, to ensure
    * that all the state is updated when this method returns. Otherwise, there's no way to know when
