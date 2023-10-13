@@ -264,7 +264,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED"
+  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
+  "sqlState" : "KD005"
 }
 
 
@@ -275,7 +276,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED"
+  "errorClass" : "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
+  "sqlState" : "KD005"
 }
 
 
