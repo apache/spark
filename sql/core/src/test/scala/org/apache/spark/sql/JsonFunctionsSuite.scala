@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 
@@ -29,6 +29,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1396,5 +1397,32 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
     checkAnswer(df.select(json_object_keys($"a")), expected)
+  }
+
+  test("function get_json_object - Codegen Support") {
+    withTempView("GetJsonObjectTable") {
+      val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+      data.createOrReplaceTempView("GetJsonObjectTable")
+      val df = sql("SELECT key, get_json_object(jstring, '$.f1') FROM GetJsonObjectTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Seq(Row("1", "value1")))
+    }
+  }
+
+  test("function get_json_object - path is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(a, null)")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
+  }
+
+  test("function get_json_object - json is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(null, '$.name')")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
   }
 }

@@ -37,14 +37,13 @@ from typing import (
 )
 import warnings
 
+import pandas as pd
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote, get_dataframe_class
 from pyspark.errors import PySparkTypeError
-import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
-
-# For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import (
     Axis,
@@ -954,7 +953,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
                 error_class="NOT_COLUMN",
                 message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
             )
-        return repr(left) == repr(right)
+        return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:
         return left._jc.equals(right._jc)
 

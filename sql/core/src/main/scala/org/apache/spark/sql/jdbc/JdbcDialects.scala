@@ -177,10 +177,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * To allow certain options to append when create a new table, which can be
    * table_options or partition_options.
    * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-   * @param statement
-   * @param tableName
-   * @param strSchema
-   * @param options
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
@@ -702,6 +704,8 @@ object JdbcDialects {
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
   registerDialect(H2Dialect)
+  registerDialect(SnowflakeDialect)
+  registerDialect(DatabricksDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -719,6 +723,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-object NoopDialect extends JdbcDialect {
+private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

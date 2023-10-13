@@ -21,7 +21,7 @@ import java.security.PrivilegedExceptionAction
 import java.util.{Collections, Map => JMap}
 import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.shims.Utils

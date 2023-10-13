@@ -22,10 +22,7 @@ import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.Exception._
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -85,25 +82,7 @@ private[sql] object TypeCast {
   }
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
-    try {
-      options.timestampFormatter.parse(value)
-    } catch {
-      case NonFatal(e) =>
-        // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-        // compatibility if enabled.
-        val enableParsingFallbackForTimestampType =
-          options.enableDateTimeParsingFallback
-            .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-            .getOrElse {
-              SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-                options.timestampFormatInRead.isEmpty
-            }
-        if (!enableParsingFallbackForTimestampType) {
-          throw e
-        }
-        val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(value))
-        DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-    }
+    options.timestampFormatter.parse(value)
   }
 
   // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
@@ -155,6 +134,12 @@ private[sql] object TypeCast {
     } else {
       value
     }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a double. All built-in formats will start with a digit or period.
+    if (signSafeValue.isEmpty ||
+      !(Character.isDigit(signSafeValue.head) || signSafeValue.head == '.')) {
+      return false
+    }
     // Rule out strings ending in D or F, as they will parse as double but should be disallowed
     if (value.nonEmpty && (value.last match {
           case 'd' | 'D' | 'f' | 'F' => true
@@ -171,6 +156,11 @@ private[sql] object TypeCast {
     } else {
       value
     }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
+    }
     (allCatch opt signSafeValue.toInt).isDefined
   }
 
@@ -179,6 +169,11 @@ private[sql] object TypeCast {
       value.substring(1)
     } else {
       value
+    }
+    // A little shortcut to avoid trying many formatters in the common case that
+    // the input isn't a number. All built-in formats will start with a digit.
+    if (signSafeValue.isEmpty || !Character.isDigit(signSafeValue.head)) {
+      return false
     }
     (allCatch opt signSafeValue.toLong).isDefined
   }

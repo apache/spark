@@ -208,8 +208,6 @@ object CheckConnectJvmClientCompatibility {
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.functions.try_reflect"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
@@ -255,18 +253,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
-
-      // StreamingQueryException
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.message"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.cause"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.startOffset"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.endOffset"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.time"),
 
       // Classes missing from streaming API
       ProblemFilters.exclude[MissingClassProblem](
@@ -358,6 +344,12 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.application.ConnectRepl$" // developer API
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ExtendedCodeClassWrapper" // developer API
+      ),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.application.ExtendedCodeClassWrapper$" // developer API
       ),
 
       // SparkSession

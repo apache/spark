@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
 import pandas as pd
 
@@ -133,33 +131,18 @@ class ExpandingTestsMixin:
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
         psdf = ps.from_pandas(pdf)
 
-        # The behavior of GroupBy.expanding is changed from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a).expanding(2)).sort_index(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).expanding(2)).sum(),
-                pd_func(pdf.groupby(pdf.a).expanding(2)).sum(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a + 1).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a + 1).expanding(2)).sort_index(),
-            )
-        else:
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a).expanding(2)).drop("a", axis=1).sort_index(),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a).expanding(2)).sum(),
-                pd_func(pdf.groupby(pdf.a).expanding(2)).sum().drop("a"),
-            )
-            self.assert_eq(
-                ps_func(psdf.groupby(psdf.a + 1).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(pdf.a + 1).expanding(2)).drop("a", axis=1).sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a).expanding(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a).expanding(2)).sort_index(),
+        )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a).expanding(2)).sum(),
+            pd_func(pdf.groupby(pdf.a).expanding(2)).sum(),
+        )
+        self.assert_eq(
+            ps_func(psdf.groupby(psdf.a + 1).expanding(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a + 1).expanding(2)).sort_index(),
+        )
 
         self.assert_eq(
             ps_func(psdf.b.groupby(psdf.a).expanding(2)).sort_index(),
@@ -179,29 +162,15 @@ class ExpandingTestsMixin:
         pdf.columns = columns
         psdf.columns = columns
 
-        # The behavior of GroupBy.expanding is changed from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                ps_func(psdf.groupby(("a", "x")).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(("a", "x")).expanding(2)).sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby(("a", "x")).expanding(2)).sort_index(),
+            pd_func(pdf.groupby(("a", "x")).expanding(2)).sort_index(),
+        )
 
-            self.assert_eq(
-                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
-                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
-            )
-        else:
-            self.assert_eq(
-                ps_func(psdf.groupby(("a", "x")).expanding(2)).sort_index(),
-                pd_func(pdf.groupby(("a", "x")).expanding(2)).drop(("a", "x"), axis=1).sort_index(),
-            )
-
-            self.assert_eq(
-                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
-                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2))
-                .drop([("a", "x"), ("a", "y")], axis=1)
-                .sort_index(),
-            )
+        self.assert_eq(
+            ps_func(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
+            pd_func(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
+        )
 
     def test_groupby_expanding_count(self):
         self._test_groupby_expanding_func("count")

@@ -33,8 +33,7 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
 /**
  * This StreamObserver is running on the execution thread. Execution pushes responses to it, it
  * caches them. ExecuteResponseGRPCSender is the consumer of the responses ExecuteResponseObserver
- * "produces". It waits on the monitor of ExecuteResponseObserver. New produced responses notify
- * the monitor.
+ * "produces". It waits on the responseLock. New produced responses notify the responseLock.
  * @see
  *   getResponse.
  *
@@ -73,17 +72,24 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** The index of the last response produced by execution. */
   private var lastProducedIndex: Long = 0 // first response will have index 1
 
+  // For testing
+  private[connect] var releasedUntilIndex: Long = 0
+
   /**
    * Highest response index that was consumed. Keeps track of it to decide which responses needs
    * to be cached, and to assert that all responses are consumed.
+   *
+   * Visible for testing.
    */
-  private var highestConsumedIndex: Long = 0
+  private[connect] var highestConsumedIndex: Long = 0
 
   /**
-   * Consumer that waits for available responses. There can be only one at a time, @see
-   * attachConsumer.
+   * Lock used for synchronization between responseObserver and grpcResponseSenders. *
+   * grpcResponseSenders wait on it for a new response to be available. * grpcResponseSenders also
+   * notify it to wake up when interrupted * responseObserver notifies it when new responses are
+   * available.
    */
-  private var responseSender: Option[ExecuteGrpcResponseSender[T]] = None
+  private[connect] val responseLock = new Object()
 
   // Statistics about cached responses.
   private val cachedSizeUntilHighestConsumed = CachedSize()
@@ -101,7 +107,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     0
   }
 
-  def onNext(r: T): Unit = synchronized {
+  def onNext(r: T): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onNext can't be called after stream completed")
     }
@@ -120,10 +126,10 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     logDebug(
       s"Execution opId=${executeHolder.operationId} produced response " +
         s"responseId=${responseId} idx=$lastProducedIndex")
-    notifyAll()
+    responseLock.notifyAll()
   }
 
-  def onError(t: Throwable): Unit = synchronized {
+  def onError(t: Throwable): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onError can't be called after stream completed")
     }
@@ -132,10 +138,10 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     logDebug(
       s"Execution opId=${executeHolder.operationId} produced error. " +
         s"Last stream index is $lastProducedIndex.")
-    notifyAll()
+    responseLock.notifyAll()
   }
 
-  def onCompleted(): Unit = synchronized {
+  def onCompleted(): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
       throw new IllegalStateException("Stream onCompleted can't be called after stream completed")
     }
@@ -143,14 +149,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     logDebug(
       s"Execution opId=${executeHolder.operationId} completed stream. " +
         s"Last stream index is $lastProducedIndex.")
-    notifyAll()
-  }
-
-  /** Attach a new consumer (ExecuteResponseGRPCSender). */
-  def attachConsumer(newSender: ExecuteGrpcResponseSender[T]): Unit = synchronized {
-    // interrupt the current sender before attaching new one
-    responseSender.foreach(_.interrupt())
-    responseSender = Some(newSender)
+    responseLock.notifyAll()
   }
 
   /**
@@ -158,7 +157,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
    * this response observer assumes that the response is consumed, and the response and previous
    * response can be uncached, keeping retryBufferSize of responses for the case of retries.
    */
-  def consumeResponse(index: Long): Option[CachedStreamResponse[T]] = synchronized {
+  def consumeResponse(index: Long): Option[CachedStreamResponse[T]] = responseLock.synchronized {
     // we index stream responses from 1, getting a lower index would be invalid.
     assert(index >= 1)
     // it would be invalid if consumer would skip a response
@@ -193,17 +192,17 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   }
 
   /** Get the stream error if there is one, otherwise None. */
-  def getError(): Option[Throwable] = synchronized {
+  def getError(): Option[Throwable] = responseLock.synchronized {
     error
   }
 
   /** If the stream is finished, the index of the last response, otherwise None. */
-  def getLastResponseIndex(): Option[Long] = synchronized {
+  def getLastResponseIndex(): Option[Long] = responseLock.synchronized {
     finalProducedIndex
   }
 
   /** Get the index in the stream for given response id. */
-  def getResponseIndexById(responseId: String): Long = synchronized {
+  def getResponseIndexById(responseId: String): Long = responseLock.synchronized {
     responseIdToIndex.getOrElse(
       responseId,
       throw new SparkSQLException(
@@ -212,7 +211,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   }
 
   /** Remove cached responses up to and including response with given id. */
-  def removeResponsesUntilId(responseId: String): Unit = synchronized {
+  def removeResponsesUntilId(responseId: String): Unit = responseLock.synchronized {
     val index = getResponseIndexById(responseId)
     removeResponsesUntilIndex(index)
     logDebug(
@@ -224,7 +223,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   }
 
   /** Remove all cached responses */
-  def removeAll(): Unit = synchronized {
+  def removeAll(): Unit = responseLock.synchronized {
     removeResponsesUntilIndex(lastProducedIndex)
     logInfo(
       s"Release all for opId=${executeHolder.operationId}. Execution stats: " +
@@ -237,7 +236,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   }
 
   /** Returns if the stream is finished. */
-  def completed(): Boolean = synchronized {
+  def completed(): Boolean = responseLock.synchronized {
     finalProducedIndex.isDefined
   }
 
@@ -284,6 +283,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
       responses.remove(i)
       i -= 1
     }
+    releasedUntilIndex = index
   }
 
   /**

@@ -21,7 +21,7 @@ import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -64,6 +64,8 @@ private[spark] class NewHadoopPartition(
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
+ * @param ignoreCorruptFiles Whether to ignore corrupt files.
+ * @param ignoreMissingFiles Whether to ignore missing files.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
@@ -74,8 +76,27 @@ class NewHadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient private val _conf: Configuration)
+    @transient private val _conf: Configuration,
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
+
+  def this(
+      sc : SparkContext,
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      _conf: Configuration) = {
+    this(
+      sc,
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      _conf,
+      ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
+      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES))
+  }
+
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
@@ -89,10 +110,6 @@ class NewHadoopRDD[K, V](
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
-
-  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
-
-  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 

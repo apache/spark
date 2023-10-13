@@ -115,7 +115,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
           "operation" -> "CREATE OR REPLACE VIEW")
@@ -124,16 +124,15 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map(
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
-          "operation" -> "CREATE VIEW")
+          "relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
       )
       checkError(
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW tab1 AS SELECT * FROM jt")
         },
-        errorClass = "UNSUPPORTED_TABLE_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         parameters = Map(
           "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`",
           "operation" -> "ALTER VIEW ... AS"
@@ -162,9 +161,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... SET TBLPROPERTIES"
         ),
         context = ExpectedContext(
@@ -177,9 +176,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER VIEW ... UNSET TBLPROPERTIES"
         ),
         context = ExpectedContext(
@@ -199,9 +198,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDE 'whatever'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -210,9 +209,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -221,9 +220,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -232,9 +231,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RENAME TO PARTITION"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -243,9 +242,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName RECOVER PARTITIONS")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... RECOVER PARTITIONS"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -254,9 +253,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -265,9 +264,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET LOCATION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -276,9 +275,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... ADD PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -287,9 +286,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... DROP PARTITION ..."
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -298,9 +297,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... SET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -309,9 +308,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ALTER TABLE ... UNSET TBLPROPERTIES"
         ),
         context = ExpectedContext(fragment = viewName, start = 12, stop = 19)
@@ -339,9 +338,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "LOAD DATA"
         ),
         context = ExpectedContext(
@@ -354,9 +353,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW CREATE TABLE $viewName")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "SHOW CREATE TABLE"
         ),
         context = ExpectedContext(
@@ -369,9 +368,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
         },
-        errorClass = "UNSUPPORTED_TEMP_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_PERMANENT_VIEW_NOT_TEMP",
         parameters = Map(
-          "tempViewName" -> s"`$viewName`",
+          "viewName" -> s"`$viewName`",
           "operation" -> "ANALYZE TABLE"
         ),
         context = ExpectedContext(
@@ -406,7 +405,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $viewName SELECT 1")
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITHOUT_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "INSERT"
@@ -421,7 +420,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNSUPPORTED_VIEW_OPERATION.WITH_SUGGESTION",
+        errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
         parameters = Map(
           "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`testview`",
           "operation" -> "LOAD DATA"),

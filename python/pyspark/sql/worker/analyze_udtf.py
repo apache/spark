@@ -18,7 +18,6 @@
 import inspect
 import os
 import sys
-import traceback
 from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -33,7 +32,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import try_simplify_traceback
+from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -99,14 +98,14 @@ def main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.
 
-    This process will be invoked from `UserDefinedPythonTableFunction.analyzeInPython` in JVM
-    and receive the Python UDTF and its arguments for the `analyze` static method,
+    This process will be invoked from `UserDefinedPythonTableFunctionAnalyzeRunner.runInPython`
+    in JVM and receive the Python UDTF and its arguments for the `analyze` static method,
     and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
     try:
         check_python_version(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_UDTF_ANALYZER_MEMORY_MB", "-1"))
+        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
         setup_spark_files(infile)
@@ -127,6 +126,8 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
+        # Return the pickled 'AnalyzeResult' class instance.
+        pickleSer._write_with_length(result, outfile)
         # Return whether the "with single partition" property is requested.
         write_int(1 if result.with_single_partition else 0, outfile)
         # Return the list of partitioning columns, if any.
@@ -146,25 +147,7 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(2, outfile)
 
     except BaseException as e:
-        try:
-            exc_info = None
-            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-                tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
-                if tb is not None:
-                    e.__cause__ = None
-                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
-            if exc_info is None:
-                exc_info = traceback.format_exc()
-
-            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info.encode("utf-8"), outfile)
-        except IOError:
-            # JVM close the socket
-            pass
-        except BaseException:
-            # Write the error to stderr if it happened while serializing
-            print("PySpark worker failed with exception:", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
+        handle_worker_exception(e, outfile)
         sys.exit(-1)
 
     send_accumulator_updates(outfile)
@@ -183,7 +166,4 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
     main(sock_file, sock_file)

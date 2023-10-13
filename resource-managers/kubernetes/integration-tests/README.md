@@ -127,7 +127,7 @@ configuration is provided in `dev/spark-rbac.yaml`.
 If you prefer to run just the integration tests directly, then you can customise the behaviour via passing system 
 properties to Maven.  For example:
 
-    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
+    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
                             -Phadoop-3 -Dhadoop.version=3.3.6 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
@@ -329,11 +329,11 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.7.0.
+- Volcano v1.8.0.
 
 ## Installation
 
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.0/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -354,5 +354,5 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.0/installer/volcano-development.yaml
 

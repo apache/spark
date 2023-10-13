@@ -20,7 +20,7 @@ import java.lang.Math.sqrt
 import java.util.{Map => JMap}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}

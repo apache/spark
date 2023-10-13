@@ -22,7 +22,7 @@ import java.util
 import java.util.{Map => JMap}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -58,13 +58,13 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def this(conf: SparkConf) = this(new SparkContext(conf))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    */
   def this(master: String, appName: String) = this(new SparkContext(master, appName))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
@@ -72,7 +72,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     this(conf.setMaster(master).setAppName(appName))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
@@ -82,7 +82,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     this(new SparkContext(master, appName, sparkHome, Seq(jarFile)))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
@@ -92,7 +92,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     this(new SparkContext(master, appName, sparkHome, jars.toSeq))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file

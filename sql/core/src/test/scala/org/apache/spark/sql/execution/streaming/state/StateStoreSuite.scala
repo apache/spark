@@ -23,8 +23,8 @@ import java.util
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.commons.io.FileUtils
@@ -534,21 +534,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  testQuietly("SPARK-18342: commit fails when rename fails") {
-    import RenameReturnsFalseFileSystem._
-    val dir = scheme + "://" + newDir()
-    val conf = new Configuration()
-    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
-    tryWithProviderResource(newStoreProvider(
-      opId = Random.nextInt, partition = 0, dir = dir, hadoopConf = conf)) { provider =>
-
-      val store = provider.getStore(0)
-      put(store, "a", 0, 0)
-      val e = intercept[IllegalStateException](store.commit())
-      assert(e.getCause.getMessage.contains("Failed to rename"))
-    }
-  }
-
   test("SPARK-18416: do not create temp delta file until the store is updated") {
     val dir = newDir()
     val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
@@ -692,8 +677,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Fail commit for next version and verify that reloading resets the files
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
       put(store, "11", 0, 11)
-      val e = intercept[IllegalStateException] { quietly { store.commit() } }
+      val e = intercept[SparkException] { quietly { store.commit() } }
       assert(e.getCause.isInstanceOf[IOException])
+      assert(e.getMessage.contains("Cannot perform commit"))
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
       // Abort commit for next version and verify that reloading resets the files
@@ -797,6 +783,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   override def newStoreProvider(storeId: StateStoreId): HDFSBackedStateStoreProvider = {
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
+  }
+
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): HDFSBackedStateStoreProvider = {
+    newStoreProvider(
+      storeId.operatorId,
+      storeId.partitionId,
+      dir = storeId.checkpointRootLocation,
+      hadoopConf = conf)
   }
 
   override def newStoreProvider(
@@ -1152,6 +1146,31 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  testQuietly("SPARK-18342: commit fails when rename fails") {
+    import RenameReturnsFalseFileSystem._
+
+    val ROCKSDB_STATE_STORE = "RocksDBStateStore"
+    val dir = scheme + "://" + newDir()
+    val conf = new Configuration()
+    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
+
+    val storeId = StateStoreId(dir, operatorId = 0, partitionId = 0)
+    tryWithProviderResource(newStoreProvider(storeId, conf)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 0)
+      val e = intercept[SparkException](quietly { store.commit() } )
+
+      assert(e.getErrorClass == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
+      } else {
+        assert(e.getMessage contains "HDFSStateStore[id=(op=0,part=0)")
+      }
+      assert(e.getMessage contains "Error writing state store files")
+      assert(e.getCause.getMessage.contains("Failed to rename"))
+    }
+  }
+
   // This test illustrates state store iterator behavior differences leading to SPARK-38320.
   testWithAllCodec("SPARK-38320 - state store iterator behavior differences") {
     val ROCKSDB_STATE_STORE = "RocksDBStateStore"
@@ -1429,6 +1448,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   /** Return a new provider with the given id */
   def newStoreProvider(storeId: StateStoreId): ProviderClass
+
+  /** Return a new provider with the given id and configuration */
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): ProviderClass
 
   /** Return a new provider with minimum delta and version to retain in memory */
   def newStoreProvider(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): ProviderClass

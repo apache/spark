@@ -21,10 +21,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -553,7 +553,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("SPARK-43898: Register scala.collection.immutable.ArraySeq$ofRef for Scala 2.13") {
-    assume(scala.util.Properties.versionNumberString.startsWith("2.13"))
     val conf = new SparkConf(false)
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
     val ser = new KryoSerializer(conf).newInstance()

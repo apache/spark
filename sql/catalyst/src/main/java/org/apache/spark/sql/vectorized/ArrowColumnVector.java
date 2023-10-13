@@ -19,12 +19,14 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
+import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -113,6 +115,12 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
+  public CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getInterval(rowId);
+  }
+
+  @Override
   public byte[] getBinary(int rowId) {
     if (isNullAt(rowId)) return null;
     return accessor.getBinary(rowId);
@@ -173,14 +181,11 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
     } else if (vector instanceof TimeStampMicroVector) {
       accessor = new TimestampNTZAccessor((TimeStampMicroVector) vector);
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
-    } else if (vector instanceof ListVector) {
-      ListVector listVector = (ListVector) vector;
+    } else if (vector instanceof ListVector listVector) {
       accessor = new ArrayAccessor(listVector);
-    } else if (vector instanceof StructVector) {
-      StructVector structVector = (StructVector) vector;
+    } else if (vector instanceof StructVector structVector) {
       accessor = new StructAccessor(structVector);
 
       childColumns = new ArrowColumnVector[structVector.size()];
@@ -193,6 +198,8 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new IntervalYearAccessor((IntervalYearVector) vector);
     } else if (vector instanceof DurationVector) {
       accessor = new DurationAccessor((DurationVector) vector);
+    } else if (vector instanceof IntervalMonthDayNanoVector) {
+      accessor = new IntervalMonthDayNanoAccessor((IntervalMonthDayNanoVector) vector);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -243,6 +250,10 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     double getDouble(int rowId) {
+      throw new UnsupportedOperationException();
+    }
+
+    CalendarInterval getInterval(int rowId) {
       throw new UnsupportedOperationException();
     }
 
@@ -600,6 +611,29 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final long getLong(int rowId) {
       return DurationVector.get(accessor.getDataBuffer(), rowId);
+    }
+  }
+
+  static class IntervalMonthDayNanoAccessor extends ArrowVectorAccessor {
+
+    private final IntervalMonthDayNanoVector accessor;
+
+    private final NullableIntervalMonthDayNanoHolder result =
+      new NullableIntervalMonthDayNanoHolder();
+
+    IntervalMonthDayNanoAccessor(IntervalMonthDayNanoVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    CalendarInterval getInterval(int rowId) {
+      accessor.get(rowId, result);
+      if (result.isSet == 0) {
+        return null;
+      } else {
+        return new CalendarInterval(result.months, result.days, result.nanoseconds / 1000);
+      }
     }
   }
 }

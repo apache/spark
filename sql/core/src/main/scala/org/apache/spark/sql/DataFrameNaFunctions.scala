@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.{lang => jl}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._

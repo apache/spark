@@ -228,7 +228,7 @@ private[jdbc] class JDBCRDD(
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
     val dialect = JdbcDialects.get(url)
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading

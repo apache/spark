@@ -40,15 +40,15 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
  * This backend holds onto each executor for the duration of the Spark job rather than relinquishing
  * executors whenever a task is done and asking the scheduler to launch a new executor for
- * each new task. Executors may be launched in a variety of ways, such as Mesos tasks for the
- * coarse-grained Mesos mode or standalone processes for Spark's standalone deploy mode
- * (spark.deploy.*).
+ * each new task. Executors may be launched in a variety of ways, such as standalone processes for
+ * Spark's standalone deploy mode (spark.deploy.*).
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
@@ -1076,6 +1076,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
   }
 
+  override def getTaskThreadDump(
+      taskId: Long,
+      executorId: String): Option[ThreadStackTrace] = withLock {
+    if (isExecutorActive(executorId)) {
+      val executorData = executorDataMap(executorId)
+      executorData.executorEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
+    } else {
+      None
+    }
+  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

@@ -18,12 +18,12 @@
 import unittest
 import glob
 import os
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -259,7 +259,6 @@ class DataFrameSparkIOTestsMixin:
     @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
-
             path1 = "{}/file1.xlsx".format(tmp)
             self.test_pdf[["i32"]].to_excel(path1)
 

@@ -20,12 +20,11 @@ Worker that receives input from Piped RDD.
 """
 import os
 import sys
+import dataclasses
 import time
 from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
-
-import traceback
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -34,7 +33,6 @@ from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import (
-    write_with_length,
     write_int,
     read_long,
     read_bool,
@@ -53,8 +51,15 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback
+from pyspark.sql.types import (
+    BinaryType,
+    Row,
+    StringType,
+    StructType,
+    _create_row,
+    _parse_datatype_json_string,
+)
+from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 from pyspark.worker_util import (
@@ -81,15 +86,19 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def wrap_udf(f, return_type):
+def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
     if return_type.needConversion():
         toInternal = return_type.toInternal
-        return lambda *a, **kw: toInternal(f(*a, **kw))
+        return args_kwargs_offsets, lambda *a: toInternal(func(*a))
     else:
-        return lambda *a, **kw: f(*a, **kw)
+        return args_kwargs_offsets, lambda *a: func(*a)
 
 
-def wrap_scalar_pandas_udf(f, return_type):
+def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_type(result):
@@ -115,16 +124,19 @@ def wrap_scalar_pandas_udf(f, return_type):
             )
         return result
 
-    return lambda *a, **kw: (
-        verify_result_length(
-            verify_result_type(f(*a, **kw)), len((list(a) + list(kw.values()))[0])
+    return (
+        args_kwargs_offsets,
+        lambda *a: (
+            verify_result_length(verify_result_type(func(*a)), len(a[0])),
+            arrow_return_type,
         ),
-        arrow_return_type,
     )
 
 
-def wrap_arrow_batch_udf(f, return_type):
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type):
     import pandas as pd
+
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
     arrow_return_type = to_arrow_type(return_type)
 
@@ -140,17 +152,8 @@ def wrap_arrow_batch_udf(f, return_type):
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
     @fail_on_stopiteration
-    def evaluate(*args: pd.Series, **kwargs: pd.Series) -> pd.Series:
-        keys = list(kwargs.keys())
-        len_args = len(args)
-        return pd.Series(
-            [
-                result_func(
-                    f(*row[:len_args], **{key: row[len_args + i] for i, key in enumerate(keys)})
-                )
-                for row in zip(*args, *[kwargs[key] for key in keys])
-            ]
-        )
+    def evaluate(*args: pd.Series) -> pd.Series:
+        return pd.Series([result_func(func(*row)) for row in zip(*args)])
 
     def verify_result_length(result, length):
         if len(result) != length:
@@ -163,9 +166,9 @@ def wrap_arrow_batch_udf(f, return_type):
             )
         return result
 
-    return lambda *a, **kw: (
-        verify_result_length(evaluate(*a, **kw), len((list(a) + list(kw.values()))[0])),
-        arrow_return_type,
+    return (
+        args_kwargs_offsets,
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type),
     )
 
 
@@ -436,25 +439,32 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
     return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
 
 
-def wrap_grouped_agg_pandas_udf(f, return_type):
+def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(*args, **kwargs):
+    def wrapped(*series):
         import pandas as pd
 
-        result = f(*args, **kwargs)
+        result = func(*series)
         return pd.Series([result])
 
-    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
 
 
-def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
+def wrap_window_agg_pandas_udf(
+    f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
+):
     window_bound_types_str = runner_conf.get("pandas_window_bound_types")
     window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
     if window_bound_type == "bounded":
-        return wrap_bounded_window_agg_pandas_udf(f, return_type)
+        return wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type)
     elif window_bound_type == "unbounded":
-        return wrap_unbounded_window_agg_pandas_udf(f, return_type)
+        return wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type)
     else:
         raise PySparkRuntimeError(
             error_class="INVALID_WINDOW_BOUND_TYPE",
@@ -464,26 +474,35 @@ def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
         )
 
 
-def wrap_unbounded_window_agg_pandas_udf(f, return_type):
+def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
     # This is similar to grouped_agg_pandas_udf, the only difference
     # is that window_agg_pandas_udf needs to repeat the return value
     # to match window length, where grouped_agg_pandas_udf just returns
     # the scalar value.
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(*args, **kwargs):
+    def wrapped(*series):
         import pandas as pd
 
-        result = f(*args, **kwargs)
-        return pd.Series([result]).repeat(len((list(args) + list(kwargs.values()))[0]))
+        result = func(*series)
+        return pd.Series([result]).repeat(len(series[0]))
 
-    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
 
 
-def wrap_bounded_window_agg_pandas_udf(f, return_type):
+def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
+    # args_offsets should have at least 2 for begin_index, end_index.
+    assert len(args_offsets) >= 2, len(args_offsets)
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets[2:], kwargs_offsets)
+
     arrow_return_type = to_arrow_type(return_type)
 
-    def wrapped(begin_index, end_index, *args, **kwargs):
+    def wrapped(begin_index, end_index, *series):
         import pandas as pd
 
         result = []
@@ -508,12 +527,34 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
             # Note: Calling reset_index on the slices will increase the cost
             #       of creating slices by about 100%. Therefore, for performance
             #       reasons we don't do it here.
-            args_slices = [s.iloc[begin_array[i] : end_array[i]] for s in args]
-            kwargs_slices = {k: s.iloc[begin_array[i] : end_array[i]] for k, s in kwargs.items()}
-            result.append(f(*args_slices, **kwargs_slices))
+            series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
+            result.append(func(*series_slices))
         return pd.Series(result)
 
-    return lambda *a, **kw: (wrapped(*a, **kw), arrow_return_type)
+    return (
+        args_offsets[:2] + args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
+def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
+    if len(kwargs_offsets):
+        keys = list(kwargs_offsets.keys())
+
+        len_args_offsets = len(args_offsets)
+        if len_args_offsets > 0:
+
+            def func(*args):
+                return f(*args[:len_args_offsets], **dict(zip(keys, args[len_args_offsets:])))
+
+        else:
+
+            def func(*args):
+                return f(**dict(zip(keys, args)))
+
+        return func, args_offsets + [kwargs_offsets[key] for key in keys]
+    else:
+        return f, args_offsets
 
 
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
@@ -561,32 +602,33 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        udf = wrap_scalar_pandas_udf(func, return_type)
+        return wrap_scalar_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        udf = wrap_arrow_batch_udf(func, return_type)
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        udf = wrap_pandas_batch_iter_udf(func, return_type)
+        return args_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        udf = wrap_pandas_batch_iter_udf(func, return_type)
+        return args_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        udf = wrap_arrow_batch_iter_udf(func, return_type)
+        return args_offsets, wrap_arrow_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        udf = wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        udf = wrap_grouped_map_pandas_udf_with_state(func, return_type)
+        return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
-        udf = wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        udf = wrap_grouped_agg_pandas_udf(func, return_type)
+        return wrap_grouped_agg_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        udf = wrap_window_agg_pandas_udf(func, return_type, runner_conf, udf_index)
+        return wrap_window_agg_pandas_udf(
+            func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
+        )
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        udf = wrap_udf(func, return_type)
+        return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
-    return args_offsets, kwargs_offsets, udf
 
 
 # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
@@ -625,7 +667,7 @@ def read_udtf(pickleSer, infile, eval_type):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
+    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     args_offsets = []
     kwargs_offsets = {}
@@ -638,6 +680,14 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    has_pickled_analyze_result = read_bool(infile)
+    if has_pickled_analyze_result:
+        pickled_analyze_result = pickleSer._read_with_length(infile)
+    else:
+        pickled_analyze_result = None
+    # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
+    # although we may set this to false later if we find otherwise.
+    udtf_init_method_accepts_analyze_result = True
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -650,6 +700,29 @@ def read_udtf(pickleSer, infile, eval_type):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
+
+    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
+    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
+    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
+    # AnalyzeResult.
+    if has_pickled_analyze_result:
+        prev_handler = handler
+
+        def construct_udtf():
+            nonlocal udtf_init_method_accepts_analyze_result
+            if not udtf_init_method_accepts_analyze_result:
+                return prev_handler()
+            else:
+                try:
+                    # Here we pass the AnalyzeResult to the UDTF's __init__ method.
+                    return prev_handler(dataclasses.replace(pickled_analyze_result))
+                except TypeError:
+                    # This means that the UDTF handler does not accept an AnalyzeResult object in
+                    # its __init__ method.
+                    udtf_init_method_accepts_analyze_result = False
+                    return prev_handler()
+
+        handler = construct_udtf
 
     class UDTFWithPartitions:
         """
@@ -700,7 +773,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield row
                 self._udtf = self._create_udtf()
             if self._udtf.eval is not None:
-                result = self._udtf.eval(*args, **kwargs)
+                # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
+                filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
+                filtered_kwargs = {
+                    key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
+                }
+                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
                     for row in result:
                         yield row
@@ -710,6 +788,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 return self._udtf.terminate()
             return iter(())
 
+        def cleanup(self) -> None:
+            if hasattr(self._udtf, "cleanup"):
+                self._udtf.cleanup()
+
         def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
             if len(self._prev_arguments) > 0:
@@ -717,16 +799,27 @@ def read_udtf(pickleSer, infile, eval_type):
                 prev_table_arg = self._get_table_arg(self._prev_arguments)
                 cur_partitions_args = []
                 prev_partitions_args = []
-                for i in partition_child_indexes:
+                for i in self._partition_child_indexes:
                     cur_partitions_args.append(cur_table_arg[i])
                     prev_partitions_args.append(prev_table_arg[i])
-                self._prev_arguments = arguments
                 result = any(k != v for k, v in zip(cur_partitions_args, prev_partitions_args))
             self._prev_arguments = arguments
             return result
 
         def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
+
+        def _remove_partition_by_exprs(self, arg: Any) -> Any:
+            if isinstance(arg, Row):
+                new_row_keys = []
+                new_row_values = []
+                for i, (key, value) in enumerate(zip(arg.__fields__, arg)):
+                    if i not in self._partition_child_indexes:
+                        new_row_keys.append(key)
+                        new_row_values.append(value)
+                return _create_row(new_row_keys, new_row_values)
+            else:
+                return arg
 
     # Instantiate the UDTF class.
     try:
@@ -789,9 +882,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
-            def func(*a: Any, **kw: Any) -> Any:
+            def func(*a: Any) -> Any:
                 try:
-                    return f(*a, **kw)
+                    return f(*a)
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -810,46 +903,45 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-            def evaluate(*args: pd.Series, **kwargs: pd.Series):
-                if len(args) == 0 and len(kwargs) == 0:
+            def evaluate(*args: pd.Series):
+                if len(args) == 0:
                     res = func()
                     check_return_value(res)
                     yield verify_result(pd.DataFrame(res)), arrow_return_type
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
-                    keys = list(kwargs.keys())
-                    len_args = len(args)
-                    row_tuples = zip(*args, *[kwargs[key] for key in keys])
+                    row_tuples = zip(*args)
                     for row in row_tuples:
-                        res = func(
-                            *row[:len_args],
-                            **{key: row[len_args + i] for i, key in enumerate(keys)},
-                        )
+                        res = func(*row)
                         check_return_value(res)
                         yield verify_result(pd.DataFrame(res)), arrow_return_type
 
             return evaluate
 
-        eval = wrap_arrow_udtf(getattr(udtf, "eval"), return_type)
+        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        eval = wrap_arrow_udtf(eval_func_kwargs_support, return_type)
 
         if hasattr(udtf, "terminate"):
             terminate = wrap_arrow_udtf(getattr(udtf, "terminate"), return_type)
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         def mapper(_, it):
             try:
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    yield from eval(
-                        *[a[o] for o in args_offsets],
-                        **{k: a[o] for k, o in kwargs_offsets.items()},
-                    )
-            finally:
+                    yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -884,9 +976,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
-            def evaluate(*a, **kw) -> tuple:
+            def evaluate(*a) -> tuple:
                 try:
-                    res = f(*a, **kw)
+                    res = f(*a)
                 except Exception as e:
                     raise PySparkRuntimeError(
                         error_class="UDTF_EXEC_ERROR",
@@ -914,24 +1006,28 @@ def read_udtf(pickleSer, infile, eval_type):
 
             return evaluate
 
-        eval = wrap_udtf(getattr(udtf, "eval"), return_type)
+        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        eval = wrap_udtf(eval_func_kwargs_support, return_type)
 
         if hasattr(udtf, "terminate"):
             terminate = wrap_udtf(getattr(udtf, "terminate"), return_type)
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
                 for a in it:
-                    yield eval(
-                        *[a[o] for o in args_offsets],
-                        **{k: a[o] for k, o in kwargs_offsets.items()},
-                    )
-            finally:
+                    yield eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -951,7 +1047,6 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
     ):
-
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
         for i in range(num_conf):
@@ -1028,9 +1123,7 @@ def read_udfs(pickleSer, infile, eval_type):
         if is_map_arrow_iter:
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
-        arg_offsets, _, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0
-        )
+        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
             num_input_rows = 0
@@ -1120,7 +1213,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         # Create function like this:
@@ -1137,7 +1230,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
@@ -1171,7 +1264,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, _, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -1188,10 +1281,7 @@ def read_udfs(pickleSer, infile, eval_type):
             udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
 
         def mapper(a):
-            result = tuple(
-                f(*[a[o] for o in args_offsets], **{k: a[o] for k, o in kwargs_offsets.items()})
-                for args_offsets, kwargs_offsets, f in udfs
-            )
+            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:
@@ -1298,25 +1388,7 @@ def main(infile, outfile):
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
     except BaseException as e:
-        try:
-            exc_info = None
-            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-                tb = try_simplify_traceback(sys.exc_info()[-1])
-                if tb is not None:
-                    e.__cause__ = None
-                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
-            if exc_info is None:
-                exc_info = traceback.format_exc()
-
-            write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info.encode("utf-8"), outfile)
-        except IOError:
-            # JVM close the socket
-            pass
-        except BaseException:
-            # Write the error to stderr if it happened while serializing
-            print("PySpark worker failed with exception:", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
+        handle_worker_exception(e, outfile)
         sys.exit(-1)
     finally:
         if faulthandler_log_path:
@@ -1346,7 +1418,4 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
     main(sock_file, sock_file)

@@ -21,8 +21,8 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
@@ -768,6 +768,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
  * access.
  */
 class FailFormatCheckFileSystem extends RawLocalFileSystem {
+  override def getScheme(): String = "failformatcheck"
   override def getFileStatus(f: Path): FileStatus = {
     if (f.getName == FileStreamSink.metadataDir) {
       throw new IOException("cannot access metadata log")

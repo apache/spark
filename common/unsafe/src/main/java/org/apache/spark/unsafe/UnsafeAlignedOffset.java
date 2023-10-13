@@ -41,16 +41,14 @@ public class UnsafeAlignedOffset {
   }
 
   public static int getSize(Object object, long offset) {
-    switch (getUaoSize()) {
-      case 4:
-        return Platform.getInt(object, offset);
-      case 8:
-        return (int)Platform.getLong(object, offset);
-      default:
+    return switch (getUaoSize()) {
+      case 4 -> Platform.getInt(object, offset);
+      case 8 -> (int) Platform.getLong(object, offset);
+      default ->
         // checkstyle.off: RegexpSinglelineJava
         throw new AssertionError("Illegal UAO_SIZE");
         // checkstyle.on: RegexpSinglelineJava
-    }
+    };
   }
 
   public static void putSize(Object object, long offset, int value) {

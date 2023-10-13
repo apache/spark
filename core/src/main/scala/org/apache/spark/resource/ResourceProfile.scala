@@ -21,8 +21,8 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
@@ -138,8 +138,8 @@ class ResourceProfile(
   }
 
   // Returns whether the executor cores was available to use to calculate the max tasks
-  // per executor and limiting resource. Some cluster managers (like standalone and coarse
-  // grained mesos) don't use the cores config by default so we can't use it to calculate slots.
+  // per executor and limiting resource. Some cluster managers (like standalone)
+  // don't use the cores config by default so we can't use it to calculate slots.
   private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
 
   // The resource that has the least amount of slots per executor. Its possible multiple or all

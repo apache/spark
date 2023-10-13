@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.scalatest.Assertions._
@@ -97,14 +97,14 @@ import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, 
 object IntegratedUDFTestUtils extends SQLHelper {
   import scala.sys.process._
 
-  private lazy val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
+  private[spark] lazy val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
 
   // Note that we will directly refer pyspark's source, not the zip from a regular build.
   // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
   private lazy val py4jPath = Paths.get(
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
-  private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
+  private[spark] lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
   private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 
@@ -363,7 +363,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestPythonUDF(name: String) extends TestUDF {
+  case class TestPythonUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -381,11 +381,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+              "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
@@ -521,8 +524,15 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFWithSinglePartition"
     val pythonScript: String =
       s"""
+        |import json
+        |from dataclasses import dataclass
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
+        |
+        |@dataclass
+        |class AnalyzeResultWithBuffer(AnalyzeResult):
+        |    buffer: str = ""
+        |
         |class $name:
         |    def __init__(self):
         |        self._count = 0
@@ -530,8 +540,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |        self._last = None
         |
         |    @staticmethod
-        |    def analyze(self):
-        |        return AnalyzeResult(
+        |    def analyze(initial_count, input_table):
+        |        buffer = ""
+        |        if initial_count.value is not None:
+        |            assert(not initial_count.is_table)
+        |            assert(initial_count.data_type == IntegerType())
+        |            count = initial_count.value
+        |            buffer = json.dumps({"initial_count": count})
+        |        return AnalyzeResultWithBuffer(
         |            schema=StructType()
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
@@ -539,9 +555,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |            with_single_partition=True,
         |            order_by=[
         |                OrderingColumn("input"),
-        |                OrderingColumn("partition_col")])
+        |                OrderingColumn("partition_col")],
+        |            buffer=buffer)
         |
-        |    def eval(self, row: Row):
+        |    def eval(self, initial_count, row):
         |        self._count += 1
         |        self._last = row["input"]
         |        self._sum += row["input"]
@@ -690,6 +707,48 @@ object IntegratedUDFTestUtils extends SQLHelper {
         "without a corresponding partitioning table requirement"
   }
 
+  object TestPythonUDTFForwardStateFromAnalyze extends TestUDTF {
+    val name: String = "TestPythonUDTFForwardStateFromAnalyze"
+    val pythonScript: String =
+      s"""
+         |from dataclasses import dataclass
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import StringType, StructType
+         |
+         |@dataclass
+         |class AnalyzeResultWithBuffer(AnalyzeResult):
+         |    buffer: str = ""
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(argument):
+         |        assert(argument.data_type == StringType())
+         |        return AnalyzeResultWithBuffer(
+         |            schema=StructType()
+         |                .add("result", StringType()),
+         |            buffer=argument.value)
+         |
+         |    def eval(self, argument):
+         |        pass
+         |
+         |    def terminate(self):
+         |        yield self._analyze_result.buffer,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF whose 'analyze' method sets state and reads it later"
+  }
+
   /**
    * A Scalar Pandas UDF that takes one column, casts into string, executes the
    * Python native function, and casts back to the type of input column.
@@ -705,7 +764,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestScalarPandasUDF(name: String) extends TestUDF {
+  case class TestScalarPandasUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -723,11 +784,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
@@ -826,7 +890,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema("col").dataType)
    * }}}
    */
-  class TestInternalScalaUDF(name: String) extends SparkUserDefinedFunction(
+  class TestInternalScalaUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends SparkUserDefinedFunction(
     (input: Any) => if (input == null) {
       null
     } else {
@@ -839,9 +905,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     override def apply(exprs: Column*): Column = {
       assert(exprs.length == 1, "Defined UDF only has one column")
       val expr = exprs.head.expr
-      assert(expr.resolved, "column should be resolved to use the same type " +
-        "as input. Try df(name) or df.col(name)")
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), expr.dataType))
+      val rt = returnType.getOrElse {
+        assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+        expr.dataType
+      }
+      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
     }
 
     override def withName(name: String): TestInternalScalaUDF = {
@@ -851,8 +920,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     }
   }
 
-  case class TestScalaUDF(name: String) extends TestUDF {
-    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name)
+  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name, returnType)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 

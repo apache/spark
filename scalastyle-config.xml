@@ -251,11 +251,18 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
+  <!-- As of SPARK-45338 JavaConversions should be replaced with CollectionConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
-    scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+      scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
+  <!-- As of SPARK-45338 JavaConverters should be replaced with CollectionConverters -->
+  <check customId="javaconverters" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">JavaConverters</parameter></parameters>
+    <customMessage>Instead of importing implicits in scala.collection.JavaConverters._, import
+      scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
