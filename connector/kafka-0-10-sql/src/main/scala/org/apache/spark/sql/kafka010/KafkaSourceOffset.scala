@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
 private[kafka010]
 case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
 
-  override val json = JsonUtils.partitionOffsets(partitionToOffsets)
+  override val json = JsonUtils.partitionOffsets(partitionToOffsets.filter(_._2 > 0))
 }
 
 private[kafka010]
