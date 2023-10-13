@@ -35,10 +35,9 @@ import java.nio.file.StandardOpenOption;
 public final class NioBufferedFileInputStream extends InputStream {
 
   private static final Cleaner cleaner = Cleaner.create();
+  private static final int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private final Cleaner.Cleanable cleanable;
-
-  private static final int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private final ByteBuffer byteBuffer;
 
