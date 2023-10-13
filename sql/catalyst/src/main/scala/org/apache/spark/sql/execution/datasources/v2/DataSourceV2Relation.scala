@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
@@ -142,6 +143,15 @@ case class DataSourceV2ScanRelation(
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
   }
+
+  override def doCanonicalize(): DataSourceV2ScanRelation =
+    this.copy(
+      output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))),
+      ordering = ordering.map(_.map(QueryPlan.normalizeExpressions(_, output))),
+      relation = relation.canonicalized.asInstanceOf[DataSourceV2Relation]
+      )
 }
 
 /**

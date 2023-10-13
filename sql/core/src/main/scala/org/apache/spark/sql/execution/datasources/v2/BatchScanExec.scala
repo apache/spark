@@ -54,11 +54,11 @@ case class BatchScanExec(
         this.proxyForPushedBroadcastVar == other.proxyForPushedBroadcastVar &&
         this.spjParams == other.spjParams
       if (commonEquality) {
-        (this, other) match {
+        (this.scan, other.scan) match {
           case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
             sr1.equalToIgnoreRuntimeFilters(sr2)
 
-          case (sr1, sr2) => sr1.batch == sr2.batch
+          case _ => this.batch == other.batch
         }
       } else {
         false
@@ -68,7 +68,7 @@ case class BatchScanExec(
   }
 
   override def hashCode(): Int = {
-    val batchHashCode = batch match {
+    val batchHashCode = scan match {
       case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
 
       case _ => batch.hashCode()
@@ -258,6 +258,7 @@ case class BatchScanExec(
 
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
+      proxyForPushedBroadcastVar = proxyForPushedBroadcastVar.map(_.map(_.canonicalized)),
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import java.util
+import java.util.Objects
 
 import scala.collection.mutable
 
@@ -103,10 +104,16 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     val batchScanToStreamingCol = new util.IdentityHashMap[BatchScanExec, Seq[Int]]()
     val transformedPlanPart1 = plan transformDown {
       case BroadcastHashJoinExtractorForBCPush(bhj) =>
-        val (buildPlan, streamedPlan, streamedKeys, buildKeys) = bhj.buildSide match {
-          case BuildLeft => (bhj.left, bhj.right, bhj.rightKeys, bhj.leftKeys)
+        val (buildPlan, streamedPlan, streamedKeys, buildKeys, canonicalizedStreamKeys,
+        canonicalizedJoinKeys) =
+          bhj.buildSide match {
+          case BuildLeft => (bhj.left, bhj.right, bhj.rightKeys, bhj.leftKeys,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys)
 
-          case BuildRight => (bhj.right, bhj.left, bhj.leftKeys, bhj.rightKeys)
+          case BuildRight => (bhj.right, bhj.left, bhj.leftKeys, bhj.rightKeys,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].leftKeys,
+            bhj.canonicalized.asInstanceOf[BroadcastHashJoinExec].rightKeys)
         }
         var pushingAnyFilter = false
         val temp = BroadcastHashJoinUtil.canPushBroadcastedKeysAsFilter(conf, streamedKeys,
@@ -116,7 +123,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
         val logicalNode = BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan)
         buildLegPlanToOriginalBatchScans.put(logicalNode, BroadcastHashJoinUtil
             .getAllBatchScansForSparkPlan(buildPlan))
-        val canonicalizedStreamKeys = streamedKeys.map(_.canonicalized)
+
         groupingOnBasisOfBatchScanExec.foreach {
           case (bsExec, list) =>
             val keysToPush = list.filter {
@@ -141,11 +148,11 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
                       }
                       val joiningKeysDataOpt = mappings.get(logicalNode)
                       val joiningKeysData = joiningKeysDataOpt.
-                        fold(Seq(JoiningKeyData(canonicalizedStreamKeys(joinIndex), buildKeys
-                        (joinIndex).canonicalized, streamingColLeafIndex, joiningColDataType,
-                          joinIndex)))(
-                          _ :+ JoiningKeyData(canonicalizedStreamKeys(joinIndex), buildKeys
-                          (joinIndex).canonicalized,
+                        fold(Seq(JoiningKeyData(canonicalizedStreamKeys(joinIndex),
+                          canonicalizedJoinKeys(joinIndex), streamingColLeafIndex,
+                          joiningColDataType, joinIndex)))(
+                          _ :+ JoiningKeyData(canonicalizedStreamKeys(joinIndex),
+                            canonicalizedJoinKeys(joinIndex),
                             streamingColLeafIndex, joiningColDataType, joinIndex))
                       mappings += (logicalNode -> joiningKeysData)
                       mappings
@@ -172,7 +179,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
             containsKey(bs)) {
           val newBatchScan = bs.copy(proxyForPushedBroadcastVar = Option(buildLeg.toSeq.sortBy(
               _._1.hashCode()).map {
-                case (sp, joinData) => ProxyBroadcastVarAndStageIdentifier(sp, joinData.
+                case (sp, joinData) => new ProxyBroadcastVarAndStageIdentifier(sp, joinData.
                   sortBy(_.joinKeyIndexInJoiningKeys))
               }.toSeq), runtimeFilters = Seq.empty)
 
@@ -186,7 +193,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           newBatchScan
         } else {
           bs.copy(proxyForPushedBroadcastVar = Option(buildLeg.toSeq.sortBy(_._1.hashCode()).map {
-            case (lp, streamSideJoinKeysForBuildLeg) => ProxyBroadcastVarAndStageIdentifier(
+            case (lp, streamSideJoinKeysForBuildLeg) => new ProxyBroadcastVarAndStageIdentifier(
                 lp, streamSideJoinKeysForBuildLeg.sortBy(_.joinKeyIndexInJoiningKeys))
           }.toSeq))
         }
@@ -224,8 +231,9 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           })
         })
         val newProxies = currentProxy.zip(buildProxyiesData).map {
-          case (proxy, buildLegPrxoxies) => proxy.copy(
-              buildLegProxyBroadcastVarAndStageIdentifiers = buildLegPrxoxies)
+          case (proxy, buildLegPrxoxies) =>
+            new ProxyBroadcastVarAndStageIdentifier(proxy.buildLegPlan,
+            proxy.joiningKeysData, buildLegPrxoxies)
         }
         val newBs = bs.copy(proxyForPushedBroadcastVar = Option(newProxies))
         bs.logicalLink.foreach(newBs.setLogicalLink)
@@ -286,15 +294,33 @@ object BroadcastHashJoinExtractorForBCPush {
 // are identical, but during BroadcastFilterPushDown, the build legs may get pushed broadcastvar
 // and they may be different. so for correct equality considerations while var push down to
 // the stream legs, we need to store the build leg's proxy identifier too.
-case class ProxyBroadcastVarAndStageIdentifier(
-    buildLegPlan: LogicalPlan,
-    joiningKeysData: Seq[JoiningKeyData],
-    buildLegProxyBroadcastVarAndStageIdentifiers: Seq[ProxyBroadcastVarAndStageIdentifier] =
-    Seq.empty
+class ProxyBroadcastVarAndStageIdentifier(
+    val buildLegPlan: LogicalPlan,
+    val joiningKeysData: Seq[JoiningKeyData],
+    val buildLegProxyBroadcastVarAndStageIdentifiers: Seq[ProxyBroadcastVarAndStageIdentifier] =
+    Seq.empty[ProxyBroadcastVarAndStageIdentifier]
 ) {
   override def toString(): String = s"ProxyBroadcastVar..: buildlegPlan=not" +
     s" printing:${joiningKeysData.mkString(",")}: proxy identifiers for buildleg" +
     s"=${buildLegProxyBroadcastVarAndStageIdentifiers.mkString(",")}"
+
+  lazy val canonicalized: ProxyBroadcastVarAndStageIdentifier =
+   new ProxyBroadcastVarAndStageIdentifier(buildLegPlan.canonicalized, this.joiningKeysData,
+      buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
+
+  override def equals(that: Any): Boolean =
+    that match {
+      case prxy: ProxyBroadcastVarAndStageIdentifier =>
+        prxy.buildLegPlan.canonicalized == this.buildLegPlan.canonicalized &&
+        prxy.joiningKeysData == this.joiningKeysData &&
+        this.buildLegProxyBroadcastVarAndStageIdentifiers ==
+          prxy.buildLegProxyBroadcastVarAndStageIdentifiers
+      case _ => false
+    }
+
+  override def hashCode(): Int =
+    Objects.hashCode(this.buildLegPlan.canonicalized, this.joiningKeysData,
+      this.buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
 }
 
 case class JoiningKeyData(

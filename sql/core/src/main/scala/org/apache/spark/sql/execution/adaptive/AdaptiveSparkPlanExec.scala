@@ -786,10 +786,12 @@ case class AdaptiveSparkPlanExec(
       }
 
     case bhj: BroadcastHashJoinExec if bhj.bcVarPushNode == SELF_PUSH =>
-      val (buildPlan, streamPlan, buildKeys, _) = bhj.buildSide match {
-        case BuildRight => (bhj.right, bhj.left, bhj.rightKeys, bhj.leftKeys)
+      val (buildPlan, streamPlan, buildKeysCanonicalized, _) = bhj.buildSide match {
+        case BuildRight => (bhj.right, bhj.left, bhj.canonicalized.
+          asInstanceOf[BroadcastHashJoinExec].rightKeys, bhj.leftKeys)
 
-        case BuildLeft => (bhj.left, bhj.right, bhj.leftKeys, bhj.rightKeys)
+        case BuildLeft => (bhj.left, bhj.right, bhj.canonicalized.
+          asInstanceOf[BroadcastHashJoinExec].leftKeys, bhj.rightKeys)
       }
       val buildSideStageResult = createQueryStages(buildPlan, stageIdToBuildsideJoinKeys,
         orphanBSCollect)
@@ -810,7 +812,7 @@ case class AdaptiveSparkPlanExec(
       }
       buildLPOpt.foreach {
         case (stgId, (buildLp, buildProxies)) => stageIdToBuildsideJoinKeys += stgId -> (buildLp,
-          buildProxies, buildKeys.map(_.canonicalized))
+          buildProxies, buildKeysCanonicalized)
       }
       if (buildSideStageResult.allChildStagesMaterialized) {
         // we have to handle the case like of reuse of exchange, where build stage
@@ -818,14 +820,15 @@ case class AdaptiveSparkPlanExec(
         // the build stage is already materialized. so we have to push variable here itself
         val pushDownData = buildLPOpt.fold(Seq.empty[BroadcastVarPushDownData]) {
           case (_, buildLp) =>
-            BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeys, streamPlan,
-              buildLp)
+            BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeysCanonicalized,
+              streamPlan, buildLp)
         }
 
         if (pushDownData.nonEmpty) {
           val hashedRelation = buildSideStageResult.newPlan.asInstanceOf[BroadcastQueryStageExec].
             broadcast.relationFuture.get().asInstanceOf[Broadcast[HashedRelation]]
-          BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation, buildKeys, pushDownData)
+          BroadcastHashJoinUtil.pushBroadcastVar(hashedRelation, buildKeysCanonicalized,
+            pushDownData)
         }
       }
       val results = Seq(buildSideStageResult, streamsideStageResult)

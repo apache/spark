@@ -119,7 +119,7 @@ object BroadcastHashJoinUtil {
         forall(isBatchScanReady)
 
   def getPushdownDataForBatchScansUsingJoinKeys(
-      buildKeys: Seq[Expression],
+      canonicalizedBuildKeys: Seq[Expression],
       streamPlan: SparkPlan,
       buildPlanAndProxies: (LogicalPlan, Seq[ProxyBroadcastVarAndStageIdentifier]))
   : Seq[BroadcastVarPushDownData] = {
@@ -137,8 +137,8 @@ object BroadcastHashJoinUtil {
                       .buildLegProxyBroadcastVarAndStageIdentifiers.size &&
                           buildLegProxies.forall(proxy.buildLegProxyBroadcastVarAndStageIdentifiers
                               .contains)))
-            => proxy.joiningKeysData.filter(jkd => buildKeys.exists(_.canonicalized ==
-                   jkd.buildSideJoinKeyAtJoin.canonicalized))
+            => proxy.joiningKeysData.filter(jkd => canonicalizedBuildKeys.exists(_ ==
+                   jkd.buildSideJoinKeyAtJoin))
         }.flatten
         jkdsOfInterest.map(jkd => BroadcastVarPushDownData(jkd.streamsideLeafJoinAttribIndex,
           bs, jkd.joiningColDataType, jkd.joinKeyIndexInJoiningKeys))
