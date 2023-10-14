@@ -500,6 +500,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "sqlState" : "42000",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(nan AS INT)\""
   },

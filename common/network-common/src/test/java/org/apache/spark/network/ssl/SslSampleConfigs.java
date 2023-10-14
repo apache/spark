@@ -21,6 +21,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.Key;
@@ -41,9 +43,6 @@ import org.apache.spark.network.util.ConfigProvider;
 import org.apache.spark.network.util.MapConfigProvider;
 
 
-/**
- *
- */
 public class SslSampleConfigs {
 
   public static final String keyStorePath = getAbsolutePath("/keystore");
@@ -217,9 +216,18 @@ public class SslSampleConfigs {
   private static void saveKeyStore(
     KeyStore ks, File keyStore, String password)
     throws GeneralSecurityException, IOException {
-    FileOutputStream out = new FileOutputStream(keyStore);
+    // Write the file atomically to ensure tests don't read a partial write
+    File tempFile = File.createTempFile("temp-key-store", "jks");
+    FileOutputStream out = new FileOutputStream(tempFile);
     try {
       ks.store(out, password.toCharArray());
+      out.close();
+      Files.move(
+        tempFile.toPath(),
+        keyStore.toPath(),
+        StandardCopyOption.REPLACE_EXISTING,
+        StandardCopyOption.ATOMIC_MOVE
+      );
     } finally {
       out.close();
     }
