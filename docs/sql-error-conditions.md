@@ -1376,7 +1376,7 @@ It is not allowed to use an aggregate function in the argument of another aggreg
 
 ### NON_FOLDABLE_ARGUMENT
 
-[SQLSTATE: 22024](sql-error-conditions-sqlstates.html#class-22-data-exception)
+[SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The function `<funcName>` requires the parameter `<paramName>` to be a foldable expression of the type `<paramType>`, but the actual argument is a non-foldable.
 
@@ -1611,61 +1611,61 @@ Rule `<rule>` in batch `<batch>` generated an invalid plan: `<reason>`
 
 ### PROTOBUF_DEPENDENCY_NOT_FOUND
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Could not find dependency: `<dependencyName>`.
 
 ### PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Error reading Protobuf descriptor file at path: `<filePath>`.
 
 ### PROTOBUF_FIELD_MISSING
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Searching for `<field>` in Protobuf schema at `<protobufSchema>` gave `<matchSize>` matches. Candidates: `<matches>`.
 
 ### PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Found `<field>` in Protobuf schema but there is no match in the SQL schema.
 
 ### PROTOBUF_FIELD_TYPE_MISMATCH
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Type mismatch encountered for field: `<field>`.
 
 ### PROTOBUF_MESSAGE_NOT_FOUND
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Unable to locate Message `<messageName>` in Descriptor.
 
 ### PROTOBUF_TYPE_NOT_SUPPORT
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Protobuf type not yet supported: `<protobufType>`.
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Found recursive reference in Protobuf schema, which can not be processed by Spark by default: `<fieldDescriptor>`. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed.
 
 ### RECURSIVE_VIEW
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0H](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Recursive view `<viewIdent>` detected (cycle: `<newPath>`).
 
 ### REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 References to DEFAULT column values are not allowed within the PARTITION clause.
 
@@ -1722,9 +1722,10 @@ Not found an id for the rule name "`<ruleName>`". Please modify RuleIdCollection
 
 ### SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The correlated scalar subquery '`<sqlExpr>`' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get.
+The correlated scalar subquery '`<sqlExpr>`' is neither present in GROUP BY, nor in an aggregate function.
+Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get.
 
 ### SCALAR_SUBQUERY_TOO_MANY_ROWS
 
@@ -1762,31 +1763,35 @@ The second argument of `<functionName>` function needs to be an integer.
 
 ### SEED_EXPRESSION_IS_UNFOLDABLE
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The seed expression `<seedExpr>` of the expression `<exprWithSeed>` must be foldable.
 
 ### SORT_BY_WITHOUT_BUCKETING
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 sortBy must be used together with bucketBy.
 
 ### SPECIFY_BUCKETING_IS_NOT_ALLOWED
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime.
+A CREATE TABLE without explicit column list cannot specify bucketing information.
+Please use the form with explicit column list and specify bucketing information.
+Alternatively, allow bucketing information to be inferred by omitting the clause.
 
 ### SPECIFY_PARTITION_IS_NOT_ALLOWED
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-It is not allowed to specify partition columns when the table schema is not defined. When the table schema is not provided, schema and partition columns will be inferred.
+A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.
+Please use the form with explicit column list and specify PARTITIONED BY.
+Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause.
 
 ### SQL_CONF_NOT_FOUND
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0I](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The SQL config `<sqlConf>` cannot be found. Please verify that the config exists.
 
@@ -1798,19 +1803,19 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
-SQLSTATE: none assigned
+[SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Static partition column `<staticName>` is also specified in the column list.
 
 ### STREAM_FAILED
 
-SQLSTATE: none assigned
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
 
 ### SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT
 
-SQLSTATE: none assigned
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = `<limit>`, offset = `<offset>`.
 
@@ -1831,7 +1836,7 @@ To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
 ### TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON
 
-SQLSTATE: none assigned
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed to analyze the Python user defined table function: `<msg>`
 
@@ -1849,13 +1854,15 @@ Failed to evaluate the table function `<functionName>` because its table metadat
 
 ### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
 
-SQLSTATE: none assigned
+[SQLSTATE: 54023](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
-There are too many table arguments for table-valued function. It allows one table argument, but got: `<num>`. If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
+There are too many table arguments for table-valued function.
+It allows one table argument, but got: `<num>`.
+If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
 
 ### TASK_WRITE_FAILED
 
-SQLSTATE: none assigned
+SQLSTATE: 58030
 
 Task failed while writing rows to `<path>`.
 
@@ -1880,9 +1887,11 @@ Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
-SQLSTATE: none assigned
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected `<aliasesSize>` aliases, but got `<aliasesNames>`. Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
+The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.
+Expected `<aliasesSize>` aliases, but got `<aliasesNames>`.
+Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 
@@ -1892,9 +1901,15 @@ Unable to acquire `<requestedBytes>` bytes of memory, got `<receivedBytes>`.
 
 ### UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Unable to convert SQL type `<toType>` to Protobuf type `<protobufType>`.
+
+### UNABLE_TO_FETCH_HIVE_TABLES
+
+SQLSTATE: 58030
+
+Unable to fetch tables of Hive database: `<dbName>`.
 
 ### UNABLE_TO_INFER_SCHEMA
 
@@ -1928,7 +1943,7 @@ Cannot invoke function `<functionName>` because it contains positional argument(
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Attempting to treat `<descriptorName>` as a Message, but it was `<containingType>`.
 
@@ -1970,9 +1985,12 @@ Unrecognized SQL type - name: `<typeName>`, id: `<jdbcType>`.
 
 ### UNRESOLVABLE_TABLE_VALUED_FUNCTION
 
-SQLSTATE: none assigned
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Could not resolve `<name>` to a table-valued function. Please make sure that `<name>` is defined as a table-valued function and that all required parameters are provided correctly. If `<name>` is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation.
+Could not resolve `<name>` to a table-valued function.
+Please make sure that `<name>` is defined as a table-valued function and that all required parameters are provided correctly.
+If `<name>` is not defined, please create the table-valued function before using it.
+For more information about defining table-valued functions, please refer to the Apache Spark documentation.
 
 ### UNRESOLVED_ALL_IN_GROUP_BY
 
@@ -2024,13 +2042,13 @@ Cannot resolve variable `<variableName>` on search path `<searchPath>`.
 
 ### UNSET_NONEXISTENT_PROPERTIES
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0J](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Attempted to unset non-existent properties [`<properties>`] in table `<table>`.
 
 ### [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add-file-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Don't support add file.
 
@@ -2044,13 +2062,14 @@ Unsupported arrow type `<typeName>`.
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-The char/varchar type can't be used in the table schema. If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
+The char/varchar type can't be used in the table schema.
+If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Unsupported data source type for direct query on files: `<dataSourceType>`
 
@@ -2062,13 +2081,13 @@ Unsupported data type `<typeName>`.
 
 ### UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 DEFAULT column values is not supported.
 
@@ -2084,15 +2103,16 @@ For more details see [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported
 
 ### UNSUPPORTED_EXPRESSION_GENERATED_COLUMN
 
-SQLSTATE: none assigned
+[SQLSTATE: 42621](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot create generated column `<fieldName>` with generation expression `<expressionStr>` because `<reason>`.
 
 ### UNSUPPORTED_EXPR_FOR_OPERATOR
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
+A query operator contains one or more unsupported expressions.
+Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.
 Invalid expressions: [`<invalidExprSqls>`]
 
 ### UNSUPPORTED_EXPR_FOR_WINDOW
@@ -2111,7 +2131,7 @@ For more details see [UNSUPPORTED_FEATURE](sql-error-conditions-unsupported-feat
 
 ### [UNSUPPORTED_GENERATOR](sql-error-conditions-unsupported-generator-error-class.html)
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The generator is not supported:
 
@@ -2119,13 +2139,13 @@ For more details see [UNSUPPORTED_GENERATOR](sql-error-conditions-unsupported-ge
 
 ### UNSUPPORTED_GROUPING_EXPRESSION
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup.
 
 ### [UNSUPPORTED_INSERT](sql-error-conditions-unsupported-insert-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Can't insert into the target.
 
@@ -2133,7 +2153,7 @@ For more details see [UNSUPPORTED_INSERT](sql-error-conditions-unsupported-inser
 
 ### [UNSUPPORTED_MERGE_CONDITION](sql-error-conditions-unsupported-merge-condition-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 MERGE operation contains unsupported `<condName>` condition.
 
@@ -2141,7 +2161,7 @@ For more details see [UNSUPPORTED_MERGE_CONDITION](sql-error-conditions-unsuppor
 
 ### [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-overwrite-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 42902](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Can't overwrite the target that is also being read from.
 
@@ -2149,7 +2169,7 @@ For more details see [UNSUPPORTED_OVERWRITE](sql-error-conditions-unsupported-ov
 
 ### [UNSUPPORTED_SAVE_MODE](sql-error-conditions-unsupported-save-mode-error-class.html)
 
-SQLSTATE: none assigned
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The save mode `<saveMode>` is not supported for:
 
@@ -2222,7 +2242,7 @@ Choose a different name, drop or replace the existing object, or add the IF NOT 
 
 ### VIEW_EXCEED_MAX_NESTED_DEPTH
 
-SQLSTATE: none assigned
+[SQLSTATE: 54K00](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
 
 The depth of view `<viewName>` exceeds the maximum view resolution depth (`<maxNestedDepth>`).
 Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of "spark.sql.view.maxNestedViewDepth".
@@ -2237,19 +2257,19 @@ To tolerate the error on drop use DROP VIEW IF EXISTS.
 
 ### WINDOW_FUNCTION_AND_FRAME_MISMATCH
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<funcName>` function can only be evaluated in an ordered row-based window frame with a single offset: `<windowExpr>`.
 
 ### WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Window function `<funcName>` requires an OVER clause.
 
 ### WRITE_STREAM_NOT_ALLOWED
 
-SQLSTATE: none assigned
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `writeStream` can be called only on streaming Dataset/DataFrame.
 
