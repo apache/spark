@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+SQLSTATE: 56K00
 
 Generic Spark Connect error.
 
