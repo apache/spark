@@ -400,7 +400,7 @@ private[sql] object ArrowConverters extends Logging {
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
-        batchesInDriver.toIterator,
+        batchesInDriver.iterator,
         schema,
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,

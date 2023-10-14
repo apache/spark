@@ -1847,9 +1847,9 @@ private[spark] class DAGScheduler(
       case Success =>
         // An earlier attempt of a stage (which is zombie) may still have running tasks. If these
         // tasks complete, they still count and we can mark the corresponding partitions as
-        // finished. Here we notify the task scheduler to skip running tasks for the same partition,
-        // to save resource.
-        if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
+        // finished if the stage is determinate. Here we notify the task scheduler to skip running
+        // tasks for the same partition to save resource.
+        if (!stage.isIndeterminate && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
         }
 

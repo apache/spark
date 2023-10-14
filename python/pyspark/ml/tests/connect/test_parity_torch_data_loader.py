@@ -16,8 +16,8 @@
 #
 
 import unittest
-from pyspark.sql import SparkSession
 
+from pyspark.sql import SparkSession
 from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUnitTests
 
 have_torch = True

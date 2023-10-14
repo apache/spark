@@ -2391,6 +2391,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
   import ExistsThrowsExceptionFileSystem._
 
+  override def getScheme(): String = "existsthrowsexception"
+
   override def getUri: URI = {
     URI.create(s"$scheme:///")
   }

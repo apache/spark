@@ -186,7 +186,7 @@ object Connect {
           |""".stripMargin)
       .version("3.5.0")
       .intConf
-      .createWithDefault(2048)
+      .createWithDefault(1024)
 
   val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
     buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")

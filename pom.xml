@@ -115,7 +115,7 @@
     <java.version>17</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.9.4</maven.version>
+    <maven.version>3.9.5</maven.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.5</asm.version>
@@ -137,7 +137,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.4.1</kafka.version>
+    <kafka.version>3.6.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
@@ -188,11 +188,11 @@
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
-    <snappy.version>1.1.10.4</snappy.version>
+    <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.24.0</commons-compress.version>
-    <commons-io.version>2.13.0</commons-io.version>
+    <commons-io.version>2.14.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -233,7 +233,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.8.1</kubernetes-client.version>
+    <kubernetes-client.version>6.9.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -311,6 +311,7 @@
       --add-opens=java.base/java.util=ALL-UNNAMED
       --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
       --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+      --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED
       --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
@@ -2970,9 +2971,6 @@
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
               <arg>-Wconf:cat=other-nullary-override:wv</arg>
-              <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
-              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
-              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite:wv</arg>
               <!--
                 SPARK-33775 Suppress compilation warnings that contain the following contents.
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.

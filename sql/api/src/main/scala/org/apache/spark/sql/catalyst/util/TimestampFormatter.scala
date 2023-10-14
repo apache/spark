@@ -167,8 +167,9 @@ class Iso8601TimestampFormatter(
 
   override def parseOptional(s: String): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicros(parsed))
       } else {
         None
@@ -196,8 +197,9 @@ class Iso8601TimestampFormatter(
 
   override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
     try {
-      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
-      if (parsed != null) {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
         Some(extractMicrosNTZ(s, parsed, allowTimeZone))
       } else {
         None

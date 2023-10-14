@@ -81,6 +81,8 @@ case class CommandResultExec(
     unsafeRows
   }
 
+  override def executeToIterator(): Iterator[InternalRow] = unsafeRows.iterator
+
   override def executeTake(limit: Int): Array[InternalRow] = {
     val taken = unsafeRows.take(limit)
     longMetric("numOutputRows").add(taken.size)

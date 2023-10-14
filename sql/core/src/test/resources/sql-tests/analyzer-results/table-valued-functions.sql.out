@@ -332,6 +332,7 @@ select * from explode(array(1, 2)) t(c1, c2)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "2",
     "funcName" : "`explode`",
@@ -455,6 +456,7 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`inline`",
@@ -611,6 +613,7 @@ select * from posexplode(array(1, 2)) t(x)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`posexplode`",
@@ -780,6 +783,7 @@ select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "1",
     "funcName" : "`json_tuple`",
@@ -873,6 +877,7 @@ select * from stack(2, 1, 2, 3) t(a, b, c)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+  "sqlState" : "42826",
   "messageParameters" : {
     "aliasesNum" : "3",
     "funcName" : "`stack`",

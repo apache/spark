@@ -1645,4 +1645,79 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       .xml(getTestResourcePath(resDir + "fias_house.xml"))
     assert(df.collect().length === 37)
   }
+
+  test("SPARK-45488: root-level value tag for attributes-only object") {
+    val schema = buildSchema(field("_attr"), field("_VALUE"))
+    val results = Seq(
+      // user specified schema
+      spark.read
+        .schema(schema)
+        .xml(getTestResourcePath(resDir + "root-level-value.xml")).collect(),
+      // schema inference
+      spark.read
+        .xml(getTestResourcePath(resDir + "root-level-value.xml")).collect())
+    results.foreach { result =>
+      assert(result.length === 3)
+      assert(result(0).getAs[String]("_VALUE") == "value1")
+      assert(result(1).getAs[String]("_attr") == "attr1"
+        && result(1).getAs[String]("_VALUE") == "value2")
+      // comments aren't included in valueTag
+      assert(result(2).getAs[String]("_VALUE") == "\n        value3\n        ")
+    }
+  }
+
+  test("SPARK-45488: root-level value tag for not attributes-only object") {
+    val ATTRIBUTE_NAME = "_attr"
+    val TAG_NAME = "tag"
+    val VALUETAG_NAME = "_VALUE"
+    val schema = buildSchema(
+      field(ATTRIBUTE_NAME),
+      field(TAG_NAME, LongType),
+      field(VALUETAG_NAME))
+    val dfs = Seq(
+      // user specified schema
+      spark.read
+        .schema(schema)
+        .xml(getTestResourcePath(resDir + "root-level-value-none.xml")),
+      // schema inference
+      spark.read
+        .xml(getTestResourcePath(resDir + "root-level-value-none.xml"))
+    )
+    dfs.foreach { df =>
+      val result = df.collect()
+      assert(result.length === 5)
+      assert(result(0).get(0) == null && result(0).get(1) == null)
+      assert(
+        result(1).getAs[String](ATTRIBUTE_NAME) == "attr1"
+          && result(1).getAs[Any](TAG_NAME) == null
+      )
+      assert(
+        result(2).getAs[Long](TAG_NAME) == 5L
+          && result(2).getAs[Any](ATTRIBUTE_NAME) == null
+      )
+      assert(
+        result(3).getAs[Long](TAG_NAME) == 6L
+          && result(3).getAs[Any](ATTRIBUTE_NAME) == null
+      )
+      assert(
+        result(4).getAs[String](ATTRIBUTE_NAME) == "8"
+          && result(4).getAs[Any](TAG_NAME) == null
+      )
+    }
+  }
+
+  test("SPARK-45488: root-level value tag for attributes-only object - from xml") {
+    val xmlData = """<ROW attr="attr1">123456</ROW>"""
+    val df = Seq((1, xmlData)).toDF("number", "payload")
+    val xmlSchema = schema_of_xml(xmlData)
+    val schema = buildSchema(
+      field("_VALUE", LongType),
+      field("_attr"))
+    val expectedSchema = df.schema.add("decoded", schema)
+    val result = df.withColumn("decoded",
+      from_xml(df.col("payload"), xmlSchema, Map[String, String]().asJava))
+    assert(expectedSchema == result.schema)
+    assert(result.select("decoded._VALUE").head().getLong(0) === 123456L)
+    assert(result.select("decoded._attr").head().getString(0) === "attr1")
+  }
 }
