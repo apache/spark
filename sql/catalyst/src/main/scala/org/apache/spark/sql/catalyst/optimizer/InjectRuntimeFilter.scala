@@ -311,7 +311,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
-        (leftKeys, rightKeys).zipped.foreach((l, r) => {
+        leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
           // 2. There is already a runtime filter (Bloom filter or IN subquery) on the key
