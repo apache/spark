@@ -21,6 +21,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -1734,6 +1735,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private int numIOExceptions = 0;
     private boolean indexMetaUpdateFailed;
 
+    private static final Cleaner CLEANER = Cleaner.create();
+
     AppShufflePartitionInfo(
         AppAttemptShuffleMergeId appAttemptShuffleMergeId,
         int reduceId,
@@ -1756,6 +1759,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.dataFilePos = 0;
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
+      CLEANER.register(this, new ResourceCleaner(dataFile, dataChannel, indexFile,
+              metaFile, appAttemptShuffleMergeId, reduceId));
     }
 
     public long getDataFilePos() {
@@ -1904,11 +1909,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           reduceId);
     }
 
-    @Override
-    protected void finalize() throws Throwable {
-      closeAllFilesAndDeleteIfNeeded(false);
-    }
-
     @VisibleForTesting
     MergeShuffleFile getIndexFile() {
       return indexFile;
@@ -1932,6 +1932,39 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     @VisibleForTesting
     int getNumIOExceptions() {
       return numIOExceptions;
+    }
+
+    private record ResourceCleaner(
+        File dataFile,
+        FileChannel dataChannel,
+        MergeShuffleFile indexFile,
+        MergeShuffleFile metaFile,
+        AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+        int reduceId) implements Runnable {
+
+      @Override
+      public void run() {
+        try {
+          if (dataChannel.isOpen()) {
+            dataChannel.close();
+          }
+        } catch (IOException ioe) {
+          logger.warn("Error closing data channel for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
+        try {
+          metaFile.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing meta file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
+        try {
+          indexFile.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing index file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+        }
+      }
     }
   }
 
