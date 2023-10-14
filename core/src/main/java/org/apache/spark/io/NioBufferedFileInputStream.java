@@ -34,7 +34,7 @@ import java.nio.file.StandardOpenOption;
  */
 public final class NioBufferedFileInputStream extends InputStream {
 
-  private static final Cleaner cleaner = Cleaner.create();
+  private static final Cleaner CLEANER = Cleaner.create();
   private static final int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private final Cleaner.Cleanable cleanable;
@@ -47,7 +47,7 @@ public final class NioBufferedFileInputStream extends InputStream {
     byteBuffer = ByteBuffer.allocateDirect(bufferSizeInBytes);
     fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     byteBuffer.flip();
-    this.cleanable = cleaner.register(this, new ResourceCleaner(fileChannel, byteBuffer));
+    this.cleanable = CLEANER.register(this, new ResourceCleaner(fileChannel, byteBuffer));
   }
 
   public NioBufferedFileInputStream(File file) throws IOException {
