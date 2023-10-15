@@ -482,7 +482,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     appShuffleInfo.shuffles.forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
       .forEach((shuffleMergeId, partitionInfo) -> {
         synchronized (partitionInfo) {
-          partitionInfo.closeAllFilesAndDeleteIfNeeded(false);
+          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partitionInfo.dataFile,
+              partitionInfo.getDataChannel(), partitionInfo.getIndexFile(), partitionInfo.getMetaFile(),
+              partitionInfo.getAppAttemptShuffleMergeId(), partitionInfo.getReduceId());
         }
       }));
     if (cleanupLocalDirs) {
@@ -538,7 +540,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     partitions
       .forEach((partitionId, partitionInfo) -> {
         synchronized (partitionInfo) {
-          partitionInfo.closeAllFilesAndDeleteIfNeeded(true);
+          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partitionInfo.dataFile,
+              partitionInfo.getDataChannel(), partitionInfo.getIndexFile(), partitionInfo.getMetaFile(),
+              partitionInfo.getAppAttemptShuffleMergeId(), partitionInfo.getReduceId());
         }
       });
   }
@@ -823,7 +827,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId, partition.reduceId,
                 ioe.getMessage());
           } finally {
-            partition.closeAllFilesAndDeleteIfNeeded(false);
+            AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partition.dataFile,
+                partition.getDataChannel(), partition.getIndexFile(), partition.getMetaFile(),
+                partition.getAppAttemptShuffleMergeId(), partition.getReduceId());
           }
         }
       }
@@ -1760,7 +1766,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
       CLEANER.register(this, new ResourceCleaner(dataFile, dataChannel, indexFile,
-              metaFile, appAttemptShuffleMergeId, reduceId));
+        metaFile, appAttemptShuffleMergeId, reduceId));
     }
 
     public long getDataFilePos() {
@@ -1869,7 +1875,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       metaFile.getChannel().truncate(metaFile.getPos());
     }
 
-    void closeAllFilesAndDeleteIfNeeded(boolean delete) {
+    static void closeAllFilesAndDeleteIfNeeded(
+        boolean delete,
+        File dataFile,
+        FileChannel dataChannel,
+        MergeShuffleFile indexFile,
+        MergeShuffleFile metaFile,
+        AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+        int reduceId) {
       try {
         if (dataChannel.isOpen()) {
           dataChannel.close();
@@ -1934,6 +1947,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return numIOExceptions;
     }
 
+    AppAttemptShuffleMergeId getAppAttemptShuffleMergeId() {
+      return appAttemptShuffleMergeId;
+    }
+
+    int getReduceId() {
+      return reduceId;
+    }
+
     private record ResourceCleaner(
         File dataFile,
         FileChannel dataChannel,
@@ -1944,26 +1965,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
       @Override
       public void run() {
-        try {
-          if (dataChannel.isOpen()) {
-            dataChannel.close();
-          }
-        } catch (IOException ioe) {
-          logger.warn("Error closing data channel for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
-        }
-        try {
-          metaFile.close();
-        } catch (IOException ioe) {
-          logger.warn("Error closing meta file for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
-        }
-        try {
-          indexFile.close();
-        } catch (IOException ioe) {
-          logger.warn("Error closing index file for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
-        }
+        AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, dataFile, dataChannel,
+            indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
       }
     }
   }
