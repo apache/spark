@@ -540,7 +540,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     partitions
       .forEach((partitionId, partitionInfo) -> {
         synchronized (partitionInfo) {
-          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partitionInfo.dataFile,
+          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(true, partitionInfo.dataFile,
               partitionInfo.getDataChannel(), partitionInfo.getIndexFile(), partitionInfo.getMetaFile(),
               partitionInfo.getAppAttemptShuffleMergeId(), partitionInfo.getReduceId());
         }
