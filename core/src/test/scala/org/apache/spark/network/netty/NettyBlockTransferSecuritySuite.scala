@@ -38,11 +38,20 @@ import org.apache.spark.internal.config.Network
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.util.ThreadUtils
 
 class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
+
+  private def sparkConfWithSsl(): SparkConf = {
+    val conf = new SparkConf()
+    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
+    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    conf
+  }
+
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")
@@ -52,8 +61,30 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     }
   }
 
+  test("ssl with cloned config") {
+    val conf = sparkConfWithSsl()
+      .set("spark.app.id", "app-id")
+    val conf1 = conf.clone
+
+    testConnection(conf, conf1) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
   test("security on same password") {
     val conf = new SparkConf()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
+  test("security on same password with ssl") {
+    val conf = sparkConfWithSsl()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
@@ -75,8 +106,32 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     }
   }
 
+  test("security on mismatch password over ssl") {
+    val conf0 = sparkConfWithSsl()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set(AUTH_SECRET, "bad")
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => t.getMessage should include("Mismatched response")
+    }
+  }
+
   test("security mismatch auth off on server") {
     val conf0 = new SparkConf()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set(NETWORK_AUTH_ENABLED, false)
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => // any funny error may occur, sever will interpret SASL token as RPC
+    }
+  }
+
+  test("security mismatch auth off on server over ssl") {
+    val conf0 = sparkConfWithSsl()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
@@ -99,8 +154,33 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     }
   }
 
+  test("security mismatch auth off on client over ssl") {
+    val conf0 = sparkConfWithSsl()
+      .set(NETWORK_AUTH_ENABLED, false)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set(NETWORK_AUTH_ENABLED, true)
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => t.getMessage should include("Expected SaslMessage")
+    }
+  }
+
   test("security with aes encryption") {
     val conf = new SparkConf()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET, "good")
+      .set("spark.app.id", "app-id")
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
+  test("security with aes encryption over ssl") {
+    val conf = sparkConfWithSsl()
       .set(NETWORK_AUTH_ENABLED, true)
       .set(AUTH_SECRET, "good")
       .set("spark.app.id", "app-id")
