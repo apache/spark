@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import com.google.common.cache.CacheBuilder
@@ -389,7 +389,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      availableResources: Array[Map[String, Buffer[String]]],
+      availableResources: Array[ExecutorResourcesAmounts],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
@@ -406,36 +406,31 @@ private[spark] class TaskSchedulerImpl(
         .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
-        taskResAssignmentsOpt.foreach { taskResAssignments =>
+        taskResAssignmentsOpt.foreach { case (taskResAssignments, taskResAmounts) =>
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments,
+                taskResAmounts)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
-              val (locality, resources) = if (task != null) {
+              val (locality, resourcesAmounts) = if (task != null) {
                 tasks(i) += task
                 addRunningTask(task.taskId, execId, taskSet)
-                (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
+                (taskSet.taskInfos(task.taskId).taskLocality, task.resourcesAmounts)
               } else {
                 assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
                 val barrierTask = taskSet.barrierPendingLaunchTasks(index)
                 barrierTask.assignedOfferIndex = i
                 barrierTask.assignedCores = taskCpus
-                (barrierTask.taskLocality, barrierTask.assignedResources)
+                (barrierTask.taskLocality, barrierTask.assignedResourcesAmount)
               }
 
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
               availableCpus(i) -= taskCpus
               assert(availableCpus(i) >= 0)
-              resources.foreach { case (rName, rInfo) =>
-                // Remove the first n elements from availableResources addresses, these removed
-                // addresses are the same as that we allocated in taskResourceAssignments since it's
-                // synchronized. We don't remove the exact addresses allocated because the current
-                // approach produces the identical result with less time complexity.
-                availableResources(i)(rName).remove(0, rInfo.addresses.size)
-              }
+              availableResources(i).acquire(resourcesAmounts)
             }
           } catch {
             case e: TaskNotSerializableException =>
@@ -468,33 +463,15 @@ private[spark] class TaskSchedulerImpl(
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
       availCpus: Int,
-      availWorkerResources: Map[String, Buffer[String]]
-      ): Option[Map[String, ResourceInformation]] = {
+      availWorkerResources: ExecutorResourcesAmounts): Option[(Map[String, ResourceInformation],
+    Map[String, Map[String, Double]])] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
     // check if the ResourceProfile has cpus first since that is common case
     if (availCpus < taskCpus) return None
     // only look at the resource other than cpus
-    val tsResources = taskSetProf.getCustomTaskResources()
-    if (tsResources.isEmpty) return Some(Map.empty)
-    val localTaskReqAssign = HashMap[String, ResourceInformation]()
-    // we go through all resources here so that we can make sure they match and also get what the
-    // assignments are for the next task
-    for ((rName, taskReqs) <- tsResources) {
-      val taskAmount = taskSetProf.getSchedulerTaskResourceAmount(rName)
-      availWorkerResources.get(rName) match {
-        case Some(workerRes) =>
-          if (workerRes.size >= taskAmount) {
-            localTaskReqAssign.put(rName, new ResourceInformation(rName,
-              workerRes.take(taskAmount).toArray))
-          } else {
-            return None
-          }
-        case None => return None
-      }
-    }
-    Some(localTaskReqAssign.toMap)
+    availWorkerResources.assignResources(taskSetProf)
   }
 
   private def minTaskLocality(
@@ -576,13 +553,8 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val rpId = taskSet.taskSet.resourceProfileId
-        val availableResourcesAmount = availableResources.map { resourceMap =>
-          // available addresses already takes into account if there are fractional
-          // task resource requests
-          resourceMap.map { case (name, addresses) => (name, addresses.length) }
-        }
-        calculateAvailableSlots(this, conf, rpId, resourceProfileIds, availableCpus,
-          availableResourcesAmount)
+        val resAmounts = availableResources.map(_.resourceAmount)
+        calculateAvailableSlots(this, conf, rpId, resourceProfileIds, availableCpus, resAmounts)
       } else {
         -1
       }
@@ -715,9 +687,8 @@ private[spark] class TaskSchedulerImpl(
               barrierPendingLaunchTasks.foreach { task =>
                 // revert all assigned resources
                 availableCpus(task.assignedOfferIndex) += task.assignedCores
-                task.assignedResources.foreach { case (rName, rInfo) =>
-                  availableResources(task.assignedOfferIndex)(rName).appendAll(rInfo.addresses)
-                }
+                availableResources(task.assignedOfferIndex).release(
+                  task.assignedResourcesAmount)
                 // re-add the task to the schedule pending list
                 taskSet.addPendingTask(task.index)
               }
@@ -735,7 +706,8 @@ private[spark] class TaskSchedulerImpl(
                 false,
                 task.assignedCores,
                 task.assignedResources,
-                launchTime)
+                launchTime,
+                task.assignedResourcesAmount)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
               tasks(task.assignedOfferIndex) += taskDesc
               shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc

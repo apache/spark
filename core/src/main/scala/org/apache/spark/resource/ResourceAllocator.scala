@@ -20,6 +20,42 @@ package org.apache.spark.resource
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
+
+private[spark] object ResourceAmountUtils {
+  /**
+   * Using "double" to do the resource calculation may encounter a problem of precision loss. Eg
+   *
+   * scala> val taskAmount = 1.0 / 9
+   * taskAmount: Double = 0.1111111111111111
+   *
+   * scala> var total = 1.0
+   * total: Double = 1.0
+   *
+   * scala> for (i <- 1 to 9 ) {
+   * |   if (total >= taskAmount) {
+   * |           total -= taskAmount
+   * |           println(s"assign $taskAmount for task $i, total left: $total")
+   * |   } else {
+   * |           println(s"ERROR Can't assign $taskAmount for task $i, total left: $total")
+   * |   }
+   * | }
+   * assign 0.1111111111111111 for task 1, total left: 0.8888888888888888
+   * assign 0.1111111111111111 for task 2, total left: 0.7777777777777777
+   * assign 0.1111111111111111 for task 3, total left: 0.6666666666666665
+   * assign 0.1111111111111111 for task 4, total left: 0.5555555555555554
+   * assign 0.1111111111111111 for task 5, total left: 0.44444444444444425
+   * assign 0.1111111111111111 for task 6, total left: 0.33333333333333315
+   * assign 0.1111111111111111 for task 7, total left: 0.22222222222222204
+   * assign 0.1111111111111111 for task 8, total left: 0.11111111111111094
+   * ERROR Can't assign 0.1111111111111111 for task 9, total left: 0.11111111111111094
+   *
+   * So we multiply RESOURCE_TOTAL_AMOUNT to convert the double to long to avoid this limitation.
+   * Double can display up to 16 decimal places, so we set the factor to
+   * 10, 000, 000, 000, 000, 000L.
+   */
+  final val RESOURCE_TOTAL_AMOUNT: Long = 10000000000000000L
+}
 
 /**
  * Trait used to help executor/worker allocate resources.
@@ -29,59 +65,45 @@ private[spark] trait ResourceAllocator {
 
   protected def resourceName: String
   protected def resourceAddresses: Seq[String]
-  protected def slotsPerAddress: Int
 
   /**
-   * Map from an address to its availability, a value > 0 means the address is available,
-   * while value of 0 means the address is fully assigned.
-   *
-   * For task resources ([[org.apache.spark.scheduler.ExecutorResourceInfo]]), this value
-   * can be a multiple, such that each address can be allocated up to [[slotsPerAddress]]
-   * times.
+   * Map from an address to its availability default to RESOURCE_TOTAL_AMOUNT, a value > 0 means
+   * the address is available, while value of 0 means the address is fully assigned.
    */
-  private lazy val addressAvailabilityMap = {
-    mutable.HashMap(resourceAddresses.map(_ -> slotsPerAddress): _*)
+  protected lazy val addressAvailabilityMap = {
+    mutable.HashMap(resourceAddresses.map(address => address -> RESOURCE_TOTAL_AMOUNT): _*)
   }
 
   /**
-   * Sequence of currently available resource addresses.
-   *
-   * With [[slotsPerAddress]] greater than 1, [[availableAddrs]] can contain duplicate addresses
-   * e.g. with [[slotsPerAddress]] == 2, availableAddrs for addresses 0 and 1 can look like
-   * Seq("0", "0", "1"), where address 0 has two assignments available, and 1 has one.
+   * Sequence of currently available resource addresses which is not fully assigned.
    */
   def availableAddrs: Seq[String] = addressAvailabilityMap
-    .flatMap { case (addr, available) =>
-      (0 until available).map(_ => addr)
-    }.toSeq.sorted
+      .filter(addresses => addresses._2 > 0).keys.toSeq.sorted
 
   /**
    * Sequence of currently assigned resource addresses.
-   *
-   * With [[slotsPerAddress]] greater than 1, [[assignedAddrs]] can contain duplicate addresses
-   * e.g. with [[slotsPerAddress]] == 2, assignedAddrs for addresses 0 and 1 can look like
-   * Seq("0", "1", "1"), where address 0 was assigned once, and 1 was assigned twice.
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
-    .flatMap { case (addr, available) =>
-      (0 until slotsPerAddress - available).map(_ => addr)
-    }.toSeq.sorted
+    .filter(addresses => addresses._2 < RESOURCE_TOTAL_AMOUNT).keys.toSeq.sorted
 
   /**
    * Acquire a sequence of resource addresses (to a launched task), these addresses must be
    * available. When the task finishes, it will return the acquired resource addresses.
    * Throw an Exception if an address is not available or doesn't exist.
    */
-  def acquire(addrs: Seq[String]): Unit = {
-    addrs.foreach { address =>
-      val isAvailable = addressAvailabilityMap.getOrElse(address,
+  def acquire(addressesAmounts: Map[String, Double]): Unit = {
+    addressesAmounts.foreach { case (address, amount) =>
+      val prevAmount = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
-        s"address $address doesn't exist."))
-      if (isAvailable > 0) {
-        addressAvailabilityMap(address) -= 1
+          s"address $address doesn't exist."))
+
+      val internalLeft = addressAvailabilityMap(address) - (amount * RESOURCE_TOTAL_AMOUNT).toLong
+
+      if (internalLeft < 0) {
+        throw new SparkException(s"Try to acquire $resourceName address $address " +
+          s"amount: $amount, but only ${prevAmount.toDouble / RESOURCE_TOTAL_AMOUNT} left.")
       } else {
-        throw new SparkException("Try to acquire an address that is not available. " +
-          s"$resourceName address $address is not available.")
+        addressAvailabilityMap(address) = internalLeft
       }
     }
   }
@@ -91,16 +113,21 @@ private[spark] trait ResourceAllocator {
    * addresses are released when a task has finished.
    * Throw an Exception if an address is not assigned or doesn't exist.
    */
-  def release(addrs: Seq[String]): Unit = {
-    addrs.foreach { address =>
-      val isAvailable = addressAvailabilityMap.getOrElse(address,
+  def release (addressesAmounts: Map[String, Double]): Unit = {
+    addressesAmounts.foreach { case (address, amount) =>
+      val prevAmount = addressAvailabilityMap.getOrElse(address,
         throw new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
           s"address $address doesn't exist."))
-      if (isAvailable < slotsPerAddress) {
-        addressAvailabilityMap(address) += 1
+
+      val internalTotal = prevAmount + (amount * RESOURCE_TOTAL_AMOUNT).toLong
+
+      if (internalTotal > RESOURCE_TOTAL_AMOUNT) {
+        throw new SparkException(s"Try to release $resourceName address $address " +
+          s"amount: $amount. But the total amount: " +
+          s"${internalTotal.toDouble / RESOURCE_TOTAL_AMOUNT} " +
+          s"after release should be <= 1")
       } else {
-        throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +
-          s"address $address is not assigned.")
+        addressAvailabilityMap(address) = internalTotal
       }
     }
   }

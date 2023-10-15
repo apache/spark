@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import scala.collection.mutable
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -28,12 +29,24 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def slotsPerAddress: Int = 1
 
+  /**
+   * Acquire the resources.
+   * @param amount How many addresses are requesting.
+   * @return ResourceInformation
+   */
   def acquire(amount: Int): ResourceInformation = {
-    val allocated = availableAddrs.take(amount)
-    acquire(allocated)
-    new ResourceInformation(resourceName, allocated.toArray)
+
+    var count = amount
+    val allocated: mutable.HashMap[String, Double] = mutable.HashMap.empty
+    for (address <- availableAddrs if count > 0) {
+      if (addressAvailabilityMap(address) == RESOURCE_TOTAL_AMOUNT) {
+        allocated(address) = 1.0
+        count -= 1
+      }
+    }
+    acquire(allocated.toMap)
+    new ResourceInformation(resourceName, allocated.keys.toArray)
   }
 }
 
@@ -162,7 +175,7 @@ private[spark] class WorkerInfo(
    */
   def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
     expected.foreach { case (rName, rInfo) =>
-      resources(rName).acquire(rInfo.addresses)
+      resources(rName).acquire(rInfo.addresses.map(addr => addr -> 1.0).toMap)
     }
   }
 
@@ -172,7 +185,7 @@ private[spark] class WorkerInfo(
    */
   private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
     allocated.foreach { case (rName, rInfo) =>
-      resources(rName).release(rInfo.addresses)
+      resources(rName).release(rInfo.addresses.map(addrs => addrs -> 1.0).toMap)
     }
   }
 }

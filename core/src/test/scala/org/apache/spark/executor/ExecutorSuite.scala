@@ -643,6 +643,7 @@ class ExecutorSuite extends SparkFunSuite
       properties = new Properties,
       cpus = 1,
       resources = immutable.Map[String, ResourceInformation](),
+      Map.empty,
       serializedTask)
   }
 

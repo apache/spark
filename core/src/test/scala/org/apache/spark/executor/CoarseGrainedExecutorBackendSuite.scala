@@ -307,11 +307,12 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000L
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
         1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-        Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+        Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), resourcesAmounts, data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
       backend.rpcEnv.setupEndpoint("Executor 1", backend)
       backend.executor = mock[Executor](CALLS_REAL_METHODS)
@@ -345,6 +346,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         assert(backend.taskResources.size == 1)
         val resources = backend.taskResources.get(taskId)
         assert(resources(GPU).addresses sameElements Array("0", "1"))
+        assert(executor.runningTasks.get(taskId).taskDescription.resourcesAmounts
+          === resourcesAmounts)
       }
 
       // Update the status of a running task shall not affect `taskResources` map.
@@ -352,6 +355,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(backend.taskResources.size == 1)
       val resources = backend.taskResources.get(taskId)
       assert(resources(GPU).addresses sameElements Array("0", "1"))
+      assert(executor.runningTasks.get(taskId).taskDescription.resourcesAmounts
+        === resourcesAmounts)
 
       // Update the status of a finished task shall remove the entry from `taskResources` map.
       backend.statusUpdate(taskId, TaskState.FINISHED, data)
@@ -423,11 +428,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
+
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
           1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), resourcesAmounts, data)
       }
       assert(taskDescriptions.length == numTasks)
 
@@ -512,11 +519,13 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val tasksKilled = new TrieMap[Long, Boolean]()
       val tasksExecuted = new TrieMap[Long, Boolean]()
 
+      val resourcesAmounts = Map(GPU -> Map("0" -> 0.15, "1" -> 0.76))
+
       // Fake tasks with different taskIds.
       val taskDescriptions = (1 to numTasks).map {
         taskId => new TaskDescription(taskId, 2, "1", s"TASK $taskId", 19,
           1, JobArtifactSet.emptyJobArtifactSet, new Properties, 1,
-          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), resourcesAmounts, data)
       }
       assert(taskDescriptions.length == numTasks)
 

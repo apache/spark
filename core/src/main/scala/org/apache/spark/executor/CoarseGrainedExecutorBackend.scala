@@ -273,7 +273,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
     val resources = taskResources.getOrDefault(taskId, Map.empty[String, ResourceInformation])
     val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
-    val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
+    val resourcesAmounts = executor.runningTasks.get(taskId).taskDescription.resourcesAmounts
+    val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources, resourcesAmounts)
     if (TaskState.isFinished(state)) {
       taskResources.remove(taskId)
     }

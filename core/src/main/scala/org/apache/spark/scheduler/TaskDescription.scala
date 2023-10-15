@@ -58,6 +58,7 @@ private[spark] class TaskDescription(
     val properties: Properties,
     val cpus: Int,
     val resources: immutable.Map[String, ResourceInformation],
+    val resourcesAmounts: immutable.Map[String, immutable.Map[String, Double]],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -82,6 +83,20 @@ private[spark] object TaskDescription {
       dataOut.writeUTF(value.name)
       dataOut.writeInt(value.addresses.size)
       value.addresses.foreach(dataOut.writeUTF(_))
+    }
+  }
+
+
+  private def serializeResourcesAmounts(map: immutable.Map[String, immutable.Map[String, Double]],
+      dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(map.size)
+    map.foreach { case (rName, addressAmountMap) =>
+      dataOut.writeUTF(rName)
+      dataOut.writeInt(addressAmountMap.size)
+      addressAmountMap.foreach { case (address, amount) =>
+        dataOut.writeUTF(address)
+        dataOut.writeDouble(amount)
+      }
     }
   }
 
@@ -114,6 +129,9 @@ private[spark] object TaskDescription {
 
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
+
+    // Write resourcesAmounts.
+    serializeResourcesAmounts(taskDescription.resourcesAmounts, dataOut)
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
     Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
@@ -192,6 +210,28 @@ private[spark] object TaskDescription {
     map.toMap
   }
 
+  private def deserializeResourcesAmounts(dataIn: DataInputStream):
+      immutable.Map[String, immutable.Map[String, Double]] = {
+    val map = new HashMap[String, immutable.Map[String, Double]]()
+    val mapSize = dataIn.readInt()
+    var i = 0
+    while (i < mapSize) {
+      val resType = dataIn.readUTF()
+      val addressAmountMap = new HashMap[String, Double]()
+      val addressAmountSize = dataIn.readInt()
+      var j = 0
+      while (j < addressAmountSize) {
+        val address = dataIn.readUTF()
+        val amount = dataIn.readDouble()
+        addressAmountMap(address) = amount
+        j += 1
+      }
+      map.put(resType, addressAmountMap.toMap)
+      i += 1
+    }
+    map.toMap
+  }
+
   def decode(byteBuffer: ByteBuffer): TaskDescription = {
     val dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer))
     val taskId = dataIn.readLong()
@@ -221,10 +261,13 @@ private[spark] object TaskDescription {
     // Read resources.
     val resources = deserializeResources(dataIn)
 
+    // Read resources.
+    val resourcesAmounts = deserializeResourcesAmounts(dataIn)
+
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
-      properties, cpus, resources, serializedTask)
+      properties, cpus, resources, resourcesAmounts, serializedTask)
   }
 }

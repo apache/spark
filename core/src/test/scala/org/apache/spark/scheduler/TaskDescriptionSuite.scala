@@ -62,6 +62,8 @@ class TaskDescriptionSuite extends SparkFunSuite {
     val originalResources =
       Map(GPU -> new ResourceInformation(GPU, Array("1", "2", "3")))
 
+    val originalResourcesAmounts = Map(GPU -> Map("1" -> 0.2, "2" -> 0.5, "3" -> 0.1))
+
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
 
@@ -83,6 +85,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       originalProperties,
       cpus = 2,
       originalResources,
+      originalResourcesAmounts,
       taskBuffer
     )
 
@@ -100,6 +103,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
     assert(decodedTaskDescription.cpus.equals(originalTaskDescription.cpus))
     assert(equalResources(decodedTaskDescription.resources, originalTaskDescription.resources))
+    assert(decodedTaskDescription.resourcesAmounts === originalTaskDescription.resourcesAmounts)
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
 
     def equalResources(original: Map[String, ResourceInformation],
