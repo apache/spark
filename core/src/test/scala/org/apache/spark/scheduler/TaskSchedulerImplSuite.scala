@@ -2302,8 +2302,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     assert(taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1, resourceProfileId = profileId),
-      WorkerOffer("executor1", "host0", 1, resourceProfileId =
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+      WorkerOffer("executor1", "host0", 1,
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     )).flatten.size === 0)
     assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
     assert(!tsm.isZombie)
