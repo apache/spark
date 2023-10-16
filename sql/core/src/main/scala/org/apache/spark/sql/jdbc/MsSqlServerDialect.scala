@@ -128,6 +128,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
     case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case _ => None
   }
 
