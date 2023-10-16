@@ -104,7 +104,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file", e)
+            logWarning("Skipped missing file", e)
             Some(StructType(Nil))
           case e: FileNotFoundException if ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
