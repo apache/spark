@@ -482,9 +482,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     appShuffleInfo.shuffles.forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
       .forEach((shuffleMergeId, partitionInfo) -> {
         synchronized (partitionInfo) {
-          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partitionInfo.dataFile,
-              partitionInfo.getDataChannel(), partitionInfo.getIndexFile(), partitionInfo.getMetaFile(),
-              partitionInfo.getAppAttemptShuffleMergeId(), partitionInfo.getReduceId());
+          partitionInfo.cleanable.clean();
         }
       }));
     if (cleanupLocalDirs) {
@@ -540,9 +538,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     partitions
       .forEach((partitionId, partitionInfo) -> {
         synchronized (partitionInfo) {
-          AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(true, partitionInfo.dataFile,
-              partitionInfo.getDataChannel(), partitionInfo.getIndexFile(), partitionInfo.getMetaFile(),
-              partitionInfo.getAppAttemptShuffleMergeId(), partitionInfo.getReduceId());
+          partitionInfo.cleanable.clean();
+          partitionInfo.deleteAllFiles();
         }
       });
   }
@@ -827,9 +824,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId, partition.reduceId,
                 ioe.getMessage());
           } finally {
-            AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, partition.dataFile,
-                partition.getDataChannel(), partition.getIndexFile(), partition.getMetaFile(),
-                partition.getAppAttemptShuffleMergeId(), partition.getReduceId());
+            partition.cleanable.clean();
           }
         }
       }
@@ -1717,6 +1712,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   /** Metadata tracked for an actively merged shuffle partition */
   public static class AppShufflePartitionInfo {
+
+    private static final Cleaner CLEANER = Cleaner.create();
     private final AppAttemptShuffleMergeId appAttemptShuffleMergeId;
     private final int reduceId;
     private final File dataFile;
@@ -1727,6 +1724,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // The meta file for a particular merged shuffle contains all the map indices that belong to
     // every chunk. The entry per chunk is a serialized bitmap.
     private final MergeShuffleFile metaFile;
+    private final Cleaner.Cleanable cleanable;
     // Location offset of the last successfully merged block for this shuffle partition
     private long dataFilePos;
     // Track the map index whose block is being merged for this shuffle partition
@@ -1740,8 +1738,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private RoaringBitmap chunkTracker;
     private int numIOExceptions = 0;
     private boolean indexMetaUpdateFailed;
-
-    private static final Cleaner CLEANER = Cleaner.create();
 
     AppShufflePartitionInfo(
         AppAttemptShuffleMergeId appAttemptShuffleMergeId,
@@ -1765,7 +1761,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.dataFilePos = 0;
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
-      CLEANER.register(this, new ResourceCleaner(dataFile, dataChannel, indexFile,
+      this.cleanable = CLEANER.register(this, new ResourceCleaner(dataFile, dataChannel, indexFile,
         metaFile, appAttemptShuffleMergeId, reduceId));
     }
 
@@ -1875,9 +1871,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       metaFile.getChannel().truncate(metaFile.getPos());
     }
 
-    static void closeAllFilesAndDeleteIfNeeded(
-        boolean delete,
-        File dataFile,
+    private static void closeAllFiles(
         FileChannel dataChannel,
         MergeShuffleFile indexFile,
         MergeShuffleFile metaFile,
@@ -1887,29 +1881,41 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (dataChannel.isOpen()) {
           dataChannel.close();
         }
-        if (delete) {
-          dataFile.delete();
-        }
       } catch (IOException ioe) {
         logger.warn("Error closing data channel for {} reduceId {}",
             appAttemptShuffleMergeId, reduceId);
       }
       try {
         metaFile.close();
-        if (delete) {
-          metaFile.delete();
-        }
       } catch (IOException ioe) {
         logger.warn("Error closing meta file for {} reduceId {}",
             appAttemptShuffleMergeId, reduceId);
         }
       try {
         indexFile.close();
-        if (delete) {
-          indexFile.delete();
-        }
       } catch (IOException ioe) {
         logger.warn("Error closing index file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+      }
+    }
+
+    private void deleteAllFiles() {
+      try {
+        dataFile.delete();
+      } catch (Exception exception) {
+        logger.warn("Error deleting data file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+      }
+      try {
+        metaFile.delete();
+      } catch (IOException ioe) {
+        logger.warn("Error deleting meta file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+      }
+      try {
+        indexFile.delete();
+      } catch (IOException ioe) {
+        logger.warn("Error deleting index file for {} reduceId {}",
             appAttemptShuffleMergeId, reduceId);
       }
     }
@@ -1947,14 +1953,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return numIOExceptions;
     }
 
-    AppAttemptShuffleMergeId getAppAttemptShuffleMergeId() {
-      return appAttemptShuffleMergeId;
-    }
-
-    int getReduceId() {
-      return reduceId;
-    }
-
     private record ResourceCleaner(
         File dataFile,
         FileChannel dataChannel,
@@ -1965,7 +1963,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
       @Override
       public void run() {
-        AppShufflePartitionInfo.closeAllFilesAndDeleteIfNeeded(false, dataFile, dataChannel,
+        AppShufflePartitionInfo.closeAllFiles(dataChannel,
             indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
       }
     }
