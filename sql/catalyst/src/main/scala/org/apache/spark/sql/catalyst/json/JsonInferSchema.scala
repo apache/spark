@@ -92,8 +92,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             Some(inferField(parser))
           }
         } catch {
-          case e @ (_: RuntimeException | _: JsonProcessingException |
-                    _: MalformedInputException) =>
+          case e @ (_: JsonProcessingException | _: MalformedInputException) =>
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e: CharConversionException if options.encoding.isEmpty =>
             val msg =
@@ -107,7 +106,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             logWarning("Skipped missing file", e)
             Some(StructType(Nil))
           case e: FileNotFoundException if ignoreMissingFiles => throw e
-          case e: IOException if ignoreCorruptFiles =>
+          case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
         }
