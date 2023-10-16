@@ -132,7 +132,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         hasHitFilter: Boolean,
         hasHitSelectiveFilter: Boolean,
         currentPlan: LogicalPlan,
-        targetCreationSideExpr: Expression): Option[(Expression, LogicalPlan)] = p match {
+        targetKey: Expression): Option[(Expression, LogicalPlan)] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -144,14 +144,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             hasHitFilter,
             hasHitSelectiveFilter,
             currentPlan,
-            targetCreationSideExpr)
+            targetKey)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
         extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan,
-          targetCreationSideExpr)
+          targetKey)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
@@ -159,46 +159,46 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
           currentPlan,
-          targetCreationSideExpr)
+          targetKey)
       case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
-        if (left.output.exists(_.semanticEquals(filterCreationSideKey))) {
-          extract(left, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-            targetCreationSideExpr = targetCreationSideExpr).orElse {
+        // We assume other rules have already pushed predicates through join if possible.
+        // So the predicate references won't pass on anymore.
+        if (left.output.exists(_.semanticEquals(targetKey))) {
+          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = left, targetKey = targetKey).orElse {
             // We can also extract from the right side if the join keys are transitive.
-            lkeys.zip(rkeys).find(_._1.semanticEquals(targetCreationSideExpr)).map(_._2)
-              .flatMap { passedFilterCreationSideExp =>
+            lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+              .flatMap { newTargetKey =>
                 extract(right, AttributeSet.empty,
                   hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
-                  targetCreationSideExpr = passedFilterCreationSideExp)
+                  targetKey = newTargetKey)
               }
           }
-        } else if (right.output.exists(_.semanticEquals(filterCreationSideKey))) {
-          extract(right, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
-            targetCreationSideExpr = targetCreationSideExpr).orElse {
-            // We can also extract from the right side if the join keys are transitive.
-            rkeys.zip(lkeys).find(_._1.semanticEquals(targetCreationSideExpr)).map(_._2)
-              .flatMap { passedFilterCreationSideExp =>
+        } else if (right.output.exists(_.semanticEquals(targetKey))) {
+          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = right, targetKey = targetKey).orElse {
+            // We can also extract from the left side if the join keys are transitive.
+            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+              .flatMap { newTargetKey =>
                 extract(left, AttributeSet.empty,
                   hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
-                  targetCreationSideExpr = passedFilterCreationSideExp)
+                  targetKey = newTargetKey)
               }
           }
         } else {
           None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
-        Some((targetCreationSideExpr, currentPlan))
+        Some((targetKey, currentPlan))
       case _ => None
     }
 
     if (!plan.isStreaming) {
       extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
-        currentPlan = plan, targetCreationSideExpr = filterCreationSideExp)
+        currentPlan = plan, targetKey = filterCreationSideKey)
     } else {
       None
     }
