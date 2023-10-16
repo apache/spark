@@ -1879,19 +1879,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       } catch (Exception exception) {
         logger.warn("Error deleting data file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+          appAttemptShuffleMergeId, reduceId);
       }
       try {
         metaFile.delete();
       } catch (IOException ioe) {
         logger.warn("Error deleting meta file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+          appAttemptShuffleMergeId, reduceId);
       }
       try {
         indexFile.delete();
       } catch (IOException ioe) {
         logger.warn("Error deleting index file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+          appAttemptShuffleMergeId, reduceId);
       }
     }
 
@@ -1954,19 +1954,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         } catch (IOException ioe) {
           logger.warn("Error closing data channel for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
+            appAttemptShuffleMergeId, reduceId);
         }
         try {
           metaFile.close();
         } catch (IOException ioe) {
           logger.warn("Error closing meta file for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
-          }
+            appAttemptShuffleMergeId, reduceId);
+        }
         try {
           indexFile.close();
         } catch (IOException ioe) {
           logger.warn("Error closing index file for {} reduceId {}",
-              appAttemptShuffleMergeId, reduceId);
+            appAttemptShuffleMergeId, reduceId);
         }
       }
     }
