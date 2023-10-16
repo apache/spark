@@ -35,11 +35,10 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
   private def numShufflePartitions = spark.sessionState.conf.numShufflePartitions
 
   private def sameOperatorStateMetadata(
-                                         operatorMetadata1: OperatorStateMetadataV1,
-                                         operatorMetadata2: OperatorStateMetadataV1
-                                       ): Boolean = {
+      operatorMetadata1: OperatorStateMetadataV1,
+      operatorMetadata2: OperatorStateMetadataV1): Boolean = {
     operatorMetadata1.operatorInfo == operatorMetadata2.operatorInfo &&
-      operatorMetadata1.stateStoreInfo.deep == operatorMetadata2.stateStoreInfo.deep
+      operatorMetadata1.stateStoreInfo.sameElements(operatorMetadata2.stateStoreInfo)
   }
 
   test("Serialize and deserialize stateful operator metadata") {
