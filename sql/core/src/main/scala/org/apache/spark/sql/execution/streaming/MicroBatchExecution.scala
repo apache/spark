@@ -746,6 +746,7 @@ class MicroBatchExecution(
       StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
     reportTimeTaken("queryPlanning") {
+      val isFirstBatch = lastExecution == null
       lastExecution = new IncrementalExecution(
         sparkSessionToRunBatch,
         triggerLogicalPlan,
@@ -756,7 +757,8 @@ class MicroBatchExecution(
         currentBatchId,
         offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
         offsetSeqMetadata,
-        watermarkPropagator)
+        watermarkPropagator,
+        isFirstBatch)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 

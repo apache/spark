@@ -65,7 +65,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = {
+  def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -178,6 +178,15 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+
+  /** Metadata of this stateful operator and its states stores. */
+  def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo =
+      Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
 
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
@@ -741,6 +750,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
+  override def shortName: String = "sessionWindowStateStoreSaveExec"
+
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
@@ -826,6 +837,14 @@ case class SessionWindowStateStoreSaveExec(
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
+  }
+
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = Array(StateStoreMetadataV1(
+      StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
