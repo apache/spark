@@ -1871,34 +1871,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       metaFile.getChannel().truncate(metaFile.getPos());
     }
 
-    private static void closeAllFiles(
-        FileChannel dataChannel,
-        MergeShuffleFile indexFile,
-        MergeShuffleFile metaFile,
-        AppAttemptShuffleMergeId appAttemptShuffleMergeId,
-        int reduceId) {
-      try {
-        if (dataChannel.isOpen()) {
-          dataChannel.close();
-        }
-      } catch (IOException ioe) {
-        logger.warn("Error closing data channel for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
-      }
-      try {
-        metaFile.close();
-      } catch (IOException ioe) {
-        logger.warn("Error closing meta file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
-        }
-      try {
-        indexFile.close();
-      } catch (IOException ioe) {
-        logger.warn("Error closing index file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
-      }
-    }
-
     private void deleteAllFiles() {
       try {
         dataFile.delete();
@@ -1963,9 +1935,37 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
       @Override
       public void run() {
-        AppShufflePartitionInfo.closeAllFiles(dataChannel,
+        closeAllFiles(dataChannel,
             indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
       }
+
+      private void closeAllFiles(
+        FileChannel dataChannel,
+        MergeShuffleFile indexFile,
+        MergeShuffleFile metaFile,
+        AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+        int reduceId) {
+      try {
+        if (dataChannel.isOpen()) {
+          dataChannel.close();
+        }
+      } catch (IOException ioe) {
+        logger.warn("Error closing data channel for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+      }
+      try {
+        metaFile.close();
+      } catch (IOException ioe) {
+        logger.warn("Error closing meta file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+        }
+      try {
+        indexFile.close();
+      } catch (IOException ioe) {
+        logger.warn("Error closing index file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+      }
+    }
     }
   }
 
