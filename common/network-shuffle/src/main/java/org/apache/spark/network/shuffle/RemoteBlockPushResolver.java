@@ -95,8 +95,8 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
+  private static final Cleaner CLEANER = Cleaner.create();
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
-
   public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   public static final String SHUFFLE_META_DELIMITER = ":";
   public static final String MERGE_DIR_KEY = "mergeDir";
@@ -1712,8 +1712,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   /** Metadata tracked for an actively merged shuffle partition */
   public static class AppShufflePartitionInfo {
-
-    private static final Cleaner CLEANER = Cleaner.create();
     private final AppAttemptShuffleMergeId appAttemptShuffleMergeId;
     private final int reduceId;
     private final File dataFile;
@@ -1761,7 +1759,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.dataFilePos = 0;
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
-      this.cleanable = CLEANER.register(this, new ResourceCleaner(dataFile, dataChannel, indexFile,
+      this.cleanable = CLEANER.register(this, new ResourceCleaner(dataChannel, indexFile,
         metaFile, appAttemptShuffleMergeId, reduceId));
     }
 
@@ -1872,27 +1870,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     private void deleteAllFiles() {
-      try {
-        if (!dataFile.delete()) {
-          logger.warn("Error deleting data file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
-        }
-      } catch (Exception exception) {
-        logger.warn("Error deleting data file for {} reduceId {}",
+      if (!dataFile.delete()) {
+        logger.info("Error deleting data file for {} reduceId {}",
           appAttemptShuffleMergeId, reduceId);
       }
-      try {
-        metaFile.delete();
-      } catch (IOException ioe) {
-        logger.warn("Error deleting meta file for {} reduceId {}",
-          appAttemptShuffleMergeId, reduceId);
-      }
-      try {
-        indexFile.delete();
-      } catch (IOException ioe) {
-        logger.warn("Error deleting index file for {} reduceId {}",
-          appAttemptShuffleMergeId, reduceId);
-      }
+      metaFile.delete();
+      indexFile.delete();
     }
 
     @Override
@@ -1934,7 +1917,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     private record ResourceCleaner(
-        File dataFile,
         FileChannel dataChannel,
         MergeShuffleFile indexFile,
         MergeShuffleFile metaFile,
@@ -2150,7 +2132,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     }
 
-    void delete() throws IOException {
+    void delete() {
       try {
         if (null != file) {
           file.delete();
