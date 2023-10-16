@@ -2269,9 +2269,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
-  test("test") {
+  test("SPARK-45537: Fix the issue where the last task may get stuck in a multi-profile") {
     val taskCpus = 1
-    val taskGpus = 1
     val executorCpus = 1
 
     val taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
