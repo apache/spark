@@ -4455,6 +4455,25 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate predicate (in and exists) subqueries with correlated references in join " +
+        "predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled")
+      .internal()
+      .doc("When true, optimize uncorrelated IN subqueries in join predicates by rewriting them " +
+        s"to joins. This interacts with ${LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key} because it " +
+        "can rewrite IN predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
