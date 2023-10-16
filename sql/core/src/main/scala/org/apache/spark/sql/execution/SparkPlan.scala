@@ -577,7 +577,7 @@ trait LeafExecNode extends SparkPlan with LeafLike[SparkPlan] {
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
-    val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
+    val outputStr = s"${QueryPlan.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
       s"""
@@ -605,7 +605,7 @@ trait UnaryExecNode extends SparkPlan with UnaryLike[SparkPlan] {
 
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
-    val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
+    val inputStr = s"${QueryPlan.generateFieldString("Input", child.output)}"
 
     if (argumentString.nonEmpty) {
       s"""
@@ -626,8 +626,8 @@ trait BinaryExecNode extends SparkPlan with BinaryLike[SparkPlan] {
 
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
-    val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"
-    val rightOutputStr = s"${ExplainUtils.generateFieldString("Right output", right.output)}"
+    val leftOutputStr = s"${QueryPlan.generateFieldString("Left output", left.output)}"
+    val rightOutputStr = s"${QueryPlan.generateFieldString("Right output", right.output)}"
 
     if (argumentString.nonEmpty) {
       s"""

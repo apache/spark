@@ -3861,6 +3861,31 @@ object SQLConf {
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
     .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
+    .internal()
+    .doc("Maximum level of recursion that is allowed wile executing a recursive CTE definition." +
+      "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
+      "unlimited.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(100)
+
+  object CTERecursionCacheMode extends Enumeration {
+    val NONE, REPARTITION, PERSIST, LOCAL_CHECKPOINT, CHECKPOINT = Value
+  }
+
+  val CTE_RECURSION_CACHE_MODE = buildConf("spark.sql.cteRecursionCacheMode")
+    .internal()
+    .doc("The way that partial results of recursive iterations are cached. Caching the partial " +
+      "result of a recursive iteration is useful so as to calculate the result of the next " +
+      "iteration and to calculate the union of partial results (the final result of the " +
+      "recursion).")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(CTERecursionCacheMode.values.map(_.toString))
+    .createWithDefault(CTERecursionCacheMode.REPARTITION.toString)
+
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()
     .doc("If true, always inline the CTE relations for the queries in commands. This is the " +

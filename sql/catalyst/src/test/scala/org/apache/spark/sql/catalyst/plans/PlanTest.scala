@@ -142,6 +142,11 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         }.asInstanceOf[Seq[NamedExpression]]
         Project(projList, child)
       case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case w @ UnresolvedWith(_, cteRelations, _) =>
+        w.copy(cteRelations = cteRelations.map {
+          case (cteName, ctePlan) =>
+            cteName -> normalizePlan(normalizeExprIds(ctePlan)).asInstanceOf[SubqueryAlias]
+        })
     }
   }
 

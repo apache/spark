@@ -48,6 +48,7 @@ class PlanParserSuite extends AnalysisTest {
 
   private def cte(
       plan: LogicalPlan,
+      allowRecursion: Boolean,
       namedPlans: (String, (LogicalPlan, Seq[String]))*): UnresolvedWith = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
@@ -58,7 +59,7 @@ class PlanParserSuite extends AnalysisTest {
         }
         name -> SubqueryAlias(name, subquery)
     }
-    UnresolvedWith(plan, ctes)
+    UnresolvedWith(plan, ctes, allowRecursion)
   }
 
   test("single comment case one") {
@@ -273,13 +274,13 @@ class PlanParserSuite extends AnalysisTest {
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
-      cte(table("cte2").select(star()),
+      cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
@@ -1392,7 +1393,7 @@ class PlanParserSuite extends AnalysisTest {
         |WITH cte1 AS (SELECT * FROM testcat.db.tab)
         |SELECT * FROM cte1
       """.stripMargin,
-      cte(table("cte1").select(star()),
+      cte(table("cte1").select(star()), false,
         "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
@@ -1403,7 +1404,21 @@ class PlanParserSuite extends AnalysisTest {
   test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
-      cte(table("t").select(star()), "t" -> ((table("a").select($"c"), Seq("x")))))
+      cte(table("t").select(star()), false, "t" -> ((table("a").select($"c"), Seq("x")))))
+  }
+
+  test("Recursive CTE") {
+    assertEqual(
+      """WITH RECURSIVE r(level) AS (
+        |  SELECT level FROM t
+        |  UNION ALL
+        |  SELECT level + 1 FROM r WHERE level < 9
+        |)
+        |SELECT * FROM r""".stripMargin,
+      cte(table("r").select(star()), true,
+        "r" -> (
+          table("t").select('level).union(table("r").where('level < 9).select('level + 1)),
+          Seq("level"))))
   }
 
   test("statement containing terminal semicolons") {

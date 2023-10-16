@@ -748,6 +748,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ => // Analysis successful!
         }
     }
+    checkRecursion(plan)
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
@@ -863,6 +864,73 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def exprsToString(exprs: Seq[Expression]): String = {
     val result = exprs.map(_.toString).mkString("\n")
     if (Utils.isTesting) scrubOutIds(result) else result
+  }
+
+  /**
+   * Recursion according to SQL standard comes with several limitations due to the fact that only
+   * those operations are allowed where the new set of rows can be computed from the result of the
+   * previous iteration. This implies that a recursive reference can't be used in some kinds of
+   * joins and aggregations.
+   * A further constraint is that a recursive term can contain one recursive reference only.
+   *
+   * This rule checks that these restrictions are not violated.
+   */
+  private def checkRecursion(
+      plan: LogicalPlan,
+      references: mutable.Map[Long, (Int, Seq[DataType])] = mutable.Map.empty): Unit = {
+    plan match {
+      case UnionLoop(id, anchor, recursion, _) =>
+        checkRecursion(anchor, references)
+        checkRecursion(recursion, references += id -> (0, anchor.output.map(_.dataType)))
+        references -= id
+      case r @ UnionLoopRef(loopId, output, false) =>
+        if (!references.contains(loopId)) {
+          r.failAnalysis(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
+            messageParameters = Map.empty
+          )
+        }
+        val (count, dataType) = references(loopId)
+        if (count > 0) {
+          r.failAnalysis(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.NUMBER",
+            messageParameters = Map.empty
+          )
+        }
+        val originalDataType = r.output.map(_.dataType)
+        if (!originalDataType.zip(dataType).forall {
+          case (odt, dt) => DataType.equalsStructurally(odt, dt, true)
+        }) {
+          r.failAnalysis(
+            errorClass = "INVALID_RECURSIVE_REFERENCE.DATA_TYPE",
+            messageParameters = Map(
+              "fromDataType" -> originalDataType.map(toSQLType).mkString(", "),
+              "toDataType" -> dataType.map(toSQLType).mkString(", ")
+            )
+          )
+        }
+        references(loopId) = (count + 1, dataType)
+      case Join(left, right, Inner, _, _) =>
+        checkRecursion(left, references)
+        checkRecursion(right, references)
+      case Join(left, right, LeftOuter, _, _) =>
+        checkRecursion(left, references)
+        checkRecursion(right, mutable.Map.empty)
+      case Join(left, right, RightOuter, _, _) =>
+        checkRecursion(left, mutable.Map.empty)
+        checkRecursion(right, references)
+      case Join(left, right, LeftSemi, _, _) =>
+        checkRecursion(left, references)
+        checkRecursion(right, mutable.Map.empty)
+      case Join(left, right, LeftAnti, _, _) =>
+        checkRecursion(left, references)
+        checkRecursion(right, mutable.Map.empty)
+      case Join(left, right, _, _, _) =>
+        checkRecursion(left, mutable.Map.empty)
+        checkRecursion(right, mutable.Map.empty)
+      case Aggregate(_, _, child) => checkRecursion(child, mutable.Map.empty)
+      case o => o.children.foreach(checkRecursion(_, references))
+    }
   }
 
   /**

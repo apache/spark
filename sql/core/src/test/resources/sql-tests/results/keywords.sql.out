@@ -227,6 +227,7 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSIVE	false
 REDUCE	false
 REFERENCES	false
 REFRESH	false

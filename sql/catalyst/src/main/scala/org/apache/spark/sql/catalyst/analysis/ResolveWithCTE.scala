@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Distinct, LogicalPlan, SubqueryAlias, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -37,21 +37,88 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     }
   }
 
+  private def updateRecursiveAnchor(cteDef: CTERelationDef): CTERelationDef = {
+    cteDef.child match {
+      case SubqueryAlias(_, u: Union) =>
+        if (u.children.head.resolved) {
+          cteDef.copy(recursionAnchor = Some(u.children.head))
+        } else {
+          cteDef
+        }
+      case SubqueryAlias(_, d @ Distinct(u: Union)) =>
+        if (u.children.head.resolved) {
+          cteDef.copy(recursionAnchor = Some(d.copy(child = u.children.head)))
+        } else {
+          cteDef
+        }
+      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, u: Union)) =>
+        if (u.children.head.resolved) {
+          cteDef.copy(recursionAnchor = Some(a.copy(child = u.children.head)))
+        } else {
+          cteDef
+        }
+      case SubqueryAlias(_, a @ UnresolvedSubqueryColumnAliases(_, d @ Distinct(u: Union))) =>
+        if (u.children.head.resolved) {
+          cteDef.copy(recursionAnchor = Some(a.copy(child = d.copy(child = u.children.head))))
+        } else {
+          cteDef
+        }
+      case _ =>
+        cteDef.failAnalysis(
+          errorClass = "INVALID_RECURSIVE_CTE",
+          messageParameters = Map.empty)
+    }
+  }
+
   private def resolveWithCTE(
       plan: LogicalPlan,
       cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case w @ WithCTE(_, cteDefs) =>
-        cteDefs.foreach { cteDef =>
-          if (cteDef.resolved) {
-            cteDefMap.put(cteDef.id, cteDef)
+        val newCTEDefs = cteDefs.map { cteDef =>
+          // If a recursive CTE definition is not yet resolved then extract the anchor term to the
+          // definition, but if it is resolved then the extracted anchor term is no longer needed
+          // and can be removed.
+          val newCTEDef = if (cteDef.recursive) {
+            if (!cteDef.resolved) {
+              if (cteDef.recursionAnchor.isEmpty) {
+                updateRecursiveAnchor(cteDef)
+              } else {
+                cteDef
+              }
+            } else {
+              if (cteDef.recursionAnchor.nonEmpty) {
+                cteDef.copy(recursionAnchor = None)
+              } else {
+                cteDef
+              }
+            }
+          } else {
+            cteDef
           }
+
+          if (newCTEDef.resolved || newCTEDef.recursionAnchorResolved) {
+            cteDefMap.put(newCTEDef.id, newCTEDef)
+          }
+
+          newCTEDef
         }
-        w
+        w.copy(cteDefs = newCTEDefs)
 
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
-          CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output)
+          // Recursive references can be resolved from the anchor term.
+          if (ref.recursive) {
+            if (cteDef.recursionAnchorResolved) {
+              ref.copy(_resolved = true, output = cteDef.recursionAnchor.get.output)
+            } else {
+              ref
+            }
+          } else if (cteDef.resolved) {
+            ref.copy(_resolved = true, output = cteDef.output)
+          } else {
+            ref
+          }
         }.getOrElse {
           ref
         }

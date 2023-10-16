@@ -21,6 +21,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -87,7 +88,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
     val reuse_op_str = ExplainUtils.getOpId(child)
     s"""
        |$formattedNodeName [Reuses operator id: $reuse_op_str]
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${QueryPlan.generateFieldString("Output", output)}
        |""".stripMargin
   }
 }

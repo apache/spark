@@ -2015,6 +2015,33 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_RECURSIVE_CTE" : {
+    "message" : [
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+    ]
+  },
+  "INVALID_RECURSIVE_REFERENCE" : {
+    "message" : [
+      "Invalid recursive reference found."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The data type of recursive references cannot change during resolution. Originally it was <fromDataType> but after resolution is <toDataType>."
+        ]
+      },
+      "NUMBER" : {
+        "message" : [
+          "Recursive references cannot be used multiple times."
+        ]
+      },
+      "PLACE" : {
+        "message" : [
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins and in aggregates."
+        ]
+      }
+    }
+  },
   "INVALID_SCHEMA" : {
     "message" : [
       "The input schema <inputSchema> is not a valid schema string."
@@ -2716,6 +2743,16 @@
   "PROTOBUF_TYPE_NOT_SUPPORT" : {
     "message" : [
       "Protobuf type not yet supported: <protobufType>."
+    ]
+  },
+  "RECURSIVE_CTE_IN_LEGACY_MODE" : {
+    "message" : [
+      "Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY)."
+    ]
+  },
+  "RECURSIVE_CTE_WHEN_INLINING_IS_FORCED" : {
+    "message" : [
+      "Recursive definitions cannot be used when CTE inlining is forced."
     ]
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {

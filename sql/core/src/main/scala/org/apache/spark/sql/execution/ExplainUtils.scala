@@ -288,17 +288,6 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Generate detailed field string with different format based on type of input value
-   */
-  def generateFieldString(fieldName: String, values: Any): String = values match {
-    case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
-    case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
-    case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
-    case str: String => s"${fieldName}: ${str}"
-    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
-  }
-
-  /**
    * Given a input plan, returns an array of tuples comprising of :
    *  1. Hosting operator id.
    *  2. Hosting expression

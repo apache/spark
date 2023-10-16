@@ -182,7 +182,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.mkString("'", "', '", "'"), ctx)
     }
-    UnresolvedWith(plan, ctes.toSeq)
+    UnresolvedWith(plan, ctes.toSeq, ctx.RECURSIVE() != null)
   }
 
   /**

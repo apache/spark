@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical
+import org.apache.spark.sql.catalyst.plans.{physical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.{LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsMetadata
@@ -86,7 +86,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     }
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Output", output)}
+       |${QueryPlan.generateFieldString("Output", output)}
        |${metaDataStr.mkString("\n")}
        |""".stripMargin
   }

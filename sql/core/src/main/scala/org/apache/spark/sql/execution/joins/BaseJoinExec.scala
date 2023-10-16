@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{JoinType, QueryPlan}
 import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils}
 
 /**
@@ -42,16 +42,16 @@ trait BaseJoinExec extends BinaryExecNode {
     if (leftKeys.nonEmpty || rightKeys.nonEmpty) {
       s"""
          |$formattedNodeName
-         |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
-         |${ExplainUtils.generateFieldString("Right keys", rightKeys)}
-         |${ExplainUtils.generateFieldString("Join type", joinType.toString)}
-         |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+         |${QueryPlan.generateFieldString("Left keys", leftKeys)}
+         |${QueryPlan.generateFieldString("Right keys", rightKeys)}
+         |${QueryPlan.generateFieldString("Join type", joinType.toString)}
+         |${QueryPlan.generateFieldString("Join condition", joinCondStr)}
          |""".stripMargin
     } else {
       s"""
          |$formattedNodeName
-         |${ExplainUtils.generateFieldString("Join type", joinType.toString)}
-         |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+         |${QueryPlan.generateFieldString("Join type", joinType.toString)}
+         |${QueryPlan.generateFieldString("Join condition", joinCondStr)}
          |""".stripMargin
     }
   }

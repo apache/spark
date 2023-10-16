@@ -1162,6 +1162,20 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 
 `<value>` is an invalid property value, please use quotes, e.g. SET `<key>`=`<value>`
 
+### INVALID_RECURSIVE_CTE
+
+SQLSTATE: none assigned
+
+Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references.
+
+### [INVALID_RECURSIVE_REFERENCE](sql-error-conditions-invalid-recursive-reference-error-class.html)
+
+SQLSTATE: none assigned
+
+Invalid recursive reference found.
+
+For more details see [INVALID_RECURSIVE_REFERENCE](sql-error-conditions-invalid-recursive-reference-error-class.html)
+
 ### [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
 
 [SQLSTATE: 42K07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1650,6 +1664,18 @@ Unable to locate Message `<messageName>` in Descriptor.
 SQLSTATE: none assigned
 
 Protobuf type not yet supported: `<protobufType>`.
+
+### RECURSIVE_CTE_IN_LEGACY_MODE
+
+SQLSTATE: none assigned
+
+Recursive definitions cannot be used in legacy CTE precedence mode (spark.sql.legacy.ctePrecedencePolicy=LEGACY).
+
+### RECURSIVE_CTE_WHEN_INLINING_IS_FORCED
+
+SQLSTATE: none assigned
+
+Recursive definitions cannot be used when CTE inlining is forced.
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 

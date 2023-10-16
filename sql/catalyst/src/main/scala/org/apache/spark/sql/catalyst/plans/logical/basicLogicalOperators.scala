@@ -409,6 +409,61 @@ object Union {
   }
 }
 
+abstract class UnionBase extends LogicalPlan {
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
+
+  override def metadataOutput: Seq[Attribute] = Nil
+
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(
+      reference: Seq[Attribute],
+      original: Seq[Attribute],
+      constraints: ExpressionSet): ExpressionSet = {
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
+    constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+
+  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
+    val common = a.intersect(b)
+    // The constraint with only one reference could be easily inferred as predicate
+    // Grouping the constraints by it's references so we can combine the constraints with same
+    // reference together
+    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
+    val others = (othera.keySet intersect otherb.keySet).map { attr =>
+      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
+    }
+    common ++ others
+  }
+
+  override protected lazy val validConstraints: ExpressionSet = {
+    children
+      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
+      .reduce(merge(_, _))
+  }
+}
+
 /**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
@@ -420,7 +475,7 @@ object Union {
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
-    allowMissingCol: Boolean = false) extends LogicalPlan {
+    allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
@@ -463,23 +518,6 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
-    }
-  }
-
-  override def metadataOutput: Seq[Attribute] = Nil
-
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
     def allChildrenCompatible: Boolean =
@@ -493,44 +531,58 @@ case class Union(
     children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
 
-  /**
-   * Maps the constraints containing a given (original) sequence of attributes to those with a
-   * given (reference) sequence of attributes. Given the nature of union, we expect that the
-   * mapping between the original and reference sequences are symmetric.
-   */
-  private def rewriteConstraints(
-      reference: Seq[Attribute],
-      original: Seq[Attribute],
-      constraints: ExpressionSet): ExpressionSet = {
-    require(reference.size == original.size)
-    val attributeRewrites = AttributeMap(original.zip(reference))
-    constraints.map(_ transform {
-      case a: Attribute => attributeRewrites(a)
-    })
-  }
-
-  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
-    val common = a.intersect(b)
-    // The constraint with only one reference could be easily inferred as predicate
-    // Grouping the constraints by it's references so we can combine the constraints with same
-    // reference together
-    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
-    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
-    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
-    val others = (othera.keySet intersect otherb.keySet).map { attr =>
-      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
-    }
-    common ++ others
-  }
-
-  override protected lazy val validConstraints: ExpressionSet = {
-    children
-      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
-      .reduce(merge(_, _))
-  }
-
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)
+}
+
+/**
+ * The logical node for recursion, that contains a initial (anchor) and a recursion describing term,
+ * that contains an [[UnionLoopRef]] node.
+ * The node is very similar to [[Union]] because the initial and "generated" children are union-ed
+ * and it is also similar to a loop because the recursion continues until the last generated child
+ * is not empty.
+ *
+ * @param id The id of the loop, inherited from [[CTERelationDef]]
+ * @param anchor The plan of the initial element of the loop.
+ * @param recursion The plan that describes the recursion with an [[UnionLoopRef]] node.
+ * @param limit An optional limit that can be pushed down to the node to stop the loop earlier.
+ */
+case class UnionLoop(
+    id: Long,
+    anchor: LogicalPlan,
+    recursion: LogicalPlan,
+    limit: Option[Int] = None) extends UnionBase {
+  override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
+    copy(anchor = newChildren(0), recursion = newChildren(1))
+}
+
+/**
+ * The recursive reference in the recursive term of an [[UnionLoop]] node.
+ *
+ * @param loopId The id of the loop, inherited from [[CTERelationRef]]
+ * @param output The output attributes of this recursive reference.
+ * @param accumulated If false the the reference stands for the result of the previous iteration.
+ *                    If it is true then then it stands for the union of all previous iteration
+ *                    results.
+ */
+case class UnionLoopRef(
+    loopId: Long,
+    override val output: Seq[Attribute],
+    accumulated: Boolean) extends LeafNode with MultiInstanceRelation {
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def computeStats(): Statistics = Statistics(SQLConf.get.defaultSizeInBytes)
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |Loop id: $loopId
+       |${QueryPlan.generateFieldString("Output", output)}
+       |Accumulated: $accumulated
+       |""".stripMargin
+  }
 }
 
 case class Join(
@@ -783,10 +835,12 @@ object View {
  * @param child The final query of this CTE.
  * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
  *                     Each CTE can see the base tables and the previously defined CTEs only.
+ * @param allowRecursion A boolean flag if recursion is allowed.
  */
 case class UnresolvedWith(
     child: LogicalPlan,
-    cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+    cteRelations: Seq[(String, SubqueryAlias)],
+    allowRecursion: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 
   override def output: Seq[Attribute] = child.output
@@ -812,19 +866,31 @@ case class UnresolvedWith(
  *                                   pushdown to help ensure rule idempotency.
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
+ * @param recursive If true the definition is recursive.
+ * @param recursionAnchor A helper plan node that temporary stores the anchor term of recursive
+ *                        definitions. In the beginning of recursive resolution the `ResolveWithCTE`
+ *                        rule updates this parameter and once it is resolved the same rule resolves
+ *                        the recursive [[CTERelationRef]] references and removed this parameter.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
-    underSubquery: Boolean = false) extends UnaryNode {
+    underSubquery: Boolean = false,
+    recursive: Boolean = false,
+    recursionAnchor: Option[LogicalPlan] = None) extends LogicalPlan {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(child = newChild)
+  override def children: Seq[LogicalPlan] = child +: recursionAnchor.toSeq
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): CTERelationDef =
+    copy(child = newChildren.head, recursionAnchor = newChildren.tail.headOption)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
+
+  lazy val recursionAnchorResolved = recursionAnchor.map(_.resolved).getOrElse(false)
 }
 
 object CTERelationDef {
@@ -841,12 +907,14 @@ object CTERelationDef {
  *                             de-duplication.
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
+ * @param recursive            If this is a recursive reference.
  */
 case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
-    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
+    statsOpt: Option[Statistics] = None,
+    recursive: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

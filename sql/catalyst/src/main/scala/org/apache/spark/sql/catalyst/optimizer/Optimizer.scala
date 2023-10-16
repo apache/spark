@@ -150,13 +150,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
     Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    Batch("Inline CTE", Once, InlineCTE()) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("Inline CTE", Once,
-      InlineCTE()) ::
     Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
@@ -745,6 +744,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
+    case l @ LocalLimit(IntegerLiteral(limit), p @ Project(_, u: UnionLoop)) =>
+      l.copy(child = p.copy(child = u.copy(limit = Some(limit))))
+    case l @ LocalLimit(IntegerLiteral(limit), u: UnionLoop) =>
+      l.copy(child = u.copy(limit = Some(limit)))
+
     // Add extra limits below JOIN:
     // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides
     //    respectively if join condition is not empty.
@@ -926,6 +930,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
+    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
+    //  `UnionLoopRef` nodes.
+    case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>

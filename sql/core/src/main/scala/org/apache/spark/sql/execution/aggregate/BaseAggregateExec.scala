@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode, UnaryExecNode}
+import org.apache.spark.sql.execution.{PartitioningPreservingUnaryExecNode, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
 
 /**
@@ -39,11 +40,11 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
   override def verboseStringWithOperatorId(): String = {
     s"""
        |$formattedNodeName
-       |${ExplainUtils.generateFieldString("Input", child.output)}
-       |${ExplainUtils.generateFieldString("Keys", groupingExpressions)}
-       |${ExplainUtils.generateFieldString("Functions", aggregateExpressions)}
-       |${ExplainUtils.generateFieldString("Aggregate Attributes", aggregateAttributes)}
-       |${ExplainUtils.generateFieldString("Results", resultExpressions)}
+       |${QueryPlan.generateFieldString("Input", child.output)}
+       |${QueryPlan.generateFieldString("Keys", groupingExpressions)}
+       |${QueryPlan.generateFieldString("Functions", aggregateExpressions)}
+       |${QueryPlan.generateFieldString("Aggregate Attributes", aggregateAttributes)}
+       |${QueryPlan.generateFieldString("Results", resultExpressions)}
        |""".stripMargin
   }
 
