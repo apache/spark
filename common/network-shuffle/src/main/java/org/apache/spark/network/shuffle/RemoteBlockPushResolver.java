@@ -1945,27 +1945,27 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         MergeShuffleFile metaFile,
         AppAttemptShuffleMergeId appAttemptShuffleMergeId,
         int reduceId) {
-      try {
-        if (dataChannel.isOpen()) {
-          dataChannel.close();
+        try {
+          if (dataChannel.isOpen()) {
+            dataChannel.close();
+          }
+        } catch (IOException ioe) {
+          logger.warn("Error closing data channel for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
         }
-      } catch (IOException ioe) {
-        logger.warn("Error closing data channel for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
-      }
-      try {
-        metaFile.close();
-      } catch (IOException ioe) {
-        logger.warn("Error closing meta file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
+        try {
+          metaFile.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing meta file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
+          }
+        try {
+          indexFile.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing index file for {} reduceId {}",
+              appAttemptShuffleMergeId, reduceId);
         }
-      try {
-        indexFile.close();
-      } catch (IOException ioe) {
-        logger.warn("Error closing index file for {} reduceId {}",
-            appAttemptShuffleMergeId, reduceId);
       }
-    }
     }
   }
 
