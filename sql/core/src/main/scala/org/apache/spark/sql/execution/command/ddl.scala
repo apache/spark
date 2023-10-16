@@ -377,13 +377,11 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // check that the column is not a partition column
-    if (findColumnByName(table.partitionSchema, columnName, resolver).isDefined) {
+    // Check that the column is not a partition column
+    if (table.partitionSchema.fieldNames.exists(resolver(columnName, _))) {
         throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
     }
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-      .getOrElse(
-        throw QueryCompilationErrors.cannotFindColumnError(columnName, table.schema.fieldNames))
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
@@ -420,12 +418,13 @@ case class AlterTableChangeColumnCommand(
     Seq.empty[Row]
   }
 
-  // Find the origin column from schema by column name
+  // Find the origin column from schema by column name, throw an AnalysisException if the column
+  // reference is invalid.
   private def findColumnByName(
-      schema: StructType, name: String, resolver: Resolver): Option[StructField] = {
+      schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
-    }
+    }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
