@@ -1928,6 +1928,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return numIOExceptions;
     }
 
+    @VisibleForTesting
+    Cleaner.Cleanable getCleanable() {
+      return cleanable;
+    }
+
     private record ResourceCleaner(
         File dataFile,
         FileChannel dataChannel,
