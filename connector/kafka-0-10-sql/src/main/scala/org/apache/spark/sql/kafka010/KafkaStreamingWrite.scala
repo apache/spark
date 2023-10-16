@@ -40,7 +40,7 @@ private[kafka010] class KafkaStreamingWrite(
     schema: StructType)
   extends StreamingWrite {
 
-  validateQuery(DataTypeUtils.toAttributes(schema), producerParams, topic)
+  validateQuery(DataTypeUtils.toAttributes(schema), topic)
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): KafkaStreamWriterFactory =

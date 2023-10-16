@@ -132,6 +132,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
   "messageParameters" : {
     "columns" : "`c1`, `c2`",
     "targetString" : "`t1`"

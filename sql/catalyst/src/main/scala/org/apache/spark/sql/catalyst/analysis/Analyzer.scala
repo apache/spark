@@ -2225,12 +2225,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             // to apply the requested partitioning and/or ordering.
             val analyzeResult = u.resolveElementMetadata(u.func, u.children)
             val newChildren = u.children.map {
+              case NamedArgumentExpression(key, t: FunctionTableSubqueryArgumentExpression) =>
+                NamedArgumentExpression(key, analyzeResult.applyToTableArgument(u.name, t))
               case t: FunctionTableSubqueryArgumentExpression =>
                 analyzeResult.applyToTableArgument(u.name, t)
               case c => c
             }
-            PythonUDTF(u.name, u.func, analyzeResult.schema, newChildren,
-              u.evalType, u.udfDeterministic, u.resultId)
+            PythonUDTF(
+              u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
+              newChildren, u.evalType, u.udfDeterministic, u.resultId)
           }
         }
     }

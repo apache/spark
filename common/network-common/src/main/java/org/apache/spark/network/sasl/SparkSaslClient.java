@@ -127,17 +127,14 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
 
       for (Callback callback : callbacks) {
-        if (callback instanceof NameCallback) {
+        if (callback instanceof NameCallback nc) {
           logger.trace("SASL client callback: setting username");
-          NameCallback nc = (NameCallback) callback;
           nc.setName(encodeIdentifier(secretKeyHolder.getSaslUser(secretKeyId)));
-        } else if (callback instanceof PasswordCallback) {
+        } else if (callback instanceof PasswordCallback pc) {
           logger.trace("SASL client callback: setting password");
-          PasswordCallback pc = (PasswordCallback) callback;
           pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
-        } else if (callback instanceof RealmCallback) {
+        } else if (callback instanceof RealmCallback rc) {
           logger.trace("SASL client callback: setting realm");
-          RealmCallback rc = (RealmCallback) callback;
           rc.setText(rc.getDefaultText());
         } else if (callback instanceof RealmChoiceCallback) {
           // ignore (?)

@@ -98,14 +98,14 @@ def main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.
 
-    This process will be invoked from `UserDefinedPythonTableFunction.analyzeInPython` in JVM
-    and receive the Python UDTF and its arguments for the `analyze` static method,
+    This process will be invoked from `UserDefinedPythonTableFunctionAnalyzeRunner.runInPython`
+    in JVM and receive the Python UDTF and its arguments for the `analyze` static method,
     and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
     try:
         check_python_version(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_UDTF_ANALYZER_MEMORY_MB", "-1"))
+        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
         setup_spark_files(infile)
@@ -126,6 +126,8 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Return the analyzed schema.
         write_with_length(result.schema.json().encode("utf-8"), outfile)
+        # Return the pickled 'AnalyzeResult' class instance.
+        pickleSer._write_with_length(result, outfile)
         # Return whether the "with single partition" property is requested.
         write_int(1 if result.with_single_partition else 0, outfile)
         # Return the list of partitioning columns, if any.

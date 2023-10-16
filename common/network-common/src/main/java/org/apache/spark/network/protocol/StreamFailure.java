@@ -62,8 +62,7 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamFailure) {
-      StreamFailure o = (StreamFailure) other;
+    if (other instanceof StreamFailure o) {
       return streamId.equals(o.streamId) && error.equals(o.error);
     }
     return false;
