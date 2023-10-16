@@ -29,6 +29,18 @@ if TYPE_CHECKING:
     from pyspark.sql.types import DataType
 
 
+class Reference(str):
+    def __init__(self, prefix: str = ""):
+        object.__setattr__(self, "_prefix", prefix)
+
+    def __getattr__(self, key: str) -> "Reference":
+        prefix = object.__getattribute__(self, "_prefix")
+        if prefix:
+            return Reference(f"{prefix}.{key}")
+        else:
+            return Reference(key)
+
+
 class CatalogMetadata(NamedTuple):
     name: str
     description: Optional[str]
