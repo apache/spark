@@ -530,6 +530,8 @@ jobs:
           sparkr-coursier-
     - name: Free up disk space
       run: |
+        # uninstall libraries dedicated for ML testing
+        python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow deepspeed
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
@@ -644,6 +646,8 @@ jobs:
           docs-maven-
     - name: Free up disk space
       run: |
+        # uninstall libraries dedicated for ML testing
+        python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow deepspeed
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
