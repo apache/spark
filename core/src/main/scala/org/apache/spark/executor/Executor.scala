@@ -29,8 +29,8 @@ import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 import javax.ws.rs.core.UriBuilder
 
-import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, WrappedArray}
+import scala.collection.{immutable, mutable}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -741,9 +741,9 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName, reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
+          // Here and below, put task metric peaks in a ArraySeq to expose them as a Seq
           // without requiring a copy.
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val metricPeaks = mutable.ArraySeq.make(metricsPoller.getTaskMetricPeaks(taskId))
           val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq)
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
@@ -754,7 +754,7 @@ private[spark] class Executor(
           logInfo(s"Executor interrupted and killed $taskName, reason: $killReason")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-          val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          val metricPeaks = mutable.ArraySeq.make(metricsPoller.getTaskMetricPeaks(taskId))
           val reason = TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq)
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
@@ -798,7 +798,7 @@ private[spark] class Executor(
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-            val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+            val metricPeaks = mutable.ArraySeq.make(metricsPoller.getTaskMetricPeaks(taskId))
 
             val (taskFailureReason, serializedTaskFailureReason) = {
               try {

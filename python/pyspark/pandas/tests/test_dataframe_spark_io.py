@@ -18,12 +18,12 @@
 import unittest
 import glob
 import os
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 

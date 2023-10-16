@@ -491,4 +491,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(simpleFormatter.parseOptional("abc").isEmpty)
 
   }
+
+  test("SPARK-45424: do not return optional parse results when only prefix match") {
+    val formatter = new Iso8601TimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss",
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true, zoneId = DateTimeTestUtils.LA)
+    assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
+  }
 }

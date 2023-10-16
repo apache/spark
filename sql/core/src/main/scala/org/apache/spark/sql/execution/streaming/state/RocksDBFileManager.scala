@@ -146,10 +146,15 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
+  @volatile private var rootDirChecked: Boolean = false
+
   def getChangeLogWriter(version: Long): StateStoreChangelogWriter = {
-    val rootDir = new Path(dfsRootDir)
     val changelogFile = dfsChangelogFile(version)
-    if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+    if (!rootDirChecked) {
+      val rootDir = new Path(dfsRootDir)
+      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+      rootDirChecked = true
+    }
     val changelogWriter = new StateStoreChangelogWriter(fm, changelogFile, codec)
     changelogWriter
   }
@@ -193,8 +198,11 @@ class RocksDBFileManager(
       // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
       // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
       // still need to create the initial dfs root directory anyway.
-      val path = new Path(dfsRootDir)
-      if (!fm.exists(path)) fm.mkdirs(path)
+      if (!rootDirChecked) {
+        val path = new Path(dfsRootDir)
+        if (!fm.exists(path)) fm.mkdirs(path)
+        rootDirChecked = true
+      }
     }
     zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version))
     logInfo(s"Saved checkpoint file for version $version")

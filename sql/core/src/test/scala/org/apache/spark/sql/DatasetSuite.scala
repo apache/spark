@@ -47,6 +47,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1219,7 +1220,7 @@ class DatasetSuite extends QueryTest
 
     val message = intercept[RuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getMessage
+    }.getCause.getMessage
 
     assert(message.contains("Null value appeared in non-nullable field"))
   }
@@ -1871,14 +1872,21 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
-    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
-      val data = Seq("\u0020\u0021\u0023", "abc")
-      val df = data.toDF()
-      val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
-      val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
-      val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
-      checkAnswer(rlike1, rlike2)
-      assert(rlike3.count() == 0)
+    val df = Seq("\u0020\u0021\u0023", "abc").toDF()
+
+    Seq(
+      true ->
+        ("value rlike '^\\x20[\\x20-\\x23]+$'", "value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'"),
+      false ->
+        ("value rlike r'^\\x20[\\x20-\\x23]+$'", "value rlike r'^\\\\x20[\\\\x20-\\\\x23]+$'")
+    ).foreach { case (escaped, (filter1, filter3)) =>
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString) {
+        val rlike1 = df.filter(filter1)
+        val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+        val rlike3 = df.filter(filter3)
+        checkAnswer(rlike1, rlike2)
+        assert(rlike3.count() == 0)
+      }
     }
   }
 
@@ -2584,9 +2592,8 @@ class DatasetSuite extends QueryTest
       // Expression decoding error
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_2151",
+        errorClass = "EXPRESSION_DECODING_FAILED",
         parameters = Map(
-          "e" -> exception.getCause.toString(),
           "expressions" -> expressions.map(
             _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
       )
@@ -2596,6 +2603,11 @@ class DatasetSuite extends QueryTest
         errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> classOf[Array[Int]].getName))
     }
+  }
+
+  test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {
+    val ds = Seq(1, 2).toDS().persist(StorageLevel.NONE)
+    assert(ds.count() == 2)
   }
 }
 

@@ -177,10 +177,12 @@ abstract class JdbcDialect extends Serializable with Logging {
    * To allow certain options to append when create a new table, which can be
    * table_options or partition_options.
    * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-   * @param statement
-   * @param tableName
-   * @param strSchema
-   * @param options
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
    */
   def createTable(
       statement: Statement,
@@ -189,6 +191,24 @@ abstract class JdbcDialect extends Serializable with Logging {
       options: JdbcOptionsInWrite): Unit = {
     val createTableOptions = options.createTableOptions
     statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
+  }
+
+  /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -538,6 +558,17 @@ abstract class JdbcDialect extends Serializable with Logging {
     } else {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     }
+  }
+
+  /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
   }
 
   /**

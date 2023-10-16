@@ -20,6 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -188,7 +189,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pandas_options = {"date_as_object": True}
 
         import pyarrow as pa
-        from distutils.version import LooseVersion
 
         if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
             # A legacy option to coerce date32, date64, duration, and timestamp

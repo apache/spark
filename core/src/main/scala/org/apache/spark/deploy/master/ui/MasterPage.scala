@@ -32,13 +32,17 @@ import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
+  private val jsonFieldPattern = "/json/([a-zA-Z]+).*".r
 
   def getMasterState: MasterStateResponse = {
     master.askSync[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    JsonProtocol.writeMasterState(getMasterState)
+    jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
+      case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
+    }
   }
 
   def handleAppKillRequest(request: HttpServletRequest): Unit = {
@@ -149,7 +153,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Drivers:</strong>
                 {state.activeDrivers.length} Running
                 ({state.activeDrivers.count(_.state == DriverState.SUBMITTED)} Waiting),
-                {state.completedDrivers.length} Completed </li>
+                {state.completedDrivers.length} Completed
+                ({state.completedDrivers.count(_.state == DriverState.KILLED)} Killed,
+                {state.completedDrivers.count(_.state == DriverState.FAILED)} Failed,
+                {state.completedDrivers.count(_.state == DriverState.ERROR)} Error)
+              </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>

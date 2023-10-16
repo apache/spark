@@ -234,10 +234,6 @@ object SparkBuild extends PomBuild {
         "-Wunused:imports",
         "-Wconf:cat=lint-multiarg-infix:wv",
         "-Wconf:cat=other-nullary-override:wv",
-        "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
         //  fixed.
@@ -259,7 +255,12 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
         "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-        "-Wconf:msg=Implicit definition should have explicit type:s"
+        "-Wconf:msg=Implicit definition should have explicit type:s",
+        // SPARK-45331 Upgrade Scala to 2.13.12 and suppress "In Scala 2, symbols inherited
+        // from a superclass shadow symbols defined in an outer scope. Such references are
+        // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
+        // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
+        "-Wconf:msg=legacy-binding:s"
       )
     }
   )
@@ -1584,6 +1585,7 @@ object TestSettings {
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",

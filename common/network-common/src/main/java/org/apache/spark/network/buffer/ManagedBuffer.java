@@ -75,4 +75,18 @@ public abstract class ManagedBuffer {
    * the caller will be responsible for releasing this new reference.
    */
   public abstract Object convertToNetty() throws IOException;
+
+  /**
+   * Convert the buffer into a Netty object, used to write the data out with SSL encryption,
+   * which cannot use {@link io.netty.channel.FileRegion}.
+   * The return value is either a {@link io.netty.buffer.ByteBuf},
+   * a {@link io.netty.handler.stream.ChunkedStream}, or a {@link java.io.InputStream}.
+   *
+   * If this method returns a ByteBuf, then that buffer's reference count will be incremented and
+   * the caller will be responsible for releasing this new reference.
+   *
+   * Once `kernel.ssl.sendfile` and OpenSSL's `ssl_sendfile` are more widely adopted (and supported
+   * in Netty), we can potentially deprecate these APIs and just use `convertToNetty`.
+   */
+  public abstract Object convertToNettyForSsl() throws IOException;
 }
