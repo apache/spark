@@ -1943,8 +1943,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
       @Override
       public void run() {
-        closeAllFiles(dataChannel,
-          indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
+        closeAllFiles(dataChannel, indexFile, metaFile, appAttemptShuffleMergeId,
+          reduceId);
       }
 
       private void closeAllFiles(
