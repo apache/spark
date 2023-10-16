@@ -15,9 +15,9 @@
     specific language governing permissions and limitations
     under the License.
 
-=======================
+================================
 Python to Spark Type Conversions
-=======================
+================================
 
 .. currentmodule:: pyspark.sql.types
 
@@ -35,27 +35,23 @@ You can access them by doing:
       - Value type in Python
       - API to access or create a data type
     * - **ByteType**
-      - | int or long
-        |
-        | **Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.
+      - int
+          .. note:: Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.
       - ByteType()
     * - **ShortType**
-      - | int or long
-        |
-        | **Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.
+      - int
+          .. note:: Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.
       - ShortType()
     * - **IntegerType**
-      - int or long
+      - int
       - IntegerType()
     * - **LongType**
-      - | long
-        |
-        | **Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.
+      - int
+          .. note:: Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.
       - LongType()
     * - **FloatType**
-      - | float
-        |
-        | **Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.
+      - float
+          .. note:: Numbers will be converted to 4-byte single-precision floating point numbers at runtime.
       - FloatType()
     * - **DoubleType**
       - float
@@ -86,21 +82,17 @@ You can access them by doing:
       - DayTimeIntervalType()
     * - **ArrayType**
       - list, tuple, or array
-      - | ArrayType(*elementType*, [*containsNull*])
-        |
-        | **Note:** The default value of *containsNull* is True.
+      - ArrayType(*elementType*, [*containsNull*])
+          .. note:: The default value of *containsNull* is True.
     * - **MapType**
       - dict
-      - | MapType(*keyType*, *valueType*, [*valueContainsNull]*)
-        |
-        | **Note:** The default value of *valueContainsNull* is True.
+      - MapType(*keyType*, *valueType*, [*valueContainsNull]*)
+          .. note:: The default value of *valueContainsNull* is True.
     * - **StructType**
       - list or tuple
-      - | StructType(*fields*)
-        |
-        | **Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.
+      - StructType(*fields*)
+          .. note:: *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.
     * - **StructField**
-      - | The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
-      - | StructField(*name*, *dataType*, [*nullable*])
-        |
-        | **Note:** The default value of *nullable* is True.
+      - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
+      - StructField(*name*, *dataType*, [*nullable*])
+          .. note:: The default value of *nullable* is True.
