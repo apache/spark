@@ -1873,7 +1873,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     private void deleteAllFiles() {
       try {
-        dataFile.delete();
+        if (!dataFile.delete()) {
+          logger.warn("Error deleting data file for {} reduceId {}",
+            appAttemptShuffleMergeId, reduceId);
+        }
       } catch (Exception exception) {
         logger.warn("Error deleting data file for {} reduceId {}",
             appAttemptShuffleMergeId, reduceId);
@@ -1936,15 +1939,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       @Override
       public void run() {
         closeAllFiles(dataChannel,
-            indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
+          indexFile, metaFile, appAttemptShuffleMergeId, reduceId);
       }
 
       private void closeAllFiles(
-        FileChannel dataChannel,
-        MergeShuffleFile indexFile,
-        MergeShuffleFile metaFile,
-        AppAttemptShuffleMergeId appAttemptShuffleMergeId,
-        int reduceId) {
+          FileChannel dataChannel,
+          MergeShuffleFile indexFile,
+          MergeShuffleFile metaFile,
+          AppAttemptShuffleMergeId appAttemptShuffleMergeId,
+          int reduceId) {
         try {
           if (dataChannel.isOpen()) {
             dataChannel.close();
