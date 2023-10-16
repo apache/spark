@@ -28,6 +28,19 @@ __all__ = ["DataSource", "DataSourceReader"]
 
 
 class DataSource:
+    """
+    A base class for data sources.
+
+    This class represents a custom data source that allows for reading from and
+    writing to it. The data source provides methods to create readers and writers
+    for reading and writing data, respectively. At least one of the methods `reader`
+    or `writer` must be implemented by any subclass to make the data source either
+    readable or writable.
+
+    After implementing this interface, you can start to load your data source using
+    `spark.read.format(...).load()` and save data using `df.write.format(...).save()`.
+    """
+
     def __init__(self, options: Dict[str, "OptionalPrimitiveType"]):
         """
         Initializes the data source with user-provided options.
@@ -109,11 +122,10 @@ class DataSourceReader(ABC):
         """
         Returns a list of partitions for this data source.
 
-        This method is called once during the physical planning stage in the Spark planner
-        to generate a list of partitions. Note, partition values must be serializable.
-
-        The planner then creates an RDD for each partition. Each partition value will be
-        passed to `read(partition)` to read the data from this data source.
+        This method is called once during the physical planning stage to generate a list
+        of partitions. If the method returns N partitions, then the planner will create
+        N tasks. Each task will then execute `read(partition)` in parallel, using each
+        partition value to read the data from this data source.
 
         If this method is not implemented, or returns an empty list, Spark will create one
         partition for the result DataFrame and use one single task to read the data.
@@ -123,6 +135,10 @@ class DataSourceReader(ABC):
         partitions : list
             A list of partitions for this data source. The partition can be any arbitrary
             serializable objects.
+
+        Notes
+        -----
+        This method should not return any un-picklable objects.
 
         Examples
         --------

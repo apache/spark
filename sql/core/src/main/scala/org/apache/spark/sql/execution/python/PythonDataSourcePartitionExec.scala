@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class PythonDataSourcePartitionExec(
     output: Seq[Attribute],
     partitions: Seq[Array[Byte]])
-    extends LeafExecNode with InputRDDCodegen with PythonSQLMetrics {
+  extends LeafExecNode with InputRDDCodegen with PythonSQLMetrics {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))

@@ -56,7 +56,7 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.read.format(TestDataSource).load()
         assertDataFrameEqual(df, [Row(id=None, value=0), Row(id=None, value=1)])
 
-    # TODO: support read with schema
+    # TODO(SPARK-45559): support read with schema
     # def test_data_source_read_with_schema(self):
     #     df = self.spark.read.format(TestDataSource).schema("value INT").load()
     #     assertDataFrameEqual(df, [Row(value=0), Row(value=1)])

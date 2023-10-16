@@ -32,11 +32,11 @@ from typing import (
 from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
-from pyspark.rdd import _prepare_for_python_RDD
 from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.datasource import DataSource
 from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.sql import utils
+from pyspark.sql.udf import _wrap_function
 from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
 
@@ -84,7 +84,7 @@ class DataFrameReader(OptionUtils):
         self._jreader = spark._jsparkSession.read()
         self._spark = spark
         self._format: Optional[Union[str, Type[DataSource]]] = None
-        self._schema = None
+        self._schema: Optional[Union[str, StructType]] = None
         self._options: Dict[str, "OptionalPrimitiveType"] = dict()
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -174,8 +174,10 @@ class DataFrameReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
+            self._schema = schema
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
+            self._schema = schema
         else:
             raise PySparkTypeError(
                 error_class="NOT_STR_OR_STRUCT",
@@ -184,7 +186,6 @@ class DataFrameReader(OptionUtils):
                     "arg_type": type(schema).__name__,
                 },
             )
-        self._schema = schema
         return self
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
@@ -336,8 +337,8 @@ class DataFrameReader(OptionUtils):
         self.options(**options)
 
         # Load a Python data source
-        if isinstance(self._format, Callable):
-            # TODO: support path in options.
+        if isinstance(self._format, Callable):  # type: ignore[arg-type]
+            # TODO(SPARK-45560): support load() with non-empty path.
 
             # Create an instance of the data source.
             data_source_cls = cast(Type[DataSource], self._format)
@@ -346,9 +347,9 @@ class DataFrameReader(OptionUtils):
             # Get schema of the data source
             schema = self._schema or data_source.schema()
             if isinstance(schema, str):
-                schema = _parse_datatype_string(schema)
+                dt = _parse_datatype_string(schema)
                 # Check if the schema is a valid StructType.
-                if not isinstance(schema, StructType):
+                if not isinstance(dt, StructType):
                     raise PySparkTypeError(
                         error_class="NOT_STR_OR_STRUCT",
                         message_parameters={
@@ -356,22 +357,12 @@ class DataFrameReader(OptionUtils):
                             "arg_type": type(schema).__name__,
                         },
                     )
+                schema = dt
 
             jschema = self._spark._jsparkSession.parseDataType(schema.json())
             sc = self._spark._sc
-            pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(
-                sc, data_source
-            )
+            func = _wrap_function(sc, data_source)  # type: ignore
             assert sc._jvm is not None
-            func = sc._jvm.SimplePythonFunction(
-                bytearray(pickled_command),
-                env,
-                includes,
-                sc.pythonExec,
-                sc.pythonVer,
-                broadcast_vars,
-                sc._javaAccumulator,
-            )
             source = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonDataSource(
                 func, jschema
             )

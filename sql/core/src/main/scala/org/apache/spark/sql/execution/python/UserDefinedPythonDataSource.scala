@@ -69,11 +69,7 @@ class UserDefinedPythonDataSourceReadRunner(
     }
 
     // Receive the pickled 'read' function.
-    val pickledFunction: Array[Byte] = {
-      val obj = new Array[Byte](length)
-      dataIn.readFully(obj)
-      obj
-    }
+    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
 
     // Receive the list of partitions, if any.
     val pickledPartitions = ArrayBuffer.empty[Array[Byte]]

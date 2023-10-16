@@ -17,7 +17,7 @@
 
 import os
 import sys
-from typing import IO
+from typing import Any, IO, Iterator
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError
@@ -93,10 +93,10 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Construct a UDTF.
         class PythonDataSourceReaderUDTF:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.ser = CloudPickleSerializer()
 
-            def eval(self, partition_bytes):
+            def eval(self, partition_bytes: Any) -> Iterator:
                 partition = self.ser.loads(partition_bytes)
                 yield from reader.read(partition)
 
