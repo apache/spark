@@ -432,7 +432,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+    $MVN --settings $tmp_settings -DskipTests -DskipTests -Dmaven.javadoc.skip=true $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
