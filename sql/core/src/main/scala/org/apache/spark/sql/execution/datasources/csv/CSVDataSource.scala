@@ -190,6 +190,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     csv.flatMap { lines =>
       try {
         val path = new Path(lines.getPath())
@@ -199,12 +201,11 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
           new CsvParser(parsedOptions.asParserSettings),
           encoding = parsedOptions.charset)
       } catch {
-        case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+        case e: FileNotFoundException if ignoreMissingFiles =>
           logWarning(s"Skipped missing file: ${lines.getPath()}", e)
           Array.empty[Array[String]]
-        // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-        case e: FileNotFoundException if !parsedOptions.ignoreMissingFiles => throw e
-        case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
+        case e: FileNotFoundException if !ignoreMissingFiles => throw e
+        case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
           logWarning(
             s"Skipped the rest of the content in the corrupted file: ${lines.getPath()}", e)
           Array.empty[Array[String]]

@@ -54,6 +54,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
     isParsing = true,
     forTimestampNTZ = true)
 
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreMissingFiles = options.ignoreMissingFiles
+
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
     parseMode match {
@@ -100,12 +103,11 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             val wrappedCharException = new CharConversionException(msg)
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
-          case e: FileNotFoundException if options.ignoreMissingFiles =>
+          case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file", e)
             Some(StructType(Nil))
-          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-          case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
-          case e: IOException if options.ignoreCorruptFiles =>
+          case e: FileNotFoundException if ignoreMissingFiles => throw e
+          case e: IOException if ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
         }
