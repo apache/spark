@@ -32,8 +32,8 @@ import org.apache.spark.sql.types._
  * Insert a runtime filter on one side of the join (we call this side the application side) if
  * we can extract a runtime filter from the other side (creation side). A simple case is that
  * the creation side is a table scan with a selective filter.
- * The runtime filter could be an IN subquery (converted to a semi join), a bloom filter, or
- * something else in the future.
+ * The runtime filter is logically an IN subquery with the join keys (converted to a semi join),
+ * but can be something different physically, such as a bloom filter.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
