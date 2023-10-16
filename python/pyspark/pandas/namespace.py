@@ -702,7 +702,6 @@ def read_spark_io(
 
     See Also
     --------
-    DataFrame.to_spark_io
     DataFrame.read_table
     DataFrame.read_delta
     DataFrame.read_parquet

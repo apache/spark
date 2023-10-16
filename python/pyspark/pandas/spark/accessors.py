@@ -727,7 +727,6 @@ class SparkFrameMethods:
         See Also
         --------
         read_table
-        DataFrame.to_spark_io
         DataFrame.spark.to_spark_io
         DataFrame.to_parquet
 
@@ -761,8 +760,7 @@ class SparkFrameMethods:
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
-        """Write the DataFrame out to a Spark data source. :meth:`DataFrame.spark.to_spark_io`
-        is an alias of :meth:`DataFrame.to_spark_io`.
+        """Write the DataFrame out to a Spark data source.
 
         Parameters
         ----------
@@ -801,7 +799,6 @@ class SparkFrameMethods:
         DataFrame.to_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
         DataFrame.spark.to_spark_io
 
         Examples
