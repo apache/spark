@@ -439,7 +439,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
     if [[ $SPARK_VERSION < "4.0" ]]; then
       ./dev/change-scala-version.sh 2.13
     fi
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+    $MVN --settings $tmp_settings -DskipTests -Dmaven.javadoc.skip=true -Dmaven.scaladoc.skip=true $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
   rm $tmp_settings
