@@ -390,19 +390,19 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case _ => false
         })
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
-        val mayHaveCountBug = if (handleCountBugInDecorrelate) {
+        val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
+          // For idempotency, we must save this variable the first time this rule is run, because
+          // decorrelation introduces a GROUP BY is if one wasn't already present.
+          mayHaveCountBugOld.get
+        } else if (handleCountBugInDecorrelate) {
           // Count bug was already handled in the above decorrelate function call.
           false
-        } else if (mayHaveCountBugOld.isEmpty) {
+        } else {
           // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
           // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
           // no COUNT bug.
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
-        } else {
-          // For idempotency, we must save this variable the first time this rule is run, because
-          // decorrelation introduces a GROUP BY is if one wasn't already present.
-          mayHaveCountBugOld.get
         }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug))
