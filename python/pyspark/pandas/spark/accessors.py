@@ -813,7 +813,7 @@ class SparkFrameMethods:
         1 2012-02-29 12:00:00      US     2
         2 2012-03-31 12:00:00      JP     3
 
-        >>> df.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
+        >>> df.spark.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
