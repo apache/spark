@@ -1288,7 +1288,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
-        override def onSwitchToDiskStoreSuccess: Unit = {
+        override def onSwitchToDiskStoreSuccess(): Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
