@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
@@ -32,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 class ParquetOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends FileSourceOptions(parameters) {
+  extends FileSourceOptions(parameters) with Logging {
 
   import ParquetOptions._
 
@@ -58,6 +59,9 @@ class ParquetOptions(
         shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw new IllegalArgumentException(s"Codec [$codecName] " +
         s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+    }
+    if (codecName == "lz4raw") {
+      log.warn("Parquet compression codec 'lz4raw' is deprecated, please use 'lz4_raw'")
     }
     shortParquetCompressionCodecNames(codecName).name()
   }
@@ -96,7 +100,9 @@ object ParquetOptions extends DataSourceOptions {
     "lzo" -> CompressionCodecName.LZO,
     "brotli" -> CompressionCodecName.BROTLI,
     "lz4" -> CompressionCodecName.LZ4,
+    // Deprecated, to be removed at Spark 4.0.0, please use 'lz4_raw' instead.
     "lz4raw" -> CompressionCodecName.LZ4_RAW,
+    "lz4_raw" -> CompressionCodecName.LZ4_RAW,
     "zstd" -> CompressionCodecName.ZSTD)
 
   def getParquetCompressionCodecName(name: String): String = {
