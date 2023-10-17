@@ -78,11 +78,11 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
       .config(SQLConf.SHUFFLE_PARTITIONS.key, "2")
       .getOrCreate()
 
-    try{
+    try {
       // Make sure the test is run where the driver and the executors uses different object layouts
       val driverArrayHeaderSize = Platform.BYTE_ARRAY_OFFSET
       val executorArrayHeaderSize =
-        spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect.head.toInt
+        spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect().head
       assert(driverArrayHeaderSize > executorArrayHeaderSize)
 
       val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
