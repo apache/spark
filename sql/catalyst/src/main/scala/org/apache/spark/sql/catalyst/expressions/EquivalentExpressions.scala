@@ -151,7 +151,8 @@ class EquivalentExpressions(
   //   2. ConditionalExpression: use its children that will always be evaluated.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
-    case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
+    case c: ConditionalExpression if !c.isInstanceOf[If] =>
+      c.alwaysEvaluatedInputs.map(skipForShortcut)
     case other => skipForShortcut(other).children
   }
 
