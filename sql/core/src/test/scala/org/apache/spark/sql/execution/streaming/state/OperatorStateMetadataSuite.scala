@@ -43,7 +43,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   test("Serialize and deserialize stateful operator metadata") {
     val stateDir = Utils.createTempDir()
-    val statePath = new Path(stateDir.getCanonicalPath)
+    val statePath = new Path(stateDir.toString)
     val stateStoreInfo = (1 to 4).map(i => StateStoreMetadataV1(s"store$i", 1, 200))
     val operatorInfo = OperatorInfoV1(1, "Join")
     val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
@@ -55,7 +55,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   test("Stateful operator metadata for streaming aggregation") {
     val inputData = MemoryStream[Int]
-    val checkpointDir = Utils.createTempDir().getAbsolutePath
+    val checkpointDir = Utils.createTempDir()
     val aggregated =
       inputData.toDF()
         .groupBy($"value")
@@ -63,13 +63,13 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         .as[(Int, Long)]
 
     testStream(aggregated, Complete)(
-      StartStream(checkpointLocation = checkpointDir),
+      StartStream(checkpointLocation = checkpointDir.toString),
       AddData(inputData, 3),
       CheckLastBatch((3, 1)),
       StopStream
     )
 
-    val statePath = new Path(checkpointDir, "state/0/")
+    val statePath = new Path(checkpointDir.getCanonicalPath, "state/0")
     val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
       .asInstanceOf[OperatorStateMetadataV1]
     val expectedMetadata = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
@@ -85,9 +85,9 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     val df2 = input2.toDF.select($"value" as "key", ($"value" * 3) as "rightValue")
     val joined = df1.join(df2, "key")
 
-    val checkpointDir = Utils.createTempDir().getAbsolutePath
+    val checkpointDir = Utils.createTempDir()
     testStream(joined)(
-      StartStream(checkpointLocation = checkpointDir),
+      StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
       AddData(input1, 1),
       CheckAnswer(),
       AddData(input2, 1, 10),       // 1 arrived on input1 first, then input2, should join
@@ -95,7 +95,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       StopStream
     )
 
-    val statePath = new Path(checkpointDir, "state/0/")
+    val statePath = new Path(checkpointDir.toString, "state/0")
     val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
       .asInstanceOf[OperatorStateMetadataV1]
 
@@ -114,7 +114,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     val input = MemoryStream[(String, Long)]
     val sessionWindow: Column = session_window($"eventTime", "10 seconds")
 
-    val checkpointDir = Utils.createTempDir().getAbsolutePath
+    val checkpointDir = Utils.createTempDir()
 
     val events = input.toDF()
       .select($"_1".as("value"), $"_2".as("timestamp"))
@@ -130,7 +130,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         "numEvents")
 
     testStream(streamingDf, OutputMode.Complete())(
-      StartStream(checkpointLocation = checkpointDir),
+      StartStream(checkpointLocation = checkpointDir.toString),
       AddData(input,
         ("hello world spark streaming", 40L),
         ("world hello structured streaming", 41L)
@@ -145,7 +145,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       StopStream
     )
 
-    val statePath = new Path(checkpointDir, "state/0/")
+    val statePath = new Path(checkpointDir.toString, "state/0")
     val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
       .asInstanceOf[OperatorStateMetadataV1]
 
