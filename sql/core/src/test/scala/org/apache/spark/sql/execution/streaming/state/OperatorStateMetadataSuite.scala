@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{count, session_window}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.streaming.OutputMode.Complete
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,30 +32,37 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
   private lazy val hadoopConf = spark.sessionState.newHadoopConf()
 
+  private var checkpointDir = Utils.createTempDir()
+
   private def numShufflePartitions = spark.sessionState.conf.numShufflePartitions
 
-  private def sameOperatorStateMetadata(
-      operatorMetadata1: OperatorStateMetadataV1,
-      operatorMetadata2: OperatorStateMetadataV1): Boolean = {
-    operatorMetadata1.operatorInfo == operatorMetadata2.operatorInfo &&
-      operatorMetadata1.stateStoreInfo.sameElements(operatorMetadata2.stateStoreInfo)
+  override def beforeEach(): Unit = {
+    Utils.deleteRecursively(checkpointDir)
+    checkpointDir = Utils.createTempDir()
+  }
+
+  private def checkOperatorStateMetadata(
+      operatorId: Int,
+      expectedMetadata: OperatorStateMetadataV1): Unit = {
+    val statePath = new Path(checkpointDir.toString, s"state/$operatorId")
+    val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
+      .asInstanceOf[OperatorStateMetadataV1]
+    // println("doodoo: " + operatorMetadata.stateStoreInfo)
+    assert(operatorMetadata.operatorInfo == expectedMetadata.operatorInfo &&
+      operatorMetadata.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
   }
 
   test("Serialize and deserialize stateful operator metadata") {
-    val stateDir = Utils.createTempDir()
-    val statePath = new Path(stateDir.toString)
+    val statePath = new Path(checkpointDir.toString, "state/0")
     val stateStoreInfo = (1 to 4).map(i => StateStoreMetadataV1(s"store$i", 1, 200))
     val operatorInfo = OperatorInfoV1(1, "Join")
     val operatorMetadata = OperatorStateMetadataV1(operatorInfo, stateStoreInfo.toArray)
     new OperatorStateMetadataWriter(statePath, hadoopConf).write(operatorMetadata)
-    val operatorMetadata1 = new OperatorStateMetadataReader(statePath, hadoopConf).read()
-      .asInstanceOf[OperatorStateMetadataV1]
-    assert(sameOperatorStateMetadata(operatorMetadata, operatorMetadata1))
+    checkOperatorStateMetadata(0, operatorMetadata)
   }
 
   test("Stateful operator metadata for streaming aggregation") {
     val inputData = MemoryStream[Int]
-    val checkpointDir = Utils.createTempDir()
     val aggregated =
       inputData.toDF()
         .groupBy($"value")
@@ -69,12 +76,9 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       StopStream
     )
 
-    val statePath = new Path(checkpointDir.getCanonicalPath, "state/0")
-    val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
-      .asInstanceOf[OperatorStateMetadataV1]
     val expectedMetadata = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
       Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
-    assert(sameOperatorStateMetadata(operatorMetadata, expectedMetadata))
+    checkOperatorStateMetadata(0, expectedMetadata)
   }
 
   test("Stateful operator metadata for streaming join") {
@@ -85,7 +89,6 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     val df2 = input2.toDF.select($"value" as "key", ($"value" * 3) as "rightValue")
     val joined = df1.join(df2, "key")
 
-    val checkpointDir = Utils.createTempDir()
     testStream(joined)(
       StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
       AddData(input1, 1),
@@ -95,10 +98,6 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       StopStream
     )
 
-    val statePath = new Path(checkpointDir.toString, "state/0")
-    val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
-      .asInstanceOf[OperatorStateMetadataV1]
-
     val expectedStateStoreInfo = Array(
       StateStoreMetadataV1("left-keyToNumValues", 0, numShufflePartitions),
       StateStoreMetadataV1("left-keyWithIndexToValue", 0, numShufflePartitions),
@@ -107,14 +106,12 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
 
     val expectedMetadata = OperatorStateMetadataV1(
       OperatorInfoV1(0, "symmetricHashJoin"), expectedStateStoreInfo)
-    assert(sameOperatorStateMetadata(operatorMetadata, expectedMetadata))
+    checkOperatorStateMetadata(0, expectedMetadata)
   }
 
   test("Stateful operator metadata for streaming session window") {
     val input = MemoryStream[(String, Long)]
     val sessionWindow: Column = session_window($"eventTime", "10 seconds")
-
-    val checkpointDir = Utils.createTempDir()
 
     val events = input.toDF()
       .select($"_1".as("value"), $"_2".as("timestamp"))
@@ -145,14 +142,37 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       StopStream
     )
 
-    val statePath = new Path(checkpointDir.toString, "state/0")
-    val operatorMetadata = new OperatorStateMetadataReader(statePath, hadoopConf).read()
-      .asInstanceOf[OperatorStateMetadataV1]
-
     val expectedMetadata = OperatorStateMetadataV1(
       OperatorInfoV1(0, "sessionWindowStateStoreSaveExec"),
       Array(StateStoreMetadataV1("default", 1, spark.sessionState.conf.numShufflePartitions))
     )
-    assert(sameOperatorStateMetadata(operatorMetadata, expectedMetadata))
+    checkOperatorStateMetadata(0, expectedMetadata)
+  }
+
+  test("Stateful operator metadata for multiple operators.") {
+    val inputData = MemoryStream[Int]
+
+    val stream = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "0 seconds")
+      .groupBy(window($"eventTime", "5 seconds").as("window"))
+      .agg(count("*").as("count"))
+      .groupBy(window($"window", "10 seconds"))
+      .agg(count("*").as("count"), sum("count").as("sum"))
+      .select($"window".getField("start").cast("long").as[Long],
+        $"count".as[Long], $"sum".as[Long])
+
+    testStream(stream)(
+      StartStream(checkpointLocation = checkpointDir.toString),
+      AddData(inputData, 10 to 21: _*),
+      CheckNewAnswer((10, 2, 10)),
+      StopStream
+    )
+    val expectedMetadata0 = OperatorStateMetadataV1(OperatorInfoV1(0, "stateStoreSave"),
+      Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
+    val expectedMetadata1 = OperatorStateMetadataV1(OperatorInfoV1(1, "stateStoreSave"),
+      Array(StateStoreMetadataV1("default", 0, numShufflePartitions)))
+    checkOperatorStateMetadata(0, expectedMetadata0)
+    checkOperatorStateMetadata(1, expectedMetadata1)
   }
 }

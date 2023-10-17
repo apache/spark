@@ -30,7 +30,9 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
 
-
+/**
+ * Metadata for a state store instance.
+ */
 trait StateStoreMetadata {
   def storeName: String
   def numColsPrefixKey: Int
@@ -40,6 +42,9 @@ trait StateStoreMetadata {
 case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
   extends StateStoreMetadata
 
+/**
+ * Information about a stateful operator.
+ */
 trait OperatorInfo {
   def operatorId: Long
   def operatorName: String
@@ -78,6 +83,9 @@ object OperatorStateMetadataV1 {
   }
 }
 
+/**
+ * Write OperatorStateMetadata into the state checkpoint directory.
+ */
 class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configuration)
   extends Logging {
 
@@ -103,6 +111,9 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
   }
 }
 
+/**
+ * Read OperatorStateMetadata from the state checkpoint directory.
+ */
 class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configuration) {
 
   private val metadataFilePath = OperatorStateMetadataV1.metadataFilePath(stateCheckpointPath)
