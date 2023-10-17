@@ -170,11 +170,7 @@ class MavenUtilsSuite
     // Local ivy repository with modified home
     val dummyIvyLocal = new File(tempIvyPath, "local" + File.separator)
     settings.setDefaultIvyUserDir(new File(tempIvyPath))
-    IvyTestUtils.withRepository(
-      main,
-      Some(dep),
-      Some(dummyIvyLocal),
-      useIvyLayout = true,
+    IvyTestUtils.withRepository(main, Some(dep), Some(dummyIvyLocal), useIvyLayout = true,
       ivySettings = settings) { repo =>
       val jarPath = MavenUtils.resolveMavenCoordinates(
         main.toString,
@@ -261,11 +257,7 @@ class MavenUtilsSuite
 
     val testUtilSettings = new IvySettings
     testUtilSettings.setDefaultIvyUserDir(new File(tempIvyPath))
-    IvyTestUtils.withRepository(
-      main,
-      Some(dep),
-      Some(dummyIvyLocal),
-      useIvyLayout = true,
+    IvyTestUtils.withRepository(main, Some(dep), Some(dummyIvyLocal), useIvyLayout = true,
       ivySettings = testUtilSettings) { repo =>
       val jarPath = MavenUtils.resolveMavenCoordinates(
         main.toString,
@@ -289,11 +281,8 @@ class MavenUtilsSuite
         transitive = true,
         isTest = true)
       val r = """.*org.apache.spark-spark-submit-parent-.*""".r
-      assert(
-        !ivySettings.getDefaultCache.listFiles
-          .map(_.getName)
-          .exists(r.findFirstIn(_).isDefined),
-        "resolution files should be cleaned")
+      assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
+        .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
     }
   }
 
@@ -306,10 +295,7 @@ class MavenUtilsSuite
       // So we let it create the jar dependency in `mylib-0.1.pom`, and then modify the pom
       // to change the type of the transitive to `pom`
       val mainPom = Paths.get(URI.create(repo)).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom")
-      val lines = Files
-        .lines(mainPom)
-        .iterator
-        .asScala
+      val lines = Files.lines(mainPom).iterator.asScala
         .map(l => if (l.trim == "<artifactId>mydep</artifactId>") s"$l<type>pom</type>" else l)
         .toList
       Files.write(mainPom, lines.asJava)
@@ -320,10 +306,8 @@ class MavenUtilsSuite
         ivySettings,
         transitive = true,
         isTest = true)
-      assert(
-        !jarPath.exists(_.indexOf("mydep") >= 0),
-        "should not find pom dependency." +
-          s" Resolved jars are: $jarPath")
+      assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency." +
+        s" Resolved jars are: $jarPath")
     }
   }
 }
