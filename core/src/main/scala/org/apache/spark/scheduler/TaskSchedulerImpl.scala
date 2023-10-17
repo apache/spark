@@ -629,7 +629,8 @@ private[spark] class TaskSchedulerImpl(
         if (!launchedAnyTask) {
 
           val hostToExecutorsForTaskSet = hostToExecutors.map { case (host, execsOnHost) =>
-            (host, execsOnHost.filter(taskSet.taskSet.resourceProfileId == executorIdToResourceProfileId(_)))
+            (host, execsOnHost.filter(taskSet.taskSet.resourceProfileId ==
+              executorIdToResourceProfileId(_)))
           }
 
           taskSet.getCompletelyExcludedTaskIfAny(hostToExecutorsForTaskSet).foreach { taskIndex =>
@@ -649,7 +650,8 @@ private[spark] class TaskSchedulerImpl(
               // notify ExecutorAllocationManager to allocate more executors to schedule the
               // unschedulable tasks else we will abort immediately.
               executorIdToRunningTaskIds
-                .filter(x => taskSet.taskSet.resourceProfileId == executorIdToResourceProfileId(x._1))
+                .filter(x => taskSet.taskSet.resourceProfileId ==
+                  executorIdToResourceProfileId(x._1))
                 .find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
