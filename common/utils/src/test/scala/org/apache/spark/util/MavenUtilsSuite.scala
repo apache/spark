@@ -75,8 +75,7 @@ class MavenUtilsSuite
     // should have central and spark-packages by default
     assert(res1.getResolvers.size() === 4)
     assert(res1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "local-m2-cache")
-    assert(
-      res1.getResolvers.get(1).asInstanceOf[FileSystemResolver].getName === "local-ivy-cache")
+    assert(res1.getResolvers.get(1).asInstanceOf[FileSystemResolver].getName === "local-ivy-cache")
     assert(res1.getResolvers.get(2).asInstanceOf[IBiblioResolver].getName === "central")
     assert(res1.getResolvers.get(3).asInstanceOf[IBiblioResolver].getName === "spark-packages")
   }
