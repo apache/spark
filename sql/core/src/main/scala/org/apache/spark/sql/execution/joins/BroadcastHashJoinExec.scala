@@ -78,13 +78,16 @@ case class BroadcastHashJoinExec(
   private[execution] def getBroadcastID: Option[Long] = this.broadcastVar.map(_.id)
 
   def pushBroadcastVar(): Unit = if (this.bcVarPushNode == SELF_PUSH ) {
-    val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeys,
-      this.streamedPlan, BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->
+    val canonicalizedBuildKeys = this.canonicalized.asInstanceOf[BroadcastHashJoinExec].buildKeys
+    val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(
+      canonicalizedBuildKeys, this.streamedPlan,
+      BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->
         BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan).flatMap(
           _.proxyForPushedBroadcastVar.getOrElse(Seq.empty)))
 
     if (pushDownData.nonEmpty) {
-      BroadcastHashJoinUtil.pushBroadcastVar(this.broadcastVar.get, buildKeys, pushDownData)
+      BroadcastHashJoinUtil.pushBroadcastVar(this.broadcastVar.get, canonicalizedBuildKeys,
+        pushDownData)
     }
   }
 

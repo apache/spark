@@ -53,7 +53,7 @@ object BroadcastHashJoinUtil {
 
   def pushBroadcastVar(
       bcRelation: Broadcast[HashedRelation],
-      buildKeys: Seq[Expression],
+      buildKeysCanonicalized: Seq[Expression],
       pushDownData: Seq[BroadcastVarPushDownData]): Unit = {
     val actualIndexToRelativeIndexAndDataTypeMap = mutable.Map[Integer, (Integer, DataType)]()
     var currentRelativeIndex = 0
@@ -71,7 +71,7 @@ object BroadcastHashJoinUtil {
         indexesOfInterestArray(relativeIndex) = actualIndex
         dataTypesArray(relativeIndex) = dataType
     }
-    val totalJoinKeys = buildKeys.size
+    val totalJoinKeys = buildKeysCanonicalized.size
     pushDownData.foreach {
       bcData =>
         val relativeIndex = actualIndexToRelativeIndexAndDataTypeMap.get(
