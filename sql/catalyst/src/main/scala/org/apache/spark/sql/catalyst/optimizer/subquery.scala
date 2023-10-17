@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -174,6 +175,71 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
+      }
+
+    // This case takes care of predicate subqueries in join conditions that are not pushed down
+    // to the children nodes by [[PushDownPredicates]].
+    case j: Join if j.condition.exists(cond =>
+      SubqueryExpression.hasInOrCorrelatedExistsSubquery(cond)) &&
+      conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+
+      val optimizeUncorrelatedInSubqueries =
+        conf.getConf(OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION)
+      val relevantSubqueries = j.condition.get.collect {
+        case i: InSubquery if i.query.isCorrelated => i
+        case i: InSubquery if !i.query.isCorrelated && optimizeUncorrelatedInSubqueries => i
+        case e: Exists if e.isCorrelated => e
+      }
+      if (relevantSubqueries.isEmpty) {
+        j
+      } else {
+        // `subqueriesWithJoinInputReferenceInfo`is of type Seq[(Expression, Boolean, Boolean)]
+        // (1): Expression, the join predicate containing some predicate subquery we are interested
+        // in re-writing
+        // (2): Boolean, whether (1) references the left join input
+        // (3): Boolean, whether (1) references the right join input
+        val subqueriesWithJoinInputReferenceInfo = relevantSubqueries.map { e =>
+          val referenceLeft = e.references.intersect(j.left.outputSet).nonEmpty
+          val referenceRight = e.references.intersect(j.right.outputSet).nonEmpty
+          (e, referenceLeft, referenceRight)
+        }
+        val subqueriesReferencingBothJoinInputs = subqueriesWithJoinInputReferenceInfo
+          .filter(i => i._2 && i._3)
+
+        // Currently do not support correlated subqueries in the join predicate that reference both
+        // join inputs
+        if (subqueriesReferencingBothJoinInputs.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedCorrelatedSubqueryInJoinConditionError(
+            subqueriesReferencingBothJoinInputs.map(_._1))
+        }
+        val subqueriesReferencingLeft = subqueriesWithJoinInputReferenceInfo.filter(_._2).map(_._1)
+        val subqueriesReferencingRight = subqueriesWithJoinInputReferenceInfo.filter(_._3).map(_._1)
+        if (subqueriesReferencingLeft.isEmpty && subqueriesReferencingRight.isEmpty) {
+          j
+        } else {
+          var newCondition = j.condition.get
+          val newLeft = subqueriesReferencingLeft.foldLeft(j.left) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          val newRight = subqueriesReferencingRight.foldLeft(j.right) {
+            case (p, e) =>
+              val (newCond, newInputPlan) = rewriteExistentialExpr(Seq(e), p)
+              // Update the join condition to rewrite the subquery expression
+              newCondition = newCondition.transform {
+                case expr if expr.fastEquals(e) => newCond.get
+              }
+              newInputPlan
+          }
+          // Remove unwanted exists columns from new existence joins with new Project
+          Project(j.output, j.copy(left = newLeft, right = newRight,
+            condition = Some(newCondition)))
+        }
       }
 
     case u: UnaryNode if u.expressions.exists(
@@ -410,6 +476,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       } else {
         newPlan
       }
+    case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
+      rewriteSubQueries(j)
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q)

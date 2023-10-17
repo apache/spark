@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: 42902](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Can't overwrite the target that is also being read from.
 
