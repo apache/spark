@@ -162,7 +162,7 @@ private[spark] class TaskSchedulerImpl(
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
 
-  private val executorToProfile = new HashMap[String, Int]
+  private val executorIdToResourceProfileId = new HashMap[String, Int]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
@@ -530,7 +530,7 @@ private[spark] class TaskSchedulerImpl(
       }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
-        executorToProfile(o.executorId) = o.resourceProfileId
+        executorIdToResourceProfileId(o.executorId) = o.resourceProfileId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
@@ -628,8 +628,8 @@ private[spark] class TaskSchedulerImpl(
 
         if (!launchedAnyTask) {
 
-          val hostToExecutorsForTaskSet = hostToExecutors.map{ case (host, execsOnHost) =>
-            (host, execsOnHost.filter(taskSet.taskSet.resourceProfileId == executorToProfile(_)))
+          val hostToExecutorsForTaskSet = hostToExecutors.map { case (host, execsOnHost) =>
+            (host, execsOnHost.filter(taskSet.taskSet.resourceProfileId == executorIdToResourceProfileId(_)))
           }
 
           taskSet.getCompletelyExcludedTaskIfAny(hostToExecutorsForTaskSet).foreach { taskIndex =>
@@ -649,7 +649,7 @@ private[spark] class TaskSchedulerImpl(
               // notify ExecutorAllocationManager to allocate more executors to schedule the
               // unschedulable tasks else we will abort immediately.
               executorIdToRunningTaskIds
-                .filter(x => taskSet.taskSet.resourceProfileId == executorToProfile(x._1))
+                .filter(x => taskSet.taskSet.resourceProfileId == executorIdToResourceProfileId(x._1))
                 .find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
@@ -1147,7 +1147,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    executorToProfile -= (executorId)
+    executorIdToResourceProfileId -= (executorId)
 
     executorsPendingDecommission.remove(executorId)
       .foreach(executorsRemovedByDecom.put(executorId, _))
