@@ -38,3 +38,4 @@ This page gives an overview of all public pandas API on Spark.
    resampling
    ml
    extensions
+   testing
