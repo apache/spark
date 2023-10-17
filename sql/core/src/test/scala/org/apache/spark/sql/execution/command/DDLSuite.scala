@@ -2409,15 +2409,15 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("SPARK-44837: Error when altering partition column in non-delta table") {
     withTable("t") {
       sql("CREATE TABLE t(i INT, j INT, k INT) USING parquet PARTITIONED BY (i, j)")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
-      }
       checkError(
-        exception = e,
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ALTER COLUMN i COMMENT 'comment'")
+        },
         errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
         sqlState = "428FR",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
-          "columnName" -> "`i`"))
+          "columnName" -> "`i`")
+      )
     }
   }
 }

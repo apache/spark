@@ -381,6 +381,7 @@ case class AlterTableChangeColumnCommand(
     if (table.partitionSchema.fieldNames.exists(resolver(columnName, _))) {
         throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
     }
+    // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
