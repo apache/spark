@@ -1394,11 +1394,6 @@ class Dataset[T] private[sql](
   def apply(colName: String): Column = col(colName)
 
   /**
-   * Selects column based on the column index (0-based) and returns it as a [[Column]].
-   */
-  private[sql] def apply(index: Int): Column = col(index)
-
-  /**
    * Specifies some hint on the current Dataset. As an example, the following code specifies
    * that one of the plan can be broadcasted:
    *
@@ -1448,13 +1443,6 @@ class Dataset[T] private[sql](
       } else {
         Column(addDataFrameIdToCol(resolve(colName)))
       }
-  }
-
-  /**
-   * Selects column based on the column index (0-based) and returns it as a [[Column]].
-   */
-  private[sql] def col(index: Int): Column = {
-    Column(addDataFrameIdToCol(queryExecution.analyzed.output(index)))
   }
 
   /**
@@ -3810,10 +3798,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def persist(): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this)
-    this
-  }
+  def persist(): this.type = persist(sparkSession.sessionState.conf.defaultCacheStorageLevel)
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).

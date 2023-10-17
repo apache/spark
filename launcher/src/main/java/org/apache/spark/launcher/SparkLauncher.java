@@ -99,6 +99,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
    * @deprecated use `CHILD_CONNECTION_TIMEOUT`
    * @since 1.6.0
    */
+  @Deprecated
   public static final String DEPRECATED_CHILD_CONNECTION_TIMEOUT =
     "spark.launcher.childConectionTimeout";
 

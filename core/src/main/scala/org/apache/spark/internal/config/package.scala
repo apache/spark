@@ -725,12 +725,12 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
       .doc("Specifies a disk-based store used in shuffle service local db. " +
-        "LEVELDB or ROCKSDB.")
+        "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.LEVELDB.name)
+      .createWithDefault(DBBackend.ROCKSDB.name)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)

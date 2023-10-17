@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Locale
 
-import scala.collection.convert.ImplicitConversions._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties.lineSeparator
 import scala.util.matching.Regex
 
@@ -71,6 +71,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
+      if (!fx(s)) {
+        print(s)
+      }
       assert(fx(s))
     }
   }
@@ -229,7 +232,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       }).toSet
 
       val docsDir = getWorkspaceFilePath("docs")
-      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).filter { f =>
+      val orphans = FileUtils.listFiles(docsDir.toFile, Array("md"), false).asScala.filter { f =>
         (f.getName.startsWith("sql-error-conditions-") && f.getName.endsWith("-error-class.md")) &&
           !subErrorFileNames.contains(f.getName)
       }
@@ -267,8 +270,7 @@ class SparkThrowableSuite extends SparkFunSuite {
          |
          |Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
          |
-         |$sqlErrorParentDocContent
-         |""".stripMargin
+         |$sqlErrorParentDocContent""".stripMargin
 
     errors.filter(_._2.subClass.isDefined).foreach(error => {
       val name = error._1
@@ -330,7 +332,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
         FileUtils.writeStringToFile(
           parentDocPath.toFile,
-          sqlErrorParentDoc + lineSeparator,
+          sqlErrorParentDoc,
           StandardCharsets.UTF_8)
       }
     } else {
@@ -546,6 +548,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "sqlState" : "0A000",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }

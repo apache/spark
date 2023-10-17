@@ -828,7 +828,7 @@ class QueryCompilationErrorsSuite
             sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
           },
           errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
-          sqlState = "46110",
+          sqlState = "0A000",
           parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
       }
     }
@@ -851,7 +851,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("location")))
@@ -861,7 +861,7 @@ class QueryCompilationErrorsSuite
               sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
             },
             errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
-            sqlState = "46110",
+            sqlState = "0A000",
             parameters = Map(
               "cmd" -> toSQLStmt("SET NAMESPACE"),
               "property" -> toSQLConf("a")))

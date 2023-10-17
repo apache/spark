@@ -34,13 +34,6 @@ from typing import (
 )
 from itertools import zip_longest
 
-from pyspark import SparkContext, SparkConf
-from pyspark.errors import PySparkAssertionError, PySparkException
-from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.dataframe import DataFrame
-from pyspark.sql import Row
-from pyspark.sql.types import StructType, AtomicType, StructField
-
 have_scipy = False
 have_numpy = False
 try:
@@ -57,6 +50,14 @@ try:
 except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
+
+from pyspark import SparkContext, SparkConf
+from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark.find_spark_home import _find_spark_home
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql import Row
+from pyspark.sql.types import StructType, AtomicType, StructField
+
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
