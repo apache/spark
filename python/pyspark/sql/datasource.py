@@ -27,18 +27,18 @@ if TYPE_CHECKING:
 __all__ = ["DataSource", "DataSourceReader"]
 
 
-class DataSource:
+class DataSource(ABC):
     """
     A base class for data sources.
 
     This class represents a custom data source that allows for reading from and
     writing to it. The data source provides methods to create readers and writers
-    for reading and writing data, respectively. At least one of the methods `reader`
-    or `writer` must be implemented by any subclass to make the data source either
+    for reading and writing data, respectively. At least one of the methods ``reader``
+    or ``writer`` must be implemented by any subclass to make the data source either
     readable or writable.
 
     After implementing this interface, you can start to load your data source using
-    `spark.read.format(...).load()` and save data using `df.write.format(...).save()`.
+    ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
     """
 
     def __init__(self, options: Dict[str, "OptionalPrimitiveType"]):
@@ -67,11 +67,11 @@ class DataSource:
         """
         Returns the schema of the data source.
 
-        It can reference the `options` field to infer the data source's schema when
+        It can reference the ``options`` field to infer the data source's schema when
         users do not explicitly specify it. This method is invoked once when calling
-        `spark.read.format(...).load()` to get the schema for a data source read operation.
-        If this method is not implemented, and a user does not provide a schema when
-        reading the data source, an exception will be thrown.
+        ``spark.read.format(...).load()`` to get the schema for a data source read
+        operation. If this method is not implemented, and a user does not provide a
+        schema when reading the data source, an exception will be thrown.
 
         Returns
         -------
@@ -83,12 +83,12 @@ class DataSource:
         Returns a DDL string:
 
         >>> def schema(self):
-        >>>    return "a INT, b STRING"
+        ...    return "a INT, b STRING"
 
         Returns a StructType:
 
         >>> def schema(self):
-        >>>   return StructType().add("a", "int").add("b", "string")
+        ...   return StructType().add("a", "int").add("b", "string")
         """
         ...
 
@@ -124,7 +124,7 @@ class DataSourceReader(ABC):
 
         This method is called once during the physical planning stage to generate a list
         of partitions. If the method returns N partitions, then the planner will create
-        N tasks. Each task will then execute `read(partition)` in parallel, using each
+        N tasks. Each task will then execute ``read(partition)`` in parallel, using each
         partition value to read the data from this data source.
 
         If this method is not implemented, or returns an empty list, Spark will create one
@@ -145,16 +145,17 @@ class DataSourceReader(ABC):
         Returns a list of integers:
 
         >>> def partitions(self):
-        >>>     return [1, 2, 3]
+        ...     return [1, 2, 3]
 
         Returns a list of string:
 
         >>> def partitions(self):
-        >>>     return ["a", "b", "c"]
+        ...     return ["a", "b", "c"]
 
         Returns a list of tuples:
+
         >>> def partitions(self):
-        >>>     return [("a", 1), ("b", 2), ("c", 3)]
+        ...     return [("a", 1), ("b", 2), ("c", 3)]
         """
         ...
 
@@ -173,7 +174,7 @@ class DataSourceReader(ABC):
         ----------
         partition : object
             The partition to read. It must be one of the partition values returned by
-            `partitions()` or None if `partitions()` method is not implemented.
+            ``partitions()`` or None if ``partitions()`` method is not implemented.
 
         Returns
         -------

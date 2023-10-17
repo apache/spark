@@ -86,4 +86,12 @@ case class PythonDataSourcePartitionExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
   }
+
+  override protected def stringArgs: Iterator[Any] = {
+    if (partitions.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
+    }
+  }
 }

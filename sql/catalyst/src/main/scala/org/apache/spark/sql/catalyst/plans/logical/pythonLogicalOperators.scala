@@ -92,21 +92,27 @@ case class PythonDataSource(
   override protected def stringArgs: Iterator[Any] = {
     Iterator(output)
   }
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_DATA_SOURCE)
 }
 
 /**
  * Represents a list of Python data source partitions.
  */
-case class PythonDataSourcePartition(partitions: Seq[Array[Byte]]) extends LeafNode {
-  override val output: Seq[Attribute] =
-    toAttributes(new StructType().add("partition", BinaryType))
-
+case class PythonDataSourcePartition(
+    output: Seq[Attribute],
+    partitions: Seq[Array[Byte]]) extends LeafNode {
   override protected def stringArgs: Iterator[Any] = {
     if (partitions.isEmpty) {
       Iterator("<empty>", output)
     } else {
       Iterator(output)
     }
+  }
+}
+
+object PythonDataSourcePartition {
+  def getOutputAttrs: Seq[Attribute] = {
+    toAttributes(new StructType().add("partition", BinaryType))
   }
 }
 

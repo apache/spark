@@ -18,7 +18,6 @@ import sys
 from typing import (
     cast,
     overload,
-    Callable,
     Dict,
     Iterable,
     List,
@@ -337,12 +336,11 @@ class DataFrameReader(OptionUtils):
         self.options(**options)
 
         # Load a Python data source
-        if isinstance(self._format, Callable):  # type: ignore[arg-type]
+        if isinstance(self._format, type) and issubclass(self._format, DataSource):
             # TODO(SPARK-45560): support load() with non-empty path.
 
             # Create an instance of the data source.
-            data_source_cls = cast(Type[DataSource], self._format)
-            data_source = data_source_cls(self._options)
+            data_source = self._format(self._options)
 
             # Get schema of the data source
             schema = self._schema or data_source.schema()
