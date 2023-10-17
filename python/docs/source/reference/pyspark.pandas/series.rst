@@ -170,7 +170,6 @@ Computations / Descriptive Stats
    Series.value_counts
    Series.round
    Series.diff
-   Series.is_monotonic
    Series.is_monotonic_increasing
    Series.is_monotonic_decreasing
 

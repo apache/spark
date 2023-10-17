@@ -5190,7 +5190,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         read_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5280,7 +5279,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         read_parquet
         DataFrame.to_delta
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5363,7 +5361,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         DataFrame.to_delta
         DataFrame.to_parquet
         DataFrame.to_table
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -5407,26 +5404,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             index_col=index_col,
             **options,
         )
-
-    def to_spark_io(
-        self,
-        path: Optional[str] = None,
-        format: Optional[str] = None,
-        mode: str = "overwrite",
-        partition_cols: Optional[Union[str, List[str]]] = None,
-        index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType",
-    ) -> None:
-        """An alias for :func:`DataFrame.spark.to_spark_io`.
-        See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
-
-        .. deprecated:: 3.2.0
-            Use :func:`DataFrame.spark.to_spark_io` instead.
-        """
-        warnings.warn("Deprecated in 3.2, Use DataFrame.spark.to_spark_io instead.", FutureWarning)
-        return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
-
-    to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> PySparkDataFrame:
         if index_col is None:
