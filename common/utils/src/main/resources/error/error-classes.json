@@ -869,6 +869,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DUPLICATED_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
+  },
   "DUPLICATE_ASSIGNMENTS" : {
     "message" : [
       "The columns or variables <nameList> appear more than once as assignment targets."
@@ -2173,6 +2179,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table"
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
@@ -2194,6 +2206,13 @@
         ]
       }
     },
+    "sqlState" : "42K0E"
+  },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_OPTION" : {
+    "message": [
+      "The time travel timestamp option '<timestamp>' is invalid.",
+      "It should be in the format of 'yyyy-MM-dd HH:mm:ss[.us][zone_id]'"
+    ],
     "sqlState" : "42K0E"
   },
   "INVALID_TYPED_LITERAL" : {
@@ -5112,11 +5131,6 @@
   "_LEGACY_ERROR_TEMP_1332" : {
     "message" : [
       "<errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1334" : {
-    "message" : [
-      "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1338" : {

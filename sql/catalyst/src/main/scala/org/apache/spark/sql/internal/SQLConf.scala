@@ -4507,6 +4507,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val TIME_TRAVEL_TIMESTAMP_KEY =
+    buildConf("spark.sql.timeTravelTimestampKey")
+      .doc("The option name to specify the time travel timestamp when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("timestampAsOf")
+
+  val TIME_TRAVEL_VERSION_KEY =
+    buildConf("spark.sql.timeTravelVersionKey")
+      .doc("The option name to specify the time travel table version when reading a table.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("versionAsOf")
+
   /**
    * Holds information about keys that have been deprecated.
    *

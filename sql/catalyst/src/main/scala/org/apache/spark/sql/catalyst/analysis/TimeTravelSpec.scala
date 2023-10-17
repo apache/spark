@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, RuntimeReplaceable, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, RuntimeReplaceable, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 sealed trait TimeTravelSpec
 
@@ -31,7 +32,7 @@ object TimeTravelSpec {
   def create(
       timestamp: Option[Expression],
       version: Option[String],
-      conf: SQLConf) : Option[TimeTravelSpec] = {
+      sessionLocalTimeZone: String) : Option[TimeTravelSpec] = {
     if (timestamp.nonEmpty && version.nonEmpty) {
       throw QueryCompilationErrors.invalidTimeTravelSpecError()
     } else if (timestamp.nonEmpty) {
@@ -50,7 +51,7 @@ object TimeTravelSpec {
           throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
             "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC", ts)
       }
-      val tz = Some(conf.sessionLocalTimeZone)
+      val tz = Some(sessionLocalTimeZone)
       // Set `ansiEnabled` to false, so that it can return null for invalid input and we can provide
       // better error message.
       val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
@@ -61,6 +62,38 @@ object TimeTravelSpec {
       Some(AsOfTimestamp(value.asInstanceOf[Long]))
     } else if (version.nonEmpty) {
       Some(AsOfVersion(version.get))
+    } else {
+      None
+    }
+  }
+
+  def fromOptions(
+      options: CaseInsensitiveStringMap,
+      timestampKey: String,
+      versionKey: String,
+      sessionLocalTimeZone: String): Option[TimeTravelSpec] = {
+    val timestampStr = options.get(timestampKey)
+    val versionStr = options.get(versionKey)
+    if (timestampStr != null && versionStr != null) {
+      throw QueryCompilationErrors.invalidTimeTravelSpecError()
+    }
+
+    if (timestampStr != null) {
+      val timestampValue = Cast(
+        Literal(timestampStr),
+        TimestampType,
+        Some(sessionLocalTimeZone),
+        ansiEnabled = false
+      ).eval()
+      if (timestampValue == null) {
+        throw new AnalysisException(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_OPTION",
+          Map("timestamp" -> timestampStr)
+        )
+      }
+      Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
+    } else if (versionStr != null) {
+      Some(AsOfVersion(versionStr))
     } else {
       None
     }
