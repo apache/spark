@@ -63,9 +63,7 @@ private[sql] class XmlOptions(
   }
 
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
-  val rowTagOpt = parameters.get(ROW_TAG)
-  require(rowTagOpt.isDefined, s"'$ROW_TAG' option is required.")
-  val rowTag = rowTagOpt.get.trim
+  val rowTag = parameters.getOrElse(ROW_TAG, XmlOptions.DEFAULT_ROW_TAG).trim
   require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be an empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
           s"'$ROW_TAG' should not include angle brackets")
@@ -188,6 +186,7 @@ private[sql] class XmlOptions(
 private[sql] object XmlOptions extends DataSourceOptions {
   val DEFAULT_ATTRIBUTE_PREFIX = "_"
   val DEFAULT_VALUE_TAG = "_VALUE"
+  val DEFAULT_ROW_TAG = "ROW"
   val DEFAULT_ROOT_TAG = "ROWS"
   val DEFAULT_DECLARATION = "version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\""
   val DEFAULT_ARRAY_ELEMENT_NAME = "item"
