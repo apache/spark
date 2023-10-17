@@ -93,8 +93,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // byte arrays instead of longs.
       md.putLong("binarylong", 1)
       Option(LongType)
-    } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Option(BooleanType)
+    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
+      Some(ByteType)
     } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
       // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
       Some(StringType)

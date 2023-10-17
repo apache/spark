@@ -43,7 +43,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/" +
+        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -54,10 +55,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
 
-    conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
+    conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), tiny TINYINT, "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
       + "dbl DOUBLE)").executeUpdate()
-    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
+    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', -128, "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002)").executeUpdate()
 
@@ -89,26 +90,28 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 9)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Byte"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Integer"))
-    assert(types(5).equals("class java.lang.Long"))
-    assert(types(6).equals("class java.math.BigDecimal"))
-    assert(types(7).equals("class java.lang.Double"))
+    assert(types(5).equals("class java.lang.Integer"))
+    assert(types(6).equals("class java.lang.Long"))
+    assert(types(7).equals("class java.math.BigDecimal"))
     assert(types(8).equals("class java.lang.Double"))
+    assert(types(9).equals("class java.lang.Double"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getInt(2) == 17)
-    assert(rows(0).getInt(3) == 77777)
-    assert(rows(0).getInt(4) == 123456789)
-    assert(rows(0).getLong(5) == 123456789012345L)
+    assert(rows(0).getByte(2) == 0x80.toByte)
+    assert(rows(0).getInt(3) == 17)
+    assert(rows(0).getInt(4) == 77777)
+    assert(rows(0).getInt(5) == 123456789)
+    assert(rows(0).getLong(6) == 123456789012345L)
     val bd = new BigDecimal("123456789012345.12345678901234500000")
-    assert(rows(0).getAs[BigDecimal](6).equals(bd))
-    assert(rows(0).getDouble(7) == 42.75)
-    assert(rows(0).getDouble(8) == 1.0000000000000002)
+    assert(rows(0).getAs[BigDecimal](7).equals(bd))
+    assert(rows(0).getDouble(8) == 42.75)
+    assert(rows(0).getDouble(9) == 1.0000000000000002)
   }
 
   test("Date types") {

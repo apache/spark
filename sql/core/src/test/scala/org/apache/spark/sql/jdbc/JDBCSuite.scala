@@ -2120,4 +2120,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val expected = Map("percentile_approx_val" -> 49)
     assert(namedObservation.get === expected)
   }
+
+  test("SPARK-45561: Mapped TINYINT to ByteType for MySQLDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:mysql")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+      metadata).isEmpty)
+  }
 }
