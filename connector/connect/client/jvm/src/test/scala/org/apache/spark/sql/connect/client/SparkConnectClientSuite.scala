@@ -27,10 +27,11 @@ import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.test.ConnectFunSuite
 
@@ -205,6 +206,31 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     assertThrows[RuntimeException] {
       session.range(10).count()
+    }
+  }
+
+  for ((name, constructor) <- GrpcExceptionConverter.errorFactory) {
+    test(s"error framework parameters - ${name}") {
+      val testParams = GrpcExceptionConverter.ErrorParams(
+        message = "test message",
+        cause = None,
+        errorClass = Some("test error class"),
+        messageParameters = Map("key" -> "value"),
+        queryContext = Array.empty)
+      val error = constructor(testParams)
+      if (!error.isInstanceOf[ParseException]) {
+        assert(error.getMessage == testParams.message)
+      } else {
+        assert(error.getMessage == s"\n${testParams.message}")
+      }
+      assert(error.getCause == null)
+      error match {
+        case sparkThrowable: SparkThrowable =>
+          assert(sparkThrowable.getErrorClass == testParams.errorClass.get)
+          assert(sparkThrowable.getMessageParameters.asScala == testParams.messageParameters)
+          assert(sparkThrowable.getQueryContext.isEmpty)
+        case _ =>
+      }
     }
   }
 
