@@ -116,6 +116,17 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("SQLSTATE is mandatory") {
+    val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
+      case (error: String, info: ErrorInfo) =>
+        !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
+    }.keys.toSeq
+    if (errorClassesNoSqlState.nonEmpty) {
+      logWarning(s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
+    }
+    assert(errorClassesNoSqlState.isEmpty)
+  }
+
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
