@@ -646,8 +646,6 @@ jobs:
           docs-maven-
     - name: Free up disk space
       run: |
-        # uninstall libraries dedicated for ML testing
-        python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow deepspeed
         if [ -f ./dev/free_disk_space_container ]; then
           ./dev/free_disk_space_container
         fi
@@ -728,6 +726,8 @@ jobs:
         ./R/install-dev.sh
     - name: Install dependencies for documentation generation
       run: |
+        # uninstall libraries dedicated for ML testing
+        python3.9 -m pip uninstall -y torch torchvision torcheval torchtnt tensorboard mlflow deepspeed
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
         apt-get install -y libcurl4-openssl-dev pandoc
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
