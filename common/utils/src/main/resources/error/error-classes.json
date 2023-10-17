@@ -3015,6 +3015,12 @@
     ],
     "sqlState" : "4274K"
   },
+  "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
+    "message" : [
+      "Class <clsName> has unexpected serializer: <objSerializer>."
+    ],
+    "sqlState" : "42846"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
@@ -5713,11 +5719,6 @@
     "message" : [
       "Error while encoding: <e>",
       "<expressions>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2153" : {
-    "message" : [
-      "class <clsName> has unexpected serializer: <objSerializer>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2154" : {

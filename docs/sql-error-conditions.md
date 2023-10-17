@@ -1941,6 +1941,12 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 
 Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
 
+### UNEXPECTED_SERIALIZER_FOR_CLASS
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Class <clsName> has unexpected serializer: <objSerializer>.
+
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
