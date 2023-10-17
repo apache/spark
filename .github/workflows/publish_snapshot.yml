@@ -66,4 +66,5 @@ jobs:
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
         GIT_REF: ${{ matrix.branch }}
+        PACKAGE_BEFORE_DEPLOY: true
       run: ./dev/create-release/release-build.sh publish-snapshot
