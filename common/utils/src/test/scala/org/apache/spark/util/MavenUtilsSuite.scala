@@ -98,9 +98,8 @@ class MavenUtilsSuite
 
   test("add dependencies works correctly") {
     val md = MavenUtils.getModuleDescriptor
-    val artifacts = MavenUtils.extractMavenCoordinates(
-      "com.databricks:spark-csv_2.12:0.1," +
-        "com.databricks:spark-avro_2.12:0.1")
+    val artifacts = MavenUtils.extractMavenCoordinates("com.databricks:spark-csv_2.12:0.1," +
+      "com.databricks:spark-avro_2.12:0.1")
 
     MavenUtils.addDependenciesToIvy(md, artifacts, "default")
     assert(md.getDependencies.length === 2)
@@ -186,10 +185,10 @@ class MavenUtilsSuite
   test("dependency not found throws RuntimeException") {
     intercept[RuntimeException] {
       MavenUtils.resolveMavenCoordinates(
-        "a:b:c",
-        MavenUtils.buildIvySettings(None, Some(tempIvyPath)),
+      "a:b:c",
+      MavenUtils.buildIvySettings(None, Some(tempIvyPath)),
         transitive = true,
-        isTest = true)
+      isTest = true)
     }
   }
 
@@ -259,11 +258,8 @@ class MavenUtilsSuite
     testUtilSettings.setDefaultIvyUserDir(new File(tempIvyPath))
     IvyTestUtils.withRepository(main, Some(dep), Some(dummyIvyLocal), useIvyLayout = true,
       ivySettings = testUtilSettings) { repo =>
-      val jarPath = MavenUtils.resolveMavenCoordinates(
-        main.toString,
-        settings,
-        transitive = true,
-        isTest = true)
+      val jarPath = MavenUtils.resolveMavenCoordinates(main.toString, settings,
+        transitive = true, isTest = true)
       assert(jarPath.exists(_.indexOf("mylib") >= 0), "should find artifact")
       assert(jarPath.forall(_.indexOf(tempIvyPath) >= 0), "should be in new ivy path")
       assert(jarPath.exists(_.indexOf("mydep") >= 0), "should find dependency")

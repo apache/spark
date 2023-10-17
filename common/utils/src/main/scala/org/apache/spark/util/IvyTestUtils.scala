@@ -331,7 +331,7 @@ private[spark] object IvyTestUtils {
    * @param useIvyLayout whether to mock the Ivy layout for local repository testing
    * @param withPython Whether to pack python files inside the jar for extensive testing.
    * @return Root path of the repository. Will be `rootDir` if supplied.
-   * */
+   */
   private[spark] def createLocalRepositoryForTests(
       artifact: MavenCoordinate,
       dependencies: Option[String],
@@ -377,8 +377,9 @@ private[spark] object IvyTestUtils {
         val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
         FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
         deps.foreach { _.foreach { dep =>
-          FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
-        }}
+            FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
+          }
+        }
       } else {
         FileUtils.deleteDirectory(repo)
       }
@@ -394,7 +395,8 @@ private[spark] object IvyTestUtils {
     // delete the artifact from the cache as well if it already exists
     FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
     dependencies.foreach { _.foreach { dep =>
-      FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
-    }}
+        FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
+      }
+    }
   }
 }
