@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
@@ -145,7 +145,15 @@ private[storage] class BlockManagerDecommissioner(
                     // Confirm peer is not the fallback BM ID because fallbackStorage would already
                     // have been used in the try-block above so there's no point trying again
                     && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
-                  fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
+                  try {
+                    fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
+                  } catch {
+                    case e: FileNotFoundException =>
+                      logWarning("Skipping block $shuffleBlockInfo, block deleted.", e)
+                    case NonFatal(e) =>
+                      logError(s"Fallback storage for $shuffleBlockInfo failed", e)
+                      keepRunning = false
+                  }
                 } else if (e.getCause != null && e.getCause.getMessage != null
                   && e.getCause.getMessage
                   .contains(blockSavedOnDecommissionedBlockManagerException)) {
