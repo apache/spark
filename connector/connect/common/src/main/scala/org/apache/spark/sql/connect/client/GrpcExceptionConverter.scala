@@ -27,7 +27,7 @@ import io.grpc.protobuf.StatusProto
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, UserContext}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub
 import org.apache.spark.internal.Logging
@@ -271,6 +271,12 @@ private object GrpcExceptionConverter {
         override def stopIndex(): Int = queryCtx.getStopIndex
 
         override def fragment(): String = queryCtx.getFragment
+
+        // TODO(MaxGekk): Invoke proper methods from QueryContext
+        override def callSite(): String = ""
+        override def code(): String = ""
+        override def contextType(): QueryContextType = QueryContextType.SQL
+        override def summary(): String = ""
       }
     }.toArray
 
