@@ -531,12 +531,7 @@ SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType(
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -545,12 +540,7 @@ SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType(T
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -559,12 +549,7 @@ SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElemen
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -573,12 +558,7 @@ SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType(
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -587,12 +567,7 @@ SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType(TAB
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -601,12 +576,7 @@ SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalar
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -615,12 +585,7 @@ SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayT
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -630,12 +595,7 @@ SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayE
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -644,12 +604,7 @@ SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStruct
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query
@@ -658,12 +613,7 @@ SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapTyp
 struct<>
 -- !query output
 org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: 
-Column 0 within a returned row had a value of
-None, either directly or within array/struct/map subfields, but the
-corresponding column type was declared as non-nullable; please
-update the UDTF to return a non-None value at this location or
-otherwise declare the column type as nullable.
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
 
 
 -- !query

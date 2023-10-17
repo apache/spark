@@ -24,7 +24,6 @@ import dataclasses
 import time
 from inspect import getfullargspec
 import json
-from textwrap import dedent
 from typing import Any, Callable, Iterable, Iterator
 import faulthandler
 
@@ -860,14 +859,11 @@ def read_udtf(pickleSer, infile, eval_type):
                         error_class="UDTF_EXEC_ERROR",
                         message_parameters={
                             "method_name": "eval' or 'terminate",
-                            "error": dedent(
-                                f"""
-                                Column {result_column_index} within a returned row had a value of
-                                None, either directly or within array/struct/map subfields, but the
-                                corresponding column type was declared as non-nullable; please
-                                update the UDTF to return a non-None value at this location or
-                                otherwise declare the column type as nullable."""
-                            ),
+                            "error": f"Column {result_column_index} within a returned row had a value "
+                            + "of None, either directly or within array/struct/map subfields, "
+                            + "but the corresponding column type was declared as non-nullable; "
+                            + "please update the UDTF to return a non-None value at this "
+                            + "location or otherwise declare the column type as nullable.",
                         },
                     )
                 elif (
