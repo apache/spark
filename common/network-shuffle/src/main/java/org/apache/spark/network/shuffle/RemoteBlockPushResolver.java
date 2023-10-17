@@ -97,6 +97,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Cleaner CLEANER = Cleaner.create();
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
+
   public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   public static final String SHUFFLE_META_DELIMITER = ":";
   public static final String MERGE_DIR_KEY = "mergeDir";
