@@ -105,7 +105,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
             Some(StructType(Nil))
-          case e: FileNotFoundException if ignoreMissingFiles => throw e
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
