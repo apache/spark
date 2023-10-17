@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
