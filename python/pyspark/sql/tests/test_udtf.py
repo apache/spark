@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Optional
 
 from py4j.protocol import Py4JJavaError
 
@@ -1967,6 +1967,12 @@ class BaseUDTFTestsMixin:
         class TestUDTF:
             @staticmethod
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(kwargs["a"].data_type, IntegerType)
+                assert kwargs["a"].value == 10
+                assert not kwargs["a"].is_table
+                assert isinstance(kwargs["b"].data_type, StringType)
+                assert kwargs["b"].value == "x"
+                assert not kwargs["b"].is_table
                 return AnalyzeResult(
                     StructType(
                         [StructField(key, arg.data_type) for key, arg in sorted(kwargs.items())]
@@ -2021,7 +2027,14 @@ class BaseUDTFTestsMixin:
         @udtf
         class TestUDTF:
             @staticmethod
-            def analyze(a, b=None):
+            def analyze(a: AnalyzeArgument, b: Optional[AnalyzeArgument] = None):
+                assert isinstance(a.data_type, IntegerType)
+                assert a.value == 10
+                assert not a.is_table
+                if b is not None:
+                    assert isinstance(b.data_type, StringType)
+                    assert b.value == "z"
+                    assert not b.is_table
                 schema = StructType().add("a", a.data_type)
                 if b is None:
                     return AnalyzeResult(schema.add("b", IntegerType()))
