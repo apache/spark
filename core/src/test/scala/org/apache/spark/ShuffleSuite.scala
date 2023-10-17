@@ -502,7 +502,7 @@ class InterleaveIterators[T, R](
   class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
     def hasNext: Boolean = sub.hasNext
 
-    def next: E = {
+    def next(): E = {
       barrier.await()
       sub.next()
     }

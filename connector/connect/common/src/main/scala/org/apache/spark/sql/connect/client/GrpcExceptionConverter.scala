@@ -162,9 +162,9 @@ private[client] class GrpcExceptionConverter(grpcStub: SparkConnectServiceBlocki
   }
 }
 
-private object GrpcExceptionConverter {
+private[client] object GrpcExceptionConverter {
 
-  private case class ErrorParams(
+  private[client] case class ErrorParams(
       message: String,
       cause: Option[Throwable],
       // errorClass will only be set if the error is both enriched and SparkThrowable.
@@ -180,7 +180,7 @@ private object GrpcExceptionConverter {
     (className, throwableCtr)
   }
 
-  private val errorFactory = Map(
+  private[client] val errorFactory = Map(
     errorConstructor(params =>
       new StreamingQueryException(
         params.message,
@@ -203,23 +203,84 @@ private object GrpcExceptionConverter {
         errorClass = params.errorClass,
         messageParameters = params.messageParameters,
         context = params.queryContext)),
-    errorConstructor(params => new NamespaceAlreadyExistsException(params.message)),
-    errorConstructor(params => new TableAlreadyExistsException(params.message, params.cause)),
-    errorConstructor(params => new TempTableAlreadyExistsException(params.message, params.cause)),
-    errorConstructor(params => new NoSuchDatabaseException(params.message, params.cause)),
-    errorConstructor(params => new NoSuchTableException(params.message, params.cause)),
+    errorConstructor(params =>
+      new NamespaceAlreadyExistsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new TableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new TempTableAlreadyExistsException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new NoSuchDatabaseException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
+    errorConstructor(params =>
+      new NoSuchTableException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor[NumberFormatException](params =>
-      new SparkNumberFormatException(params.message)),
+      new SparkNumberFormatException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
-      new SparkIllegalArgumentException(params.message, params.cause)),
-    errorConstructor[ArithmeticException](params => new SparkArithmeticException(params.message)),
+      new SparkIllegalArgumentException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor[ArithmeticException](params =>
+      new SparkArithmeticException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
-      new SparkUnsupportedOperationException(params.message)),
+      new SparkUnsupportedOperationException(
+        params.message,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
-      new SparkArrayIndexOutOfBoundsException(params.message)),
-    errorConstructor[DateTimeException](params => new SparkDateTimeException(params.message)),
-    errorConstructor(params => new SparkRuntimeException(params.message, params.cause)),
-    errorConstructor(params => new SparkUpgradeException(params.message, params.cause)),
+      new SparkArrayIndexOutOfBoundsException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor[DateTimeException](params =>
+      new SparkDateTimeException(
+        params.message,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkRuntimeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters,
+        params.queryContext)),
+    errorConstructor(params =>
+      new SparkUpgradeException(
+        params.message,
+        params.cause,
+        params.errorClass,
+        params.messageParameters)),
     errorConstructor(params =>
       new SparkException(
         message = params.message,

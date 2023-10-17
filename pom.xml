@@ -137,13 +137,13 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.6.0</kafka.version>
+    <kafka.version>3.4.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.52.v20230823</jetty.version>
+    <jetty.version>9.4.53.v20231009</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
@@ -2965,12 +2965,7 @@
               <arg>-target:17</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
-              <!--
-                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
-              -->
               <arg>-Wconf:cat=scaladoc:wv</arg>
-              <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
-              <arg>-Wconf:cat=other-nullary-override:wv</arg>
               <!--
                 SPARK-33775 Suppress compilation warnings that contain the following contents.
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
@@ -2978,8 +2973,6 @@
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
               <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
-              <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
-              <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`
