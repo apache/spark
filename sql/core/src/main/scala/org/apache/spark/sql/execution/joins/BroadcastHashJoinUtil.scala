@@ -45,7 +45,7 @@ object BroadcastHashJoinUtil {
       if (conf.pushBroadcastedJoinKeysASFilterToScan && isBuildPlanPrunable(buildPlan,
           batchScansSelectedForBCPush)) {
       getPushDownDataSkipBuildSideCheck(conf, streamJoinKeys, buildJoinKeys, streamPlan, buildPlan,
-          buildLegsBlockingPushFromAncestors)
+          buildLegsBlockingPushFromAncestors, batchScansSelectedForBCPush)
     } else {
       Seq.empty
     }
@@ -183,7 +183,8 @@ object BroadcastHashJoinUtil {
       buildJoinKeys: Seq[Expression],
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
-      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _]):
+      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]):
   Seq[BroadcastVarPushDownData] = {
     val streamKeysStart = streamJoinKeys.zipWithIndex.filter {
       case (streamJk, _) => streamJk.isInstanceOf[Attribute]
@@ -191,7 +192,7 @@ object BroadcastHashJoinUtil {
     (for ((streamKeyStartExp, joinKeyIndex) <- streamKeysStart) yield {
       val streamKeyStart = streamKeyStartExp.asInstanceOf[Attribute]
       val batchScansOfInterest = identifyBatchScanOfInterest(streamKeyStart, streamPlan,
-          buildLegsBlockingPush)
+          buildLegsBlockingPush, batchScansSelectedForBCPush)
       val filteredBatchScansOfInterest = batchScansOfInterest.flatMap {
         case (currentStreamKey, runtimeFilteringBatchScan) =>
           val underlyingRuntimeFilteringScan = runtimeFilteringBatchScan.scan.
@@ -267,7 +268,8 @@ object BroadcastHashJoinUtil {
   private def identifyBatchScanOfInterest(
       streamKeyStart: Attribute,
       streamPlan: SparkPlan,
-      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _]):
+      buildLegsBlockingPush: java.util.IdentityHashMap[SparkPlan, _],
+      batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]):
   Seq[(Attribute, BatchScanExec)] = {
     var currentStreamKey = streamKeyStart
     var currentStreamPlan = streamPlan
@@ -336,7 +338,7 @@ object BroadcastHashJoinUtil {
             _.canonicalized == currentStreamKey.canonicalized)
           batchScanOfInterest = (for (child <- u.children) yield {
             identifyBatchScanOfInterest(child.output(indexOfStreamCol), child,
-                buildLegsBlockingPush)
+                buildLegsBlockingPush, batchScansSelectedForBCPush)
           }).flatten
           keepGoing = false
 

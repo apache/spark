@@ -51,21 +51,21 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.batch.asInstanceOf[AdvancedBatch]
+        d.getBatch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getBatchWithV2Filter(query: DataFrame): AdvancedBatchWithV2Filter = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+        d.getBatch.asInstanceOf[AdvancedBatchWithV2Filter]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
+        d.getBatch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
 
@@ -73,7 +73,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       query: DataFrame): JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
+        d.getBatch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
     }.head
   }
 
@@ -891,7 +891,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
           case "i" => current
           case "j" => -current
         }
-        InternalRow.fromSeq(values)
+        InternalRow.fromSeq(values.to[Seq])
       }
 
       override def close(): Unit = {}
@@ -1058,8 +1058,8 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(
-        Option(options.get("partitionKeys")).map(_.split(",")),
-        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+        Option(options.get("partitionKeys")).map(_.split(",").to[Seq]),
+        Option(options.get("orderKeys")).map(_.split(",").to[Seq]).getOrElse(Seq.empty)
       )
     }
   }

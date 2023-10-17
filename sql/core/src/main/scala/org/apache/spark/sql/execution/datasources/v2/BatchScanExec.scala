@@ -30,6 +30,8 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.joins.ProxyBroadcastVarAndStageIdentifier
 
+
+
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  */
@@ -43,13 +45,45 @@ case class BatchScanExec(
     @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None
   ) extends DataSourceV2ScanExecBase {
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
-  @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = null
-  @transient @volatile private var inputRDDCached: RDD[InternalRow] = null
+  @transient
+  @volatile private var _batch: Batch = _
+
+  @transient
+  @volatile private var _inputPartitions: Seq[InputPartition] = _
+
+  @transient
+  @volatile private var _readerFactory: PartitionReaderFactory = _
+
+  private def getOrCreate[T](createAndInit: () => T, nullChecker: () => Option[T]): T =
+    nullChecker().getOrElse(createAndInit())
+
+
+  def getBatch: Batch = getOrCreate(() => {
+    val temp = this.scan.toBatch
+    this._batch = temp
+    temp
+  }, () => Option(this._batch))
+
+
+  override def inputPartitions: Seq[InputPartition] = getOrCreate(() => {
+    val temp = this.getBatch.planInputPartitions().to[Seq]
+    this._inputPartitions = temp
+    temp
+  }, () => Option(this._inputPartitions))
+
+  override def readerFactory: PartitionReaderFactory = getOrCreate(() => {
+    val temp = this.getBatch.createReaderFactory()
+    this._readerFactory = temp
+    temp
+  }, () => Option(this._readerFactory))
+
+
+  @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = _
+  @transient @volatile private var inputRDDCached: RDD[InternalRow] = _
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: BatchScanExec if this.batch != null =>
+    case other: BatchScanExec =>
       val commonEquality = this.runtimeFilters == other.runtimeFilters &&
         this.proxyForPushedBroadcastVar == other.proxyForPushedBroadcastVar &&
         this.spjParams == other.spjParams
@@ -58,7 +92,7 @@ case class BatchScanExec(
           case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
             sr1.equalToIgnoreRuntimeFilters(sr2)
 
-          case _ => this.batch == other.batch
+          case _ if this.getBatch != null => this.getBatch == other.getBatch
         }
       } else {
         false
@@ -71,7 +105,7 @@ case class BatchScanExec(
     val batchHashCode = scan match {
       case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
 
-      case _ => batch.hashCode()
+      case _ => this.getBatch.hashCode()
     }
     Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
       this.proxyForPushedBroadcastVar)
@@ -126,19 +160,18 @@ case class BatchScanExec(
               "partition values that are not present in the original partitioning.")
           }
 
-          groupPartitions(newPartitions.toSeq).get.groupedParts.map(_.parts)
+          groupPartitions(newPartitions.to[Seq]).get.groupedParts.map(_.parts)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning
           newPartitions.map(Seq(_)).toSeq
       }
-      this.filteredPartitions = newGroupedPartitions
+      this.filteredPartitions = newGroupedPartitions.to[Seq]
     } else {
       this.filteredPartitions = partitions
     }
   }
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
@@ -153,7 +186,6 @@ case class BatchScanExec(
     }
   }
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override def inputRDD: RDD[InternalRow] = {
     var local = inputRDDCached
@@ -166,7 +198,7 @@ case class BatchScanExec(
           this.inputRDDCached = if (filteredPartitions.isEmpty &&
             outputPartitioning == SinglePartition) {
             // return an empty RDD with 1 partition if dynamic filtering removed the only split
-            sparkContext.parallelize(Array.empty[InternalRow], 1)
+            sparkContext.parallelize(Array.empty[InternalRow].to[Seq], 1)
           } else {
             var finalPartitions = filteredPartitions
 
@@ -271,8 +303,8 @@ case class BatchScanExec(
     val broadcastVarFiltersString = this.proxyForPushedBroadcastVar.fold("")(proxies =>
       proxies.map(proxy => {
         val joinKeysStr = proxy.joiningKeysData.map(jkd => s"build side join" +
-          s" key = ${jkd.buildSideJoinKeyAtJoin} and stream side join key =" +
-          s" ${jkd.streamSideJoinKeyAtJoin}").mkString(";")
+          s" key index= ${jkd.joinKeyIndexInJoiningKeys} and stream side join key index at leaf =" +
+          s" ${jkd.streamsideLeafJoinAttribIndex}").mkString(";")
         s"for this buildleg : join col and streaming col = $joinKeysStr"
       }).mkString("\n"))
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString" +
@@ -285,10 +317,11 @@ case class BatchScanExec(
   }
 
   def resetFilteredPartitionsAndInputRdd(): Unit = {
-    this.synchronized {
-      this.filteredPartitions = null
-      this.inputRDDCached = null
-    }
+    this.filteredPartitions = null
+    this.inputRDDCached = null
+    this._inputPartitions = null
+    this._batch = null
+    this._readerFactory = null
   }
 }
 
