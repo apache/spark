@@ -714,7 +714,7 @@ def read_spark_io(
        id
     0   0
 
-    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.json' % path,
+    >>> ps.range(10, 15, num_partitions=1).spark.to_spark_io('%s/read_spark_io/data.json' % path,
     ...                                                format='json', lineSep='__')
     >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.json' % path, format='json', schema='id long', lineSep='__')
