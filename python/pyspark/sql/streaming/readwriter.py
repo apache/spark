@@ -224,6 +224,11 @@ class DataStreamReader(OptionUtils):
         >>> spark.readStream.options(x="1", y=2)
         <...streaming.readwriter.DataStreamReader object ...>
 
+        Specify options in a dictionary.
+
+        >>> spark.readStream.options(**{"k1": "v1", "k2": "v2"})
+        <...streaming.readwriter.DataStreamReader object ...>
+
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
         Rate source in order to generate 10 rows with 10 partitions every second.
 
@@ -941,6 +946,11 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.option("x", 1)
+        <...streaming.readwriter.DataStreamWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> df.writeStream.options(**{"k1": "v1", "k2": "v2"})
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order

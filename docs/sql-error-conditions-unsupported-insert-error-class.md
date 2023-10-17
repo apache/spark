@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Can't insert into the target.
 

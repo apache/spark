@@ -116,12 +116,10 @@ public class ExternalShuffleIntegrationSuite {
         public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
           ManagedBuffer res;
           if (rddId == RDD_ID) {
-            switch (splitIdx) {
-              case SPLIT_INDEX_CORRUPT_LENGTH:
-                res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
-                break;
-              default:
-                res = super.getRddBlockData(appId, execId, rddId, splitIdx);
+            if (splitIdx == SPLIT_INDEX_CORRUPT_LENGTH) {
+              res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
+            } else {
+              res = super.getRddBlockData(appId, execId, rddId, splitIdx);
             }
           } else {
             res = super.getRddBlockData(appId, execId, rddId, splitIdx);

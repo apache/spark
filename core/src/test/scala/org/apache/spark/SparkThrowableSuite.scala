@@ -71,6 +71,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
+      if (!fx(s)) {
+        print(s)
+      }
       assert(fx(s))
     }
   }
@@ -545,6 +548,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "sqlState" : "0A000",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }

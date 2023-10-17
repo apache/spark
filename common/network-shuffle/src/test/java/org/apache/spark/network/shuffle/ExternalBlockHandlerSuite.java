@@ -139,29 +139,27 @@ public class ExternalBlockHandlerSuite {
       ByteStreams.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
       long checksumByWriter = checkedIn.getChecksum().getValue();
 
-      switch (expectedCaused) {
+      // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
+      checksumByReader = switch (expectedCaused) {
         // when checksumByWriter != checksumRecalculated
-        case DISK_ISSUE:
+        case DISK_ISSUE -> {
           out.writeLong(checksumByWriter - 1);
-          checksumByReader = checksumByWriter;
-          break;
-
-        // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
-        case NETWORK_ISSUE:
+          yield checksumByWriter;
+        }
+        case NETWORK_ISSUE -> {
           out.writeLong(checksumByWriter);
-          checksumByReader = checksumByWriter - 1;
-          break;
-
-        case UNKNOWN_ISSUE:
-          // write a int instead of a long to corrupt the checksum file
+          yield checksumByWriter - 1;
+        }
+        case UNKNOWN_ISSUE -> {
+          // write an int instead of a long to corrupt the checksum file
           out.writeInt(0);
-          checksumByReader = checksumByWriter;
-          break;
-
-        default:
+          yield checksumByWriter;
+        }
+        default -> {
           out.writeLong(checksumByWriter);
-          checksumByReader = checksumByWriter;
-      }
+          yield checksumByWriter;
+        }
+      };
     }
     out.close();
 
