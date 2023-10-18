@@ -40,8 +40,9 @@ object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
+  // Visible for testing.
   /** An AutoClosable to clean up resources on query termination. Stops Python worker. */
-  private case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
+  private[connect] case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
     override def close(): Unit = {
       try runner.stop()
       catch {
@@ -100,7 +101,7 @@ object StreamingForeachBatchHelper extends Logging {
    * Starts up Python worker and initializes it with Python function. Returns a foreachBatch
    * function that sets up the session and Dataframe cache and and interacts with the Python
    * worker to execute user's function. In addition, it returns an AutoClosable. The caller
-   * should close it
+   * must ensure it is closed so that worker process and related resources are released.
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
