@@ -33,6 +33,10 @@ Cannot be casted to the "TIMESTAMP" type.
 
 Must be deterministic.
 
+## OPTION
+
+Timestamp string in the options should be in the format of 'yyyy-MM-dd HH:mm:ss[.us][zone_id]'.
+
 ## UNEVALUABLE
 
 Must be evaluable.

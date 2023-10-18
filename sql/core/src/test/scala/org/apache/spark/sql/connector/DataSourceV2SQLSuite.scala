@@ -2980,8 +2980,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           spark.read.option("timestampAsOf", "abc").table("t").collect()
         },
-        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_OPTION",
-        parameters = Map("timestamp" -> "abc"))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
+        parameters = Map("expr" -> "'abc'"))
 
       checkError(
         exception = intercept[AnalysisException] {

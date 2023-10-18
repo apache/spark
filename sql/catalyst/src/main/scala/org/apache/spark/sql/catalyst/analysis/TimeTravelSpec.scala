@@ -72,30 +72,29 @@ object TimeTravelSpec {
       timestampKey: String,
       versionKey: String,
       sessionLocalTimeZone: String): Option[TimeTravelSpec] = {
-    val timestampStr = options.get(timestampKey)
-    val versionStr = options.get(versionKey)
-    if (timestampStr != null && versionStr != null) {
-      throw QueryCompilationErrors.invalidTimeTravelSpecError()
-    }
+    (Option(options.get(timestampKey)), Option(options.get(versionKey))) match {
+      case (Some(_), Some(_)) =>
+        throw QueryCompilationErrors.invalidTimeTravelSpecError()
 
-    if (timestampStr != null) {
-      val timestampValue = Cast(
-        Literal(timestampStr),
-        TimestampType,
-        Some(sessionLocalTimeZone),
-        ansiEnabled = false
-      ).eval()
-      if (timestampValue == null) {
-        throw new AnalysisException(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_OPTION",
-          Map("timestamp" -> timestampStr)
-        )
-      }
-      Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
-    } else if (versionStr != null) {
-      Some(AsOfVersion(versionStr))
-    } else {
-      None
+      case (Some(timestampStr), None) =>
+        val timestampValue = Cast(
+          Literal(timestampStr),
+          TimestampType,
+          Some(sessionLocalTimeZone),
+          ansiEnabled = false
+        ).eval()
+        if (timestampValue == null) {
+          throw new AnalysisException(
+            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
+            Map("expr" -> s"'$timestampStr''")
+          )
+        }
+        Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
+
+      case (None, Some(versionStr)) =>
+        Some(AsOfVersion(versionStr))
+
+      case _ => None
     }
   }
 }

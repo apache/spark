@@ -1122,10 +1122,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
-        resolveRelation(
-          u,
-          TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
-        ).getOrElse(r)
+        val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
+        resolveRelation(u, timeTravelSpec).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
@@ -1265,7 +1263,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         conf.sessionLocalTimeZone
       )
       if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
-        throw new AnalysisException("DUPLICATED_TIME_TRAVEL_SPEC", Map.empty[String, String])
+        throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
       }
       val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
       resolveTempView(u.multipartIdentifier, u.isStreaming, finalTimeTravelSpec.isDefined).orElse {

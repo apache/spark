@@ -869,12 +869,6 @@
     ],
     "sqlState" : "42710"
   },
-  "DUPLICATED_TIME_TRAVEL_SPEC" : {
-    "message" : [
-      "Cannot specify time travel in both the time travel clause and options."
-    ],
-    "sqlState" : "42K0E"
-  },
   "DUPLICATE_ASSIGNMENTS" : {
     "message" : [
       "The columns or variables <nameList> appear more than once as assignment targets."
@@ -2200,19 +2194,17 @@
           "Must be deterministic."
         ]
       },
+      "OPTION" : {
+        "message" : [
+          "Timestamp string in the options should be in the format of 'yyyy-MM-dd HH:mm:ss[.us][zone_id]'."
+        ]
+      },
       "UNEVALUABLE" : {
         "message" : [
           "Must be evaluable."
         ]
       }
     },
-    "sqlState" : "42K0E"
-  },
-  "INVALID_TIME_TRAVEL_TIMESTAMP_OPTION" : {
-    "message": [
-      "The time travel timestamp option '<timestamp>' is invalid.",
-      "It should be in the format of 'yyyy-MM-dd HH:mm:ss[.us][zone_id]'"
-    ],
     "sqlState" : "42K0E"
   },
   "INVALID_TYPED_LITERAL" : {
@@ -2385,6 +2377,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
