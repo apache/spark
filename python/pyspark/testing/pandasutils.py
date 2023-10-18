@@ -340,6 +340,10 @@ def assertPandasOnSparkEqual(
     (pandas-on-Spark or pandas object).
 
     .. versionadded:: 3.5.0
+    .. deprecated:: 4.0.0
+        `assertPandasOnSparkEqual` will be removed in the future version.
+        Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal`
+        and `ps.testing.assert_index_equal` instead.
 
     Parameters
     ----------
