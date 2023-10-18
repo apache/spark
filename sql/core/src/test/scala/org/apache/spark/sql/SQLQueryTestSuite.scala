@@ -650,18 +650,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           TestPythonUDTFLastString,
           TestPythonUDTFWithSinglePartition,
           TestPythonUDTFPartitionBy,
-          TestPythonUDTFInvalidPartitionByAndWithSinglePartition,
-          TestPythonUDTFInvalidOrderByWithoutPartitionBy,
-          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType,
-          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType,
-          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
-          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType,
-          TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType,
-          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType,
-          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType,
-          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
-          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType,
-          TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType
+          InvalidPartitionByAndWithSinglePartition,
+          InvalidOrderByWithoutPartitionBy,
+          InvalidEvalReturnsNoneToNonNullableColumnScalarType,
+          InvalidEvalReturnsNoneToNonNullableColumnArrayType,
+          InvalidEvalReturnsNoneToNonNullableColumnArrayElementType,
+          InvalidEvalReturnsNoneToNonNullableColumnStructType,
+          InvalidEvalReturnsNoneToNonNullableColumnMapType,
+          InvalidTerminateReturnsNoneToNonNullableColumnScalarType,
+          InvalidTerminateReturnsNoneToNonNullableColumnArrayType,
+          InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType,
+          InvalidTerminateReturnsNoneToNonNullableColumnStructType,
+          InvalidTerminateReturnsNoneToNonNullableColumnMapType
         ))).map { udtfSet =>
           UDTFSetTestCase(
             s"$testCaseName - Python UDTFs", absPath, resultFile, udtfSet)

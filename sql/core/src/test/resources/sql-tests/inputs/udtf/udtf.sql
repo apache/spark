@@ -106,17 +106,16 @@ SELECT * FROM
     UDTFInvalidOrderByWithoutPartitionBy(TABLE(t2) PARTITION BY partition_col);
 -- The following UDTF calls should fail because the UDTF's 'eval' or 'terminate' method returns None
 -- to a non-nullable column, either directly or within an array/struct/map subfield.
-SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(
-    TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
-SELECT * FROM TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

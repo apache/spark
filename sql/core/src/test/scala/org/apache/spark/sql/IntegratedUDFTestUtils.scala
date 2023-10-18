@@ -628,7 +628,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Python UDTF exporting input table partitioning and ordering requirement from 'analyze'"
   }
 
-  object TestPythonUDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
+  object InvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
     val pythonScript: String =
       s"""
@@ -668,7 +668,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         "because the 'with_single_partition' property is also exported to true"
   }
 
-  object TestPythonUDTFInvalidOrderByWithoutPartitionBy extends TestUDTF {
+  object InvalidOrderByWithoutPartitionBy extends TestUDTF {
     val name: String = "UDTFInvalidOrderByWithoutPartitionBy"
     val pythonScript: String =
       s"""
@@ -749,8 +749,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String = "Python UDTF whose 'analyze' method sets state and reads it later"
   }
 
-  object TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnScalarType"
+  object InvalidEvalReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnScalarType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -783,8 +783,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'eval' method returns None to a non-nullable scalar column"
   }
 
-  object TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayType"
+  object InvalidEvalReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnArrayType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -817,8 +817,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'eval' method returns None to a non-nullable array column"
   }
 
-  object TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnArrayElementType"
+  object InvalidEvalReturnsNoneToNonNullableColumnArrayElementType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnArrayElementType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -851,8 +851,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'eval' method returns None to a non-nullable array element"
   }
 
-  object TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnStructType"
+  object InvalidEvalReturnsNoneToNonNullableColumnStructType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnStructType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -885,8 +885,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'eval' method returns None to a non-nullable struct column"
   }
 
-  object TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidEvalReturnsNoneToNonNullableColumnMapType"
+  object InvalidEvalReturnsNoneToNonNullableColumnMapType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnMapType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -919,8 +919,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'eval' method returns None to a non-nullable map column"
   }
 
-  object TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnScalarType"
+  object InvalidTerminateReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnScalarType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -956,8 +956,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable column"
   }
 
-  object TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayType"
+  object InvalidTerminateReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnArrayType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -993,10 +993,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable array column"
   }
 
-  object TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType
-    extends TestUDTF {
-    val name: String =
-      "TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnArrayElementType"
+  object InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -1032,8 +1030,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable array element"
   }
 
-  object TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnStructType"
+  object InvalidTerminateReturnsNoneToNonNullableColumnStructType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnStructType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
@@ -1069,8 +1067,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable struct column"
   }
 
-  object TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType extends TestUDTF {
-    val name: String = "TestPythonUDTFInvalidTerminateReturnsNoneToNonNullableColumnMapType"
+  object InvalidTerminateReturnsNoneToNonNullableColumnMapType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnMapType"
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult
