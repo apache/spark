@@ -1945,7 +1945,7 @@ Cannot invoke function `<functionName>` because it contains positional argument(
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Class `<clsName>` has unexpected serializer: `<objSerializer>`.
+The class `<className>` has an unexpected expression serializer. Expects "STRUCT" or "IF" which returns "STRUCT" but found `<expr>`.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 

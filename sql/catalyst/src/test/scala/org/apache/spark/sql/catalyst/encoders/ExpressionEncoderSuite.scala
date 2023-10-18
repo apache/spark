@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -138,7 +139,8 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
-class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
+class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
+  with QueryErrorsBase {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
@@ -590,8 +592,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       exception = exception,
       errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       parameters = Map(
-        "clsName" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
-        "objSerializer" -> unexpectedSerializer.toString())
+        "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
+        "expr" -> toSQLExpr(unexpectedSerializer))
     )
   }
 

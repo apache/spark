@@ -3017,7 +3017,7 @@
   },
   "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
     "message" : [
-      "Class <clsName> has unexpected serializer: <objSerializer>."
+      "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
     ],
     "sqlState" : "42846"
   },
