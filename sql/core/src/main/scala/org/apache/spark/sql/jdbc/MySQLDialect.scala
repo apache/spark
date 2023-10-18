@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -93,8 +93,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // byte arrays instead of longs.
       md.putLong("binarylong", 1)
       Option(LongType)
-    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
-      Some(ByteType)
+    } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
+      Option(BooleanType)
     } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
       // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
       Some(StringType)
@@ -102,6 +102,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
       // Explicitly converts it into StringType here.
       Some(StringType)
+    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
+      Some(ByteType)
     } else None
   }
 
