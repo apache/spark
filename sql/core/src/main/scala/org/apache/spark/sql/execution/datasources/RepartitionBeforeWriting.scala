@@ -30,12 +30,15 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object RepartitionBeforeWriting extends Rule[LogicalPlan] {
 
-  def buildRepartition(attributes: Seq[Attribute], query: LogicalPlan): LogicalPlan = {
+  def buildRepartition(
+      attributes: Seq[Attribute],
+      query: LogicalPlan,
+      numPartitions: Option[Int] = None): LogicalPlan = {
     query.collectFirst { case r: RepartitionOperation => r } match {
         case Some(RepartitionByExpression(attrs, _, _, _))
           if AttributeSet(attrs).subsetOf(AttributeSet(attributes)) => query
 
-        case _ => new RepartitionByExpression(attributes, query, None, None)
+        case _ => new RepartitionByExpression(attributes, query, numPartitions, None)
     }
   }
 
@@ -50,7 +53,7 @@ object RepartitionBeforeWriting extends Rule[LogicalPlan] {
         val resolver = conf.resolver
         val bucketColumns =
           bucket.bucketColumnNames.map { col => query.resolve(Seq(col), resolver).get.toAttribute }
-        i.copy(query = buildRepartition(bucketColumns, query))
+        i.copy(query = buildRepartition(bucketColumns, query, Some(bucket.numBuckets)))
 
       case i @ InsertIntoHadoopFsRelationCommand(_, sp, _, pc, None, _, _, query, _, _, _, _)
         if query.resolved =>
