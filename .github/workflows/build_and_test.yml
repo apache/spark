@@ -145,10 +145,11 @@ jobs:
             network-common, network-shuffle, repl, launcher,
             examples, sketch, graphx
           - >-
-            catalyst, hive-thriftserver,mllib
+            catalyst, hive-thriftserver
+          - >-
+            mllib-local,mllib
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, 
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
