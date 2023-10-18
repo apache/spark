@@ -84,7 +84,7 @@ private[spark] object DatasetUtils extends Logging {
   private[ml] def checkNonNanVectors(vectorCol: Column): Column = {
     when(vectorCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
       .when(exists(unwrap_udt(vectorCol).getField("values"),
-        v => v.isNaN || abs(v) === expr("double('inf')")),
+        v => v.isNaN || v === Double.NegativeInfinity || v === Double.PositiveInfinity),
         raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
           vectorCol.cast(StringType))))
       .otherwise(vectorCol)
