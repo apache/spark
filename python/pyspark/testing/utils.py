@@ -491,8 +491,6 @@ def assertDataFrameEqual(
 
     Examples
     --------
-    >>> from pyspark.pandas.utils import default_session
-    >>> spark = default_session()
     >>> df1 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 3000)], schema=["id", "amount"])
     >>> assertDataFrameEqual(df1, df2)  # pass, DataFrames are identical
