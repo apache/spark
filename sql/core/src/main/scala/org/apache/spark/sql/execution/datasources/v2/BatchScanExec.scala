@@ -42,7 +42,7 @@ case class BatchScanExec(
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
     spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams(),
-    proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None
+    @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None
   ) extends DataSourceV2ScanExecBase {
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
@@ -259,8 +259,13 @@ case class BatchScanExec(
     spjParams.keyGroupedPartitioning
 
   override def doCanonicalize(): BatchScanExec = {
+    val nullSafeProxyVar = if (this.proxyForPushedBroadcastVar == null) {
+      None
+    } else {
+      this.proxyForPushedBroadcastVar
+    }
     this.copy(
-      proxyForPushedBroadcastVar = proxyForPushedBroadcastVar.map(_.map(_.canonicalized)),
+      proxyForPushedBroadcastVar = nullSafeProxyVar.map(_.map(_.canonicalized)),
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
@@ -270,7 +275,12 @@ case class BatchScanExec(
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
-    val broadcastVarFiltersString = this.proxyForPushedBroadcastVar.fold("")(proxies =>
+    val nullSafeProxyVar = if (this.proxyForPushedBroadcastVar == null) {
+      None
+    } else {
+      this.proxyForPushedBroadcastVar
+    }
+    val broadcastVarFiltersString = nullSafeProxyVar.fold("")(proxies =>
       proxies.map(proxy => {
         val joinKeysStr = proxy.joiningKeysData.map(jkd => s"build side join" +
           s" key index= ${jkd.joinKeyIndexInJoiningKeys} and stream side join key index at leaf =" +
