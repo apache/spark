@@ -1558,8 +1558,8 @@ class DatasetSuite extends QueryTest
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level Product or row object"))
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getCause.getMessage.contains("top level Product or row object"))
   }
 
   test("dropDuplicates") {
