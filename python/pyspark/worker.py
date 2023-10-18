@@ -887,7 +887,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     elif isinstance(value, Row):
                         items = value.asDict().items()
                     else:
-                        items = []
+                        return
                     for map_key, map_value in items:
                         check_for_none_in_non_nullable_column(
                             map_key, data_type.keyType, nullable=False
