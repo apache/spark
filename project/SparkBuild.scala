@@ -232,16 +232,12 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation:wv,any:e",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
-        "-Wconf:cat=lint-multiarg-infix:wv",
-        "-Wconf:cat=other-nullary-override:wv",
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
         //  fixed.
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
         "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-        "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-        "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
@@ -1585,6 +1581,7 @@ object TestSettings {
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",

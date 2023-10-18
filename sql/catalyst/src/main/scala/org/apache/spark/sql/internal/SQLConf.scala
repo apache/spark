@@ -1558,7 +1558,7 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "disabled by default. Currently, the optimization rules enabled by this configuration " +
+        "enabled by default. The optimization rules enabled by this configuration " +
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
@@ -4451,6 +4451,25 @@ object SQLConf {
       .doc("Decorrelate scalar and lateral subqueries with correlated references in join " +
         "predicates. This configuration is only effective when " +
         s"'${DECORRELATE_INNER_QUERY_ENABLED.key}' is true.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate predicate (in and exists) subqueries with correlated references in join " +
+        "predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled")
+      .internal()
+      .doc("When true, optimize uncorrelated IN subqueries in join predicates by rewriting them " +
+        s"to joins. This interacts with ${LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key} because it " +
+        "can rewrite IN predicates.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)

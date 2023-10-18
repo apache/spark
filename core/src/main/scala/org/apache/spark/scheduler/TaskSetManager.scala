@@ -1032,7 +1032,7 @@ private[spark] class TaskSetManager(
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+  override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
