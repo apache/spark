@@ -40,7 +40,8 @@ object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
-  case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
+  /** An AutoClosable to clean up resources on query termination. Stops Python worker. */
+  private case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
     override def close(): Unit = {
       try runner.stop()
       catch {
@@ -98,11 +99,12 @@ object StreamingForeachBatchHelper extends Logging {
   /**
    * Starts up Python worker and initializes it with Python function. Returns a foreachBatch
    * function that sets up the session and Dataframe cache and and interacts with the Python
-   * worker to execute user's function.
+   * worker to execute user's function. In addition, it returns an AutoClosable. The caller
+   * should close it
    */
   def pythonForeachBatchWrapper(
       pythonFn: SimplePythonFunction,
-      sessionHolder: SessionHolder): (ForeachBatchFnType, RunnerCleaner) = {
+      sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
 
     val port = SparkConnectService.localPort
     val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
