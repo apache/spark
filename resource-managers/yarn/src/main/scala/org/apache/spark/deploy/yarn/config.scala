@@ -144,6 +144,11 @@ package object config extends Logging {
     .stringConf
     .createWithDefault("default")
 
+  private[spark] val QUEUE_ENFORCER_CLASS = ConfigBuilder("spark.queue.enforcer.class")
+    .doc("Fully Qualified class name for concrete impl to be used to enforce queue")
+    .stringConf
+    .createWithDefault(null)
+    
   private[spark] val HISTORY_SERVER_ADDRESS = ConfigBuilder("spark.yarn.historyServer.address")
     .version("1.0.0")
     .stringConf

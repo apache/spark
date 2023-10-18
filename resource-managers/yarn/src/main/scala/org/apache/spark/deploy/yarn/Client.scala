@@ -56,6 +56,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.propertymodifier.QueueEnforcer
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
@@ -257,6 +258,39 @@ private[spark] class Client(
     cleanupStagingDirInternal()
   }
 
+  private def getInitiator: String = {
+    var user: String = null
+    try {
+      user = JobInitiatorFetcher.getJobInitiator
+    } catch {
+      case e: Throwable =>
+        throw new RuntimeException("User couldn't be set. ", e)
+    }
+    user
+  }
+
+  @throws[IOException]
+  private def getEnforcedQueue(queue: String): String = {
+    log.info("Input queue name: " + queue)
+    val queueEnforcerClassName: String = sparkConf.get(QUEUE_ENFORCER_CLASS)
+
+    if (queueEnforcerClassName == null) {
+      throw new RuntimeException("Queue enforcer class is null.")
+    }
+
+    var queueEnforcer: QueueEnforcer = null
+    try {queueEnforcer = Utils.classForName(queueEnforcerClassName)
+      .newInstance.asInstanceOf[QueueEnforcer]
+    } catch {
+      case e: Throwable =>
+        throw new RuntimeException("Couldn't enforce queue. ", e)
+    }
+    log.info("queue enforcer class: " + queueEnforcerClassName)
+    val enforcedQueue: String = queueEnforcer.getEnforcedQueue(queue, getInitiator, sparkConf)
+    log.info("Enforced queue name: " + enforcedQueue)
+    enforcedQueue
+  }
+
   /**
    * Set up the context for submitting our ApplicationMaster.
    * This uses the YarnClientApplication not available in the Yarn alpha API.
@@ -276,7 +310,8 @@ private[spark] class Client(
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
-    appContext.setQueue(sparkConf.get(QUEUE_NAME))
+    log.info("setting queue")
+    appContext.setQueue(getEnforcedQueue(sparkConf.get(QUEUE_NAME)))
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType(sparkConf.get(APPLICATION_TYPE))
 
@@ -1348,6 +1383,21 @@ private[spark] class Client(
       }
   }
 
+}
+
+private object JobInitiatorFetcher {
+  val SUDO_USER_PROP_KEY = "SUDO_USER"
+  val USER = "USER"
+
+  @throws[IOException]
+  @throws[InterruptedException]
+  def getJobInitiator: String = {
+    val sudoUser = Option(System.getenv.get(SUDO_USER_PROP_KEY))
+    val user = Option(System.getenv.get(USER))
+    if (sudoUser.isDefined) return sudoUser.get
+    else if (user.isDefined) return user.get
+    null
+  }
 }
 
 private[spark] object Client extends Logging {

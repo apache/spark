@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.4.2-SNAPSHOT</version>
+  <version>3.4.fdp.1</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -345,6 +345,14 @@
       <!--
         This is used as a fallback when the first try fails.
       -->
+      <id>flipkart-libs-snapshots-local</id>
+      <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
+    </repository>
+    <repository>
+      <id>flipkart-libs-release-local</id>
+      <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
+    </repository>
+    <repository>
       <id>central</id>
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
@@ -371,6 +379,14 @@
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>flipkart-libs-snapshots-local</id>
+      <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
+    </pluginRepository>
+    <pluginRepository>
+      <id>flipkart-libs-release-local</id>
+      <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
     </pluginRepository>
     <pluginRepository>
       <id>central</id>
@@ -3677,8 +3693,8 @@
       <id>snapshots-and-staging</id>
       <properties>
         <!-- override point for ASF staging/snapshot repos -->
-        <asf.staging>https://repository.apache.org/content/groups/staging/</asf.staging>
-        <asf.snapshots>https://repository.apache.org/content/repositories/snapshots/</asf.snapshots>
+        <asf.staging>https://jfrog.fkinternal.com/artifactory/maven_virtual</asf.staging>
+        <asf.snapshots>https://jfrog.fkinternal.com/artifactory/maven_virtual/</asf.snapshots>
       </properties>
 
       <pluginRepositories>
@@ -3829,4 +3845,16 @@
       </build>
     </profile>
   </profiles>
+    <distributionManagement>
+        <snapshotRepository>
+            <id>fk-jfrog-snapshot</id>
+            <name>libs-snapshot</name>
+            <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
+        </snapshotRepository>
+        <repository>
+            <id>fk-jfrog-release</id>
+            <name>libs-rel</name>
+            <url>https://jfrog.fkinternal.com/artifactory/maven_virtual</url>
+        </repository>
+    </distributionManagement>
 </project>
