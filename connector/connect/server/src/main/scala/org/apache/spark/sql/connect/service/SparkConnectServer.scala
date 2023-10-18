@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.net.InetSocketAddress
+
+import scala.collection.convert.ImplicitConversions._
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-
-import java.net.InetSocketAddress
-import scala.collection.convert.ImplicitConversions._
 
 /**
  * The Spark Connect server
@@ -43,15 +44,7 @@ object SparkConnectServer extends Logging {
         }
       } catch {
         case e: Exception =>
-          e.getCause match {
-            case sparkThrowable: SparkThrowable if (sparkThrowable.getErrorClass != null) =>
-              logError(
-                "Error starting Spark Connect server with error class "
-                  + sparkThrowable.getErrorClass,
-                e)
-            case _ =>
-              logError("Error starting Spark Connect server", e)
-          }
+          handleStartServerError(e)
           System.exit(-1)
       }
       SparkConnectService.server.awaitTermination()
@@ -59,4 +52,17 @@ object SparkConnectServer extends Logging {
       session.stop()
     }
   }
+
+  def handleStartServerError(e: Exception): Unit = {
+    e.getCause match {
+      case sparkThrowable: SparkThrowable if (sparkThrowable.getErrorClass != null) =>
+        logError(
+          "Error starting Spark Connect server with error class: "
+            + sparkThrowable.getErrorClass,
+          e)
+      case _ =>
+        logError("Error starting Spark Connect server", e)
+    }
+  }
+
 }
