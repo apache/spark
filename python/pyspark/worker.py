@@ -955,15 +955,15 @@ def read_udtf(pickleSer, infile, eval_type):
             def check_return_value(res):
                 # Check whether the result of an arrow UDTF is iterable before
                 # using it to construct a pandas DataFrame.
+                if res is not None and not isinstance(res, Iterable):
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_RETURN_NOT_ITERABLE",
+                        message_parameters={
+                            "type": type(res).__name__,
+                            "func": f.__name__,
+                        },
+                    )
                 if res is not None:
-                    if not isinstance(res, Iterable):
-                        raise PySparkRuntimeError(
-                            error_class="UDTF_RETURN_NOT_ITERABLE",
-                            message_parameters={
-                                "type": type(res).__name__,
-                                "func": f.__name__,
-                            },
-                        )
                     for row in res:
                         check_output_row_against_schema(row)
 
