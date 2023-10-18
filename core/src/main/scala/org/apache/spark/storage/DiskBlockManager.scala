@@ -79,7 +79,7 @@ private[spark] class DiskBlockManager(
   private val shutdownHook = addShutdownHook()
 
   // If either of these features are enabled, we must change permissions on block manager
-  // directories and files to accomodate the shuffle service deleting files in a secure environment.
+  // directories and files to accommodate the shuffle service deleting files in a secure environment.
   // Parent directories are assumed to be restrictive to prevent unauthorized users from accessing
   // or modifying world readable files.
   private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
