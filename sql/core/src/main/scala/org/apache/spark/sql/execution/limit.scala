@@ -282,9 +282,7 @@ case class TakeOrderedAndProjectExec(
     projectList.map(_.toAttribute)
   }
 
-  override def executeCollect(): Array[InternalRow] = {
-    // SPARK-45584: Wait for subquery execution to finish before executing collect.
-    prepareAndWaitForSubqueries()
+  override def executeCollect(): Array[InternalRow] = executeQuery {
     val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val limited = if (orderingSatisfies) {
@@ -299,11 +297,6 @@ case class TakeOrderedAndProjectExec(
     } else {
       data
     }
-  }
-
-  private def prepareAndWaitForSubqueries(): Unit = {
-    prepare()
-    waitForSubqueries()
   }
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
