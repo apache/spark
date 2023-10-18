@@ -37,8 +37,6 @@ import static org.apache.spark.network.ssl.SslSampleConfigs.*;
 
 public class ReloadingX509TrustManagerSuite {
 
-  private final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManagerSuite.class);
-
   /**
    * Waits until reload count hits the requested value, sleeping 100ms at a time.
    * If the maximum number of attempts is hit, throws a RuntimeException
@@ -280,8 +278,6 @@ public class ReloadingX509TrustManagerSuite {
             new ReloadingX509TrustManager("jks", trustStoreSymlink, "password", 1);
     assertEquals(1, tm.getReloadInterval());
     assertEquals(0, tm.reloadCount);
-    logger.info("TRUST STORE 1 IS" + trustStore1);
-    logger.info("TRUST STORE 2 IS " + trustStore2);
     try {
       tm.init();
       assertEquals(1, tm.getAcceptedIssuers().length);
@@ -289,10 +285,8 @@ public class ReloadingX509TrustManagerSuite {
       assertEquals(0, tm.reloadCount);
 
       // Repoint to trustStore2, which has another cert
-      logger.info("REPOINTING SYMLINK!!!");
       trustStoreSymlink.delete();
       Files.createSymbolicLink(trustStoreSymlink.toPath(), trustStore2.toPath());
-      logger.info("REPOINTED!!!");
 
       // Wait up to 5s until we reload
       waitForReloadCount(tm, 1, 50);
