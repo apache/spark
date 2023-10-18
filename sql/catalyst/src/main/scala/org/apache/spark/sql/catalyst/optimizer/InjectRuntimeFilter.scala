@@ -352,8 +352,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left))) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
-                case (filterCreationSideExp, filterCreationSidePlan) =>
-                  newLeft = injectFilter(l, newLeft, filterCreationSideExp, filterCreationSidePlan)
+                case (filterCreationSideKey, filterCreationSidePlan) =>
+                  newLeft = injectFilter(l, newLeft, filterCreationSideKey, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
@@ -362,9 +362,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right))) {
               extractBeneficialFilterCreatePlan(right, left, r, l).foreach {
-                case (filterCreationSideExp, filterCreationSidePlan) =>
+                case (filterCreationSideKey, filterCreationSidePlan) =>
                   newRight = injectFilter(
-                    r, newRight, filterCreationSideExp, filterCreationSidePlan)
+                    r, newRight, filterCreationSideKey, filterCreationSidePlan)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
