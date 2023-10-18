@@ -940,6 +940,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 verify_pandas_result(
                     result, return_type, assign_cols_by_name=False, truncate_return_schema=False
                 )
+                for result_tuple in result.itertuples():
+                    check_output_row_against_schema(list(result_tuple))
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -963,9 +965,6 @@ def read_udtf(pickleSer, infile, eval_type):
                             "func": f.__name__,
                         },
                     )
-                if res is not None:
-                    for row in res:
-                        check_output_row_against_schema(row)
 
             def evaluate(*args: pd.Series):
                 if len(args) == 0:
