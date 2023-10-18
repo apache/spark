@@ -211,7 +211,7 @@ private[storage] class BlockManagerDecommissioner(
   @volatile private var stopped = false
   @volatile private[storage] var stoppedRDD =
     !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)
-  @volatile private[storage] var stoppedShuffle =
+  @volatile private var stoppedShuffle =
     !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
   private val migrationPeers =

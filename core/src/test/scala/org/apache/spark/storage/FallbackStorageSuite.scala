@@ -306,7 +306,6 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
-      .set(STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1000L)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 
@@ -331,9 +330,11 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       when(resolver.getIndexFile(shuffleId, mapId)).thenReturn(indexFile)
       when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
     }
-
+    val bmIds = Seq(BlockManagerId("test", "fake", 7337),
+      BlockManagerId("test1", "fake", 7337),
+      BlockManagerId("test2", "fake", 7337))
     when(bm.getPeers(mc.any()))
-      .thenReturn(Seq(BlockManagerId("test", "fake", 7337)))
+      .thenReturn(bmIds)
     val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
     when(bm.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
@@ -368,7 +369,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
           assert(!fallbackStorage.exists(shuffleId = 1, filename))
         }
-        assert(decommissioner.stoppedShuffle)
+        assert(decommissioner.numMigratedShuffles.get() > 0)
       }
     } finally {
       decommissioner.stop()
