@@ -130,7 +130,7 @@ private object ErrorClassesJsonReader {
  *
  * @param sqlState SQLSTATE associated with this class.
  * @param subClass SubClass associated with this class.
- * @param message Message format with optional tags (e.g. <parm>).
+ * @param message Message format with optional tags (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
@@ -145,7 +145,7 @@ private case class ErrorInfo(
 /**
  * Information associated with an error subclass.
  *
- * @param message Message format with optional tags (e.g. <parm>).
+ * @param message Message format with optional tags (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorSubInfo(message: Seq[String]) {
