@@ -413,26 +413,13 @@ def assertDataFrameEqual(
     `assertPandasOnSparkEqual`.
 
     .. versionadded:: 3.5.0
-    .. versionchanged:: 4.0.0
-        Only support Spark, Spark Connect DataFrame. For pandas or pandas-on-Spark DataFrame,
-        use `pyspark.pandas.testing.assert_frame_equal` instead.
 
     Parameters
     ----------
     actual : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark) or list of Rows
         The DataFrame that is being compared or tested.
-
-        .. versionchanged:: 4.0.0
-            Only support Spark, Spark Connect DataFrame. For pandas or pandas-on-Spark DataFrame,
-            use `pyspark.pandas.testing.assert_frame_equal` instead.
-
     expected : DataFrame (Spark, Spark Connect, pandas, or pandas-on-Spark) or list of Rows
         The expected result of the operation, for comparison with the actual result.
-
-        .. versionchanged:: 4.0.0
-            Only support Spark, Spark Connect DataFrame. For pandas or pandas-on-Spark DataFrame,
-            use `pyspark.pandas.testing.assert_frame_equal` instead.
-
     checkRowOrder : bool, optional
         A flag indicating whether the order of rows should be considered in the comparison.
         If set to `False` (default), the row order is not taken into account.
