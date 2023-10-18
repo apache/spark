@@ -340,6 +340,7 @@ def assertPandasOnSparkEqual(
     (pandas-on-Spark or pandas object).
 
     .. versionadded:: 3.5.0
+
     .. deprecated:: 4.0.0
         `assertPandasOnSparkEqual` will be removed in the future version.
         Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal`
@@ -397,6 +398,12 @@ def assertPandasOnSparkEqual(
     >>> s2 = ps.Index([212.3, 100.0001])
     >>> assertPandasOnSparkEqual(s1, s2, almost=True)  # pass, ps.Index obj are almost equal
     """
+    warnings.warn(
+        "`assertPandasOnSparkEqual` will be removed in the future version. "
+        "Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal` "
+        "and `ps.testing.assert_index_equal` instead.",
+        FutureWarning,
+    )
     if actual is None and expected is None:
         return True
     elif actual is None or expected is None:
