@@ -2181,7 +2181,7 @@
   },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
-      "Cannot specify both version and timestamp when time travelling the table"
+      "Cannot specify both version and timestamp when time travelling the table."
     ],
     "sqlState" : "42K0E"
   },
