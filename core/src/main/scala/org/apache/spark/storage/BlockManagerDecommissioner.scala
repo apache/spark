@@ -149,7 +149,7 @@ private[storage] class BlockManagerDecommissioner(
                     fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
                   } catch {
                     case e: FileNotFoundException =>
-                      logWarning("Skipping block $shuffleBlockInfo, block deleted.", e)
+                      logWarning(s"Skipping block $shuffleBlockInfo, block deleted.", e)
                     case NonFatal(e) =>
                       logError(s"Fallback storage for $shuffleBlockInfo failed", e)
                       keepRunning = false
