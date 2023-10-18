@@ -24,9 +24,9 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This rule add a shuffle before writing data into partitioned table or bucket table when
- * AUTO_REPARTITION_FOR_WRITING_ENABLED is true, which can avoid many small files.
+ * AUTO_REPARTITION_FOR_WRITING_ENABLED is true, which can avoid creating too many small files.
  * 1. For bucket tables, repartition by bucket columns.
- * 2. For partition tables, repartition by partition columns.
+ * 2. For partition tables, repartition by dynamic partition columns.
  */
 object RepartitionBeforeWriting extends Rule[LogicalPlan] {
 
