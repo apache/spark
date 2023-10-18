@@ -241,7 +241,7 @@ class EquivalentExpressions(
 case class ExpressionEquals(e: Expression) {
   // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
   // only be a parent of expr2 if expr1.height is larger than expr2.height.
-  lazy val height = e.height
+  lazy val height: Int = e.height
 
   override def equals(o: Any): Boolean = o match {
     case other: ExpressionEquals => e.semanticEquals(other.e) && height == other.height
