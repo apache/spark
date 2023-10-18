@@ -3840,11 +3840,4 @@
       </build>
     </profile>
   </profiles>
-  <distributionManagement>
-    <snapshotRepository>
-      <id>internal.snapshot</id>
-      <name>Internal Snapshot Repository</name>
-      <url>http://localhost:8081/repository/maven-snapshots/</url>
-    </snapshotRepository>
-  </distributionManagement>
 </project>
