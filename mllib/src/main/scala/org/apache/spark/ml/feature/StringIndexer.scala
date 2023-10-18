@@ -607,17 +607,14 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
     } else {
       $(labels)
     }
-    val indexer = udf { index: Double =>
-      val idx = index.toInt
-      if (0 <= idx && idx < values.length) {
-        values(idx)
-      } else {
-        throw new SparkException(s"Unseen index: $index ??")
-      }
-    }
-    val outputColName = $(outputCol)
-    dataset.select(col("*"),
-      indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
+
+    val indexCol = col($(inputCol)).cast(IntegerType)
+    val output = when(indexCol >= 0 && indexCol < values.length,
+      org.apache.spark.sql.functions.get(lit(values), indexCol)
+    ).otherwise(
+      raise_error(concat(lit("Unseen index: "), indexCol.cast(StringType)))
+    )
+    dataset.withColumn($(outputCol), output)
   }
 
   @Since("1.5.0")
