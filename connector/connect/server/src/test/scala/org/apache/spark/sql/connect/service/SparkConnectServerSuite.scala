@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.core.Logger
 import org.mockito.Mockito.{spy, verify, when}
 import org.scalatestplus.mockito.MockitoSugar
@@ -30,8 +29,8 @@ class SparkConnectServerSuite extends SparkFunSuite with MockitoSugar with Share
   test("SparkConnectServerSuite: Error handling") {
     // Mock the logger
     val mockLogger = mock[Logger]
-    val sparkServer = spy(SparkConnectServer)
-    when(mockLogger.getLevel()).thenReturn(Level.INFO)
+    // Mock the SparkConnectServer
+    val mockSparkServer = spy(SparkConnectServer)
 
     // Exception with SparkThrowable
     val exceptionWithSparkThrowable = new SparkException(
@@ -44,7 +43,7 @@ class SparkConnectServerSuite extends SparkFunSuite with MockitoSugar with Share
     val exceptionWithoutSparkThrowable = new Exception("Exception message")
 
     // Verify log messages for exception with SparkThrowable
-    when(sparkServer.handleStartServerError(exceptionWithSparkThrowable))
+    when(mockSparkServer.handleStartServerError(exceptionWithSparkThrowable))
       .thenAnswer(_ =>
         mockLogger.error(
           "Error starting Spark Connect server with error class: " +
@@ -52,13 +51,13 @@ class SparkConnectServerSuite extends SparkFunSuite with MockitoSugar with Share
           exceptionWithSparkThrowable))
 
     // Verify log messages for exception without SparkThrowable
-    when(sparkServer.handleStartServerError(exceptionWithoutSparkThrowable))
+    when(mockSparkServer.handleStartServerError(exceptionWithoutSparkThrowable))
       .thenAnswer(_ =>
         mockLogger.error("Error starting Spark Connect server", exceptionWithoutSparkThrowable))
 
     // Call the methods to trigger the logging
-    sparkServer.handleStartServerError(exceptionWithSparkThrowable)
-    sparkServer.handleStartServerError(exceptionWithoutSparkThrowable)
+    mockSparkServer.handleStartServerError(exceptionWithSparkThrowable)
+    mockSparkServer.handleStartServerError(exceptionWithoutSparkThrowable)
 
     // Verify that the appropriate logError messages were called
     verify(mockLogger)
