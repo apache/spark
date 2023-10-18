@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
@@ -721,11 +721,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         data.write.saveAsTable("tab1")
         data.write.saveAsTable("tab2")
         data.createOrReplaceTempView("tempView1")
-        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
-          val e = intercept[AnalysisException] {
-            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
-          }.getMessage
-          assert(e.contains(s"'$f' does not support more than one source"))
+        Seq(
+          ("input_file_name", 26),
+          ("input_file_block_start", 33),
+          ("input_file_block_length", 34)).foreach { case (f, e) =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+            },
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            parameters = Map("expr" -> s""""$f()""""),
+            context = ExpectedContext(
+              fragment = s"$f()",
+              start = 10,
+              stop = e)
+          )
         }
 
         def checkResult(
@@ -734,8 +744,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             numExpectedRows: Int = 0): Unit = {
           val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
           if (exceptionExpected) {
-            val e = intercept[AnalysisException](sql(stmt)).getMessage
-            assert(e.contains("'input_file_name' does not support more than one source"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(stmt)
+              },
+              errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+              parameters = Map("expr" -> """"input_file_name()""""),
+              context = ExpectedContext(
+                fragment = s"input_file_name()",
+                start = 10,
+                stop = 26)
+            )
           } else {
             assert(sql(stmt).count() == numExpectedRows)
           }
@@ -2526,8 +2545,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       booleanDf.select(assert_true($"cond", lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val nullDf = Seq(("first row", None), ("second row", Some(true))).toDF("n", "cond")
     checkAnswer(
@@ -2537,8 +2557,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[SparkException] {
       nullDf.select(assert_true($"cond", $"n")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "first row")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "first row"))
 
     // assert_true(condition)
     val intDf = Seq((0, 1)).toDF("a", "b")
@@ -2546,8 +2567,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e3 = intercept[SparkException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
+
     assert(e3.getCause.isInstanceOf[RuntimeException])
-    assert(e3.getCause.getMessage == "'('a > 'b)' is not true!")
+    assert(e3.getCause.getMessage.matches(
+      "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true!"))
   }
 
   test("raise_error") {
@@ -2556,14 +2579,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    checkError(e1.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "null"))
 
     val e2 = intercept[SparkException] {
       strDf.select(raise_error($"a")).collect()
     }
-    assert(e2.getCause.isInstanceOf[RuntimeException])
-    assert(e2.getCause.getMessage == "hello")
+    checkError(e2.getCause.asInstanceOf[SparkThrowable],
+      errorClass = "USER_RAISED_EXCEPTION",
+      parameters = Map("errorMessage" -> "hello"))
   }
 
   test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {

@@ -34,9 +34,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -343,10 +344,23 @@ class DataFrameSuite extends QueryTest
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
-    val e = intercept[AnalysisException] {
-      df.select(explode($"*"))
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in expression 'explode'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"*"))
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"explode(csv)\"",
+        "paramIndex" -> "1",
+        "inputSql"-> "\"csv\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "(\"ARRAY\" or \"MAP\")")
+    )
+
+    val df2 = Seq(Array("1", "2"), Array("4"), Array("7", "8", "9")).toDF("csv")
+    checkAnswer(
+      df2.select(explode($"*")),
+      Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 
   test("explode on output of array-valued function") {
@@ -2884,7 +2898,7 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
       .repartition($"a", $"b").sortWithinPartitions("a", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val df3 = df1.groupBy("a", "b").as[GroupByKey, Row]
       .cogroup(df2.groupBy("a", "b").as[GroupByKey, Row]) { case (_, data1, data2) =>
@@ -2908,7 +2922,7 @@ class DataFrameSuite extends QueryTest
     val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a1", "b", "c")
       .repartition($"a1", $"b").sortWithinPartitions("a1", "b")
 
-    implicit val valueEncoder = RowEncoder(df1.schema)
+    implicit val valueEncoder = ExpressionEncoder(df1.schema)
 
     val groupedDataset1 = df1.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
     val groupedDataset2 = df2.groupBy(($"a1" + 1).as("a"), $"b").as[GroupByKey, Row]
@@ -2926,7 +2940,7 @@ class DataFrameSuite extends QueryTest
   test("groupBy.as: throw AnalysisException for unresolved grouping expr") {
     val df = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
 
-    implicit val valueEncoder = RowEncoder(df.schema)
+    implicit val valueEncoder = ExpressionEncoder(df.schema)
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -3634,6 +3648,19 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("SPARK-45216: Non-deterministic functions with seed") {
+    val df = Seq(Array.range(0, 10)).toDF("a")
+
+    val r = rand()
+    val r2 = randn()
+    val r3 = random()
+    val r4 = uuid()
+    val r5 = shuffle(col("a"))
+    df.select(r, r, r2, r2, r3, r3, r4, r4, r5, r5).collect.foreach { row =>
+      (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
+    }
+  }
+
   test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
@@ -3645,6 +3672,30 @@ class DataFrameSuite extends QueryTest
     val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
     val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
     checkAnswer(df1, df2)
+  }
+
+  test("SPARK-44373: filter respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[ParseException] {
+          spark.range(1).toDF("CASE").filter("CASE").collect()
+        },
+        errorClass = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'CASE'", "hint" -> ""))
+    }
+  }
+
+  test("SPARK-44373: createTempView respects active session and it's params respects parser") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(1).createTempView("AUTHORIZATION")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1321",
+        parameters = Map("viewName" -> "AUTHORIZATION"))
+    }
   }
 }
 

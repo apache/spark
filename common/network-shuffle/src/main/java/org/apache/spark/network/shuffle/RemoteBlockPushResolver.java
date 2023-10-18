@@ -177,7 +177,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
     String dbBackendName =
-      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.ROCKSDB.name());
     DBBackend dbBackend = DBBackend.byName(dbBackendName);
     db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
@@ -328,6 +328,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int size = (int) indexFile.length();
     // First entry is the zero offset
     int numChunks = (size / Long.BYTES) - 1;
+    if (numChunks <= 0) {
+      throw new RuntimeException(String.format(
+          "Merged shuffle index file %s is empty", indexFile.getPath()));
+    }
     File metaFile = appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
     if (!metaFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle meta file %s not found",

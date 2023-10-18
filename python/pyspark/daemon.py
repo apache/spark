@@ -28,8 +28,15 @@ from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
-from pyspark.worker import main as worker_main
-from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.serializers import read_long, write_int, write_with_length, UTF8Deserializer
+
+if len(sys.argv) > 1:
+    import importlib
+
+    worker_module = importlib.import_module(sys.argv[1])
+    worker_main = worker_module.main
+else:
+    from pyspark.worker import main as worker_main
 
 
 def compute_real_exit_code(exit_code):
@@ -132,7 +139,7 @@ def manager():
 
             if 0 in ready_fds:
                 try:
-                    worker_pid = read_int(stdin_bin)
+                    worker_pid = read_long(stdin_bin)
                 except EOFError:
                     # Spark told us to exit by closing stdin
                     shutdown(0)

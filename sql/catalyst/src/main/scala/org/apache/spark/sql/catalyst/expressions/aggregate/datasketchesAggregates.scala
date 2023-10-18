@@ -17,23 +17,23 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
- * The HllSketchAgg function utilizes a Datasketches HllSketch instance to
- * count a probabilistic approximation of the number of unique values in
- * a given column, and outputs the binary representation of the HllSketch.
+ * The HllSketchAgg function utilizes a Datasketches HllSketch instance to count a probabilistic
+ * approximation of the number of unique values in a given column, and outputs the binary
+ * representation of the HllSketch.
  *
- * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information
+ * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information.
  *
  * @param left child expression against which unique counting will occur
  * @param right the log-base-2 of K, where K is the number of buckets or slots for the sketch
@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgConfigK) - Returns the HllSketch's updateable binary representation.
+    _FUNC_(expr, lgConfigK) - Returns the HllSketch's updatable binary representation.
       `lgConfigK` (optional) the log-base-2 of K, with K is the number of buckets or
       slots for the HllSketch. """,
   examples = """
@@ -117,9 +117,9 @@ case class HllSketchAgg(
   }
 
   /**
-   * Evaluate the input row and update the HllSketch instance with the row's value.
-   * The update function only supports a subset of Spark SQL types, and an
-   * UnsupportedOperationException will be thrown for unsupported types.
+   * Evaluate the input row and update the HllSketch instance with the row's value. The update
+   * function only supports a subset of Spark SQL types, and an exception will be thrown for
+   * unsupported types.
    *
    * @param sketch The HllSketch instance.
    * @param input  an input row
@@ -128,10 +128,10 @@ case class HllSketchAgg(
     val v = left.eval(input)
     if (v != null) {
       left.dataType match {
-        // Update implemented for a subset of types supported by HllSketch
-        // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out
-        // Leaving out support for Array types, as unique counting these aren't a common use case
-        // Leaving out support for floating point types (IE DoubleType) due to imprecision
+        // This is implemented for a subset of input data types.
+        // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out.
+        // We leave out support for Array types, as unique counting these aren't a common use case.
+        // We leave out support for floating point types (such as DoubleType) due to imprecision.
         // TODO: implement support for decimal/datetime/interval types
         case IntegerType => sketch.update(v.asInstanceOf[Int])
         case LongType => sketch.update(v.asInstanceOf[Long])
@@ -189,21 +189,20 @@ object HllSketchAgg {
   private val minLgConfigK = 4
   private val maxLgConfigK = 21
 
-  // Replicate Datasketche's HllUtil's checkLgK implementation, as we can't reference it directly
+  // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw new SketchesArgumentException(
-        s"Log K must be between $minLgConfigK and $maxLgConfigK, inclusive: " + lgConfigK)
+      throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
+        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK.toString)
     }
   }
 }
 
 /**
- * The HllUnionAgg function ingests and merges Datasketches HllSketch
- * instances previously produced by the HllSketchBinary function, and
- * outputs the merged HllSketch.
+ * The HllUnionAgg function ingests and merges Datasketches HllSketch instances previously produced
+ * by the HllSketchBinary function, and outputs the merged HllSketch.
  *
- * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information
+ * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information.
  *
  * @param left Child expression against which unique counting will occur
  * @param right Allow sketches with different lgConfigK values
@@ -286,20 +285,15 @@ case class HllUnionAgg(
   }
 
   /**
-   * Helper method to compare lgConfigKs and throw an exception if
-   * allowDifferentLgConfigK isn't true and configs don't match
+   * Helper method to compare lgConfigKs and throw an exception if `allowDifferentLgConfigK` isn't
+   * true and configs don't match.
    *
    * @param left An lgConfigK value
    * @param right An lgConfigK value
    */
   def compareLgConfigK(left: Int, right: Int): Unit = {
-    if (!allowDifferentLgConfigK) {
-      if (left != right) {
-        throw new UnsupportedOperationException(
-          s"Sketches have different lgConfigK values: $left and $right. " +
-            "Set allowDifferentLgConfigK to true to enable unions of " +
-            "different lgConfigK values.")
-      }
+    if (!allowDifferentLgConfigK && left != right) {
+      throw QueryExecutionErrors.hllUnionDifferentLgK(left, right, function = prettyName)
     }
   }
 
@@ -314,13 +308,18 @@ case class HllUnionAgg(
     if (v != null) {
       left.dataType match {
         case BinaryType =>
-          val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
-          val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
-          compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
-          union.update(sketch)
-          Some(union)
-        case _ => throw new UnsupportedOperationException(
-          s"A Union instance can only be updated with a valid HllSketch byte array")
+          try {
+            val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
+            val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
+            compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
+            union.update(sketch)
+            Some(union)
+          } catch {
+            case _: java.lang.Error =>
+              throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+          }
+        case _ =>
+          throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
       }
     } else {
       unionOption

@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any, Dict, Union, List, Tuple, Callable, Optional
+import math
+
+import torch
+import torch.nn as torch_nn
+import numpy as np
+import pandas as pd
 
 from pyspark import keyword_only
 from pyspark.ml.connect.base import _PredictorParams
-
 from pyspark.ml.param.shared import HasProbabilityCol
-
-from typing import Any, Dict, Union, List, Tuple, Callable, Optional
-import numpy as np
-import pandas as pd
-import math
-
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -41,10 +41,7 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.connect.base import Predictor, PredictionModel
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
-from pyspark.sql.functions import lit, count, countDistinct
-
-import torch
-import torch.nn as torch_nn
+from pyspark.sql import functions as sf
 
 
 class _LogisticRegressionParams(
@@ -152,6 +149,31 @@ class LogisticRegression(
     Logistic regression estimator.
 
     .. versionadded:: 3.5.0
+
+    Examples
+    --------
+    >>> from pyspark.ml.connect.classification import LogisticRegression, LogisticRegressionModel
+    >>> lor = LogisticRegression(maxIter=20, learningRate=0.01)
+    >>> dataset = spark.createDataFrame([
+    ...     ([1.0, 2.0], 1),
+    ...     ([2.0, -1.0], 1),
+    ...     ([-3.0, -2.0], 0),
+    ...     ([-1.0, -2.0], 0),
+    ... ], schema=['features', 'label'])
+    >>> lor_model = lor.fit(dataset)
+    >>> transformed_dataset = lor_model.transform(dataset)
+    >>> transformed_dataset.show()
+    +------------+-----+----------+--------------------+
+    |    features|label|prediction|         probability|
+    +------------+-----+----------+--------------------+
+    |  [1.0, 2.0]|    1|         1|[0.02423273026943...|
+    | [2.0, -1.0]|    1|         1|[0.09334788471460...|
+    |[-3.0, -2.0]|    0|         0|[0.99808156490325...|
+    |[-1.0, -2.0]|    0|         0|[0.96210002899169...|
+    +------------+-----+----------+--------------------+
+    >>> lor_model.saveToLocal("/tmp/lor_model")
+    >>> LogisticRegressionModel.loadFromLocal("/tmp/lor_model")
+    LogisticRegression_...
     """
 
     _input_kwargs: Dict[str, Any]
@@ -207,18 +229,20 @@ class LogisticRegression(
             num_train_workers
         )
 
-        # TODO: check label values are in range of [0, num_classes)
-        num_rows, num_classes = dataset.agg(
-            count(lit(1)), countDistinct(self.getLabelCol())
+        num_rows, num_features, classes = dataset.select(
+            sf.count(sf.lit(1)),
+            sf.first(sf.array_size(self.getFeaturesCol())),
+            sf.collect_set(self.getLabelCol()),
         ).head()  # type: ignore[misc]
+
+        num_classes = len(classes)
+        if num_classes < 2:
+            raise ValueError("Training dataset distinct labels must >= 2.")
+        if any(c not in range(0, num_classes) for c in classes):
+            raise ValueError("Training labels must be integers in [0, numClasses).")
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
         num_samples_per_worker = num_batches_per_worker * batch_size
-
-        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore[index]
-
-        if num_classes < 2:
-            raise ValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
         distributor = TorchDistributor(

@@ -694,14 +694,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
 
       withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
+        val e = intercept[ParseException] {
           sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
         }.getMessage
         assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
       }
 
       withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
+        val e = intercept[ParseException] {
           sql(
             """
               |CREATE TABLE gen__tmp
@@ -1231,7 +1231,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           .save(path)
 
         // We don't support creating a temporary table while specifying a database
-        intercept[AnalysisException] {
+        intercept[ParseException] {
           spark.sql(
             s"""
               |CREATE TEMPORARY VIEW db.t
@@ -1352,6 +1352,17 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(sql(s"select a.id from parquet.`${f.getCanonicalPath}` as a"),
         df)
     })
+  }
+
+  test("SPARK-44520: invalid path for support direct query shall throw correct exception") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"select id from parquet.`invalid_path`")
+      },
+      errorClass = "PATH_NOT_FOUND",
+      parameters = Map("path" -> "file.*invalid_path"),
+      matchPVals = true
+    )
   }
 
   test("run sql directly on files - orc") {
@@ -2132,16 +2143,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("Auto alias construction of get_json_object") {
     val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
-    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
-      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
-      "get_json_object(jstring, $.f1)"
 
     withTable("t") {
       val e = intercept[AnalysisException] {
         df.select($"key", functions.get_json_object($"jstring", "$.f1"))
           .write.format("hive").saveAsTable("t")
-      }.getMessage
-      assert(e.contains(expectedMsg))
+      }
+      checkError(e,
+        errorClass = "INVALID_HIVE_COLUMN_NAME",
+        parameters = Map(
+          "invalidChars" -> "','",
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+      )
     }
 
     withTempView("tempView") {
@@ -2150,8 +2164,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[AnalysisException] {
           sql("CREATE TABLE t USING hive AS " +
             "SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
-        }.getMessage
-        assert(e.contains(expectedMsg))
+        }
+        checkError(e,
+          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          parameters = Map(
+            "invalidChars" -> "','",
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "columnName" -> "`get_json_object(jstring, $`.`f1)`")
+        )
       }
     }
   }

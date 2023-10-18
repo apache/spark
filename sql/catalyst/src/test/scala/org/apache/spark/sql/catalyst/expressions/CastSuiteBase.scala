@@ -28,7 +28,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -40,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -826,9 +826,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
         checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
         val ret2 = cast(
-          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          Literal.create(Map("1" -> null, "2" -> "a".getBytes, "3" -> null, "4" -> "c".getBytes)),
           StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val nullStr = if (legacyCast) "" else " null"
+        checkEvaluation(ret2, s"${lb}1 ->$nullStr, 2 -> a, 3 ->$nullStr, 4 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite extends MergeIntoTableSuiteBase {
+class DeltaBasedMergeIntoTableUpdateAsDeleteAndInsertSuite
+  extends DeltaBasedMergeIntoTableSuiteBase {
 
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()

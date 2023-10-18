@@ -36,7 +36,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "SCALA_PROFILE": "scala2.13"
+          "SCALA_PROFILE": "scala2.13",
+          "PYTHON_TO_TEST": ""
         }
       jobs: >-
         {

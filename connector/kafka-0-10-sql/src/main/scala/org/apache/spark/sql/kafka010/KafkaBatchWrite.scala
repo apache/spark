@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.types.StructType
@@ -38,7 +39,7 @@ private[kafka010] class KafkaBatchWrite(
     schema: StructType)
   extends BatchWrite {
 
-  validateQuery(schema.toAttributes, producerParams, topic)
+  validateQuery(DataTypeUtils.toAttributes(schema), topic)
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): KafkaBatchWriterFactory =
     KafkaBatchWriterFactory(topic, producerParams, schema)
@@ -62,6 +63,6 @@ private case class KafkaBatchWriterFactory(
   extends DataWriterFactory {
 
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new KafkaDataWriter(topic, producerParams, schema.toAttributes)
+    new KafkaDataWriter(topic, producerParams, DataTypeUtils.toAttributes(schema))
   }
 }

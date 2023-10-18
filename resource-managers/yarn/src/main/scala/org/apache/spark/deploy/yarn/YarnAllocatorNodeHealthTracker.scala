@@ -16,8 +16,8 @@
  */
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest

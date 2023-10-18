@@ -178,3 +178,22 @@ struct<emp_name:string,bonus_amt:double>
 -- !query output
 emp 5	1000.0
 emp 6 - no dept	500.0
+
+
+-- !query
+SELECT *
+FROM BONUS
+WHERE EXISTS(SELECT RANK() OVER (PARTITION BY hiredate ORDER BY salary) AS s
+                    FROM EMP, DEPT where EMP.dept_id = DEPT.dept_id
+                        AND DEPT.dept_name < BONUS.emp_name)
+-- !query schema
+struct<emp_name:string,bonus_amt:double>
+-- !query output
+emp 1	10.0
+emp 1	20.0
+emp 2	100.0
+emp 2	300.0
+emp 3	300.0
+emp 4	100.0
+emp 5	1000.0
+emp 6 - no dept	500.0

@@ -114,7 +114,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT 1 FROM `hello`
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -147,7 +147,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 -- !query
 ALTER TABLE `not_exist` ADD COLUMN not_exist int
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -167,7 +167,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 ALTER TABLE not_exist ADD COLUMN `not_exist` int
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -187,7 +187,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT 1 AS `not_exist` FROM `not_exist`
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -207,7 +207,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT 1 FROM not_exist AS X(`hello`)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

@@ -121,7 +121,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"stack(n, a, b, c)\"",
-        "inputName" -> "n",
+        "inputName" -> "`n`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> "\"n\""),
       context = ExpectedContext(
@@ -536,11 +536,18 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df,
       Row(1, 1) :: Row(1, 2) :: Row(2, 2) :: Row(2, 3) :: Row(3, null) :: Nil)
   }
+
+  test("SPARK-45171: Handle evaluated nondeterministic expression") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = sql("select explode(array(rand(0)))")
+      checkAnswer(df, Row(0.7604953758285915d))
+    }
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iteratorClass = classOf[Iterator[_]].getName
     ev.copy(code =

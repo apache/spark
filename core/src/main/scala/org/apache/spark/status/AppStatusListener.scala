@@ -20,9 +20,9 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -443,6 +443,7 @@ private[spark] class AppStatusListener(
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
       .toSeq
+      .filter(!_.isEmpty)
       .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))

@@ -83,9 +83,10 @@ select udf(a), b from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "rand(5)"
+    "expr" : "\"rand(5)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -102,11 +103,12 @@ select udf(a), udf(b) from values ("one", 2.0), ("two") as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "1",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -123,9 +125,10 @@ select udf(a), udf(b) from values ("one", array(0, 1)), ("two", struct(1, 2)) as
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2303",
+  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "name" : "b"
+    "colName" : "`b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -142,11 +145,12 @@ select udf(a), udf(b) from values ("one"), ("two") as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "0",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -184,9 +188,10 @@ select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "count(1)"
+    "expr" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",

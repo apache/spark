@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
     YearMonthIntervalType,
+    CalendarIntervalType,
     MapType,
     StringType,
     CharType,
@@ -169,7 +170,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, YearMonthIntervalType):
         ret.year_month_interval.start_field = data_type.startField
         ret.year_month_interval.end_field = data_type.endField
+    elif isinstance(data_type, CalendarIntervalType):
+        ret.calendar_interval.CopyFrom(pb2.DataType.CalendarInterval())
     elif isinstance(data_type, StructType):
+        struct = pb2.DataType.Struct()
         for field in data_type.fields:
             struct_field = pb2.DataType.StructField()
             struct_field.name = field.name
@@ -177,7 +181,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             struct_field.nullable = field.nullable
             if field.metadata is not None and len(field.metadata) > 0:
                 struct_field.metadata = json.dumps(field.metadata)
-            ret.struct.fields.append(struct_field)
+            struct.fields.append(struct_field)
+        ret.struct.CopyFrom(struct)
     elif isinstance(data_type, MapType):
         ret.map.key_type.CopyFrom(pyspark_types_to_proto_types(data_type.keyType))
         ret.map.value_type.CopyFrom(pyspark_types_to_proto_types(data_type.valueType))
@@ -263,6 +268,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             else None
         )
         return YearMonthIntervalType(startField=start, endField=end)
+    elif schema.HasField("calendar_interval"):
+        return CalendarIntervalType()
     elif schema.HasField("array"):
         return ArrayType(
             proto_schema_to_pyspark_data_type(schema.array.element_type),

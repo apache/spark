@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
-import scala.collection.convert.ImplicitConversions.`map AsScala`
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
@@ -162,7 +161,7 @@ case class ShowTablesExec(
     // "Partition Parameters"
     val metadata = partitionTable.loadPartitionMetadata(ident)
     if (!metadata.isEmpty) {
-      val metadataValues = metadata.map { case (key, value) =>
+      val metadataValues = metadata.asScala.map { case (key, value) =>
         if (value.isEmpty) key else s"$key: $value"
       }.mkString("{", ", ", "}")
       results.put("Partition Parameters", metadataValues)

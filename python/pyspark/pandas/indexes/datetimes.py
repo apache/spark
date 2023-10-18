@@ -25,6 +25,7 @@ from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
+from pyspark.pandas import DataFrame
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
 from pyspark.pandas.series import Series, first_series
@@ -45,9 +46,15 @@ class DatetimeIndex(Index):
         inferred frequency upon creation.
     normalize : bool, default False
         Normalize start/end dates to midnight before generating date range.
+
+        .. deprecated:: 4.0.0
+
     closed : {'left', 'right'}, optional
         Set whether to include `start` and `end` that are on the
         boundary. The default includes boundary points on either end.
+
+        .. deprecated:: 4.0.0
+
     ambiguous : 'infer', bool-ndarray, 'NaT', default 'raise'
         When clocks moved backward due to DST, ambiguous times may arise.
         For example in Central European Time (UTC+01), when going from 03:00
@@ -111,6 +118,18 @@ class DatetimeIndex(Index):
         copy=False,
         name=None,
     ) -> "DatetimeIndex":
+        if closed is not None:
+            warnings.warn(
+                "The 'closed' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+        if normalize is not None:
+            warnings.warn(
+                "The 'normalize' keyword in DatetimeIndex construction is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
@@ -214,28 +233,40 @@ class DatetimeIndex(Index):
         )
         return Index(self.to_series().dt.microsecond)
 
-    @property
-    def week(self) -> Index:
+    def isocalendar(self) -> DataFrame:
         """
-        The week ordinal of the year.
+        Calculate year, week, and day according to the ISO 8601 standard.
 
-        .. deprecated:: 3.5.0
+            .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        DataFrame
+            With columns year, week and day.
+
+        .. note:: Returns have int64 type instead of UInt32 as is in pandas due to UInt32
+            is not supported by spark
+
+        Examples
+        --------
+        >>> psidxs = ps.from_pandas(
+        ...     pd.DatetimeIndex(["2019-12-29", "2019-12-30", "2019-12-31", "2020-01-01"])
+        ... )
+        >>> psidxs.isocalendar()
+                    year  week  day
+        2019-12-29  2019    52    7
+        2019-12-30  2020     1    1
+        2019-12-31  2020     1    2
+        2020-01-01  2020     1    3
+
+        >>> psidxs.isocalendar().week
+        2019-12-29    52
+        2019-12-30     1
+        2019-12-31     1
+        2020-01-01     1
+        Name: week, dtype: int64
         """
-        warnings.warn(
-            "`week` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.week)
-
-    @property
-    def weekofyear(self) -> Index:
-        warnings.warn(
-            "`weekofyear` is deprecated in 3.5.0 and will be removed in 4.0.0.",
-            FutureWarning,
-        )
-        return Index(self.to_series().dt.weekofyear)
-
-    weekofyear.__doc__ = week.__doc__
+        return self.to_series().dt.isocalendar()
 
     @property
     def dayofweek(self) -> Index:
@@ -261,7 +292,7 @@ class DatetimeIndex(Index):
         --------
         >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')  # doctest: +SKIP
         >>> idx.dayofweek  # doctest: +SKIP
-        Int64Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
+        Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
         warnings.warn(
             "`dayofweek` will return int32 index instead of int 64 index in 4.0.0.",
@@ -730,24 +761,32 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")  # doctest: +SKIP
-        >>> psidx  # doctest: +SKIP
+        >>> psidx = ps.date_range("2000-01-01", periods=3, freq="T")
+        >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
                       dtype='datetime64[ns]', freq=None)
 
-        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()  # doctest: +SKIP
-        Int64Index([1, 2], dtype='int64')
+        >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
+        Index([1, 2], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)  # doctest: +SKIP
-        Int64Index([1], dtype='int64')
+        >>> psidx.indexer_between_time("00:01", "00:02", include_end=False)
+        Index([1], dtype='int64')
 
-        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)  # doctest: +SKIP
-        Int64Index([2], dtype='int64')
+        >>> psidx.indexer_between_time("00:01", "00:02", include_start=False)
+        Index([2], dtype='int64')
         """
 
         def pandas_between_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
-            return pdf.between_time(start_time, end_time, include_start, include_end)
+            if include_start and include_end:
+                inclusive = "both"
+            elif not include_start and not include_end:
+                inclusive = "neither"
+            elif include_start and not include_end:
+                inclusive = "left"
+            elif not include_start and include_end:
+                inclusive = "right"
+            return pdf.between_time(start_time, end_time, inclusive=inclusive)
 
         psdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(psdf, "__id_column__")
@@ -783,10 +822,10 @@ class DatetimeIndex(Index):
                       dtype='datetime64[ns]', freq=None)
 
         >>> psidx.indexer_at_time("00:00")  # doctest: +SKIP
-        Int64Index([0], dtype='int64')
+        Index([0], dtype='int64')
 
         >>> psidx.indexer_at_time("00:01")  # doctest: +SKIP
-        Int64Index([1], dtype='int64')
+        Index([1], dtype='int64')
         """
         if asof:
             raise NotImplementedError("'asof' argument is not supported")

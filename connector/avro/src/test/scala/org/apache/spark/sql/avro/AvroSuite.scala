@@ -21,9 +21,9 @@ import java.io._
 import java.net.URL
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
-import java.util.{Locale, UUID}
+import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
@@ -46,9 +46,9 @@ import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
@@ -816,7 +816,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-43380: Fix Avro data type conversion" +
-      " of decimal type to avoid producing incorrect results") {
+    " of decimal type to avoid producing incorrect results") {
     withTempPath { path =>
       val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
@@ -829,12 +829,11 @@ abstract class AvroSuite
           case ex: AnalysisException =>
             checkError(
               exception = ex,
-              errorClass = "AVRO_LOWER_PRECISION",
+              errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> "\"DECIMAL\\(4,3\\)\"",
-                "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\""),
               matchPVals = true
             )
           case other =>
@@ -880,12 +879,11 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>
@@ -923,12 +921,11 @@ abstract class AvroSuite
             case ex: AnalysisException =>
               checkError(
                 exception = ex,
-                errorClass = "AVRO_INCORRECT_TYPE",
+                errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
-                  "sqlType" -> s""""$sqlType"""",
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
+                  "sqlType" -> s""""$sqlType""""),
                 matchPVals = true
               )
             case other =>
@@ -1585,20 +1582,24 @@ abstract class AvroSuite
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       withTempDir { dir =>
         val tempDir = new File(dir, "files").getCanonicalPath
-        var msg = intercept[AnalysisException] {
-          sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.contains("Cannot save interval data type into external storage.") ||
-          msg.contains("Column `INTERVAL '1' DAY` has a data type of interval day, " +
-            "which is not supported by Avro."))
-
-        msg = intercept[AnalysisException] {
-          spark.udf.register("testType", () => new IntervalData())
-          sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains("column `testtype()` has a data type of interval, " +
-            "which is not supported by avro."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1136",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.udf.register("testType", () => new IntervalData())
+            sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`testType()`",
+            "columnType" -> "\"INTERVAL\"",
+            "format" -> "Avro")
+        )
       }
     }
   }
@@ -2774,7 +2775,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2808,7 +2809,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2889,7 +2890,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

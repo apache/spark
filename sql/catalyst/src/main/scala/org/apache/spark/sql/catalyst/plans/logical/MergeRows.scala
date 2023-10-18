@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.Instruction
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NullType}
 
 case class MergeRows(
     isSourceRowPresent: Expression,
@@ -37,7 +37,17 @@ case class MergeRows(
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
   }
 
-  override lazy val references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = {
+    val usedExprs = if (checkCardinality) {
+      val rowIdAttr = child.output.find(attr => conf.resolver(attr.name, ROW_ID))
+      assert(rowIdAttr.isDefined, "Cannot find row ID attr")
+      rowIdAttr.get +: expressions
+    } else {
+      expressions
+    }
+    AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
+  }
 
   override def simpleString(maxFields: Int): String = {
     s"MergeRows${truncatedString(output, "[", ", ", "]", maxFields)}"
@@ -64,7 +74,11 @@ object MergeRows {
     def condition: Expression
     def outputs: Seq[Seq[Expression]]
     override def nullable: Boolean = false
-    override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+    // We return NullType here as only the `MergeRows` operator can contain `Instruction`
+    // expressions and it doesn't care about the data type. Some external optimizer rules may
+    // assume optimized plan is always resolved and Expression#dataType is always available, so
+    // we can't just fail here.
+    override def dataType: DataType = NullType
   }
 
   case class Keep(condition: Expression, output: Seq[Expression]) extends Instruction {

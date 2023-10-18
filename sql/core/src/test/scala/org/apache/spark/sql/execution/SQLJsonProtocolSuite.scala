@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkFunSuite, SparkThrowableHelper}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.test.TestSparkSession
-import org.apache.spark.util.JsonProtocol
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
@@ -84,21 +85,23 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
   test("SparkListenerSQLExecutionEnd backward compatibility") {
     spark = new TestSparkSession()
     val qe = spark.sql("select 1").queryExecution
-    val errorMessage = SparkThrowableHelper.getMessage(new Exception("test"))
+    val exception = new Exception("test")
+    val errorMessage = Utils.exceptionString(exception)
+    val errorMessageJson = new ObjectMapper().writeValueAsString(errorMessage)
     val event = SparkListenerSQLExecutionEnd(1, 10, Some(errorMessage))
     event.duration = 1000
     event.executionName = Some("test")
     event.qe = qe
-    event.executionFailure = Some(new Exception("test"))
+    event.executionFailure = Some(exception)
     val json = JsonProtocol.sparkEventToJsonString(event)
     // scalastyle:off line.size.limit
     assert(parse(json) == parse(
-      """
+      s"""
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
         |  "time" : 10,
-        |  "errorMessage" : "{\"errorClass\":\"java.lang.Exception\",\"messageParameters\":{\"message\":\"test\"}}"
+        |  "errorMessage" : $errorMessageJson
         |}
       """.stripMargin))
     // scalastyle:on

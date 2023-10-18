@@ -71,7 +71,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     // Since the cost function is convex, the loss is guaranteed to be monotonically decreasing
     // with L-BFGS optimizer.
     // (SGD doesn't guarantee this, and the loss will be fluctuating in the optimization process.)
-    assert((loss, loss.tail).zipped.forall(_ > _), "loss should be monotonically decreasing.")
+    assert(loss.lazyZip(loss.tail).forall(_ > _), "loss should be monotonically decreasing.")
 
     val stepSize = 1.0
     // Well, GD converges slower, so it requires more iterations!

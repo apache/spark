@@ -47,8 +47,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
     super.test(testName + " (codegen path)", testTags: _*)(
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
     super.test(testName + " (interpreted path)", testTags: _*)(
-      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") { testFun }})(pos)
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) { testFun })(pos)
   }
 
   protected def testFallback(
@@ -96,6 +95,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         udf.copy(resultId = ExprId(0))
       case udaf: PythonUDAF =>
         udaf.copy(resultId = ExprId(0))
+      case a: FunctionTableSubqueryArgumentExpression =>
+        a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
     }
   }
 

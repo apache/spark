@@ -68,14 +68,9 @@ public final class Platform {
     }
     try {
       Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor<?> constructor;
-      try {
-        constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
-      } catch (NoSuchMethodException e) {
-        // DirectByteBuffer(long,int) was removed in
-        // https://github.com/openjdk/jdk/commit/a56598f5a534cc9223367e7faa8433ea38661db9
-        constructor = cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
-      }
+      Constructor<?> constructor = (majorVersion < 21) ?
+        cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE) :
+        cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
       Field cleanerField = cls.getDeclaredField("cleaner");
       try {
         constructor.setAccessible(true);
@@ -101,7 +96,7 @@ public final class Platform {
         Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
         // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
         // unfortunately, unless the user has allowed access with something like
-        // --add-opens java.base/java.lang=ALL-UNNAMED  If not, we can't really use the Cleaner
+        // --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  If not, we can't use the Cleaner
         // hack below. It doesn't break, just means the user might run into the default JVM limit
         // on off-heap memory and increase it or set the flag above. This tests whether it's
         // available:
@@ -121,6 +116,11 @@ public final class Platform {
     } catch (InvocationTargetException ite) {
       throw new IllegalStateException(ite.getCause());
     }
+  }
+
+  // Visible for testing
+  public static boolean cleanerCreateMethodIsDefined() {
+    return CLEANER_CREATE_METHOD != null;
   }
 
   /**

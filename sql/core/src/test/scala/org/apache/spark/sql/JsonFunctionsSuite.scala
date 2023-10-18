@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 
@@ -29,6 +29,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1021,16 +1022,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       .add("c2", ArrayType(new StructType().add("c3", LongType).add("c4", StringType)))
     val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
-    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
-    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
 
+    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
-      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+      checkAnswer(
+        df2.select(from_json($"c0", new StructType().add("data", st))),
+        Row(Row(Row(123456, null)))
+      )
+    }
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
     }
 
+    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+    }
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
-      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
       checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
     }
 
@@ -1119,14 +1127,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         )
       )
 
-    // Value "a" cannot be parsed as an integer,
-    // the error cascades to "c2", thus making its value null.
+    // Value "a" cannot be parsed as an integer, c2 value is null.
     val df = Seq("""[{"c1": [{"c2": ["a"]}]}]""").toDF("c0")
 
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       checkAnswer(
         df.select(from_json($"c0", ArrayType(st))),
-        Row(Array(Row(null)))
+        Row(Array(Row(Seq(Row(null)))))
       )
     }
 
@@ -1369,5 +1376,53 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "type" -> "\"JAVA.LANG.INTEGER\""
       )
     )
+  }
+
+  test("json_array_length function") {
+    val df = Seq(null, "[]", "[1, 2, 3]", "{\"key\": 1}", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(0), Row(3), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_array_length(a)"), expected)
+    checkAnswer(df.select(json_array_length($"a")), expected)
+  }
+
+  test("json_object_keys function") {
+    val df = Seq(null, "{}", "{\"key1\":1, \"key2\": 2}", "[1, 2, 3]", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(Seq.empty),
+      Row(Seq("key1", "key2")), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
+    checkAnswer(df.select(json_object_keys($"a")), expected)
+  }
+
+  test("function get_json_object - Codegen Support") {
+    withTempView("GetJsonObjectTable") {
+      val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+      data.createOrReplaceTempView("GetJsonObjectTable")
+      val df = sql("SELECT key, get_json_object(jstring, '$.f1') FROM GetJsonObjectTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Seq(Row("1", "value1")))
+    }
+  }
+
+  test("function get_json_object - path is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(a, null)")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
+  }
+
+  test("function get_json_object - json is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(null, '$.name')")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
   }
 }

@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.ParquetProperties._
@@ -249,10 +249,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
           assert(numOutputRows > 0)
 
           if (conf.useSmallSplits) {
-            // SPARK-39634: Until the fix the fix for PARQUET-2161 is available is available,
-            // it is not possible to split Parquet files into multiple partitions while generating
-            // row indexes.
-            // assert(numPartitions >= 2 * conf.numFiles)
+            assert(numPartitions >= 2 * conf.numFiles)
           }
 
           // Assert that every rowIdx value matches the value in `expectedRowIdx`.

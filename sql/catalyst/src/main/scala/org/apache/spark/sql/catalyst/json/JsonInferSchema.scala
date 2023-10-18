@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -148,11 +148,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
+        val timestampType = SQLConf.get.timestampType
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.inferTimestamp &&
+        } else if (options.inferTimestamp && (SQLConf.get.legacyTimeParserPolicy ==
+          LegacyBehaviorPolicy.LEGACY || timestampType == TimestampNTZType) &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-          SQLConf.get.timestampType
+          timestampType
         } else if (options.inferTimestamp &&
             timestampFormatter.parseOptional(field).isDefined) {
           TimestampType

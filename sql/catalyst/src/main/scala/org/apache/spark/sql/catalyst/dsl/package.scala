@@ -134,7 +134,7 @@ package object dsl {
         expr
       } else {
         val cast = Cast(expr, to)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
       }
     }
@@ -353,7 +353,7 @@ package object dsl {
       def struct(structType: StructType): AttributeReference = attrRef(structType)
 
       def struct(attrs: AttributeReference*): AttributeReference =
-        struct(StructType.fromAttributes(attrs))
+        struct(DataTypeUtils.fromAttributes(attrs))
 
       /** Creates a new AttributeReference of object type */
       def obj(cls: Class[_]): AttributeReference = attrRef(ObjectType(cls))
@@ -415,7 +415,7 @@ package object dsl {
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
-          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          func: (Key, Iterator[Left], Iterator[Right]) => IterableOnce[Result],
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
@@ -521,8 +521,9 @@ package object dsl {
         EliminateSubqueryAliases(analyzed)
       }
 
-      def hint(name: String, parameters: Any*): LogicalPlan =
+      def hint(name: String, parameters: Expression*): LogicalPlan = {
         UnresolvedHint(name, parameters, logicalPlan)
+      }
 
       def sample(
           lowerBound: Double,

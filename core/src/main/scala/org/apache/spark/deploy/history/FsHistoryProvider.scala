@@ -23,9 +23,9 @@ import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.{Codec, Source}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -1225,11 +1225,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // If the hybrid store is enabled, try it first and fail back to leveldb store.
+    // If the hybrid store is enabled, try it first and fail back to RocksDB store.
     if (hybridStoreEnabled) {
       try {
         return createHybridStore(dm, appId, attempt, metadata)
       } catch {
+        case e: RuntimeException if e.getMessage != null &&
+            e.getMessage.contains("Not enough memory to create hybrid") =>
+          // Handle exception from `HistoryServerMemoryManager.lease`.
+          logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
+            s" Using $hybridStoreDiskBackend. " + e.getMessage)
         case e: Exception =>
           logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
             s" Using $hybridStoreDiskBackend.", e)
@@ -1283,7 +1288,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
-        override def onSwitchToDiskStoreSuccess: Unit = {
+        override def onSwitchToDiskStoreSuccess(): Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)

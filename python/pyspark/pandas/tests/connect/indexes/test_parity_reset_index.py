@@ -29,12 +29,6 @@ class FrameParityResetIndexTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_reset_index_with_default_index_types(self):
-        super().test_reset_index_with_default_index_types()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.indexes.test_parity_reset_index import *  # noqa: F401

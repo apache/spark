@@ -46,6 +46,7 @@ import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.Constants;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
+import org.apache.spark.network.shuffle.ShuffleTransportContext;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.DBIterator;
@@ -96,7 +97,7 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * {@code yarn.nodemanager.aux-services.<service>.classpath}, this file must be on the classpath
  * of the NodeManager itself. When using the {@code classpath} configuration, it can be present
  * either on the NodeManager's classpath, or specified in the classpath configuration.
- * This {@code classpath} configuration is only supported on YARN versions >= 2.9.0.
+ * This {@code classpath} configuration is only supported on YARN versions &gt;= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
   private static final Logger defaultLogger = LoggerFactory.getLogger(YarnShuffleService.class);
@@ -258,7 +259,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
     if (_recoveryPath != null) {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
-        DBBackend.LEVELDB.name());
+        DBBackend.ROCKSDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
       logger.info("Use {} as the implementation of {}",
         dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
@@ -300,7 +301,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       int port = _conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-      transportContext = new TransportContext(transportConf, blockHandler, true);
+      transportContext = new ShuffleTransportContext(transportConf, blockHandler, true);
       shuffleServer = transportContext.createServer(port, bootstraps);
       // the port should normally be fixed, but for tests its useful to find an open port
       port = shuffleServer.getPort();

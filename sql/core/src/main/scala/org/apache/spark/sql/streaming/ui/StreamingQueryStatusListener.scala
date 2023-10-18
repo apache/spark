@@ -38,8 +38,8 @@ import org.apache.spark.util.kvstore.KVIndex
  * UI data for both active and inactive query.
  */
 private[sql] class StreamingQueryStatusListener(
-    conf: SparkConf,
-    store: ElementTrackingStore) extends StreamingQueryListener {
+    val conf: SparkConf,
+    val store: ElementTrackingStore) extends StreamingQueryListener {
 
   private val streamingProgressRetention =
     conf.get(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES)

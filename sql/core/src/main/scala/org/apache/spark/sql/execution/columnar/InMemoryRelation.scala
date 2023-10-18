@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, QueryExecution, SparkPlan, WholeStageCodegenExec}
@@ -144,7 +145,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
-    val outputSchema = StructType.fromAttributes(selectedAttributes)
+    val outputSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val columnIndices =
       selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
 
@@ -216,6 +217,11 @@ case class CachedRDDBuilder(
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
 
+  val supportsColumnarInput: Boolean = {
+    cachedPlan.supportsColumnar &&
+      serializer.supportsColumnarInput(cachedPlan.output)
+  }
+
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
       synchronized {
@@ -263,8 +269,7 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (cachedPlan.supportsColumnar &&
-        serializer.supportsColumnarInput(cachedPlan.output)) {
+    val cb = if (supportsColumnarInput) {
       serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,

@@ -15,7 +15,7 @@ AS testData(a, b), false, true, LocalTempView, true
 -- !query
 SELECT udf(a), udf(COUNT(b)) FROM testData
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -56,7 +56,7 @@ Aggregate [a#x], [cast(udf(cast(a#x as string)) as int) AS udf(a)#x, count(cast(
 -- !query
 SELECT udf(a), udf(COUNT(udf(b))) FROM testData GROUP BY b
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -145,7 +145,7 @@ Aggregate [(a#x + b#x)], [cast(udf(cast((a#x + b#x) as string)) as int) AS udf((
 -- !query
 SELECT udf(a + 2), udf(COUNT(b)) FROM testData GROUP BY a + 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -218,7 +218,7 @@ Filter (k#x > 1)
 -- !query
 SELECT udf(COUNT(b)) AS k FROM testData GROUP BY k
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "GROUP_BY_AGGREGATE",
   "sqlState" : "42903",
@@ -249,7 +249,7 @@ CreateViewCommand `testDataHasSameNameWithAlias`, SELECT * FROM VALUES
 -- !query
 SELECT k AS a, udf(COUNT(udf(v))) FROM testDataHasSameNameWithAlias GROUP BY udf(a)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -269,7 +269,7 @@ SetCommand (spark.sql.groupByAliases,Some(false))
 -- !query
 SELECT a AS k, udf(COUNT(udf(b))) FROM testData GROUP BY k
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -377,7 +377,7 @@ Project [udf(udf(1))#x]
 -- !query
 SELECT udf(id) FROM range(10) HAVING id > 0
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_GROUP_BY",
   "sqlState" : "42803",
@@ -547,7 +547,7 @@ Aggregate [cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as in
 -- !query
 SELECT every(udf(1))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -571,7 +571,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT some(udf(1S))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -595,7 +595,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT any(udf(1L))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -619,7 +619,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT udf(every("true"))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
@@ -731,7 +731,7 @@ Project [cnt#xL]
 -- !query
 SELECT udf(count(*)) FROM test_agg WHERE count(*) > 1L
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -752,7 +752,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT udf(count(*)) FROM test_agg WHERE count(*) + 1L > 1L
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
@@ -773,7 +773,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT udf(count(*)) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_WHERE_CONDITION",
   "sqlState" : "42903",
