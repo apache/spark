@@ -66,15 +66,12 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
     val dups = ss.groupBy(identity).mapValues(_.size).filter(_._2 > 1).keys.toSeq
-    assert(dups.isEmpty)
+    assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
-      if (!fx(s)) {
-        print(s)
-      }
-      assert(fx(s))
+      assert(fx(s), s)
     }
   }
 
@@ -121,10 +118,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       case (error: String, info: ErrorInfo) =>
         !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
     }.keys.toSeq
-    if (errorClassesNoSqlState.nonEmpty) {
-      logWarning(s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
-    }
-    assert(errorClassesNoSqlState.isEmpty)
+    assert(errorClassesNoSqlState.isEmpty,
+      s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
   }
 
   test("SQLSTATE invariants") {
