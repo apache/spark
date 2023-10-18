@@ -432,14 +432,24 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+    if [ "$PACKAGE_BEFORE_DEPLOY" = "true" ]; then
+      $MVN -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean package
+      $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
+    else
+      $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+    fi
   fi
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
     if [[ $SPARK_VERSION < "4.0" ]]; then
       ./dev/change-scala-version.sh 2.13
     fi
-    $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+    if [ "$PACKAGE_BEFORE_DEPLOY" = "true" ]; then
+      $MVN -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean package
+      $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES deploy
+    else
+      $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+    fi
   fi
 
   rm $tmp_settings
