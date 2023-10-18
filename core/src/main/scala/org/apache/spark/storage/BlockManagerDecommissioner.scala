@@ -40,7 +40,7 @@ private[storage] class BlockManagerDecommissioner(
     conf: SparkConf,
     bm: BlockManager) extends Logging {
 
-  private val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
+  private[storage] val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
   private val blockSavedOnDecommissionedBlockManagerException =
@@ -211,7 +211,7 @@ private[storage] class BlockManagerDecommissioner(
   @volatile private var stopped = false
   @volatile private[storage] var stoppedRDD =
     !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)
-  @volatile private var stoppedShuffle =
+  @volatile private[storage] var stoppedShuffle =
     !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
   private val migrationPeers =
