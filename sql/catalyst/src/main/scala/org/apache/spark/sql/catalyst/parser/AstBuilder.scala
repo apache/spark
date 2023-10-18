@@ -2767,8 +2767,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     } catch {
       case e: SparkArithmeticException =>
         throw new ParseException(
-          errorClass = "_LEGACY_ERROR_TEMP_0061",
-          messageParameters = Map("msg" -> e.getMessage),
+          errorClass = e.getErrorClass,
+          messageParameters = e.getMessageParameters.asScala.toMap,
           ctx)
     }
   }
