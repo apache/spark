@@ -299,7 +299,7 @@ class ProxyBroadcastVarAndStageIdentifier(
     val joiningKeysData: Seq[JoiningKeyData],
     val buildLegProxyBroadcastVarAndStageIdentifiers: Seq[ProxyBroadcastVarAndStageIdentifier] =
     Seq.empty[ProxyBroadcastVarAndStageIdentifier]
-) {
+) extends Serializable {
   override def toString(): String = s"ProxyBroadcastVar..: buildlegPlan=not" +
     s" printing:${joiningKeysData.mkString(",")}: proxy identifiers for buildleg" +
     s"=${buildLegProxyBroadcastVarAndStageIdentifiers.mkString(",")}"
@@ -328,4 +328,4 @@ case class JoiningKeyData(
     buildSideJoinKeyAtJoin: Expression,
     streamsideLeafJoinAttribIndex: Int,
     joiningColDataType: DataType,
-    joinKeyIndexInJoiningKeys: Int)
+    joinKeyIndexInJoiningKeys: Int) extends Serializable
