@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.StatisticsCache
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
@@ -30,7 +32,9 @@ import org.apache.spark.sql.connector.expressions.IdentityTransform
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean,
+    statisticsCache: StatisticsCache,
+    rt: ResolvedTable) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
@@ -61,6 +65,19 @@ case class DescribeTableExec(
           rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
         }
       })
+    val statistics = statisticsCache.get(ResolvedIdentifier(rt.catalog, rt.identifier))
+
+    if (statistics.isDefined) {
+      def getStatisticsSimpleStr = {
+        val rowCountString = if (statistics.get.numRows().isPresent) {
+          s", ${statistics.get.numRows().getAsLong} rows"
+        } else {
+          ""
+        }
+        s"${statistics.get.sizeInBytes().getAsLong} bytes$rowCountString"
+      }
+      rows += toCatalystRow("Statistics", getStatisticsSimpleStr, "")
+    }
     val properties =
       conf.redactOptions(table.properties.asScala.toMap).toList
         .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))

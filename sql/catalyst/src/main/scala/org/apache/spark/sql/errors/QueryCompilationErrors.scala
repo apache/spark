@@ -1454,8 +1454,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("cmd" -> toSQLStmt(cmd)))
   }
 
-  def analyzeTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("ANALYZE TABLE")
+  def analyzeTableForColumnsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE ... FOR [ALL] COLUMNS ...")
+  }
+
+  def analyzeTablePartitionNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE ... PARTITION ...")
+  }
+
+  def analyzeTableNoScanNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE ... NOSCAN")
   }
 
   def alterTableRecoverPartitionsNotSupportedForV2TablesError(): Throwable = {

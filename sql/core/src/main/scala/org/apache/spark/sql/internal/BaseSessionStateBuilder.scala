@@ -260,6 +260,10 @@ abstract class BaseSessionStateBuilder(
     }
   }
 
+  protected def statisticsCache: StatisticsCache = {
+    new StatisticsCache
+  }
+
   /**
    * Custom operator optimization rules to add to the Optimizer. Prefer overriding this instead
    * of creating your own Optimizer.
@@ -373,6 +377,7 @@ abstract class BaseSessionStateBuilder(
       sqlParser,
       () => analyzer,
       () => optimizer,
+      () => statisticsCache,
       planner,
       () => streamingQueryManager,
       listenerManager,

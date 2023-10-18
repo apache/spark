@@ -177,6 +177,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.StatisticsCache"),
 
       // DataFrame Reader & Writer
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // rdd

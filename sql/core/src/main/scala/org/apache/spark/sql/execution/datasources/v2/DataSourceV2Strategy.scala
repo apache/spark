@@ -336,7 +336,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
       }
-      DescribeTableExec(output, r.table, isExtended) :: Nil
+      DescribeTableExec(output, r.table, isExtended,
+        session.sessionState.statisticsCache, r) :: Nil
 
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {
@@ -412,8 +413,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
       ShowTablePropertiesExec(output, rt.table, rt.name, propertyKey) :: Nil
 
-    case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
-      throw QueryCompilationErrors.analyzeTableNotSupportedForV2TablesError()
+    case AnalyzeTable(rt: ResolvedTable, partitionSpec, noScan) =>
+      if (partitionSpec.nonEmpty) {
+        throw QueryCompilationErrors.analyzeTablePartitionNotSupportedForV2TablesError()
+      }
+      if (noScan) {
+        throw QueryCompilationErrors.analyzeTableNoScanNotSupportedForV2TablesError()
+      }
+      AnalyzeTableExec(rt, session.sessionState.statisticsCache) :: Nil
+
+    case AnalyzeColumn(_: ResolvedTable, _, _) =>
+      throw QueryCompilationErrors.analyzeTableForColumnsNotSupportedForV2TablesError()
 
     case AddPartitions(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>

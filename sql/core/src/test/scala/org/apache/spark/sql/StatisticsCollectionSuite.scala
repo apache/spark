@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -722,6 +723,41 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           }
         }
       }
+    }
+  }
+
+  test("SPARK-39420: ANALYZE TABLE on v2 tables") {
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    withTable("testcat.test") {
+      // Create a data source table using the result of a query.
+      sql("CREATE TABLE testcat.test USING parquet AS SELECT 'a', 'b'")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE testcat.test COMPUTE STATISTICS FOR COLUMNS a")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "ANALYZE TABLE ... FOR [ALL] COLUMNS ..."))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE testcat.test PARTITION (a = 'a') COMPUTE STATISTICS")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "ANALYZE TABLE ... PARTITION ..."))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ANALYZE TABLE testcat.test COMPUTE STATISTICS NOSCAN")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "ANALYZE TABLE ... NOSCAN"))
+
+      sql("ANALYZE TABLE testcat.test COMPUTE STATISTICS")
+
+      assertResult("52 bytes, 1 rows")(sql("DESC EXTENDED testcat.test").filter(Column("col_name")
+        .equalTo("Statistics")).head().getAs[String]("data_type"))
+
     }
   }
 

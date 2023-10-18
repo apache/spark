@@ -2271,8 +2271,12 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
-      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        parameters = Map("cmd" -> "ANALYZE TABLE ... FOR [ALL] COLUMNS ..."))
     }
   }
 

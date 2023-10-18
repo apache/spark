@@ -76,6 +76,7 @@ private[sql] class SessionState(
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
     optimizerBuilder: () => Optimizer,
+    statisticsCacheBuilder: () => StatisticsCache,
     val planner: SparkPlanner,
     val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
@@ -92,6 +93,8 @@ private[sql] class SessionState(
   lazy val analyzer: Analyzer = analyzerBuilder()
 
   lazy val optimizer: Optimizer = optimizerBuilder()
+
+  lazy val statisticsCache: StatisticsCache = statisticsCacheBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
