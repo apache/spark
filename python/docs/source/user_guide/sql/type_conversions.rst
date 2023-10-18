@@ -28,6 +28,41 @@ You can access them by doing:
 
     from pyspark.sql.types import *
 
+The conversion between native types and Spark SQL types is especially important to consider when writing Python UDFs.
+
+.. code-block:: python
+
+    from pyspark.sql.types import (
+        StructType,
+        StructField,
+        IntegerType,
+        StringType,
+        FloatType,
+    )
+    from pyspark.sql.functions import udf, col
+
+    df = spark.createDataFrame(
+        [[1]], schema=StructType([StructField("int", IntegerType())])
+    )
+
+    @udf(returnType=StringType())
+    def to_string(value):
+        # Must cast return value to str to convert to StringType.
+        return str(value)
+
+
+    @udf(returnType=FloatType())
+    def to_float(value):
+        # Must cast return value to float to convert to FloatType.
+        return float(value)
+
+
+    df.withColumn("cast_int", to_float(col("int"))).withColumn(
+        "cast_str", to_string(col("int"))
+    ).show()
+
+All conversions can be found below:
+
 .. list-table::
     :header-rows: 1
 
@@ -96,3 +131,5 @@ You can access them by doing:
       - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
       - StructField(*name*, *dataType*, [*nullable*])
           .. note:: The default value of *nullable* is True.
+
+.. TODO: Add explanation and table for type conversions (SPARK-44734).
