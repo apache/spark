@@ -51,21 +51,21 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   private def getBatch(query: DataFrame): AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.getBatch.asInstanceOf[AdvancedBatch]
+        d.batch.asInstanceOf[AdvancedBatch]
     }.head
   }
 
   private def getBatchWithV2Filter(query: DataFrame): AdvancedBatchWithV2Filter = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.getBatch.asInstanceOf[AdvancedBatchWithV2Filter]
+        d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
     }.head
   }
 
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.getBatch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
 
@@ -73,7 +73,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       query: DataFrame): JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
-        d.getBatch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
     }.head
   }
 
