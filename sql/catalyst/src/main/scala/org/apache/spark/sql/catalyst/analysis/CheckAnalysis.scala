@@ -609,7 +609,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             val varName = toSQLId(
               ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
             throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-              "CRETE VARIABLE",
+              "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
 

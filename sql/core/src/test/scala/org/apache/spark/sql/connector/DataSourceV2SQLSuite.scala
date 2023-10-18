@@ -3327,7 +3327,7 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"$sqlCommand $sqlParams")
       },
       errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
-      sqlState = "46110",
+      sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
 }
