@@ -71,6 +71,18 @@ class DatasetSuite extends QueryTest
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  test("SPARK-45592: correctness issue") {
+    val ee = spark.range(0, 1000000, 1, 5).map(l => (l, l)).toDF()
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+    ee.count()
+
+    val minNbrs1 = ee
+      .groupBy("_1").agg(min(col("_2")).as("min_number"))
+      .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+    val join = ee.join(minNbrs1, "_1")
+    assert(join.count() == 1000000)
+  }
+
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
     checkAnswer(
