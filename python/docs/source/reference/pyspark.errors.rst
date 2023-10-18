@@ -33,11 +33,24 @@ Classes
     TempTableAlreadyExistsException
     ParseException
     IllegalArgumentException
+    ArithmeticException
+    UnsupportedOperationException
+    ArrayIndexOutOfBoundsException
+    DateTimeException
+    NumberFormatException
     StreamingQueryException
     QueryExecutionException
     PythonException
     UnknownException
+    SparkRuntimeException
     SparkUpgradeException
+    PySparkTypeError
+    PySparkValueError
+    PySparkAttributeError
+    PySparkRuntimeError
+    PySparkAssertionError
+    PySparkNotImplementedError
+    PySparkPicklingError
 
 
 Methods
