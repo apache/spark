@@ -287,7 +287,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <include>com.google.guava:*</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
 

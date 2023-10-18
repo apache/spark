@@ -138,6 +138,10 @@
               </includes>
             </relocation>
             <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
+            </relocation>
+            <relocation>
               <pattern>com.google</pattern>
               <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
               <excludes>
