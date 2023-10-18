@@ -859,11 +859,11 @@ def read_udtf(pickleSer, infile, eval_type):
                         error_class="UDTF_EXEC_ERROR",
                         message_parameters={
                             "method_name": "eval' or 'terminate",
-                            "error": f"Column {result_column_index} within a returned row had a value "
-                            + "of None, either directly or within array/struct/map subfields, "
-                            + "but the corresponding column type was declared as non-nullable; "
-                            + "please update the UDTF to return a non-None value at this "
-                            + "location or otherwise declare the column type as nullable.",
+                            "error": f"Column {result_column_index} within a returned row had a "
+                            + "value of None, either directly or within array/struct/map "
+                            + "subfields, but the corresponding column type was declared as "
+                            + "non-nullable; please update the UDTF to return a non-None value at "
+                            + "this location or otherwise declare the column type as nullable.",
                         },
                     )
                 elif (
@@ -955,15 +955,17 @@ def read_udtf(pickleSer, infile, eval_type):
             def check_return_value(res):
                 # Check whether the result of an arrow UDTF is iterable before
                 # using it to construct a pandas DataFrame.
-                if res is not None and not isinstance(res, Iterable):
-                    raise PySparkRuntimeError(
-                        error_class="UDTF_RETURN_NOT_ITERABLE",
-                        message_parameters={
-                            "type": type(res).__name__,
-                            "func": f.__name__,
-                        },
-                    )
-                check_output_row_against_schema(res)
+                if res is not None:
+                    if not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_NOT_ITERABLE",
+                            message_parameters={
+                                "type": type(res).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+                    for row in res:
+                        check_output_row_against_schema(row)
 
             def evaluate(*args: pd.Series):
                 if len(args) == 0:
