@@ -26,7 +26,12 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.{CommandResultExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -39,7 +44,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils with PrivateMethodTester {
+    with SQLTestUtils with PrivateMethodTester with AdaptiveSparkPlanHelper {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -927,4 +932,72 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       testDefaultColumn
     }
   }
+
+  test("CARMEL-XXX2: Auto repartition when writing to a partition table") {
+    withTable("src_tab") {
+      spark.range(200).selectExpr("id as a", "id / 100 as b", "id / 50 as c")
+        .write.saveAsTable("src_tab")
+
+      for (enabled <- Seq("true", "false");
+           dataSource <- Seq("USING PARQUET", "STORED AS PARQUET")) {
+        withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+          SQLConf.AUTO_REPARTITION_BEFORE_WRITING_ENABLED.key -> enabled) {
+          withTable("part_tab") {
+            sql(s"CREATE TABLE part_tab(a int, b int) $dataSource PARTITIONED BY (b)")
+            val df = sql(s"INSERT INTO part_tab SELECT * FROM src_tab DISTRIBUTE BY a")
+            df.collect()
+            val adaptivePlan =
+              df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
+                .commandPhysicalPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+            val shuffles = collect(adaptivePlan) { case s: ShuffleExchangeExec => s }
+            assert(shuffles.length == 1)
+            val exprs = shuffles.head.outputPartitioning.asInstanceOf[HashPartitioning].expressions
+            if (enabled.toBoolean) {
+              // Auto repartition by partition columns when writing to a partitioned table
+              assert(exprs.map(_.asInstanceOf[NamedExpression].name).mkString(", ") == "b")
+            } else {
+              assert(exprs.map(_.asInstanceOf[NamedExpression].name).mkString(", ") == "a")
+            }
+          }
+        }
+      }
+    }
+
+  }
+
+  test("CARMEL-XXX2: Auto repartition when writing to a bucket table") {
+    withTable("src_tab") {
+      spark.range(200).selectExpr("id as a", "id / 100 as b", "id / 50 as c")
+        .write.saveAsTable("src_tab")
+
+      for (enabled <- Seq("true", "false");
+           dataSource <- Seq("USING PARQUET", "STORED AS PARQUET")) {
+        withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "2",
+          SQLConf.AUTO_REPARTITION_BEFORE_WRITING_ENABLED.key -> enabled) {
+          withTable("part_tab") {
+            sql(s"""CREATE TABLE part_tab(a int, b int, c int)
+                 |$dataSource
+                 |CLUSTERED BY (c) SORTED BY (a) INTO 2 BUCKETS
+                 |""".stripMargin)
+            val df = sql(s"INSERT INTO part_tab SELECT * FROM src_tab DISTRIBUTE BY a")
+            df.collect()
+            val adaptivePlan =
+              df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
+                .commandPhysicalPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+            val shuffles = collect(adaptivePlan) { case s: ShuffleExchangeExec => s }
+            assert(shuffles.length == 1)
+            val exprs = shuffles.head.outputPartitioning.asInstanceOf[HashPartitioning].expressions
+            if (enabled.toBoolean) {
+              // Auto repartition by bucket columns when writing to a bucket table
+              assert(exprs.map(_.asInstanceOf[NamedExpression].name).mkString(", ") == "c")
+            } else {
+              assert(exprs.map(_.asInstanceOf[NamedExpression].name).mkString(", ") == "a")
+            }
+          }
+        }
+      }
+    }
+  }
+
 }

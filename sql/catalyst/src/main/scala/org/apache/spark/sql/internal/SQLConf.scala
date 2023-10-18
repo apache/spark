@@ -4507,6 +4507,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val AUTO_REPARTITION_BEFORE_WRITING_ENABLED =
+    buildConf("spark.sql.repartition.writing.enabled")
+      .internal()
+      .doc("When true, add a shuffle before writing data into partitioned table or bucket table.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
