@@ -34,7 +34,8 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 private[sql] class XmlOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    defaultColumnNameOfCorruptRecord: String,
+    rowTagRequired: Boolean)
   extends FileSourceOptions(parameters) with Logging {
 
   import XmlOptions._
@@ -42,11 +43,13 @@ private[sql] class XmlOptions(
   def this(
       parameters: Map[String, String] = Map.empty,
       defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
-      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord) = {
+      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord,
+      rowTagRequired: Boolean = false) = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,
-      defaultColumnNameOfCorruptRecord)
+      defaultColumnNameOfCorruptRecord,
+      rowTagRequired)
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
@@ -223,8 +226,8 @@ private[sql] object XmlOptions extends DataSourceOptions {
   newOption(ENCODING, CHARSET)
 
   def apply(parameters: Map[String, String]): XmlOptions =
-    new XmlOptions(parameters, SQLConf.get.sessionLocalTimeZone)
+    new XmlOptions(parameters)
 
   def apply(): XmlOptions =
-    new XmlOptions(Map.empty, SQLConf.get.sessionLocalTimeZone)
+    new XmlOptions(Map.empty)
 }
