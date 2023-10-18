@@ -208,7 +208,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) { {
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
       case b: BinaryComparison if !predicates.contains(b) => b transform {
         case a: AttributeReference => constantsMap.getOrElse(a, a)
       }
