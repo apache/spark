@@ -933,9 +933,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("CARMEL-XXX2: Auto repartition when writing to a partition table") {
+  test("SPARK-45594: Auto repartition when writing data to a partition table") {
     withTable("src_tab") {
-      spark.range(200).selectExpr("id as a", "id / 100 as b", "id / 50 as c")
+      spark.range(200).selectExpr("id as a", "id / 100 as b")
         .write.saveAsTable("src_tab")
 
       for (enabled <- Seq("true", "false");
@@ -965,7 +965,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   }
 
-  test("CARMEL-XXX2: Auto repartition when writing to a bucket table") {
+  test("SPARK-45594: Auto repartition when writing data to a bucket table") {
     withTable("src_tab") {
       spark.range(200).selectExpr("id as a", "id / 100 as b", "id / 50 as c")
         .write.saveAsTable("src_tab")
