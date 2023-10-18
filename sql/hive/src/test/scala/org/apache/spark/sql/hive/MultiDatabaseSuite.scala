@@ -297,7 +297,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |)
             """.stripMargin)
         }.getMessage
-        assert(message.contains("`t:a` is not a valid name for tables/databases. " +
+        assert(message.contains("`t:a` is not a valid name for tables/schemas. " +
           "Valid names only contain alphabet characters, numbers and _."))
       }
 

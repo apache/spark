@@ -407,7 +407,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
-        "to bypass this error.")
+        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -417,7 +417,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+      " SQLSTATE: 42703"
     )
 
     assert(
@@ -440,7 +441,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
       ) ==
         "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]." +
+          " SQLSTATE: 42703"
     )
   }
 
@@ -507,8 +509,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     assert(SparkThrowableHelper.getMessage(e, PRETTY) ===
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
-      "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
-      "\nQuery summary")
+        "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+        " SQLSTATE: 22012" +
+        "\nQuery summary")
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{

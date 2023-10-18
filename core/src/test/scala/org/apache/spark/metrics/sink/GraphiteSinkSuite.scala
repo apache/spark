@@ -90,7 +90,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
     }
     assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
     assert(e.getMessage ===
-      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'host' property.")
+      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'host' property. SQLSTATE: KD000")
   }
 
   test("GraphiteSink without port") {
@@ -103,7 +103,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
     }
     assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
     assert(e.getMessage ===
-      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'port' property.")
+      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'port' property. SQLSTATE: KD000")
   }
 
   test("GraphiteSink with invalid protocol") {

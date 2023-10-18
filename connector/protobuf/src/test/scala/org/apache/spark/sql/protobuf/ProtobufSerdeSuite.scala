@@ -266,7 +266,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
           " SQLSTATE: 42K0G"
       case Serializer =>
         s"[UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE] Unable to convert SQL type" +
-          s" ${toSQLType(catalystSchema)} to Protobuf type ${protoSchema.getName}. SQLSTATE: 42K0G"
+          s" ${toSQLType(catalystSchema)} to Protobuf type ${protoSchema.getName}. SQLSTATE: 42846"
     }
 
     assert(e.getMessage === expectMsg)

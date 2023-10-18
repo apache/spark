@@ -120,7 +120,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       exception = intercept[AnalysisException] {
         func(name)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1065",
+      errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
       parameters = Map("name" -> name)
     )
   }
