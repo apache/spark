@@ -2048,7 +2048,8 @@
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
-    ]
+    ],
+    "sqlState" : "42K08"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -2370,7 +2371,8 @@
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
@@ -3689,7 +3691,8 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
