@@ -11739,16 +11739,17 @@ def create_map(
     Example 3: Usage of create_map function with more than one key-value pair.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2, "female"),
-    ...                             ("Bob", 5, "male")], ("name", "age", "gender"))
-    >>> df.select(sf.create_map(sf.lit('name'), df['name'],
-    ...                         sf.lit('age'), df['age'])).show(truncate=False)
-    +-------------------------+
-    |map(name, name, age, age)|
-    +-------------------------+
-    |{name -> Alice, age -> 2}|
-    |{name -> Bob, age -> 5}  |
-    +-------------------------+
+    >>> df = spark.createDataFrame(
+    ...     [(133.12, 2), (53.23, 5,)], ("height", "age"))
+    >>> df.select(sf.create_map(
+    ...     sf.lit('height'), df['height'], sf.lit('age'), df['age'])
+    ... ).show(truncate=False)
+    +------------------------------+
+    |map(height, height, age, age) |
+    +------------------------------+
+    |{height -> 133.12, age -> 2.0}|
+    |{height -> 53.23, age -> 5.0} |
+    +------------------------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -11833,49 +11834,49 @@ def array(
     Example 1: Basic usage of array function with column names.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array('name', 'age').alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([(150.1, 2), (200.3, 5)], ("height", "age"))
+    >>> df.select(sf.array('height', 'age').alias("arr")).show()
+    +------------+
+    |         arr|
+    +------------+
+    |[150.1, 2.0]|
+    |[200.3, 5.0]|
+    +------------+
 
-    Example 2: Usage of array function with Column objects.
+    Example 2: Usage of array function with :class:`Column` objects.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array(df.name, df.age).alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([(150.1, 2), (200.3, 5)], ("height", "age"))
+    >>> df.select(sf.array(df.height, df.age).alias("arr")).show()
+    +------------+
+    |         arr|
+    +------------+
+    |[150.1, 2.0]|
+    |[200.3, 5.0]|
+    +------------+
 
     Example 3: Single argument as list of column names.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array(['name', 'age']).alias("arr")).show()
-    +----------+
-    |       arr|
-    +----------+
-    |[Alice, 2]|
-    |  [Bob, 5]|
-    +----------+
+    >>> df = spark.createDataFrame([(150.1, 2), (200.3, 5)], ("height", "age"))
+    >>> df.select(sf.array(['height', 'age']).alias("arr")).show()
+    +------------+
+    |         arr|
+    +------------+
+    |[150.1, 2.0]|
+    |[200.3, 5.0]|
+    +------------+
 
     Example 4: array function with a column containing null values.
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("Alice", None), ("Bob", 5)], ("name", "age"))
-    >>> df.select(sf.array('name', 'age').alias("arr")).show()
+    >>> df = spark.createDataFrame([(150.1, None), (200.3, 5)], ("height", "age"))
+    >>> df.select(sf.array('height', 'age').alias("arr")).show()
     +-------------+
     |          arr|
     +-------------+
-    |[Alice, NULL]|
-    |     [Bob, 5]|
+    |[150.1, NULL]|
+    | [200.3, 5.0]|
     +-------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
