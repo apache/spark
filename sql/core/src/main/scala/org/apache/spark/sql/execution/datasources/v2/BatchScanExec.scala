@@ -42,41 +42,9 @@ case class BatchScanExec(
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
     spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams(),
-    @transient proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None
+    proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]] = None
   ) extends DataSourceV2ScanExecBase {
-
-  @transient
-  @volatile private var _batch: Batch = _
-
-  @transient
-  @volatile private var _inputPartitions: Seq[InputPartition] = _
-
-  @transient
-  @volatile private var _readerFactory: PartitionReaderFactory = _
-
-  private def getOrCreate[T](createAndInit: () => T, nullChecker: () => Option[T]): T =
-    nullChecker().getOrElse(createAndInit())
-
-
-  def getBatch: Batch = getOrCreate(() => {
-    val temp = this.scan.toBatch
-    this._batch = temp
-    temp
-  }, () => Option(this._batch))
-
-
-  override def inputPartitions: Seq[InputPartition] = getOrCreate(() => {
-    val temp = this.getBatch.planInputPartitions().to[Seq]
-    this._inputPartitions = temp
-    temp
-  }, () => Option(this._inputPartitions))
-
-  override def readerFactory: PartitionReaderFactory = getOrCreate(() => {
-    val temp = this.getBatch.createReaderFactory()
-    this._readerFactory = temp
-    temp
-  }, () => Option(this._readerFactory))
-
+  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
   @transient @volatile private var filteredPartitions: Seq[Seq[InputPartition]] = _
   @transient @volatile private var inputRDDCached: RDD[InternalRow] = _
@@ -92,7 +60,7 @@ case class BatchScanExec(
           case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
             sr1.equalToIgnoreRuntimeFilters(sr2)
 
-          case _ if this.getBatch != null => this.getBatch == other.getBatch
+          case _ if this.batch != null => this.batch == other.batch
         }
       } else {
         false
@@ -105,11 +73,12 @@ case class BatchScanExec(
     val batchHashCode = scan match {
       case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
 
-      case _ => this.getBatch.hashCode()
+      case _ => this.batch.hashCode()
     }
     Objects.hashCode(Integer.valueOf(batchHashCode), runtimeFilters,
       this.proxyForPushedBroadcastVar)
   }
+  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
   private def initFilteredPartitions(): Unit = {
     val dataSourceFilters = runtimeFilters.flatMap {
@@ -186,6 +155,7 @@ case class BatchScanExec(
     }
   }
 
+  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override def inputRDD: RDD[InternalRow] = {
     var local = inputRDDCached
@@ -319,9 +289,6 @@ case class BatchScanExec(
   def resetFilteredPartitionsAndInputRdd(): Unit = {
     this.filteredPartitions = null
     this.inputRDDCached = null
-    this._inputPartitions = null
-    this._batch = null
-    this._readerFactory = null
   }
 }
 
