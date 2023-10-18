@@ -6784,7 +6784,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
+    >>> df.select(date_format('dt', 'MM/dd/yyyy').alias('date')).collect()
     [Row(date='04/08/2015')]
     """
     return _invoke_function("date_format", _to_java_column(date), format)
