@@ -1506,6 +1506,30 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       }
     }
   }
+
+  private def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, false)
+    mapOutputStatuses.filter(_ != null).find(_.mapId == mapId).map(_.location)
+  }
+
+  def getMapOutputLocationWithRefresh(
+      shuffleId: Int,
+      mapId: Long,
+      prevLocation: BlockManagerId): Option[BlockManagerId] = {
+    // Try to get the cached location first in case other concurrent tasks
+    // fetched the fresh location already
+    getMapOutputLocation(shuffleId, mapId) match {
+      case Some(location) =>
+        if (location == prevLocation) {
+          unregisterShuffle(shuffleId)
+          getMapOutputLocation(shuffleId, mapId)
+        } else {
+          Some(location)
+        }
+      case _ =>
+        None
+    }
+  }
 }
 
 private[spark] object MapOutputTracker extends Logging {
