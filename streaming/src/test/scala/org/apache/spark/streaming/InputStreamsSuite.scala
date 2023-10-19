@@ -23,8 +23,8 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -457,7 +457,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       }
 
       class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-        def getReceiver: Receiver[String] = null
+        def getReceiver(): Receiver[String] = null
       }
 
       // Register input streams

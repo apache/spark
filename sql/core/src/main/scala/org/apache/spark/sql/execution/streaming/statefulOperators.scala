@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -520,6 +520,12 @@ case class StateStoreSaveExec(
           // Update and output only rows being evicted from the StateStore
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
+            assert(watermarkPredicateForDataForLateEvents.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
+            assert(watermarkPredicateForKeysForEviction.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
                 watermarkPredicateForDataForLateEvents.get)
@@ -777,6 +783,9 @@ case class SessionWindowStateStoreSaveExec(
         // Update and output only rows being evicted from the StateStore
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
+          assert(watermarkPredicateForDataForEviction.isDefined,
+              "Watermark needs to be defined for session window query in append mode")
+
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }

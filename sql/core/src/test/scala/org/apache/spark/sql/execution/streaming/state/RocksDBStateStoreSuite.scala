@@ -86,6 +86,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxOpenFiles", "1000"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxWriteBufferNumber", "3"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".writeBufferSizeMB", "16"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".allowFAllocate", "false"),
         (SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key, "4")
       )
       testConfs.foreach { case (k, v) => spark.conf.set(k, v) }
@@ -115,6 +116,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(rocksDBConfInTask.maxOpenFiles == 1000)
       assert(rocksDBConfInTask.maxWriteBufferNumber == 3)
       assert(rocksDBConfInTask.writeBufferSizeMB == 16L)
+      assert(rocksDBConfInTask.allowFAllocate == false)
     }
   }
 
@@ -152,6 +154,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = 0)
   }
 
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
+  }
+
   override def newStoreProvider(numPrefixCols: Int): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols)
   }
@@ -159,11 +165,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   def newStoreProvider(
       storeId: StateStoreId,
       numColsPrefixKey: Int,
-      sqlConf: Option[SQLConf] = None): RocksDBStateStoreProvider = {
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), new Configuration)
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider
   }
 

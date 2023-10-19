@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -248,7 +248,7 @@ class Dataset[T] private[sql](
   private[sql] def resolve(colName: String): NamedExpression = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     queryExecution.analyzed.resolveQuoted(colName, resolver)
-      .getOrElse(throw QueryCompilationErrors.resolveException(colName, schema.fieldNames))
+      .getOrElse(throw QueryCompilationErrors.unresolvedColumnError(colName, schema.fieldNames))
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -1394,11 +1394,6 @@ class Dataset[T] private[sql](
   def apply(colName: String): Column = col(colName)
 
   /**
-   * Selects column based on the column index (0-based) and returns it as a [[Column]].
-   */
-  private[sql] def apply(index: Int): Column = col(index)
-
-  /**
    * Specifies some hint on the current Dataset. As an example, the following code specifies
    * that one of the plan can be broadcasted:
    *
@@ -1448,13 +1443,6 @@ class Dataset[T] private[sql](
       } else {
         Column(addDataFrameIdToCol(resolve(colName)))
       }
-  }
-
-  /**
-   * Selects column based on the column index (0-based) and returns it as a [[Column]].
-   */
-  private[sql] def col(index: Int): Column = {
-    Column(addDataFrameIdToCol(queryExecution.analyzed.output(index)))
   }
 
   /**
@@ -2218,7 +2206,7 @@ class Dataset[T] private[sql](
   */
   @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
-    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
+    CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan, id)
   }
 
   /**
@@ -2676,7 +2664,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
     val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
@@ -2713,14 +2701,14 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
+  def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => IterableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
     val elementSchema = attributes.toStructType
 
-    def rowFunction(row: Row): TraversableOnce[InternalRow] = {
+    def rowFunction(row: Row): IterableOnce[InternalRow] = {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
@@ -3510,7 +3498,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 1.6.0
    */
-  def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+  def flatMap[U : Encoder](func: T => IterableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
   /**
@@ -3810,10 +3798,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def persist(): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this)
-    this
-  }
+  def persist(): this.type = persist(sparkSession.sessionState.conf.defaultCacheStorageLevel)
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).

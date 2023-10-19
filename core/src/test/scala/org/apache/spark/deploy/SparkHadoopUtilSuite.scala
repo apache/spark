@@ -110,8 +110,9 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   test("SPARK-40640: aws credentials from environment variables") {
     val hadoopConf = new Configuration(false)
     SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf,
-      "access-key", "secret-key", "session-token")
+      "endpoint", "access-key", "secret-key", "session-token")
     val source = "Set by Spark on " + InetAddress.getLocalHost + " from "
+    assertConfigMatches(hadoopConf, "fs.s3a.endpoint", "endpoint", source)
     assertConfigMatches(hadoopConf, "fs.s3a.access.key", "access-key", source)
     assertConfigMatches(hadoopConf, "fs.s3a.secret.key", "secret-key", source)
     assertConfigMatches(hadoopConf, "fs.s3a.session.token", "session-token", source)
@@ -119,8 +120,16 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
 
   test("SPARK-19739: S3 session token propagation requires access and secret keys") {
     val hadoopConf = new Configuration(false)
-    SparkHadoopUtil.appendS3CredentialsFromEnvironment(hadoopConf, null, null, "session-token")
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(
+      hadoopConf, null, null, null, "session-token")
     assertConfigValue(hadoopConf, "fs.s3a.session.token", null)
+  }
+
+  test("SPARK-45404: aws endpoint propagation requires access and secret keys") {
+    val hadoopConf = new Configuration(false)
+    SparkHadoopUtil.appendS3CredentialsFromEnvironment(
+      hadoopConf, "endpoint", null, null, null)
+    assertConfigValue(hadoopConf, "fs.s3a.endpoint", null)
   }
 
   test("substituteHadoopVariables") {

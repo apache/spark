@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -461,6 +462,22 @@ object DecorrelateInnerQuery extends PredicateHelper {
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
   }
 
+  private def isCountBugFree(aggregateExpressions: Seq[NamedExpression]): Boolean = {
+    // The COUNT bug only appears if an aggregate expression returns a non-NULL result on an empty
+    // input.
+    // Typical example (hence the name) is COUNT(*) that returns 0 from an empty result.
+    // However, SUM(x) IS NULL is another case that returns 0, and in general any IS/NOT IS and CASE
+    // expressions are suspect (and the combination of those).
+    // For now we conservatively accept only those expressions that are guaranteed to be safe.
+    aggregateExpressions.forall {
+      case _ : AttributeReference => true
+      case Alias(_: AttributeReference, _) => true
+      case Alias(_: Literal, _) => true
+      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
+      case _ => false
+    }
+  }
+
   def apply(
       innerPlan: LogicalPlan,
       outerPlan: LogicalPlan,
@@ -710,6 +727,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
+            val countBugSusceptible = groupingExpressions.isEmpty &&
+              !isCountBugFree(aggregateExpressions)
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
@@ -772,7 +791,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // | 0 | 2    | true       | 2                              |
             // | 0 | null | null       | 0                              |  <--- correct result
             // +---+------+------------+--------------------------------+
-            if (groupingExpressions.isEmpty && handleCountBug) {
+            // TODO(a.gubichev): retire the 'handleCountBug' parameter.
+            if (countBugSusceptible && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()

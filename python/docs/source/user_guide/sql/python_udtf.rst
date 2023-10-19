@@ -50,10 +50,108 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             Notes
             -----
-            - This method does not accept any extra arguments. Only the default
-              constructor is supported.
             - You cannot create or reference the Spark session within the UDTF. Any
               attempt to do so will result in a serialization error.
+            - If the below `analyze` method is implemented, it is also possible to define this
+              method as: `__init__(self, analyze_result: AnalyzeResult)`. In this case, the result
+              of the `analyze` method is passed into all future instantiations of this UDTF class.
+              In this way, the UDTF may inspect the schema and metadata of the output table as
+              needed during execution of other methods in this class. Note that it is possible to
+              create a subclass of the `AnalyzeResult` class if desired for purposes of passing
+              custom information generated just once during UDTF analysis to other method calls;
+              this can be especially useful if this initialization is expensive.
+            """
+            ...
+
+        def analyze(self, *args: Any) -> AnalyzeResult:
+            """
+            Computes the output schema of a particular call to this function in response to the
+            arguments provided.
+
+            This method is optional and only needed if the registration of the UDTF did not provide
+            a static output schema to be use for all calls to the function. In this context,
+            `output schema` refers to the ordered list of the names and types of the columns in the
+            function's result table.
+
+            This method accepts zero or more parameters mapping 1:1 with the arguments provided to
+            the particular UDTF call under consideration. Each parameter is an instance of the
+            `AnalyzeArgument` class, which contains fields including the provided argument's data
+            type and value (in the case of literal scalar arguments only). For table arguments, the
+            `is_table` field is set to true and the `data_type` field is a StructType representing
+            the table's column types:
+
+                data_type: DataType
+                value: Optional[Any]
+                is_table: bool
+
+            This method returns an instance of the `AnalyzeResult` class which includes the result
+            table's schema as a StructType. If the UDTF accepts an input table argument, then the
+            `AnalyzeResult` can also include a requested way to partition the rows of the input
+            table across several UDTF calls. If `with_single_partition` is set to True, the query
+            planner will arrange a repartitioning operation from the previous execution stage such
+            that all rows of the input table are consumed by the `eval` method from exactly one
+            instance of the UDTF class. On the other hand, if the `partition_by` list is non-empty,
+            the query planner will arrange a repartitioning such that all rows with each unique
+            combination of values of the partitioning columns are consumed by a separate unique
+            instance of the UDTF class. If `order_by` is non-empty, this specifies the requested
+            ordering of rows within each partition.
+
+                schema: StructType
+                with_single_partition: bool = False
+                partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
+                order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
+
+            Examples
+            --------
+            analyze implementation that returns one output column for each word in the input string
+            argument.
+
+            >>> def analyze(self, text: str) -> AnalyzeResult:
+            ...     schema = StructType()
+            ...     for index, word in enumerate(text.split(" ")):
+            ...         schema = schema.add(f"word_{index}")
+            ...     return AnalyzeResult(schema=schema)
+
+            Same as above, but using *args to accept the arguments.
+
+            >>> def analyze(self, *args) -> AnalyzeResult:
+            ...     assert len(args) == 1, "This function accepts one argument only"
+            ...     assert args[0].data_type == StringType(), "Only string arguments are supported"
+            ...     text = args[0]
+            ...     schema = StructType()
+            ...     for index, word in enumerate(text.split(" ")):
+            ...         schema = schema.add(f"word_{index}")
+            ...     return AnalyzeResult(schema=schema)
+
+            Same as above, but using **kwargs to accept the arguments.
+
+            >>> def analyze(self, **kwargs) -> AnalyzeResult:
+            ...     assert len(kwargs) == 1, "This function accepts one argument only"
+            ...     assert "text" in kwargs, "An argument named 'text' is required"
+            ...     assert kwargs["text"].data_type == StringType(), "Only strings are supported"
+            ...     text = args["text"]
+            ...     schema = StructType()
+            ...     for index, word in enumerate(text.split(" ")):
+            ...         schema = schema.add(f"word_{index}")
+            ...     return AnalyzeResult(schema=schema)
+
+            analyze implementation that returns a constant output schema, but add custom information
+            in the result metadata to be consumed by future __init__ method calls:
+
+            >>> def analyze(self, text: str) -> AnalyzeResult:
+            ...     @dataclass
+            ...     class AnalyzeResultWithOtherMetadata(AnalyzeResult):
+            ...         num_words: int
+            ...         num_articles: int
+            ...     words = text.split(" ")
+            ...     return AnalyzeResultWithOtherMetadata(
+            ...         schema=StructType()
+            ...             .add("word", StringType())
+            ...             .add('total", IntegerType()),
+            ...         num_words=len(words),
+            ...         num_articles=len((
+            ...             word for word in words
+            ...             if word == 'a' or word == 'an' or word == 'the')))
             """
             ...
 
@@ -89,7 +187,9 @@ To implement a Python UDTF, you first need to define a class implementing the me
             -----
             - The result of the function must be a tuple representing a single row
               in the UDTF result table.
-            - UDTFs currently do not accept keyword arguments during the function call.
+            - It is also possible for UDTFs to accept the exact arguments expected, along with
+              their types.
+            - UDTFs can instead accept keyword arguments during the function call if needed.
 
             Examples
             --------
@@ -103,20 +203,41 @@ To implement a Python UDTF, you first need to define a class implementing the me
             >>> def eval(self, x: int, y: int):
             ...     yield (x + y, x - y)
             ...     yield (y + x, y - x)
+
+            Same as above, but using *args to accept the arguments:
+
+            >>> def eval(self, *args):
+            ...     assert len(args) == 2, "This function accepts two integer arguments only"
+            ...     x = args[0]
+            ...     y = args[1]
+            ...     yield (x + y, x - y)
+            ...     yield (y + x, y - x)
+
+            Same as above, but using **kwargs to accept the arguments:
+
+            >>> def eval(self, **kwargs):
+            ...     assert len(kwargs) == 2, "This function accepts two integer arguments only"
+            ...     x = kwargs["x"]
+            ...     y = kwargs["y"]
+            ...     yield (x + y, x - y)
+            ...     yield (y + x, y - x)
             """
             ...
 
         def terminate(self) -> Iterator[Any]:
             """
-            Called when the UDTF has processed all input rows.
+            Called when the UDTF has successfully processed all input rows.
 
             This method is optional to implement and is useful for performing any
-            cleanup or finalization operations after the UDTF has finished processing
+            finalization operations after the UDTF has finished processing
             all rows. It can also be used to yield additional rows if needed.
             Table functions that consume all rows in the entire input partition
             and then compute and return the entire output table can do so from
             this method as well (please be mindful of memory usage when doing
             this).
+
+            If any exceptions occur during input row processing, this method
+            won't be called.
 
             Yields
             ------
@@ -128,6 +249,21 @@ To implement a Python UDTF, you first need to define a class implementing the me
             --------
             >>> def terminate(self) -> Iterator[Any]:
             >>>     yield "done", None
+            """
+            ...
+
+        def cleanup(self) -> None:
+            """
+            Invoked after the UDTF completes processing input rows.
+
+            This method is optional to implement and is useful for final cleanup
+            regardless of whether the UDTF processed all input rows successfully
+            or was aborted due to exceptions.
+
+            Examples
+            --------
+            >>> def cleanup(self) -> None:
+            >>>     self.conn.close()
             """
             ...
 

@@ -94,6 +94,9 @@ if TYPE_CHECKING:
     import socket
     import io
 
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
+
     from pyspark._typing import NonUDFType
     from pyspark._typing import S, NumberOrArray
     from pyspark.context import SparkContext
@@ -118,9 +121,6 @@ if TYPE_CHECKING:
         SQLBatchedUDFType,
         SQLTableUDFType,
     )
-
-    from py4j.java_gateway import JavaObject
-    from py4j.java_collections import JavaArray
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)

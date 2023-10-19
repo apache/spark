@@ -45,4 +45,6 @@ addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
 addSbtPlugin("com.github.sbt" % "sbt-pom-reader" % "2.4.0")
 
+addSbtPlugin("net.aichler" % "sbt-jupiter-interface" % "0.11.1")
+
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.6")

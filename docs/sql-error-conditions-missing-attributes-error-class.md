@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-SQLSTATE: none assigned
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
 

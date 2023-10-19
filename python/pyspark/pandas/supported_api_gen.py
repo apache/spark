@@ -19,7 +19,6 @@
 Generate 'Supported pandas APIs' documentation file
 """
 import warnings
-from distutils.version import LooseVersion
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
 from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
@@ -27,11 +26,12 @@ from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
-from pyspark.pandas.exceptions import PandasNotImplementedError
-
 import pandas as pd
 import pandas.core.groupby as pdg
 import pandas.core.window as pdw
+
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas.exceptions import PandasNotImplementedError
 
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {
@@ -98,7 +98,7 @@ def generate_supported_api(output_rst_file_path: str) -> None:
 
     Write supported APIs documentation.
     """
-    pandas_latest_version = "2.1.0"
+    pandas_latest_version = "2.1.1"
     if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
         msg = (
             "Warning: Latest version of pandas (%s) is required to generate the documentation; "

@@ -23,8 +23,8 @@ import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.catalyst.xml.TypeCast._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -46,24 +45,6 @@ class StaxXmlParser(
     filters: Seq[Filter] = Seq.empty) extends Logging {
 
   private val factory = options.buildXmlFactory()
-
-  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
-  // dates and timestamps.
-  // For more information, see comments for "enableDateTimeParsingFallback" option in XmlOptions.
-  private val enableParsingFallbackForTimestampType =
-  options.enableDateTimeParsingFallback
-    .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-    .getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        options.timestampFormatInRead.isEmpty
-    }
-  private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback
-      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
-      .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-          options.dateFormatInRead.isEmpty
-      }
 
   /**
    * Parses a single XML string and turns it into either one resulting row or no row (if the
@@ -122,7 +103,12 @@ class StaxXmlParser(
       }
       val parser = StaxXmlParserUtils.filteredReader(xml)
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-      Some(convertObject(parser, schema, options, rootAttributes))
+      // A structure object is an attribute-only element
+      // if it only consists of attributes and valueTags.
+      val isRootAttributesOnly = schema.fields.forall { f =>
+        f.name == options.valueTag || f.name.startsWith(options.attributePrefix)
+      }
+      Some(convertObject(parser, schema, options, rootAttributes, isRootAttributesOnly))
     } catch {
       case e: SparkUpgradeException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
@@ -324,7 +310,8 @@ class StaxXmlParser(
       parser: XMLEventReader,
       schema: StructType,
       options: XmlOptions,
-      rootAttributes: Array[Attribute] = Array.empty): InternalRow = {
+      rootAttributes: Array[Attribute] = Array.empty,
+      isRootAttributesOnly: Boolean = false): InternalRow = {
     val row = new Array[Any](schema.length)
     val nameToIndex = schema.map(_.name).zipWithIndex.toMap
     // If there are attributes, then we process them first.
@@ -389,6 +376,13 @@ class StaxXmlParser(
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
         }
+
+        case c: Characters if !c.isWhiteSpace && isRootAttributesOnly =>
+          nameToIndex.get(options.valueTag) match {
+            case Some(index) =>
+              row(index) = convertTo(c.getData, schema(index).dataType, options)
+            case None => // do nothing
+          }
 
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)

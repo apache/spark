@@ -20,11 +20,11 @@ Worker that receives input from Piped RDD.
 """
 import os
 import sys
+import dataclasses
 import time
 from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
-
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -51,7 +51,14 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import BinaryType, Row, StringType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import (
+    BinaryType,
+    Row,
+    StringType,
+    StructType,
+    _create_row,
+    _parse_datatype_json_string,
+)
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
@@ -660,7 +667,7 @@ def read_udtf(pickleSer, infile, eval_type):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
+    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     args_offsets = []
     kwargs_offsets = {}
@@ -673,6 +680,14 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    has_pickled_analyze_result = read_bool(infile)
+    if has_pickled_analyze_result:
+        pickled_analyze_result = pickleSer._read_with_length(infile)
+    else:
+        pickled_analyze_result = None
+    # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
+    # although we may set this to false later if we find otherwise.
+    udtf_init_method_accepts_analyze_result = True
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -685,6 +700,29 @@ def read_udtf(pickleSer, infile, eval_type):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
+
+    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
+    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
+    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
+    # AnalyzeResult.
+    if has_pickled_analyze_result:
+        prev_handler = handler
+
+        def construct_udtf():
+            nonlocal udtf_init_method_accepts_analyze_result
+            if not udtf_init_method_accepts_analyze_result:
+                return prev_handler()
+            else:
+                try:
+                    # Here we pass the AnalyzeResult to the UDTF's __init__ method.
+                    return prev_handler(dataclasses.replace(pickled_analyze_result))
+                except TypeError:
+                    # This means that the UDTF handler does not accept an AnalyzeResult object in
+                    # its __init__ method.
+                    udtf_init_method_accepts_analyze_result = False
+                    return prev_handler()
+
+        handler = construct_udtf
 
     class UDTFWithPartitions:
         """
@@ -735,7 +773,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             yield row
                 self._udtf = self._create_udtf()
             if self._udtf.eval is not None:
-                result = self._udtf.eval(*args, **kwargs)
+                # Filter the arguments to exclude projected PARTITION BY values added by Catalyst.
+                filtered_args = [self._remove_partition_by_exprs(arg) for arg in args]
+                filtered_kwargs = {
+                    key: self._remove_partition_by_exprs(value) for (key, value) in kwargs.items()
+                }
+                result = self._udtf.eval(*filtered_args, **filtered_kwargs)
                 if result is not None:
                     for row in result:
                         yield row
@@ -745,6 +788,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 return self._udtf.terminate()
             return iter(())
 
+        def cleanup(self) -> None:
+            if hasattr(self._udtf, "cleanup"):
+                self._udtf.cleanup()
+
         def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
             if len(self._prev_arguments) > 0:
@@ -752,16 +799,27 @@ def read_udtf(pickleSer, infile, eval_type):
                 prev_table_arg = self._get_table_arg(self._prev_arguments)
                 cur_partitions_args = []
                 prev_partitions_args = []
-                for i in partition_child_indexes:
+                for i in self._partition_child_indexes:
                     cur_partitions_args.append(cur_table_arg[i])
                     prev_partitions_args.append(prev_table_arg[i])
-                self._prev_arguments = arguments
                 result = any(k != v for k, v in zip(cur_partitions_args, prev_partitions_args))
             self._prev_arguments = arguments
             return result
 
         def _get_table_arg(self, inputs: list) -> Row:
             return [x for x in inputs if type(x) is Row][0]
+
+        def _remove_partition_by_exprs(self, arg: Any) -> Any:
+            if isinstance(arg, Row):
+                new_row_keys = []
+                new_row_values = []
+                for i, (key, value) in enumerate(zip(arg.__fields__, arg)):
+                    if i not in self._partition_child_indexes:
+                        new_row_keys.append(key)
+                        new_row_values.append(value)
+                return _create_row(new_row_keys, new_row_values)
+            else:
+                return arg
 
     # Instantiate the UDTF class.
     try:
@@ -871,15 +929,19 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         def mapper(_, it):
             try:
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -954,14 +1016,18 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
                 for a in it:
                     yield eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -1352,7 +1418,4 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
     main(sock_file, sock_file)

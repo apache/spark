@@ -27,8 +27,8 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.4 and Java 8/11/17.
-Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.9.5 and Java 17/21.
+Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -64,7 +64,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -96,10 +96,6 @@ causes multiple versions of these to appear on executor classpaths: the version 
 the Spark assembly and the version on each node, included with `yarn.application.classpath`.
 The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects,
 like ZooKeeper and Hadoop itself.
-
-## Building with Mesos support
-
-    ./build/mvn -Pmesos -DskipTests clean package
 
 ## Building with Kubernetes support
 
@@ -261,6 +257,7 @@ or
 
     ./build/sbt docker-integration-tests/test
 
+<!---
 ## Change Scala Version
 
 When other versions of Scala like 2.13 are supported, it will be possible to build for that version.
@@ -275,6 +272,7 @@ Enable the profile (e.g. 2.13):
 
     # For sbt
     ./build/sbt -Pscala-2.13 compile
+-->
 
 ## Running Jenkins tests with GitHub Enterprise
 

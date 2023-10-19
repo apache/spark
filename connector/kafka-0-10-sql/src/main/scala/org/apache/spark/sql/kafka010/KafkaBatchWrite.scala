@@ -39,7 +39,7 @@ private[kafka010] class KafkaBatchWrite(
     schema: StructType)
   extends BatchWrite {
 
-  validateQuery(DataTypeUtils.toAttributes(schema), producerParams, topic)
+  validateQuery(DataTypeUtils.toAttributes(schema), topic)
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): KafkaBatchWriterFactory =
     KafkaBatchWriterFactory(topic, producerParams, schema)

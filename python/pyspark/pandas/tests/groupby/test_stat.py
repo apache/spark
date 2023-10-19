@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from distutils.version import LooseVersion
 import unittest
 
 import numpy as np
@@ -244,10 +243,6 @@ class GroupbyStatMixin:
             psdf.groupby("A").last(min_count=2).sort_index(),
         )
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43552): Enable GroupByTests.test_nth for pandas 2.0.0.",
-    )
     def test_nth(self):
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))

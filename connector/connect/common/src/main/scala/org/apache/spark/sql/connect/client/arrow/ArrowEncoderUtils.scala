@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
@@ -24,7 +25,7 @@ import org.apache.arrow.vector.complex.StructVector
 
 private[arrow] object ArrowEncoderUtils {
   object Classes {
-    val WRAPPED_ARRAY: Class[_] = classOf[scala.collection.mutable.WrappedArray[_]]
+    val MUTABLE_ARRAY_SEQ: Class[_] = classOf[mutable.ArraySeq[_]]
     val ITERABLE: Class[_] = classOf[scala.collection.Iterable[_]]
     val MAP: Class[_] = classOf[scala.collection.Map[_, _]]
     val JLIST: Class[_] = classOf[java.util.List[_]]

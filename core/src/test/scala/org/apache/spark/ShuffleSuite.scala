@@ -21,7 +21,7 @@ import java.io.{File, RandomAccessFile}
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
@@ -502,7 +502,7 @@ class InterleaveIterators[T, R](
   class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
     def hasNext: Boolean = sub.hasNext
 
-    def next: E = {
+    def next(): E = {
       barrier.await()
       sub.next()
     }

@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=17-jre
+ARG java_image_tag=21-jre
 
-FROM eclipse-temurin:${java_image_tag}
+FROM azul/zulu-openjdk:${java_image_tag}
 
 ARG spark_uid=185
 
@@ -49,6 +49,7 @@ COPY sbin /opt/spark/sbin
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
 COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
+RUN ln -s $(basename $(ls /opt/spark/examples/jars/spark-examples_*.jar)) /opt/spark/examples/jars/spark-examples.jar
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 

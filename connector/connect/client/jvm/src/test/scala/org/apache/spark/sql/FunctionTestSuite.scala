@@ -18,7 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.functions._
@@ -278,7 +278,7 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "rand")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 
   test("randn no seed") {
@@ -286,6 +286,6 @@ class FunctionTestSuite extends ConnectFunSuite {
     assert(e.hasUnresolvedFunction)
     val fn = e.getUnresolvedFunction
     assert(fn.getFunctionName == "randn")
-    assert(fn.getArgumentsCount == 0)
+    assert(fn.getArgumentsCount == 1)
   }
 }

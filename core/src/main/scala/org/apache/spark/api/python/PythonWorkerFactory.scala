@@ -25,8 +25,8 @@ import java.util.Arrays
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
@@ -77,7 +77,7 @@ private[spark] class PythonWorkerFactory(
   @GuardedBy("self")
   private var daemonPort: Int = 0
   @GuardedBy("self")
-  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, Int]()
+  private val daemonWorkers = new mutable.WeakHashMap[PythonWorker, Long]()
   @GuardedBy("self")
   private val idleWorkers = new mutable.Queue[PythonWorker]()
   @GuardedBy("self")
@@ -92,7 +92,7 @@ private[spark] class PythonWorkerFactory(
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
 
-  def create(): (PythonWorker, Option[Int]) = {
+  def create(): (PythonWorker, Option[Long]) = {
     if (useDaemon) {
       self.synchronized {
         if (idleWorkers.nonEmpty) {
@@ -112,9 +112,9 @@ private[spark] class PythonWorkerFactory(
    * processes itself to avoid the high cost of forking from Java. This currently only works
    * on UNIX-based systems.
    */
-  private def createThroughDaemon(): (PythonWorker, Option[Int]) = {
+  private def createThroughDaemon(): (PythonWorker, Option[Long]) = {
 
-    def createWorker(): (PythonWorker, Option[Int]) = {
+    def createWorker(): (PythonWorker, Option[Long]) = {
       val socketChannel = SocketChannel.open(new InetSocketAddress(daemonHost, daemonPort))
       // These calls are blocking.
       val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
@@ -154,7 +154,7 @@ private[spark] class PythonWorkerFactory(
   /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
-  private[spark] def createSimpleWorker(blockingMode: Boolean): (PythonWorker, Option[Int]) = {
+  private[spark] def createSimpleWorker(blockingMode: Boolean): (PythonWorker, Option[Long]) = {
     var serverSocketChannel: ServerSocketChannel = null
     try {
       serverSocketChannel = ServerSocketChannel.open()
@@ -198,8 +198,7 @@ private[spark] class PythonWorkerFactory(
               "Timed out while waiting for the Python worker to connect back")
           }
         authHelper.authClient(socketChannel.socket())
-        // TODO: When we drop JDK 8, we can just use workerProcess.pid()
-        val pid = new DataInputStream(Channels.newInputStream(socketChannel)).readInt()
+        val pid = workerProcess.toHandle.pid()
         if (pid < 0) {
           throw new IllegalStateException("Python failed to launch worker with code " + pid)
         }
@@ -395,7 +394,7 @@ private[spark] class PythonWorkerFactory(
           daemonWorkers.get(worker).foreach { pid =>
             // tell daemon to kill worker by pid
             val output = new DataOutputStream(daemon.getOutputStream)
-            output.writeInt(pid)
+            output.writeLong(pid)
             output.flush()
             daemon.getOutputStream.flush()
           }

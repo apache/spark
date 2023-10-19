@@ -30,8 +30,6 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExponentialMoving,
     MissingPandasLikeExponentialMovingGroupby,
 )
-
-# For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy

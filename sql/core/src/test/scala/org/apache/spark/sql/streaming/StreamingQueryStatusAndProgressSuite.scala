@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually

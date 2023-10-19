@@ -22,50 +22,81 @@ Functions
 .. currentmodule:: pyspark.sql.functions
 
 A collections of builtin functions available for DataFrame operations.
-From Apache Spark 3.5.0, all functions support Spark Connect.
+
+.. note::
+   From Apache Spark 3.5.0, all functions support Spark Connect.
 
 Normal Functions
 ----------------
 .. autosummary::
     :toctree: api/
 
+    broadcast
+    call_function
     col
     column
     lit
-    broadcast
-    coalesce
-    input_file_name
-    isnan
-    isnull
-    monotonically_increasing_id
-    named_struct
-    nanvl
-    rand
-    randn
-    spark_partition_id
-    when
-    bitwise_not
-    bitwiseNOT
     expr
-    greatest
-    least
 
 
-Math Functions
+Conditional Functions
+---------------------
+.. autosummary::
+    :toctree: api/
+
+    coalesce
+    ifnull
+    nanvl
+    nullif
+    nvl
+    nvl2
+    when
+
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ilike
+    isnan
+    isnotnull
+    isnull
+    like
+    regexp
+    regexp_like
+    rlike
+
+
+Sort Functions
 --------------
 .. autosummary::
     :toctree: api/
 
-    sqrt
+    asc
+    asc_nulls_first
+    asc_nulls_last
+    desc
+    desc_nulls_first
+    desc_nulls_last
+
+
+Mathematical Functions
+----------------------
+.. autosummary::
+    :toctree: api/
+
     abs
     acos
     acosh
     asin
     asinh
     atan
-    atanh
     atan2
+    atanh
     bin
+    bround
     cbrt
     ceil
     ceiling
@@ -74,14 +105,16 @@ Math Functions
     cosh
     cot
     csc
+    degrees
     e
     exp
     expm1
     factorial
     floor
+    greatest
     hex
-    unhex
     hypot
+    least
     ln
     log
     log10
@@ -94,36 +127,117 @@ Math Functions
     positive
     pow
     power
+    radians
+    rand
+    randn
     rint
     round
-    bround
     sec
-    shiftleft
-    shiftright
-    shiftrightunsigned
     sign
     signum
     sin
     sinh
+    sqrt
     tan
     tanh
     toDegrees
+    toRadians
     try_add
-    try_avg
     try_divide
     try_multiply
     try_subtract
-    try_sum
-    try_to_binary
-    try_to_number
-    degrees
-    toRadians
-    radians
+    unhex
     width_bucket
 
 
-Datetime Functions
-------------------
+String Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    ascii
+    base64
+    bit_length
+    btrim
+    char
+    char_length
+    character_length
+    concat_ws
+    contains
+    decode
+    elt
+    encode
+    endswith
+    find_in_set
+    format_number
+    format_string
+    initcap
+    instr
+    lcase
+    left
+    length
+    levenshtein
+    locate
+    lower
+    lpad
+    ltrim
+    mask
+    octet_length
+    overlay
+    position
+    printf
+    regexp_count
+    regexp_extract
+    regexp_extract_all
+    regexp_instr
+    regexp_replace
+    regexp_substr
+    repeat
+    replace
+    right
+    rpad
+    rtrim
+    sentences
+    soundex
+    split
+    split_part
+    startswith
+    substr
+    substring
+    substring_index
+    to_binary
+    to_char
+    to_number
+    to_varchar
+    translate
+    trim
+    try_to_binary
+    try_to_number
+    ucase
+    unbase64
+    upper
+
+
+Bitwise Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    bitwiseNOT
+    bitwise_not
+    getbit
+    shiftLeft
+    shiftleft
+    shiftRight
+    shiftright
+    shiftRightUnsigned
+    shiftrightunsigned
+
+
+Date and Timestamp Functions
+----------------------------
 .. autosummary::
     :toctree: api/
 
@@ -137,24 +251,23 @@ Datetime Functions
     date_diff
     date_format
     date_from_unix_date
+    date_part
     date_sub
     date_trunc
     dateadd
     datediff
-    day
-    date_part
     datepart
+    day
     dayofmonth
     dayofweek
     dayofyear
     extract
-    second
-    weekofyear
-    year
-    quarter
-    month
+    from_unixtime
+    from_utc_timestamp
+    hour
     last_day
     localtimestamp
+    make_date
     make_dt_interval
     make_interval
     make_timestamp
@@ -162,33 +275,48 @@ Datetime Functions
     make_timestamp_ntz
     make_ym_interval
     minute
+    month
     months_between
     next_day
-    hour
-    make_date
     now
-    from_unixtime
-    unix_timestamp
-    to_unix_timestamp
-    to_timestamp
-    to_timestamp_ltz
-    to_timestamp_ntz
-    to_date
-    trunc
-    from_utc_timestamp
-    to_utc_timestamp
-    weekday
-    window
+    quarter
+    second
     session_window
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    to_date
+    to_timestamp
+    to_timestamp_ltz
+    to_timestamp_ntz
+    to_unix_timestamp
+    to_utc_timestamp
+    trunc
     try_to_timestamp
     unix_date
     unix_micros
     unix_millis
     unix_seconds
+    unix_timestamp
+    weekday
+    weekofyear
+    window
     window_time
+    year
+
+
+Hash Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    crc32
+    hash
+    md5
+    sha
+    sha1
+    sha2
+    xxhash64
 
 
 Collection Functions
@@ -196,86 +324,81 @@ Collection Functions
 .. autosummary::
     :toctree: api/
 
-    array
-    array_contains
-    arrays_overlap
-    array_join
-    create_map
-    slice
-    concat
-    array_position
-    element_at
-    array_append
-    array_size
-    array_sort
-    array_insert
-    array_remove
-    array_prepend
-    array_distinct
-    array_intersect
-    array_union
-    array_except
-    array_compact
-    transform
-    exists
-    forall
-    filter
     aggregate
-    zip_with
+    array_sort
+    cardinality
+    concat
+    element_at
+    exists
+    filter
+    forall
+    map_filter
+    map_zip_with
+    reduce
+    reverse
+    size
+    transform
     transform_keys
     transform_values
-    map_filter
-    map_from_arrays
-    map_zip_with
-    explode
-    explode_outer
-    posexplode
-    posexplode_outer
-    inline
-    inline_outer
-    get
-    get_json_object
-    json_tuple
-    from_json
-    schema_of_json
-    to_json
-    json_array_length
-    json_object_keys
-    size
-    cardinality
-    struct
-    sort_array
-    array_max
-    array_min
-    shuffle
-    reverse
-    flatten
-    sequence
-    array_repeat
-    map_contains_key
-    map_keys
-    map_values
-    map_entries
-    map_from_entries
-    arrays_zip
-    map_concat
-    from_csv
-    schema_of_csv
-    str_to_map
-    to_csv
     try_element_at
+    zip_with
 
 
-Partition Transformation Functions
-----------------------------------
+Array Functions
+---------------
 .. autosummary::
     :toctree: api/
 
-    years
-    months
-    days
-    hours
-    bucket
+    array
+    array_append
+    array_compact
+    array_contains
+    array_distinct
+    array_except
+    array_insert
+    array_intersect
+    array_join
+    array_max
+    array_min
+    array_position
+    array_prepend
+    array_remove
+    array_repeat
+    array_size
+    array_union
+    arrays_overlap
+    arrays_zip
+    flatten
+    get
+    sequence
+    shuffle
+    slice
+    sort_array
+
+
+Struct Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    named_struct
+    struct
+
+
+Map Functions
+-------------
+.. autosummary::
+    :toctree: api/
+
+    create_map
+    map_concat
+    map_contains_key
+    map_entries
+    map_from_arrays
+    map_from_entries
+    map_keys
+    map_values
+    str_to_map
 
 
 Aggregate Functions
@@ -292,6 +415,8 @@ Aggregate Functions
     bit_and
     bit_or
     bit_xor
+    bitmap_construct_agg
+    bitmap_or_agg
     bool_and
     bool_or
     collect_list
@@ -299,9 +424,8 @@ Aggregate Functions
     corr
     count
     count_distinct
-    countDistinct
-    count_min_sketch
     count_if
+    count_min_sketch
     covar_pop
     covar_samp
     every
@@ -325,7 +449,6 @@ Aggregate Functions
     percentile
     percentile_approx
     product
-    reduce
     regr_avgx
     regr_avgy
     regr_count
@@ -342,8 +465,10 @@ Aggregate Functions
     stddev_pop
     stddev_samp
     sum
-    sum_distinct
     sumDistinct
+    sum_distinct
+    try_avg
+    try_sum
     var_pop
     var_samp
     variance
@@ -365,166 +490,57 @@ Window Functions
     row_number
 
 
-Sort Functions
---------------
-.. autosummary::
-    :toctree: api/
-
-    asc
-    asc_nulls_first
-    asc_nulls_last
-    desc
-    desc_nulls_first
-    desc_nulls_last
-
-
-String Functions
-----------------
-.. autosummary::
-    :toctree: api/
-
-    ascii
-    base64
-    bit_length
-    btrim
-    char
-    character_length
-    char_length
-    concat_ws
-    contains
-    decode
-    elt
-    encode
-    endswith
-    find_in_set
-    format_number
-    format_string
-    ilike
-    initcap
-    instr
-    lcase
-    length
-    like
-    lower
-    left
-    levenshtein
-    locate
-    lpad
-    ltrim
-    mask
-    octet_length
-    parse_url
-    position
-    printf
-    rlike
-    regexp
-    regexp_like
-    regexp_count
-    regexp_extract
-    regexp_extract_all
-    regexp_replace
-    regexp_substr
-    regexp_instr
-    replace
-    right
-    ucase
-    unbase64
-    rpad
-    repeat
-    rtrim
-    soundex
-    split
-    split_part
-    startswith
-    substr
-    substring
-    substring_index
-    overlay
-    sentences
-    to_binary
-    to_char
-    to_number
-    to_varchar
-    translate
-    trim
-    upper
-    url_decode
-    url_encode
-
-
-Bitwise Functions
------------------
-.. autosummary::
-    :toctree: api/
-
-    bit_count
-    bit_get
-    getbit
-
-
-Call Functions
---------------
-.. autosummary::
-    :toctree: api/
-
-    call_function
-    call_udf
-    pandas_udf
-    udf
-    udtf
-    unwrap_udt
-
-Misc Functions
---------------
-.. autosummary::
-    :toctree: api/
-
-    aes_decrypt
-    aes_encrypt
-    bitmap_bit_position
-    bitmap_bucket_number
-    bitmap_construct_agg
-    bitmap_count
-    bitmap_or_agg
-    current_catalog
-    current_database
-    current_schema
-    current_user
-    input_file_block_length
-    input_file_block_start
-    md5
-    sha
-    sha1
-    sha2
-    crc32
-    hash
-    xxhash64
-    assert_true
-    raise_error
-    reflect
-    try_reflect
-    hll_sketch_estimate
-    hll_union
-    java_method
-    stack
-    try_aes_decrypt
-    typeof
-    user
-    version
-
-Predicate Functions
+Generator Functions
 -------------------
 .. autosummary::
     :toctree: api/
 
-    equal_null
-    ifnull
-    isnotnull
-    nullif
-    nvl
-    nvl2
+    explode
+    explode_outer
+    inline
+    inline_outer
+    posexplode
+    posexplode_outer
+    stack
 
-Xml Functions
+
+Partition Transformation Functions
+----------------------------------
+.. autosummary::
+    :toctree: api/
+
+    years
+    months
+    days
+    hours
+    bucket
+
+
+CSV Functions
+-------------
+.. autosummary::
+    :toctree: api/
+
+    from_csv
+    schema_of_csv
+    to_csv
+
+
+JSON Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    from_json
+    get_json_object
+    json_array_length
+    json_object_keys
+    json_tuple
+    schema_of_json
+    to_json
+
+
+XML Functions
 --------------
 .. autosummary::
     :toctree: api/
@@ -540,4 +556,58 @@ Xml Functions
     xpath_number
     xpath_short
     xpath_string
+
+
+URL Functions
+-------------
+.. autosummary::
+    :toctree: api/
+
+    parse_url
+    url_decode
+    url_encode
+
+
+Misc Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    aes_decrypt
+    aes_encrypt
+    assert_true
+    bitmap_bit_position
+    bitmap_bucket_number
+    bitmap_count
+    current_catalog
+    current_database
+    current_schema
+    current_user
+    hll_sketch_estimate
+    hll_union
+    input_file_block_length
+    input_file_block_start
+    input_file_name
+    java_method
+    monotonically_increasing_id
+    raise_error
+    reflect
+    spark_partition_id
+    try_aes_decrypt
+    try_reflect
+    typeof
+    user
+    version
+
+
+UDF, UDTF and UDT
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    call_udf
+    pandas_udf
+    udf
+    udtf
+    unwrap_udt
 

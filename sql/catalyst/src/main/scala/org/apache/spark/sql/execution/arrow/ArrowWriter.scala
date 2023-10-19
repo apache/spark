@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
@@ -463,7 +463,7 @@ private[arrow] class DurationWriter(val valueVector: DurationVector)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueVector.set(count, input.getLong(ordinal))
+    valueVector.setSafe(count, input.getLong(ordinal))
   }
 }
 

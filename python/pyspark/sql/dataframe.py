@@ -887,7 +887,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self._jdf.isEmpty()
 
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
-        """Prints the first ``n`` rows to the console.
+        """
+        Prints the first ``n`` rows of the DataFrame to the console.
 
         .. versionadded:: 1.3.0
 
@@ -896,20 +897,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        n : int, optional
+        n : int, optional, default 20
             Number of rows to show.
-        truncate : bool or int, optional
-            If set to ``True``, truncate strings longer than 20 chars by default.
+        truncate : bool or int, optional, default True
+            If set to ``True``, truncate strings longer than 20 chars.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
         vertical : bool, optional
-            If set to ``True``, print output rows vertically (one line
-            per column value).
+            If set to ``True``, print output rows vertically (one line per column value).
 
         Examples
         --------
         >>> df = spark.createDataFrame([
-        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        ...     (14, "Tom"), (23, "Alice"), (16, "Bob"), (19, "This is a super long name")],
+        ...     ["age", "name"])
+
+        Show :class:`DataFrame`
+
+        >>> df.show()
+        +---+--------------------+
+        |age|                name|
+        +---+--------------------+
+        | 14|                 Tom|
+        | 23|               Alice|
+        | 16|                 Bob|
+        | 19|This is a super l...|
+        +---+--------------------+
 
         Show only top 2 rows.
 
@@ -922,6 +935,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         only showing top 2 rows
 
+        Show full column content without truncation.
+
+        >>> df.show(truncate=False)
+        +---+-------------------------+
+        |age|name                     |
+        +---+-------------------------+
+        |14 |Tom                      |
+        |23 |Alice                    |
+        |16 |Bob                      |
+        |19 |This is a super long name|
+        +---+-------------------------+
+
         Show :class:`DataFrame` where the maximum number of characters is 3.
 
         >>> df.show(truncate=3)
@@ -931,20 +956,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 14| Tom|
         | 23| Ali|
         | 16| Bob|
+        | 19| Thi|
         +---+----+
 
         Show :class:`DataFrame` vertically.
 
         >>> df.show(vertical=True)
-        -RECORD 0-----
+        -RECORD 0--------------------
         age  | 14
         name | Tom
-        -RECORD 1-----
+        -RECORD 1--------------------
         age  | 23
         name | Alice
-        -RECORD 2-----
+        -RECORD 2--------------------
         age  | 16
         name | Bob
+        -RECORD 3--------------------
+        age  | 19
+        name | This is a super l...
         """
 
         if not isinstance(n, int) or isinstance(n, bool):
@@ -1886,7 +1915,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |        6|
         +---------+
 
-        Repartition the data into 7 partitions by 'age' and 'name columns.
+        Repartition the data into 3 partitions by 'age' and 'name' columns.
 
         >>> df.repartition(3, "name", "age").select(
         ...     sf.spark_partition_id().alias("partition")
@@ -2751,6 +2780,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This is similar to a left-join except that we match on the nearest
         key rather than equal keys.
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         other : :class:`DataFrame`
@@ -3455,10 +3487,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(item, (list, tuple)):
             return self.select(*item)
         elif isinstance(item, int):
-            n = len(self.columns)
-            # 1, convert bool; 2, covert negative index; 3, validate index
-            item = range(0, n)[int(item)]
-            jc = self._jdf.apply(item)
+            jc = self._jdf.apply(self.columns[item])
             return Column(jc)
         else:
             raise PySparkTypeError(
@@ -5786,7 +5815,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
     def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
-        """Returns a new :class:`DataFrame` by renaming an existing column.
+        """
+        Returns a new :class:`DataFrame` by renaming an existing column.
         This is a no-op if the schema doesn't contain the given column name.
 
         .. versionadded:: 1.3.0
@@ -5797,21 +5827,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         existing : str
-            string, name of the existing column to rename.
+            The name of the existing column to be renamed.
         new : str
-            string, new name of the column.
+            The new name to be assigned to the column.
 
         Returns
         -------
         :class:`DataFrame`
-            DataFrame with renamed column.
+            A new DataFrame with renamed column.
+
+        See Also
+        --------
+        :meth:`withColumnsRenamed`
 
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.withColumnRenamed('age', 'age2').show()
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnRenamed("age", "age2").show()
         +----+-----+
         |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename a column that does not exist (no-op)
+
+        >>> df.withColumnRenamed("non_existing", "new_name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 3: Rename multiple columns
+
+        >>> df.withColumnRenamed("age", "age2").withColumnRenamed("name", "name2").show()
+        +----+-----+
+        |age2|name2|
         +----+-----+
         |   2|Alice|
         |   5|  Bob|
@@ -5830,7 +5887,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         colsMap : dict
-            a dict of existing column names and corresponding desired column names.
+            A dict of existing column names and corresponding desired column names.
             Currently, only a single map is supported.
 
         Returns
@@ -5842,21 +5899,49 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         :meth:`withColumnRenamed`
 
-        Notes
-        -----
-        Support Spark Connect
-
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df = df.withColumns({'age2': df.age + 2, 'age3': df.age + 3})
-        >>> df.withColumnsRenamed({'age2': 'age4', 'age3': 'age5'}).show()
-        +---+-----+----+----+
-        |age| name|age4|age5|
-        +---+-----+----+----+
-        |  2|Alice|   4|   5|
-        |  5|  Bob|   7|   8|
-        +---+-----+----+----+
+
+        Example 1: Rename a single column
+
+        >>> df.withColumnsRenamed({"age": "age2"}).show()
+        +----+-----+
+        |age2| name|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 2: Rename multiple columns
+
+        >>> df.withColumnsRenamed({"age": "age2", "name": "name2"}).show()
+        +----+-----+
+        |age2|name2|
+        +----+-----+
+        |   2|Alice|
+        |   5|  Bob|
+        +----+-----+
+
+        Example 3: Rename non-existing column (no-op)
+
+        >>> df.withColumnsRenamed({"non_existing": "new_name"}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 4: Rename with an empty dictionary (no-op)
+
+        >>> df.withColumnsRenamed({}).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         """
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(

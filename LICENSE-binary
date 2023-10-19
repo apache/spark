@@ -209,10 +209,10 @@ org.apache.zookeeper:zookeeper
 oro:oro
 commons-configuration:commons-configuration
 commons-digester:commons-digester
-com.chuusai:shapeless_2.12
+com.chuusai:shapeless_2.13
 com.googlecode.javaewah:JavaEWAH
 com.twitter:chill-java
-com.twitter:chill_2.12
+com.twitter:chill_2.13
 com.univocity:univocity-parsers
 javax.jdo:jdo-api
 joda-time:joda-time
@@ -220,23 +220,23 @@ net.sf.opencsv:opencsv
 org.apache.derby:derby
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
-org.scalanlp:breeze-macros_2.12
-org.scalanlp:breeze_2.12
-org.typelevel:macro-compat_2.12
+org.scalanlp:breeze-macros_2.13
+org.scalanlp:breeze_2.13
+org.typelevel:macro-compat_2.13
 org.yaml:snakeyaml
 org.apache.xbean:xbean-asm7-shaded
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
-org.apache.spark:spark-catalyst_2.12
-org.apache.spark:spark-kvstore_2.12
-org.apache.spark:spark-launcher_2.12
-org.apache.spark:spark-mllib-local_2.12
-org.apache.spark:spark-network-common_2.12
-org.apache.spark:spark-network-shuffle_2.12
-org.apache.spark:spark-sketch_2.12
-org.apache.spark:spark-tags_2.12
-org.apache.spark:spark-unsafe_2.12
+org.apache.spark:spark-catalyst_2.13
+org.apache.spark:spark-kvstore_2.13
+org.apache.spark:spark-launcher_2.13
+org.apache.spark:spark-mllib-local_2.13
+org.apache.spark:spark-network-common_2.13
+org.apache.spark:spark-network-shuffle_2.13
+org.apache.spark:spark-sketch_2.13
+org.apache.spark:spark-tags_2.13
+org.apache.spark:spark-unsafe_2.13
 commons-httpclient:commons-httpclient
 com.vlkan:flatbuffers
 com.ning:compress-lzf
@@ -299,10 +299,10 @@ org.apache.orc:orc-mapreduce
 org.mortbay.jetty:jetty
 org.mortbay.jetty:jetty-util
 com.jolbox:bonecp
-org.json4s:json4s-ast_2.12
-org.json4s:json4s-core_2.12
-org.json4s:json4s-jackson_2.12
-org.json4s:json4s-scalap_2.12
+org.json4s:json4s-ast_2.13
+org.json4s:json4s-core_2.13
+org.json4s:json4s-jackson_2.13
+org.json4s:json4s-scalap_2.13
 com.carrotsearch:hppc
 com.fasterxml.jackson.core:jackson-annotations
 com.fasterxml.jackson.core:jackson-core
@@ -312,7 +312,7 @@ com.fasterxml.jackson.jaxrs:jackson-jaxrs-base
 com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider
 com.fasterxml.jackson.module:jackson-module-jaxb-annotations
 com.fasterxml.jackson.module:jackson-module-paranamer
-com.fasterxml.jackson.module:jackson-module-scala_2.12
+com.fasterxml.jackson.module:jackson-module-scala_2.13
 com.github.mifmif:generex
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
@@ -348,8 +348,7 @@ org.apache.directory.server:apacheds-i18n
 org.apache.directory.server:apacheds-kerberos-codec
 org.apache.htrace:htrace-core
 org.apache.ivy:ivy
-org.apache.mesos:mesos
-org.apache.parquet:parquet-column
+=org.apache.parquet:parquet-column
 org.apache.parquet:parquet-common
 org.apache.parquet:parquet-encoding
 org.apache.parquet:parquet-format
@@ -385,8 +384,8 @@ org.eclipse.jetty:jetty-xml
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-parser-combinators_2.12
-org.scala-lang.modules:scala-xml_2.12
+org.scala-lang.modules:scala-parser-combinators_2.13
+org.scala-lang.modules:scala-xml_2.13
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
 org.apache.hive:hive-beeline
@@ -420,6 +419,12 @@ docs/js/vendor/bootstrap.js
 This product bundles various third-party components under other open source licenses.
 This section summarizes those components and their licenses. See licenses-binary/
 for text of these licenses.
+
+
+Python Software Foundation License
+----------------------------------
+
+python/pyspark/loose_version.py
 
 
 BSD 2-Clause
@@ -471,19 +476,19 @@ MIT License
 -----------
 
 com.microsoft.sqlserver:mssql-jdbc
-org.typelevel:spire_2.12
-org.typelevel:spire-macros_2.12
-org.typelevel:spire-platform_2.12
-org.typelevel:spire-util_2.12
-org.typelevel:algebra_2.12:jar
-org.typelevel:cats-kernel_2.12
-org.typelevel:machinist_2.12
+org.typelevel:spire_2.13
+org.typelevel:spire-macros_2.13
+org.typelevel:spire-platform_2.13
+org.typelevel:spire-util_2.13
+org.typelevel:algebra_2.13:jar
+org.typelevel:cats-kernel_2.13
+org.typelevel:machinist_2.13
 net.razorvine:pickle
 org.slf4j:jcl-over-slf4j
 org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
-com.github.scopt:scopt_2.12
+com.github.scopt:scopt_2.13
 dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack

@@ -22,14 +22,14 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCo
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
+import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -2087,5 +2088,36 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
     assert(databricksDialect
       .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
+
+  test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).get == ShortType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-45475: saving a table via JDBC should work with observe API") {
+    val tableName = "test_table"
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val expected = Map("percentile_approx_val" -> 49)
+    assert(namedObservation.get === expected)
   }
 }

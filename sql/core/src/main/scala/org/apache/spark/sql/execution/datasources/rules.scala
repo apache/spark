@@ -284,10 +284,11 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
   }
 
-  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
-    case f: FileDataSourceV2 => f.fallbackFileFormat
-    case _ => cls
-  }
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] =
+    cls.getDeclaredConstructor().newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => cls
+    }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(

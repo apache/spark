@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.Pod

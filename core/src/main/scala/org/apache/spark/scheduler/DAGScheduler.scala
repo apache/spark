@@ -1847,9 +1847,9 @@ private[spark] class DAGScheduler(
       case Success =>
         // An earlier attempt of a stage (which is zombie) may still have running tasks. If these
         // tasks complete, they still count and we can mark the corresponding partitions as
-        // finished. Here we notify the task scheduler to skip running tasks for the same partition,
-        // to save resource.
-        if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
+        // finished if the stage is determinate. Here we notify the task scheduler to skip running
+        // tasks for the same partition to save resource.
+        if (!stage.isIndeterminate && task.stageAttemptId < stage.latestInfo.attemptNumber()) {
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
         }
 
@@ -1903,19 +1903,26 @@ private[spark] class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            shuffleStage.pendingPartitions -= task.partitionId
-            val status = event.result.asInstanceOf[MapStatus]
-            val execId = status.location.executorId
-            logDebug("ShuffleMapTask finished on " + execId)
-            if (executorFailureEpoch.contains(execId) &&
+            // Ignore task completion for old attempt of indeterminate stage
+            val ignoreIndeterminate = stage.isIndeterminate &&
+              task.stageAttemptId < stage.latestInfo.attemptNumber()
+            if (!ignoreIndeterminate) {
+              shuffleStage.pendingPartitions -= task.partitionId
+              val status = event.result.asInstanceOf[MapStatus]
+              val execId = status.location.executorId
+              logDebug("ShuffleMapTask finished on " + execId)
+              if (executorFailureEpoch.contains(execId) &&
                 smt.epoch <= executorFailureEpoch(execId)) {
-              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+                logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+              } else {
+                // The epoch of the task is acceptable (i.e., the task was launched after the most
+                // recent failure we're aware of for the executor), so mark the task's output as
+                // available.
+                mapOutputTracker.registerMapOutput(
+                  shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+              }
             } else {
-              // The epoch of the task is acceptable (i.e., the task was launched after the most
-              // recent failure we're aware of for the executor), so mark the task's output as
-              // available.
-              mapOutputTracker.registerMapOutput(
-                shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+              logInfo(s"Ignoring $smt completion from an older attempt of indeterminate stage")
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {

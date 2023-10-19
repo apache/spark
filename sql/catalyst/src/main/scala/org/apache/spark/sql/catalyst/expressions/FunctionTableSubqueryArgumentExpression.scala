@@ -93,7 +93,7 @@ case class FunctionTableSubqueryArgumentExpression(
       newChildren: IndexedSeq[Expression]): FunctionTableSubqueryArgumentExpression =
     copy(outerAttrs = newChildren)
 
-  final override def nodePatternsInternal: Seq[TreePattern] =
+  final override def nodePatternsInternal(): Seq[TreePattern] =
     Seq(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION)
 
   def hasRepartitioning: Boolean = withSinglePartition || partitionByExpressions.nonEmpty

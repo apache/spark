@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{config, Logging}
