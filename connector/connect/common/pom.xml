@@ -47,6 +47,11 @@
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
         </dependency>
+        <!--
+          SPARK-45593: spark connect relies on a specific version of Guava, We perform shading
+          of the Guava library within the connect-common module to ensure both connect-server and
+          connect-client modules maintain consistent and accurate Guava dependencies.
+        -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
@@ -154,6 +159,7 @@
                         <includes>
                             <include>org.spark-project.spark:unused</include>
                             <include>com.google.guava:guava</include>
+                            <include>com.google.guava:failureaccess</include>
                             <include>org.apache.tomcat:annotations-api</include>
                         </includes>
                     </artifactSet>
