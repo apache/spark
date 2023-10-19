@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
@@ -32,6 +34,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessi
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -50,7 +53,8 @@ class IncrementalExecution(
     val currentBatchId: Long,
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
     val offsetSeqMetadata: OffsetSeqMetadata,
-    val watermarkPropagator: WatermarkPropagator)
+    val watermarkPropagator: WatermarkPropagator,
+    val isFirstBatch: Boolean)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -70,6 +74,8 @@ class IncrementalExecution(
       StreamingDeduplicationStrategy ::
       StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
+
+  private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
@@ -174,6 +180,17 @@ class IncrementalExecution(
         // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
         // no stateful operator (i.e., consuming the iterator is not needed).
         LocalLimitExec(limit, child)
+    }
+  }
+
+  object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
+        val metadata = stateStoreWriter.operatorStateMetadata()
+        val metadataWriter = new OperatorStateMetadataWriter(new Path(
+          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+        metadataWriter.write(metadata)
+        stateStoreWriter
     }
   }
 
@@ -357,6 +374,9 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
+      // The rule doesn't change the plan but cause the side effect that metadata is written
+      // in the checkpoint directory of stateful operator.
+      planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
     }

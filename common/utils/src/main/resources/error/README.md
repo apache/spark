@@ -1,6 +1,6 @@
 # Guidelines
 
-To throw a standardized user-facing error or exception, developers should specify the error class
+To throw a standardized user-facing error or exception, developers should specify the error class, a SQLSTATE,
 and message parameters rather than an arbitrary error message.
 
 ## Usage
@@ -10,7 +10,7 @@ and message parameters rather than an arbitrary error message.
    If true, use the error class `INTERNAL_ERROR` and skip to step 4.
 2. Check if an appropriate error class already exists in `error-classes.json`.
    If true, use the error class and skip to step 4.
-3. Add a new class to `error-classes.json`; keep in mind the invariants below.
+3. Add a new class with a new or existing SQLSTATE to `error-classes.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
@@ -26,9 +26,9 @@ Throw with arbitrary error message:
 
 `error-classes.json`
 
-    "PROBLEM_BECAUSE": {
-      "message": ["Problem <problem> because <cause>"],
-      "sqlState": "XXXXX"
+    "PROBLEM_BECAUSE" : {
+      "message" : ["Problem <problem> because <cause>"],
+      "sqlState" : "XXXXX"
     }
 
 `SparkException.scala`
@@ -70,6 +70,8 @@ Error classes are a succinct, human-readable representation of the error categor
 
 An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
+You should not introduce new uncategorized errors. Instead, convert them to proper errors whenever encountering them in new code.
+
 #### Invariants
 
 - Unique
@@ -79,7 +81,10 @@ An uncategorized errors can be assigned to a legacy error class with the prefix 
 ### Message
 
 Error messages provide a descriptive, human-readable representation of the error.
-The message format accepts string parameters via the C-style printf syntax.
+The message format accepts string parameters via the HTML tag syntax: e.g. <relationName>.
+
+The values passed to the message shoudl not themselves be messages.
+They should be: runtime-values, keywords, identifiers, or other values that are not translated.
 
 The quality of the error message should match the
 [guidelines](https://spark.apache.org/error-message-guidelines.html).
@@ -90,21 +95,24 @@ The quality of the error message should match the
 
 ### SQLSTATE
 
-SQLSTATE is an optional portable error identifier across SQL engines.
+SQLSTATE is an mandatory portable error identifier across SQL engines.
 SQLSTATE comprises a 2-character class value followed by a 3-character subclass value.
 Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
 For extension Spark claims the 'K**' subclass range.
 If a new class is needed it will also claim the 'K0' class.
 
+Internal errors should use the 'XX' class. You can subdivide internal errors by component. 
+For example: The existing 'XXKD0' is used for an internal analyzer error.
+
 #### Invariants
 
-- Consistent across releases
+- Consistent across releases unless the error is internal.
 
 #### ANSI/ISO standard
 
 The following SQLSTATEs are collated from:
 - SQL2016
-- DB2 zOS
+- DB2 zOS/LUW
 - PostgreSQL 15
 - Oracle 12 (last published)
 - SQL Server

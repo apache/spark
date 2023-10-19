@@ -731,11 +731,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     false
   }
 
-  /**
-   * Return the number of executors currently registered with this backend.
-   */
-  private def numExistingExecutors: Int = synchronized { executorDataMap.size }
-
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }
