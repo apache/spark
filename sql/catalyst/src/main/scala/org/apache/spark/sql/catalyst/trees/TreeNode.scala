@@ -177,7 +177,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
 
   private lazy val _hashCode: Int = MurmurHash3.productHash(this)
-  
   override def hashCode(): Int = _hashCode
 
   /**
