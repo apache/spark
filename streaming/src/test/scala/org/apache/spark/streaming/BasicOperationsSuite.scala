@@ -31,6 +31,25 @@ import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
 import org.apache.spark.util.ManualClock
 
 class BasicOperationsSuite extends TestSuiteBase {
+  test("fix: OOM should fail the streaming context") {
+    withStreamingContext(new StreamingContext(conf, Milliseconds(500))) { ssc =>
+      val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+      val stream = new TestInputStream[Int](ssc, input, 1)
+      val outputStream = new TestOOMOutputStream(stream)
+      outputStream.register()
+
+      ssc.start()
+
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      clock.advance(Milliseconds(2000).milliseconds)
+
+      val err = intercept[OutOfMemoryError] {
+        ssc.awaitTerminationOrTimeout(1000)
+      }
+      assert(err.getMessage.contains("TestOOMOutputStream"))
+    }
+  }
+
   test("map") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     testOperation(

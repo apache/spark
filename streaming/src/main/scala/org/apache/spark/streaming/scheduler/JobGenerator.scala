@@ -19,8 +19,6 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.TimeUnit
 
-import scala.util.{Failure, Success, Try}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
@@ -249,14 +247,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
     // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
     ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
-    Try {
+    try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
-      graph.generateJobs(time) // generate jobs using allocated block
-    } match {
-      case Success(jobs) =>
-        val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
-      case Failure(e) =>
+      val jobs = graph.generateJobs(time) // generate jobs using allocated block
+      val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
+      jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
+    } catch {
+      case e: Throwable =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
         PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
     }

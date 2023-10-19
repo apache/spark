@@ -109,6 +109,22 @@ class TestOutputStream[T: ClassTag](
 }
 
 /**
+ * This is a output stream just for testing. It throws `OutOfMemoryError` when generating
+ * its streaming job.
+ */
+class TestOOMOutputStream[T: ClassTag](
+    parent: DStream[T]) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+    rdd.collect()
+  }, false) {
+
+  override def generateJob(time: Time): Option[Job] = {
+    // scalastyle:off throwerror
+    throw new OutOfMemoryError("TestOOMOutputStream")
+    // scalastyle:on throwerror
+  }
+}
+
+/**
  * This is a output stream just for the testsuites. All the output is collected into a
  * ConcurrentLinkedQueue. This queue is wiped clean on being restored from checkpoint.
  *
