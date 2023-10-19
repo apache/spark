@@ -380,7 +380,7 @@ object Artifact {
           s" Expected 'org:module:version', found $authority.")
     }
 
-    val (transitive, exclusions) = MavenUtils.parseQueryParams(uri)
+    val (transitive, exclusions, repos) = MavenUtils.parseQueryParams(uri)
 
     val exclusionsList: Seq[String] =
       if (!StringUtils.isBlank(exclusions)) {
@@ -389,7 +389,7 @@ object Artifact {
         Nil
       }
 
-    val ivySettings = MavenUtils.buildIvySettings(None, None)
+    val ivySettings = MavenUtils.buildIvySettings(Some(repos), None)
 
     val jars = MavenUtils.resolveMavenCoordinates(
       authority,

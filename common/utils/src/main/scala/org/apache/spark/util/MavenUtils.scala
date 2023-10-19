@@ -505,11 +505,13 @@ private[spark] object MavenUtils extends Logging {
    * consists of `group:module` pairs separated by commas. Example: Input:
    * excludeorg.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http Output:
    * [org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http]
+   *
+   * 3. repos: comma separated repositories to use when resolving dependencies.
    */
-  def parseQueryParams(uri: URI): (Boolean, String) = {
+  def parseQueryParams(uri: URI): (Boolean, String, String) = {
     val uriQuery = uri.getQuery
     if (uriQuery == null) {
-      (true, "")
+      (true, "", "")
     } else {
       val mapTokens = uriQuery.split("&").map(_.split("="))
       if (mapTokens.exists(MavenUtils.isInvalidQueryString)) {
@@ -551,7 +553,17 @@ private[spark] object MavenUtils extends Logging {
         }
         .getOrElse("")
 
-      val validParams = Set("transitive", "exclude")
+      val repos = groupedParams
+        .get("repos")
+        .map { params =>
+          params
+            .map(_._2)
+            .flatMap(_.split(","))
+            .mkString(",")
+        }
+        .getOrElse("")
+
+      val validParams = Set("transitive", "exclude", "repos")
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
         logWarning(
@@ -559,7 +571,7 @@ private[spark] object MavenUtils extends Logging {
             s"in Ivy URI query `$uriQuery`.")
       }
 
-      (transitive, exclusionList)
+      (transitive, exclusionList, repos)
     }
   }
 }

@@ -26,6 +26,8 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
@@ -195,27 +197,33 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("External JAR") {
-    val input = """
-       |// this import will fail
-       |import org.apache.commons.numbers.combinatorics.Factorial
-       |// making library available in the REPL to compile UDF
-       |import $ivy.`org.apache.commons:commons-numbers-combinatorics:1.0`
-       |val func = udf((a: Int) => {
-       |  import org.apache.commons.numbers.combinatorics.Factorial
-       |  Factorial.value(a).toInt
-       |})
-       |
-       |// add library to the Executor
-       |spark.addArtifact("ivy://org.apache.commons:commons-numbers-combinatorics:1.0")
-       |
-       |spark.range(5).select(func(col("id"))).as[Int].collect()
-       |""".stripMargin
-    val output = runCommandsInShell(input)
-    // making sure the library was not available before installation
-    assertContains(
-      "object numbers is not a member of package org.apache.commons",
-      getCleanString(errorStream))
-    assertContains("Array[Int] = Array(1, 1, 2, 6, 24)", output)
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val input =
+        s"""
+           |// this import will fail
+           |import my.great.lib.MyLib
+           |
+           |// making library available in the REPL to compile UDF
+           |import coursierapi.{Credentials, MavenRepository}
+           |interp.repositories() ++= Seq(MavenRepository.of("$repo"))
+           |import $$ivy.`my.great.lib:mylib:0.1`
+           |
+           |val func = udf((a: Int) => {
+           |  import my.great.lib.MyLib
+           |  MyLib.myFunc(a)
+           |})
+           |
+           |// add library to the Executor
+           |spark.addArtifact("ivy://my.great.lib:mylib:0.1?repos=$repo")
+           |
+           |spark.range(5).select(func(col("id"))).as[Int].collect()
+           |""".stripMargin
+      val output = runCommandsInShell(input)
+      // making sure the library was not available before installation
+      assertContains("not found: value my", getCleanString(errorStream))
+      assertContains("Array[Int] = Array(1, 2, 3, 4, 5)", output)
+    }
   }
 
   test("Java UDF") {

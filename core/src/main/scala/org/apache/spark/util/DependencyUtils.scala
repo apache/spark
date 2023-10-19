@@ -78,13 +78,15 @@ private[spark] object DependencyUtils extends Logging {
           s" Expected 'org:module:version', found $authority.")
     }
 
-    val (transitive, exclusionList) = MavenUtils.parseQueryParams(uri)
-
+    val (transitive, exclusionList, repos) = MavenUtils.parseQueryParams(uri)
+    val fullReposList = Seq(ivyProperties.repositories, repos)
+      .filter(!StringUtils.isBlank(_))
+      .mkString(",")
     resolveMavenDependencies(
       transitive,
       exclusionList,
       authority,
-      ivyProperties.repositories,
+      fullReposList,
       ivyProperties.ivyRepoPath,
       Option(ivyProperties.ivySettingsPath)
     )
