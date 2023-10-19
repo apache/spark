@@ -15,14 +15,13 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
+from pyspark.loose_version import LooseVersion
 
 import matplotlib as mat
 import numpy as np
 from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
-
 from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,

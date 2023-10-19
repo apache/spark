@@ -1158,14 +1158,6 @@ yarn = Module(
     test_tags=["org.apache.spark.tags.ExtendedYarnTest"],
 )
 
-mesos = Module(
-    name="mesos",
-    dependencies=[],
-    source_file_regexes=["resource-managers/mesos/"],
-    build_profile_flags=["-Pmesos"],
-    sbt_test_goals=["mesos/test"],
-)
-
 kubernetes = Module(
     name="kubernetes",
     dependencies=[],

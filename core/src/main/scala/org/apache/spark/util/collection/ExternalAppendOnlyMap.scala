@@ -592,7 +592,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    override def hasNext(): Boolean = cur != null
+    override def hasNext: Boolean = cur != null
 
     override def next(): (K, C) = {
       val r = cur

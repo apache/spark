@@ -18,9 +18,10 @@
 
 import os
 import pickle
-import numpy as np
 import tempfile
 import unittest
+
+import numpy as np
 
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
@@ -32,6 +33,7 @@ if should_test_connect:
         MaxAbsScalerModel,
         StandardScaler,
         StandardScalerModel,
+        ArrayAssembler,
     )
     import pandas as pd
 
@@ -143,6 +145,53 @@ class FeatureTestsMixin:
                 sk_model = pickle.load(f)
                 sk_result = sk_model.transform(np.stack(list(local_df1.features)))
                 np.testing.assert_allclose(sk_result, expected_result)
+
+    def test_array_assembler(self):
+        spark_df = self.spark.createDataFrame(
+            [
+                ([2.0, 3.5, 1.5], 3.0, True, 1),
+                ([-3.0, np.nan, -2.5], 4.0, False, 2),
+            ],
+            schema=["f1", "f2", "f3", "f4"],
+        )
+        pandas_df = spark_df.toPandas()
+
+        assembler1 = ArrayAssembler(
+            inputCols=["f1", "f2", "f3", "f4"],
+            outputCol="out",
+            featureSizes=[3, 1, 1, 1],
+            handleInvalid="keep",
+        )
+        expected_result = [
+            [2.0, 3.5, 1.5, 3.0, 1.0, 1.0],
+            [-3.0, np.nan, -2.5, 4.0, 0.0, 2.0],
+        ]
+        result1 = assembler1.transform(pandas_df)["out"].tolist()
+        np.testing.assert_allclose(result1, expected_result)
+
+        result2 = assembler1.transform(spark_df).toPandas()["out"].tolist()
+        # For spark UDF, if output is a array type, 'NaN' values in UDF output array
+        # are converted to 'None' value.
+        if result2[1][1] is None:
+            result2[1][1] = np.nan
+        np.testing.assert_allclose(result2, expected_result)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "assembler")
+            assembler1.saveToLocal(save_path)
+            loaded_assembler = ArrayAssembler.loadFromLocal(save_path)
+            assert loaded_assembler.getInputCols() == ["f1", "f2", "f3", "f4"]
+            assert loaded_assembler.getFeatureSizes() == [3, 1, 1, 1]
+
+        assembler2 = ArrayAssembler(
+            inputCols=["f1", "f2", "f3", "f4"],
+            outputCol="out",
+            featureSizes=[3, 1, 1, 1],
+            handleInvalid="error",
+        )
+
+        with self.assertRaisesRegex(Exception, "The input features contains invalid value"):
+            assembler2.transform(pandas_df)["out"].tolist()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

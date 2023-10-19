@@ -27,9 +27,9 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
+
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
@@ -531,89 +531,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         False
         """
         return self.isnull().any()
-
-    @property
-    def is_monotonic(self) -> bool:
-        """
-        Return boolean if values in the object are monotonically increasing.
-
-        .. note:: the current implementation of is_monotonic requires to shuffle
-            and aggregate multiple times to check the order locally and globally,
-            which is potentially expensive. In case of multi-index, all data is
-            transferred to a single node which can easily cause out-of-memory errors.
-
-        .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
-            for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
-
-        .. deprecated:: 3.4.0
-
-        Returns
-        -------
-        is_monotonic : bool
-
-        Examples
-        --------
-        >>> ser = ps.Series(['1/1/2018', '3/1/2018', '4/1/2018'])
-        >>> ser.is_monotonic
-        True
-
-        >>> df = ps.DataFrame({'dates': [None, '1/1/2018', '2/1/2018', '3/1/2018']})
-        >>> df.dates.is_monotonic
-        False
-
-        >>> df.index.is_monotonic
-        True
-
-        >>> ser = ps.Series([1])
-        >>> ser.is_monotonic
-        True
-
-        >>> ser = ps.Series([])
-        >>> ser.is_monotonic
-        True
-
-        >>> ser.rename("a").to_frame().set_index("a").index.is_monotonic
-        True
-
-        >>> ser = ps.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
-        >>> ser.is_monotonic
-        False
-
-        >>> ser.index.is_monotonic
-        True
-
-        Support for MultiIndex
-
-        >>> midx = ps.MultiIndex.from_tuples(
-        ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
-        >>> midx  # doctest: +SKIP
-        MultiIndex([('x', 'a'),
-                    ('x', 'b'),
-                    ('y', 'c'),
-                    ('y', 'd'),
-                    ('z', 'e')],
-                   )
-        >>> midx.is_monotonic
-        True
-
-        >>> midx = ps.MultiIndex.from_tuples(
-        ... [('z', 'a'), ('z', 'b'), ('y', 'c'), ('y', 'd'), ('x', 'e')])
-        >>> midx  # doctest: +SKIP
-        MultiIndex([('z', 'a'),
-                    ('z', 'b'),
-                    ('y', 'c'),
-                    ('y', 'd'),
-                    ('x', 'e')],
-                   )
-        >>> midx.is_monotonic
-        False
-        """
-        warnings.warn(
-            "is_monotonic is deprecated and will be removed in a future version. "
-            "Use is_monotonic_increasing instead.",
-            FutureWarning,
-        )
-        return self._is_monotonic("increasing")
 
     @property
     def is_monotonic_increasing(self) -> bool:
@@ -1704,16 +1621,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             if len(categories) == 0:
                 scol = F.lit(None)
             else:
-                kvs = list(
-                    chain(
-                        *[
-                            (F.lit(code), F.lit(category))
-                            for code, category in enumerate(categories)
-                        ]
-                    )
-                )
-                map_scol = F.create_map(*kvs)
-                scol = map_scol[self.spark.column]
+                scol = F.lit(None)
+                for code, category in reversed(list(enumerate(categories))):
+                    scol = F.when(self.spark.column == F.lit(code), F.lit(category)).otherwise(scol)
+
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
             ).factorize(use_na_sentinel=use_na_sentinel)
@@ -1761,9 +1672,16 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = F.lit(na_sentinel_code)
         else:
-            map_scol = F.create_map(*kvs)
             null_scol = F.when(self.isnull().spark.column, F.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol[self.spark.column])
+            mapped_scol = None
+            for i in range(0, len(kvs), 2):
+                key = kvs[i]
+                value = kvs[i + 1]
+                if mapped_scol is None:
+                    mapped_scol = F.when(self.spark.column == key, value)
+                else:
+                    mapped_scol = mapped_scol.when(self.spark.column == key, value)
+            new_scol = null_scol.otherwise(mapped_scol)
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 

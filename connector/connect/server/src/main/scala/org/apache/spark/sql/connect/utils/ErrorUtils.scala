@@ -108,6 +108,29 @@ private[connect] object ErrorUtils extends Logging {
             .asJava)
       }
 
+      currentError match {
+        case sparkThrowable: SparkThrowable =>
+          val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
+            .newBuilder()
+          if (sparkThrowable.getErrorClass != null) {
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          }
+          for (queryCtx <- sparkThrowable.getQueryContext) {
+            sparkThrowableBuilder.addQueryContexts(
+              FetchErrorDetailsResponse.QueryContext
+                .newBuilder()
+                .setObjectType(queryCtx.objectType())
+                .setObjectName(queryCtx.objectName())
+                .setStartIndex(queryCtx.startIndex())
+                .setStopIndex(queryCtx.stopIndex())
+                .setFragment(queryCtx.fragment())
+                .build())
+          }
+          sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
+          builder.setSparkThrowable(sparkThrowableBuilder.build())
+        case _ =>
+      }
+
       val causeIdx = buffer.size + 1
 
       if (causeIdx < MAX_ERROR_CHAIN_LENGTH && currentError.getCause != null) {

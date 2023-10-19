@@ -259,7 +259,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
     if (_recoveryPath != null) {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
-        DBBackend.LEVELDB.name());
+        DBBackend.ROCKSDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
       logger.info("Use {} as the implementation of {}",
         dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);

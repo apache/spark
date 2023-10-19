@@ -88,6 +88,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e
       }
 
+    // Replace ScalarSubquery with null if its maxRows is 0
+    case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
+      Literal(null, s.dataType)
+
     case other => other.mapChildren(constantFolding(_, isConditionalBranch))
   }
 
@@ -112,7 +116,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  */
 object ConstantPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LITERAL, FILTER), ruleId) {
+    _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
     case f: Filter =>
       val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true)
       if (newCondition.isDefined) {
@@ -143,6 +147,8 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   private def traverse(condition: Expression, replaceChildren: Boolean, nullIsFalse: Boolean)
     : (Option[Expression], AttributeMap[(Literal, BinaryComparison)]) =
     condition match {
+      case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
+        (None, AttributeMap.empty)
       case e @ EqualTo(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
         (None, AttributeMap(Map(left -> (right, e))))
@@ -202,7 +208,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
-    condition transform {
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
       case b: BinaryComparison if !predicates.contains(b) => b transform {
         case a: AttributeReference => constantsMap.getOrElse(a, a)
       }

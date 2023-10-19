@@ -457,7 +457,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       }
 
       class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-        def getReceiver: Receiver[String] = null
+        def getReceiver(): Receiver[String] = null
       }
 
       // Register input streams

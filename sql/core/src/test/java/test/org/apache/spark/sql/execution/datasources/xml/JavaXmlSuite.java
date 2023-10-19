@@ -82,7 +82,7 @@ public final class JavaXmlSuite {
     public void testXmlParser() {
         Map<String, String> options = new HashMap<>();
         options.put("rowTag", booksFileTag);
-        Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
+        Dataset<Row> df = spark.read().options(options).xml(booksFile);
         String prefix = XmlOptions.DEFAULT_ATTRIBUTE_PREFIX();
         long result = df.select(prefix + "id").count();
         Assertions.assertEquals(result, numBooks);
@@ -92,7 +92,7 @@ public final class JavaXmlSuite {
     public void testLoad() {
         Map<String, String> options = new HashMap<>();
         options.put("rowTag", booksFileTag);
-        Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
+        Dataset<Row> df = spark.read().options(options).xml(booksFile);
         long result = df.select("description").count();
         Assertions.assertEquals(result, numBooks);
     }
@@ -103,10 +103,10 @@ public final class JavaXmlSuite {
         options.put("rowTag", booksFileTag);
         Path booksPath = getEmptyTempDir().resolve("booksFile");
 
-        Dataset<Row> df = spark.read().options(options).format("xml").load(booksFile);
-        df.select("price", "description").write().format("xml").save(booksPath.toString());
+        Dataset<Row> df = spark.read().options(options).xml(booksFile);
+        df.select("price", "description").write().options(options).xml(booksPath.toString());
 
-        Dataset<Row> newDf = spark.read().format("xml").load(booksPath.toString());
+        Dataset<Row> newDf = spark.read().options(options).xml(booksPath.toString());
         long result = newDf.select("price").count();
         Assertions.assertEquals(result, numBooks);
     }

@@ -86,7 +86,6 @@ object PythonRunner {
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
     if (sparkConf.getOption("spark.yarn.appMasterEnv.OMP_NUM_THREADS").isEmpty &&
-        sparkConf.getOption("spark.mesos.driverEnv.OMP_NUM_THREADS").isEmpty &&
         sparkConf.getOption("spark.kubernetes.driverEnv.OMP_NUM_THREADS").isEmpty) {
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to the driver
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool

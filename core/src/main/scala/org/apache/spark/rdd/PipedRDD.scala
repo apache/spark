@@ -185,13 +185,13 @@ private[spark] class PipedRDD[T: ClassTag](
     val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
     new Iterator[String] {
       def next(): String = {
-        if (!hasNext()) {
+        if (!hasNext) {
           throw SparkCoreErrors.noSuchElementError()
         }
         lines.next()
       }
 
-      def hasNext(): Boolean = {
+      def hasNext: Boolean = {
         val result = if (lines.hasNext) {
           true
         } else {

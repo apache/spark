@@ -41,7 +41,9 @@ object MimaExcludes {
     // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
     // [SPARK-44198][CORE] Support propagation of the log level to the executors
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf")
   )
 
   // Default exclude rules
@@ -73,6 +75,9 @@ object MimaExcludes {
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+
+    // SPARK-43299: Convert StreamingQueryException in Scala Client
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryException"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

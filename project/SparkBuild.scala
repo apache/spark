@@ -64,10 +64,10 @@ object BuildCommons {
     "tags", "sketch", "kvstore", "common-utils", "sql-api"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
-  val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
+  val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
-    Seq("kubernetes", "mesos", "yarn",
+    Seq("kubernetes", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
@@ -232,20 +232,12 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation:wv,any:e",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
-        "-Wconf:cat=lint-multiarg-infix:wv",
-        "-Wconf:cat=other-nullary-override:wv",
-        "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-        "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
         //  fixed.
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
         "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-        "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-        "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
@@ -259,7 +251,12 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
         "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
         // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-        "-Wconf:msg=Implicit definition should have explicit type:s"
+        "-Wconf:msg=Implicit definition should have explicit type:s",
+        // SPARK-45331 Upgrade Scala to 2.13.12 and suppress "In Scala 2, symbols inherited
+        // from a superclass shadow symbols defined in an outer scope. Such references are
+        // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
+        // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
+        "-Wconf:msg=legacy-binding:s"
       )
     }
   )
@@ -352,10 +349,7 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    ) ++ {
-      // Do not attempt to scaladoc javadoc comments under 2.12 since it can't handle inner classes
-      if (scalaBinaryVersion.value == "2.12") Seq("-no-java-comments") else Seq.empty
-    },
+    ),
 
     // disable Mima check for all modules,
     // to be enabled in specific ones that have previous artifacts
@@ -1587,6 +1581,7 @@ object TestSettings {
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",

@@ -219,11 +219,27 @@ private[sql] object XmlInferSchema {
           dataTypes += inferredType
           nameToDataType += (field -> dataTypes)
 
+        case c: Characters if !c.isWhiteSpace =>
+          // This can be an attribute-only object
+          val valueTagType = inferFrom(c.getData, options)
+          nameToDataType += options.valueTag -> ArrayBuffer(valueTagType)
+
         case _: EndElement =>
           shouldStop = StaxXmlParserUtils.checkEndElement(parser)
 
         case _ => // do nothing
       }
+    }
+    // A structure object is an attribute-only element
+    // if it only consists of attributes and valueTags.
+    // If not, we will remove the valueTag field from the schema
+    val attributesOnly = nameToDataType.forall {
+      case (fieldName, dataTypes) =>
+        dataTypes.length == 1 &&
+        (fieldName == options.valueTag || fieldName.startsWith(options.attributePrefix))
+    }
+    if (!attributesOnly) {
+      nameToDataType -= options.valueTag
     }
     // We need to manually merges the fields having the sames so that
     // This can be inferred as ArrayType.

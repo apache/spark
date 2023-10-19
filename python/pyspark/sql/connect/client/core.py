@@ -19,6 +19,7 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -31,7 +32,6 @@ import time
 import urllib.parse
 import uuid
 import sys
-from distutils.version import LooseVersion
 from types import TracebackType
 from typing import (
     Iterable,
@@ -1167,6 +1167,8 @@ class SparkConnectClient(object):
     ]:
         logger.info("ExecuteAndFetchAsIterator")
 
+        num_records = 0
+
         def handle_response(
             b: pb2.ExecutePlanResponse,
         ) -> Iterator[
@@ -1178,6 +1180,7 @@ class SparkConnectClient(object):
                 Dict[str, Any],
             ]
         ]:
+            nonlocal num_records
             if b.session_id != self._session_id:
                 raise SparkConnectException(
                     "Received incorrect session identifier for request: "
@@ -1218,10 +1221,29 @@ class SparkConnectClient(object):
                     f"size={len(b.arrow_batch.data)}"
                 )
 
+                if (
+                    b.arrow_batch.HasField("start_offset")
+                    and num_records != b.arrow_batch.start_offset
+                ):
+                    raise SparkConnectException(
+                        f"Expected arrow batch to start at row offset {num_records} in results, "
+                        + "but received arrow batch starting at offset "
+                        + f"{b.arrow_batch.start_offset}."
+                    )
+
+                num_records_in_batch = 0
                 with pa.ipc.open_stream(b.arrow_batch.data) as reader:
                     for batch in reader:
                         assert isinstance(batch, pa.RecordBatch)
+                        num_records_in_batch += batch.num_rows
                         yield batch
+
+                if num_records_in_batch != b.arrow_batch.row_count:
+                    raise SparkConnectException(
+                        f"Expected {b.arrow_batch.row_count} rows in arrow batch but got "
+                        + f"{num_records_in_batch}."
+                    )
+                num_records += num_records_in_batch
 
         try:
             if self._use_reattachable_execute:
@@ -1538,14 +1560,24 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
+    def add_artifacts(self, *paths: str, pyfile: bool, archive: bool, file: bool) -> None:
+        for path in paths:
+            for attempt in self._retrying():
+                with attempt:
+                    self._artifact_manager.add_artifacts(
+                        path, pyfile=pyfile, archive=archive, file=file
+                    )
 
     def copy_from_local_to_fs(self, local_path: str, dest_path: str) -> None:
-        self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
+        for attempt in self._retrying():
+            with attempt:
+                self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
 
     def cache_artifact(self, blob: bytes) -> str:
-        return self._artifact_manager.cache_artifact(blob)
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifact(blob)
+        raise SparkConnectException("Invalid state during retry exception handling.")
 
 
 class RetryState:
