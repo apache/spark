@@ -2129,7 +2129,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create a [[Cast]] expression.
+   * Create a [[Cast]] expression for '::' syntax.
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
