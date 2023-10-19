@@ -752,8 +752,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonUDTFExec(
           udtf, requiredChildOutput, resultAttrs, planLater(child), evalType) :: Nil
-      case PythonDataSourcePartition(output, partitions) =>
-        PythonDataSourcePartitionExec(output, partitions) :: Nil
+      case PythonDataSourcePartitions(output, partitions) =>
+        PythonDataSourcePartitionsExec(output, partitions) :: Nil
       case _ =>
         Nil
     }

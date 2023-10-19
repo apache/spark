@@ -23,7 +23,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
-case class PythonDataSourcePartitionExec(
+/**
+ * A physical plan node for scanning data from a list of data source partition values.
+ *
+ * It creates a RDD with number of partitions equal to size of the partition value list and
+ * each partition contains a single row with a serialized partition value.
+ */
+case class PythonDataSourcePartitionsExec(
     output: Seq[Attribute],
     partitions: Seq[Array[Byte]])
   extends LeafExecNode with InputRDDCodegen with PythonSQLMetrics {

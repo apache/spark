@@ -103,7 +103,7 @@ class SparkOptimizer(
     V2ScanPartitioningAndOrdering.ruleName :+
     V2Writes.ruleName :+
     ReplaceCTERefWithRepartition.ruleName :+
-    V2ScanRelationPushDown.ruleName
+    PlanPythonDataSourceScan.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

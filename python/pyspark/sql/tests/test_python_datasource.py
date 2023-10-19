@@ -16,6 +16,8 @@
 #
 import unittest
 
+
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.types import (
     IntegerType,
     Row,
@@ -67,6 +69,73 @@ class BasePythonDataSourceTestsMixin:
             df, [Row(id=1, value=0), Row(id=1, value=1), Row(id=2, value=0), Row(id=2, value=1)]
         )
         self.assertEqual(df.rdd.getNumPartitions(), 2)
+
+    # TODO(SPARK-45559): support read with schema
+    # def test_schema_not_implemented(self):
+    #     class TestDataSource(DataSource):
+    #         def reader(self, schema):
+    #             return TestDataSourceReader()
+    #
+    #     self.spark.read.format(TestDataSource).load().collect()
+
+    def test_reader_not_implemented(self):
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x INT"
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED"
+        ):
+            self.spark.read.format(TestDataSource).load().collect()
+
+    def test_exception_in_reader(self):
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x INT, y INT"
+
+            def reader(self, schema):
+                raise Exception("fail to create reader")
+
+        with self.assertRaisesRegex(AnalysisException, r"PYTHON_DATA_SOURCE_CREATE_ERROR"):
+            self.spark.read.format(TestDataSource).load().collect()
+
+    def test_exception_in_reader_partitions(self):
+        class TestDataSourceReader(DataSourceReader):
+            def partitions(self):
+                raise Exception("fail to create partitions")
+
+            def read(self, partition):
+                yield 1,
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x INT"
+
+            def reader(self, schema):
+                return TestDataSourceReader()
+
+        with self.assertRaisesRegex(
+            AnalysisException, r"PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON"
+        ):
+            self.spark.read.format(TestDataSource).load().collect()
+
+    def test_exception_in_reader_read(self):
+        class TestDataSourceReader(DataSourceReader):
+            def partitions(self):
+                return [1, 2]
+
+            def read(self, partition):
+                raise Exception("fail to read")
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x INT"
+
+            def reader(self, schema):
+                return TestDataSourceReader()
+
+        with self.assertRaisesRegex(PythonException, "fail to read"):
+            self.spark.read.format(TestDataSource).load().collect()
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

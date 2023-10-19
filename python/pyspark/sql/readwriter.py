@@ -82,6 +82,7 @@ class DataFrameReader(OptionUtils):
     def __init__(self, spark: "SparkSession"):
         self._jreader = spark._jsparkSession.read()
         self._spark = spark
+        # TODO(SPARK-45600): separate the logic for Python data source.
         self._format: Optional[Union[str, Type[DataSource]]] = None
         self._schema: Optional[Union[str, StructType]] = None
         self._options: Dict[str, "OptionalPrimitiveType"] = dict()
@@ -345,6 +346,7 @@ class DataFrameReader(OptionUtils):
             # Get schema of the data source
             schema = self._schema or data_source.schema()
             if isinstance(schema, str):
+                # TODO(SPARK-45559): check for parsing failure
                 dt = _parse_datatype_string(schema)
                 # Check if the schema is a valid StructType.
                 if not isinstance(dt, StructType):

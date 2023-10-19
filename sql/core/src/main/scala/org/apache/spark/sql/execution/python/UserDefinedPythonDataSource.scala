@@ -50,6 +50,7 @@ class UserDefinedPythonDataSourceReadRunner(
     func: PythonFunction,
     schema: StructType) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
 
+  // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_read"
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
@@ -65,7 +66,7 @@ class UserDefinedPythonDataSourceReadRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
+      throw QueryCompilationErrors.failToPlanDataSourceError("read", msg)
     }
 
     // Receive the pickled 'read' function.

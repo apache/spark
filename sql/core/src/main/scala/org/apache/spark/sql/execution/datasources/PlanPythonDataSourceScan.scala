@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.expressions.PythonUDTF
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Project, PythonDataSource, PythonDataSourcePartition}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, Project, PythonDataSource, PythonDataSourcePartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.PYTHON_DATA_SOURCE
 import org.apache.spark.sql.execution.python.UserDefinedPythonDataSourceReadRunner
@@ -61,8 +61,8 @@ object PlanPythonDataSourceScan extends Rule[LogicalPlan] {
         broadcastVars = dataSource.broadcastVars,
         accumulator = dataSource.accumulator)
 
-      val partitionPlan = PythonDataSourcePartition(
-        PythonDataSourcePartition.getOutputAttrs, info.partitions)
+      val partitionPlan = PythonDataSourcePartitions(
+        PythonDataSourcePartitions.getOutputAttrs, info.partitions)
 
       // Construct a Python UDTF for the reader function.
       val pythonUDTF = PythonUDTF(

@@ -31,11 +31,11 @@ class DataSource(ABC):
     """
     A base class for data sources.
 
-    This class represents a custom data source that allows for reading from and
+    This class represents a custom data source that allows for reading from and/or
     writing to it. The data source provides methods to create readers and writers
     for reading and writing data, respectively. At least one of the methods ``reader``
     or ``writer`` must be implemented by any subclass to make the data source either
-    readable or writable.
+    readable or writable (or both).
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.

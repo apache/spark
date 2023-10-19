@@ -98,7 +98,7 @@ case class PythonDataSource(
 /**
  * Represents a list of Python data source partitions.
  */
-case class PythonDataSourcePartition(
+case class PythonDataSourcePartitions(
     output: Seq[Attribute],
     partitions: Seq[Array[Byte]]) extends LeafNode {
   override protected def stringArgs: Iterator[Any] = {
@@ -110,7 +110,7 @@ case class PythonDataSourcePartition(
   }
 }
 
-object PythonDataSourcePartition {
+object PythonDataSourcePartitions {
   def getOutputAttrs: Seq[Attribute] = {
     toAttributes(new StructType().add("partition", BinaryType))
   }

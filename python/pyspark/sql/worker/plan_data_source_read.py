@@ -20,7 +20,7 @@ import sys
 from typing import Any, IO, Iterator
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
@@ -45,7 +45,22 @@ from pyspark.worker_util import (
 
 def main(infile: IO, outfile: IO) -> None:
     """
-    Plan Python data source read.
+    Main method for planning a data source read.
+
+    This process is invoked from the `UserDefinedPythonDataSourceReadRunner.runInPython`
+    method in the optimizer rule `PlanPythonDataSourceScan` in JVM. This process is responsible
+    for creating a `DataSourceReader` object and send the information needed back to the JVM.
+
+    The infile and outfile are connected to the JVM via a socket. The JVM sends the following
+    information to this process via the socket:
+    - a `DataSource` instance representing the data source
+    - a `StructType` instance representing the output schema of the data source
+
+    This process then creates a `DataSourceReader` instance by calling the `reader` method
+    on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
+    constructs a Python UDTF using the `read()` method of the reader.
+
+    The partition values and the UDTF are then serialized and sent back to the JVM via the socket.
     """
     try:
         check_python_version(infile)
@@ -61,18 +76,24 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the data source instance.
         data_source = read_command(pickleSer, infile)
         if not isinstance(data_source, DataSource):
-            raise PySparkRuntimeError(
-                f"Expected a Python data source instance of type 'DataSource', but "
-                f"got '{type(data_source).__name__}'."
+            raise PySparkAssertionError(
+                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                message_parameters={
+                    "expected": "a Python data source instance of type 'DataSource'",
+                    "actual": f"'{type(data_source).__name__}'",
+                },
             )
 
         # Receive the data source output schema.
         schema_json = utf8_deserializer.loads(infile)
         schema = _parse_datatype_json_string(schema_json)
         if not isinstance(schema, StructType):
-            raise PySparkRuntimeError(
-                f"Expected a Python data source schema of type 'StructType', but "
-                f"got '{type(schema).__name__}'."
+            raise PySparkAssertionError(
+                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                message_parameters={
+                    "expected": "a Python data source schema of type 'StructType'",
+                    "actual": f"'{type(schema).__name__}'",
+                },
             )
 
         # Instantiate data source reader.
@@ -80,11 +101,14 @@ def main(infile: IO, outfile: IO) -> None:
             reader = data_source.reader(schema=schema)
         except NotImplementedError:
             raise PySparkRuntimeError(
-                "Unable to create the Python data source reader because the 'reader' "
-                "method hasn't been implemented."
+                error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
+                message_parameters={"type": "reader", "method": "reader"},
             )
         except Exception as e:
-            raise PySparkRuntimeError(f"Unable to create the Python data source reader: {str(e)}")
+            raise PySparkRuntimeError(
+                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
+                message_parameters={"type": "reader", "error": str(e)},
+            )
 
         # Generate all partitions.
         partitions = list(reader.partitions() or [])
