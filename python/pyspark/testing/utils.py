@@ -525,7 +525,8 @@ def assertDataFrameEqual(
       Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
 
-    # Example for ignoreColumnOrder
+    Example for ignoreColumnOrder
+
     >>> df1_col_order = spark.createDataFrame(
     ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
     ... )
@@ -534,7 +535,8 @@ def assertDataFrameEqual(
     ... )
     >>> assertDataFrameEqual(df1_col_order, df2_col_order, ignoreColumnOrder=True)
 
-    # Example for ignoreColumnName
+    Example for ignoreColumnName
+
     >>> df1_col_names = spark.createDataFrame(
     ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "identity"]
     ... )
@@ -543,7 +545,8 @@ def assertDataFrameEqual(
     ... )
     >>> assertDataFrameEqual(df1_col_names, df2_col_names, ignoreColumnName=True)
 
-    # Example for ignoreColumnType
+    Example for ignoreColumnType
+
     >>> df1_col_types = spark.createDataFrame(
     ...     data=[(1000, "1"), (5000, "2")], schema=["amount", "id"]
     ... )
@@ -552,7 +555,8 @@ def assertDataFrameEqual(
     ... )
     >>> assertDataFrameEqual(df1_col_types, df2_col_types, ignoreColumnType=True)
 
-    # Example for maxErrors (will only report the first mismatching row)
+    Example for maxErrors (will only report the first mismatching row)
+
     >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
     >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
     >>> assertDataFrameEqual(df1, df2, maxErrors=1)  # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -566,7 +570,8 @@ def assertDataFrameEqual(
       Row(_1=1, _2='A')
     ! Row(_1=2, _2='X')
 
-    # Example for showOnlyDiff (will only report the mismatching rows)
+    Example for showOnlyDiff (will only report the mismatching rows)
+
     >>> df1 = spark.createDataFrame([(1, "A"), (2, "B"), (3, "C")])
     >>> df2 = spark.createDataFrame([(1, "A"), (2, "X"), (3, "Y")])
     >>> assertDataFrameEqual(df1, df2, showOnlyDiff=True)  # doctest: +IGNORE_EXCEPTION_DETAIL
