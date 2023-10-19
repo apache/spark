@@ -175,6 +175,8 @@ abstract class BaseSessionStateBuilder(
    */
   protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
 
+  protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
+
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    *
@@ -193,6 +195,7 @@ abstract class BaseSessionStateBuilder(
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
+        QualifyLocationWithWarehouse(catalog) +:
         PreprocessTableCreation(catalog) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
@@ -365,6 +368,7 @@ abstract class BaseSessionStateBuilder(
       functionRegistry,
       tableFunctionRegistry,
       udfRegistration,
+      udtfRegistration,
       () => catalog,
       sqlParser,
       () => analyzer,

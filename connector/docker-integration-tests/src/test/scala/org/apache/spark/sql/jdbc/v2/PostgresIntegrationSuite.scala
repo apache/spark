@@ -71,11 +71,20 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
-    }.getMessage
-    assert(msg.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(sql1)
+      },
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      parameters = Map(
+        "originType" -> "\"STRING\"",
+        "newType" -> "\"INT\"",
+        "newName" -> "`ID`",
+        "originName" -> "`ID`",
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 60)
+    )
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

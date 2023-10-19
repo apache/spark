@@ -24,14 +24,14 @@ import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutExceptio
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -186,6 +186,9 @@ abstract class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
+  /* Make sure we propagate the ArtifactSet to the micro batch thread. */
+  private val jobArtifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
@@ -204,7 +207,9 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        runStream()
+        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
+          runStream()
+        }
       }
     }
 
@@ -353,8 +358,15 @@ abstract class StreamExecution(
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        val errorClassOpt = exception.flatMap {
+          _.cause match {
+            case t: SparkThrowable => Some(t.getErrorClass)
+            case _ => None
+          }
+        }
         postEvent(
-          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
+            errorClassOpt))
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&

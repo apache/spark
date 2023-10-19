@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 class MemoryStateStore extends StateStore() {
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
   override def iterator(): Iterator[UnsafeRowPair] = {

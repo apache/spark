@@ -26,10 +26,10 @@ import java.io.PrintWriter
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
@@ -185,13 +185,13 @@ private[spark] class PipedRDD[T: ClassTag](
     val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
     new Iterator[String] {
       def next(): String = {
-        if (!hasNext()) {
+        if (!hasNext) {
           throw SparkCoreErrors.noSuchElementError()
         }
         lines.next()
       }
 
-      def hasNext(): Boolean = {
+      def hasNext: Boolean = {
         val result = if (lines.hasNext) {
           true
         } else {

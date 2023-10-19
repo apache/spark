@@ -32,8 +32,10 @@ import org.apache.spark.sql.LocalSparkSession._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{CompletionIterator, Utils}
 
+@ExtendedSQLTest
 class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
 
   import StateStoreTestsHelper._

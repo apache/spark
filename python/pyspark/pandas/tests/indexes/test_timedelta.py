@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from datetime import timedelta
 
 import pandas as pd

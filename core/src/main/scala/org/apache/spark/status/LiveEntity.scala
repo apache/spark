@@ -20,9 +20,9 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -66,6 +66,7 @@ private class LiveJob(
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
+    jobTags: Seq[String],
     numTasks: Int,
     sqlExecutionId: Option[Long]) extends LiveEntity {
 
@@ -98,6 +99,7 @@ private class LiveJob(
       completionTime,
       stageIds,
       jobGroup,
+      jobTags,
       status,
       numTasks,
       activeTasks,

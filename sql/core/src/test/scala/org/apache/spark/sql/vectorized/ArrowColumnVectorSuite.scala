@@ -250,10 +250,64 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("large_string") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("string", 0, Long.MaxValue)
+    val vector = ArrowUtils.toArrowField("string", StringType, nullable = true, null, true)
+      .createVector(allocator).asInstanceOf[LargeVarCharVector]
+    vector.allocateNew()
+
+    (0 until 10).foreach { i =>
+      val utf8 = s"str$i".getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setNull(10)
+    vector.setValueCount(11)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === StringType)
+    assert(columnVector.hasNull)
+    assert(columnVector.numNulls === 1)
+
+    (0 until 10).foreach { i =>
+      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s"str$i"))
+    }
+    assert(columnVector.isNullAt(10))
+
+    columnVector.close()
+    allocator.close()
+  }
+
   test("binary") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("binary", 0, Long.MaxValue)
-    val vector = ArrowUtils.toArrowField("binary", BinaryType, nullable = true, null)
+    val vector = ArrowUtils.toArrowField("binary", BinaryType, nullable = true, null, false)
       .createVector(allocator).asInstanceOf[VarBinaryVector]
+    vector.allocateNew()
+
+    (0 until 10).foreach { i =>
+      val utf8 = s"str$i".getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setNull(10)
+    vector.setValueCount(11)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === BinaryType)
+    assert(columnVector.hasNull)
+    assert(columnVector.numNulls === 1)
+
+    (0 until 10).foreach { i =>
+      assert(columnVector.getBinary(i) === s"str$i".getBytes("utf8"))
+    }
+    assert(columnVector.isNullAt(10))
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test("large_binary") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("binary", 0, Long.MaxValue)
+    val vector = ArrowUtils.toArrowField("binary", BinaryType, nullable = true, null, true)
+      .createVector(allocator).asInstanceOf[LargeVarBinaryVector]
     vector.allocateNew()
 
     (0 until 10).foreach { i =>

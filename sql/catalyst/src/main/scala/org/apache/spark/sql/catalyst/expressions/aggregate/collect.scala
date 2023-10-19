@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.generic.Growable
 import scala.collection.mutable
+import scala.collection.mutable.Growable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult

@@ -29,7 +29,6 @@ from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
-
 from pyspark.context import SparkContext
 from pyspark.mllib.linalg import Vector
 from pyspark.mllib.regression import LabeledPoint
@@ -251,7 +250,7 @@ class StandardScalerModel(JavaVectorTransformer):
         self.call("setWithStd", withStd)
         return self
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def withStd(self) -> bool:
         """
@@ -259,7 +258,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("withStd")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def withMean(self) -> bool:
         """
@@ -267,7 +266,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("withMean")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def std(self) -> Vector:
         """
@@ -275,7 +274,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("std")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def mean(self) -> Vector:
         """

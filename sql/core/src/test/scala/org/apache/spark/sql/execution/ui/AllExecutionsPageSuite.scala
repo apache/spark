@@ -34,6 +34,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
@@ -271,9 +272,10 @@ class AllExecutionsPageWithInMemoryStoreSuite extends AllExecutionsPageSuite {
   }
 }
 
+@SlowSQLTest
 class AllExecutionsPageWithRocksDBBackendSuite extends AllExecutionsPageSuite {
   private val storePath = Utils.createTempDir()
-  override protected def createStatusStore(): SQLAppStatusStore = {
+  override protected def createStatusStore: SQLAppStatusStore = {
     val conf = sparkContext.conf
     conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
     val appStatusStore = AppStatusStore.createLiveStore(conf)

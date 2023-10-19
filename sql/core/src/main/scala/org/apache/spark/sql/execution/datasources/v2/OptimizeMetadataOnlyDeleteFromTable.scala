@@ -73,7 +73,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
     type ReturnType = (RowLevelWrite, RowLevelOperation.Command, Expression, LogicalPlan)
 
     def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-      case rd @ ReplaceData(_, cond, _, originalTable, _) =>
+      case rd @ ReplaceData(_, cond, _, originalTable, _, _) =>
         val command = rd.operation.command
         Some(rd, command, cond, originalTable)
 

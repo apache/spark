@@ -48,7 +48,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
   test("query builtin functions don't call the external catalog") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val catalog = spy(inMemoryCatalog)
+      val catalog = spy[InMemoryCatalog](inMemoryCatalog)
       val analyzer = getAnalyzer(catalog, tempDir)
       reset(catalog)
       val testRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
@@ -63,7 +63,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
   test("check the existence of builtin functions don't call the external catalog") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val externCatalog = spy(inMemoryCatalog)
+      val externCatalog = spy[InMemoryCatalog](inMemoryCatalog)
       val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin)
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI(tempDir.toString), Map.empty),

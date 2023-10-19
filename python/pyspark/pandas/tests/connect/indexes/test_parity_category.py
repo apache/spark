@@ -24,41 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class CategoricalIndexParityTests(
     CategoricalIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_append(self):
-        super().test_append()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_factorize(self):
-        super().test_factorize()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_intersection(self):
-        super().test_intersection()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_remove_categories(self):
-        super().test_remove_categories()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_remove_unused_categories(self):
-        super().test_remove_unused_categories()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_reorder_categories(self):
-        super().test_reorder_categories()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_set_categories(self):
-        super().test_set_categories()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_union(self):
-        super().test_union()
+    pass
 
 
 if __name__ == "__main__":

@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -735,7 +735,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase {
+  extends DescribeCommandBase with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -746,6 +746,10 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result.toSeq
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 

@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
@@ -307,7 +307,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       }.getCause
       checkError(
         exception = exception1.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 

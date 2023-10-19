@@ -35,4 +35,14 @@ public interface SupportsDelta extends RowLevelOperation {
    * Returns the row ID column references that should be used for row equality.
    */
   NamedReference[] rowId();
+
+  /**
+   * Controls whether to represent updates as deletes and inserts.
+   * <p>
+   * Data sources may choose to split updates into deletes and inserts to either better cluster
+   * and order the incoming delta of rows or to simplify the write process.
+   */
+  default boolean representUpdateAsDeleteAndInsert() {
+    return false;
+  }
 }

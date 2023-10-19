@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
@@ -147,11 +147,16 @@ class HiveUDAFSuite extends QueryTest
       withUserDefinedFunction("testUDAFPercentile" -> true) {
         // non-deterministic children of Hive UDAF
         sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
-        val e1 = intercept[AnalysisException] {
-          sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
-        }.getMessage
-        assert(Seq("nondeterministic expression",
-          "should not appear in the arguments of an aggregate function").forall(e1.contains))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
+          },
+          errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+          parameters = Map("sqlExpr" -> "\"testUDAFPercentile( x, rand())\""),
+          context = ExpectedContext(
+            fragment = "rand()",
+            start = 29,
+            stop = 34))
       }
     }
   }

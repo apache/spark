@@ -46,8 +46,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession
@@ -895,7 +897,9 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-30403: AQE should handle InSubquery") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
         " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
       )
@@ -2825,6 +2829,29 @@ class AdaptiveQueryExecSuite
       assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
         .executedPlan.isInstanceOf[LocalTableScanExec])
     }
+  }
+
+  test("SPARK-43376: Improve reuse subquery with table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      withTable("t1", "t2") {
+        withCache("t1") {
+          Seq(1).toDF("c1").cache().createOrReplaceTempView("t1")
+          Seq(2).toDF("c2").createOrReplaceTempView("t2")
+
+          val (_, adaptive) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM t1 WHERE c1 < (SELECT c2 FROM t2)")
+          assert(findReusedSubquery(adaptive).size == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-44040: Fix compute stats when AggregateExec nodes above QueryStageExec") {
+    val emptyDf = spark.range(1).where("false")
+    val aggDf1 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df1"))
+    val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
+    val unionDF = aggDf1.union(aggDf2)
+    checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
   }
 }
 

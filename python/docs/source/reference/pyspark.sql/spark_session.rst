@@ -21,9 +21,6 @@ Spark Session
 =============
 .. currentmodule:: pyspark.sql
 
-.. autosummary::
-    :toctree: api/
-
 The entry point to programming Spark with the Dataset and DataFrame API.
 To create a Spark session, you should use ``SparkSession.builder`` attribute.
 See also :class:`SparkSession`.
@@ -31,6 +28,7 @@ See also :class:`SparkSession`.
 .. autosummary::
     :toctree: api/
 
+    SparkSession.active
     SparkSession.builder.appName
     SparkSession.builder.config
     SparkSession.builder.enableHiveSupport
@@ -51,4 +49,25 @@ See also :class:`SparkSession`.
     SparkSession.streams
     SparkSession.table
     SparkSession.udf
+    SparkSession.udtf
     SparkSession.version
+    is_remote
+
+Spark Connect Only
+------------------
+
+.. autosummary::
+    :toctree: api/
+
+    SparkSession.builder.create
+    SparkSession.addArtifact
+    SparkSession.addArtifacts
+    SparkSession.copyFromLocalToFs
+    SparkSession.client
+    SparkSession.interruptAll
+    SparkSession.interruptTag
+    SparkSession.interruptOperation
+    SparkSession.addTag
+    SparkSession.removeTag
+    SparkSession.getTags
+    SparkSession.clearTags

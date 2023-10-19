@@ -19,9 +19,10 @@ import unittest
 
 from pyspark.sql.tests.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
+class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_createDataFrame_empty_partition(self):
         super().test_createDataFrame_empty_partition()
@@ -54,9 +55,16 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_no_partition_toPandas(self):
         super().test_no_partition_toPandas()
 
-    @unittest.skip("The test uses internal APIs.")
     def test_pandas_self_destruct(self):
-        super().test_pandas_self_destruct()
+        df = self.spark.range(100).select("id", "id", "id")
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": True}):
+            self_destruct_pdf = df.toPandas()
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
+            no_self_destruct_pdf = df.toPandas()
+
+        self.assert_eq(self_destruct_pdf, no_self_destruct_pdf)
 
     def test_propagates_spark_exception(self):
         self.check_propagates_spark_exception()
@@ -102,6 +110,33 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
 
     def test_timestamp_nat(self):
         self.check_timestamp_nat(True)
+
+    def test_toPandas_error(self):
+        self.check_toPandas_error(True)
+
+    def test_toPandas_duplicate_field_names(self):
+        self.check_toPandas_duplicate_field_names(True)
+
+    def test_createDataFrame_duplicate_field_names(self):
+        self.check_createDataFrame_duplicate_field_names(True)
+
+    def test_toPandas_empty_columns(self):
+        self.check_toPandas_empty_columns(True)
+
+    def test_createDataFrame_nested_timestamp(self):
+        self.check_createDataFrame_nested_timestamp(True)
+
+    def test_toPandas_nested_timestamp(self):
+        self.check_toPandas_nested_timestamp(True)
+
+    def test_createDataFrame_udt(self):
+        self.check_createDataFrame_udt(True)
+
+    def test_toPandas_udt(self):
+        self.check_toPandas_udt(True)
+
+    def test_create_dataframe_namedtuples(self):
+        self.check_create_dataframe_namedtuples(True)
 
 
 if __name__ == "__main__":

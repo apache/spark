@@ -24,7 +24,7 @@ from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -220,7 +220,12 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.read.option("key", "value")
+        >>> spark.read.options(key="value")
+        <...readwriter.DataFrameReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.read.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
@@ -495,6 +500,7 @@ class DataFrameReader(OptionUtils):
         Parameters
         ----------
         paths : str
+            One or more file paths to read the Parquet files from.
 
         Other Parameters
         ----------------
@@ -505,24 +511,71 @@ class DataFrameReader(OptionUtils):
 
             .. # noqa
 
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame containing the data from the Parquet files.
+
         Examples
         --------
+        Create sample dataframes.
+
+        >>> df = spark.createDataFrame(
+        ...     [(10, "Alice"), (15, "Bob"), (20, "Tom")], schema=["age", "name"])
+        >>> df2 = spark.createDataFrame([(70, "Alice"), (80, "Bob")], schema=["height", "name"])
+
         Write a DataFrame into a Parquet file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Write a DataFrame into a Parquet file
-        ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
-        ...     ).write.mode("overwrite").format("parquet").save(d)
+        ...     # Write a DataFrame into a Parquet file.
+        ...     df.write.mode("overwrite").format("parquet").save(d)
         ...
         ...     # Read the Parquet file as a DataFrame.
-        ...     spark.read.parquet(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
+        ...     spark.read.parquet(d).orderBy("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 10|Alice|
+        | 15|  Bob|
+        | 20|  Tom|
+        +---+-----+
+
+        Read a Parquet file with a specific column.
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     df.write.mode("overwrite").format("parquet").save(d)
+        ...
+        ...     # Read the Parquet file with only the 'name' column.
+        ...     spark.read.schema("name string").parquet(d).orderBy("name").show()
+        +-----+
+        | name|
+        +-----+
+        |Alice|
+        |  Bob|
+        |  Tom|
+        +-----+
+
+        Read multiple Parquet files and merge schema.
+
+        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        ...     df.write.mode("overwrite").format("parquet").save(d1)
+        ...     df2.write.mode("overwrite").format("parquet").save(d2)
+        ...
+        ...     spark.read.option(
+        ...         "mergeSchema", "true"
+        ...     ).parquet(d1, d2).select(
+        ...         "name", "age", "height"
+        ...     ).orderBy("name", "age").show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        |Alice|NULL|    70|
+        |Alice|  10|  NULL|
+        |  Bob|NULL|    80|
+        |  Bob|  15|  NULL|
+        |  Tom|  20|  NULL|
+        +-----+----+------+
         """
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
@@ -1124,7 +1177,12 @@ class DataFrameWriter(OptionUtils):
 
         Examples
         --------
-        >>> spark.range(1).write.option("key", "value")
+        >>> spark.range(1).write.options(key="value")
+        <...readwriter.DataFrameWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.range(1).write.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
@@ -1281,7 +1339,12 @@ class DataFrameWriter(OptionUtils):
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
@@ -1358,7 +1421,12 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 

@@ -29,33 +29,7 @@ class OpsOnDiffFramesGroupByRollingParityTests(
     TestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_count(self):
-        super().test_groupby_rolling_count()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_min(self):
-        super().test_groupby_rolling_min()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_max(self):
-        super().test_groupby_rolling_max()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_mean(self):
-        super().test_groupby_rolling_mean()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_sum(self):
-        super().test_groupby_rolling_sum()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_std(self):
-        super().test_groupby_rolling_std()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_rolling_var(self):
-        super().test_groupby_rolling_var()
+    pass
 
 
 if __name__ == "__main__":

@@ -27,7 +27,6 @@ import pandas as pd
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
-
 from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
     InternalField,
@@ -171,7 +170,7 @@ class PandasOnSparkFrameMethods:
                 for scol, label in zip(internal.data_spark_columns, internal.column_labels)
             ]
         )
-        sdf = attach_func(sdf, name_like_string(column))  # type: ignore[assignment]
+        sdf = attach_func(sdf, name_like_string(column))
 
         return DataFrame(
             InternalFrame(

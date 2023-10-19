@@ -33,7 +33,7 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, TaskContext}
+import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -1143,7 +1143,8 @@ final class ShuffleBlockFetcherIterator(
         logWarning(diagnosisResponse)
         diagnosisResponse
       case unexpected: BlockId =>
-        throw new IllegalArgumentException(s"Unexpected type of BlockId, $unexpected")
+        throw SparkException.internalError(
+          s"Unexpected type of BlockId, $unexpected", category = "STORAGE")
     }
   }
 

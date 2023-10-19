@@ -283,10 +283,10 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
     } else if (numArgs == 2) {
       val scale = expressions(1)
       if (!(scale.foldable && scale.dataType == IntegerType)) {
-        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
       }
       if (scale.eval() == null) {
-        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
       }
       buildWithTwoParams(expressions(0), scale)
     } else {
@@ -1172,14 +1172,13 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       val maybeFailOnErrorCode = if (failOnError) {
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (${ev.value} == null) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $c,
-           |    $format,
+           |    UTF8String.fromString("HEX"),
            |    "try_to_binary");
            |}
            |""".stripMargin
@@ -1272,7 +1271,7 @@ case class Pow(left: Expression, right: Expression)
        4
   """,
   since = "1.5.0",
-  group = "math_funcs")
+  group = "bitwise_funcs")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1510,7 +1509,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "scala",
+              "inputName" -> toSQLId("scale"),
               "inputType" -> toSQLType(scale.dataType),
               "inputExpr" -> toSQLExpr(scale)))
         }

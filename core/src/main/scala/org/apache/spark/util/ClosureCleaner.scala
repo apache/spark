@@ -21,10 +21,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map, Set, Stack}
+import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}
+import org.apache.commons.lang3.ClassUtils
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
@@ -421,8 +421,7 @@ private[spark] object ClosureCleaner extends Logging {
    * This method is used to get the final modifier field when on Java 17.
    */
   private def getFinalModifiersFieldForJava17(field: Field): Option[Field] = {
-    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) &&
-        Modifier.isFinal(field.getModifiers)) {
+    if (Modifier.isFinal(field.getModifiers)) {
       val methodGetDeclaredFields0 = classOf[Class[_]]
         .getDeclaredMethod("getDeclaredFields0", classOf[Boolean])
       methodGetDeclaredFields0.setAccessible(true)

@@ -61,7 +61,7 @@ class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest 
 }
 
 trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
-  private val codecsInShortName =
+  protected val codecsInShortName =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
   protected def testWithAllCodec(name: String)(func: => Any): Unit = {

@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -76,7 +77,7 @@ class UDFSuite
 
   test("temporary function: create and drop") {
     withUserDefinedFunction(functionName -> true) {
-      intercept[AnalysisException] {
+      intercept[ParseException] {
         sql(s"CREATE TEMPORARY FUNCTION default.$functionName AS '$functionClass'")
       }
       sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
@@ -84,7 +85,7 @@ class UDFSuite
         sql(s"SELECT $functionNameLower(value) from $testTableName"),
         expectedDF
       )
-      intercept[AnalysisException] {
+      intercept[ParseException] {
         sql(s"DROP TEMPORARY FUNCTION default.$functionName")
       }
     }

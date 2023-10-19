@@ -117,3 +117,8 @@ drop table char_tbl4;
 -- ascii value for Latin-1 Supplement characters
 select ascii('§'), ascii('÷'), ascii('×10');
 select chr(167), chr(247), chr(215);
+
+-- to_varchar is an alias for to_char
+SELECT to_varchar(78.12, '$99.99');
+SELECT to_varchar(111.11, '99.9');
+SELECT to_varchar(12454.8, '99,999.9S');

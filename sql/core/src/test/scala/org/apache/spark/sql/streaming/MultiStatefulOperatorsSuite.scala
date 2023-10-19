@@ -26,8 +26,10 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StateStoreSaveExe
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 // Tests for the multiple stateful operators support.
+@SlowSQLTest
 class MultiStatefulOperatorsSuite
   extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 

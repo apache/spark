@@ -90,9 +90,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return data;
   }
 
-  @Override
-  public void close() {
-    super.close();
+  protected void releaseMemory() {
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
@@ -105,6 +103,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     dataCapacity = 0;
     lengthDataCapacity = 0;
     offsetDataCapacity = 0;
+  }
+
+  @Override
+  public void close() {
+    super.close();
   }
 
   //
@@ -239,10 +242,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public byte[] getBytes(int rowId, int count) {
-    assert(dictionary == null);
     byte[] array = new byte[count];
-    assertDataWithinCapacity(rowId + count, 0);
-    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 0);
+      Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 
@@ -303,10 +311,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public short[] getShorts(int rowId, int count) {
-    assert(dictionary == null);
     short[] array = new short[count];
-    assertDataWithinCapacity(rowId + count, 1);
-    Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 1);
+      Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 
@@ -371,10 +384,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int[] getInts(int rowId, int count) {
-    assert(dictionary == null);
     int[] array = new int[count];
-    assertDataWithinCapacity(rowId + count, 2);
-    Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 2);
+      Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 
@@ -452,10 +470,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public long[] getLongs(int rowId, int count) {
-    assert(dictionary == null);
     long[] array = new long[count];
-    assertDataWithinCapacity(rowId + count, 3);
-    Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 3);
+      Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = dictionary.decodeToLong(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 
@@ -518,10 +541,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public float[] getFloats(int rowId, int count) {
-    assert(dictionary == null);
     float[] array = new float[count];
-    assertDataWithinCapacity(rowId + count, 2);
-    Platform.copyMemory(null, data + rowId * 4L, array, Platform.FLOAT_ARRAY_OFFSET, count * 4L);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 2);
+      Platform.copyMemory(null, data + rowId * 4L, array, Platform.FLOAT_ARRAY_OFFSET, count * 4L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = dictionary.decodeToFloat(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 
@@ -585,10 +613,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public double[] getDoubles(int rowId, int count) {
-    assert(dictionary == null);
     double[] array = new double[count];
-    assertDataWithinCapacity(rowId + count, 3);
-    Platform.copyMemory(null, data + rowId * 8L, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8L);
+    if (dictionary == null) {
+      assertDataWithinCapacity(rowId + count, 3);
+      Platform.copyMemory(null, data + rowId * 8L, array, Platform.DOUBLE_ARRAY_OFFSET,
+        count * 8L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        array[i] = dictionary.decodeToDouble(dictionaryIds.getDictId(rowId + i));
+      }
+    }
     return array;
   }
 

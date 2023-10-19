@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalog
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -52,6 +52,14 @@ abstract class Catalog {
   def listDatabases(): Dataset[Database]
 
   /**
+   * Returns a list of databases (namespaces) which name match the specify pattern and available
+   * within the current catalog.
+   *
+   * @since 3.5.0
+   */
+  def listDatabases(pattern: String): Dataset[Database]
+
+  /**
    * Returns a list of tables/views in the current database (namespace). This includes all
    * temporary views.
    *
@@ -69,6 +77,15 @@ abstract class Catalog {
   def listTables(dbName: String): Dataset[Table]
 
   /**
+   * Returns a list of tables/views in the specified database (namespace) which name match the
+   * specify pattern (the name can be qualified with catalog). This includes all temporary views.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listTables(dbName: String, pattern: String): Dataset[Table]
+
+  /**
    * Returns a list of functions registered in the current database (namespace). This includes all
    * temporary functions.
    *
@@ -84,6 +101,16 @@ abstract class Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   def listFunctions(dbName: String): Dataset[Function]
+
+  /**
+   * Returns a list of functions registered in the specified database (namespace) which name match
+   * the specify pattern (the name can be qualified with catalog). This includes all built-in and
+   * temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function]
 
   /**
    * Returns a list of columns for the given table/view or temporary view.
@@ -516,10 +543,9 @@ abstract class Catalog {
    * cached before, then it will also be uncached.
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
-   * application,
-   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM global_temp.view1`.
+   * application, i.e. it will be automatically dropped when the application terminates. It's tied
+   * to a system preserved database `global_temp`, and we must use the qualified name to refer a
+   * global temp view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @param viewName
    *   the unqualified name of the temporary view to be dropped.
@@ -639,4 +665,12 @@ abstract class Catalog {
    * @since 3.5.0
    */
   def listCatalogs(): Dataset[CatalogMetadata]
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern and available in this
+   * session.
+   *
+   * @since 3.5.0
+   */
+  def listCatalogs(pattern: String): Dataset[CatalogMetadata]
 }

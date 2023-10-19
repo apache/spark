@@ -26,7 +26,6 @@ except ImportError:
     have_torch = False
 
 from pyspark.sql import SparkSession
-
 from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorBaselineUnitTestsMixin,
     TorchDistributorLocalUnitTestsMixin,
@@ -64,7 +63,7 @@ class TorchDistributorLocalUnitTestsOnConnect(
         builder = builder.config(
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
-        cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
+        cls.spark = builder.remote("local-cluster[2,2,512]").getOrCreate()
 
     @classmethod
     def tearDownClass(cls):
@@ -126,7 +125,7 @@ class TorchDistributorDistributedUnitTestsOnConnect(
         builder = builder.config(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
-        cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
+        cls.spark = builder.remote("local-cluster[2,2,512]").getOrCreate()
 
     @classmethod
     def tearDownClass(cls):

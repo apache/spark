@@ -46,10 +46,12 @@ ExplainCommand CTE [max_store_sales, best_ss_customer], CostMode
 -- !query
 DROP TABLE explain_temp1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp1
 
 
 -- !query
 DROP TABLE explain_temp2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp2

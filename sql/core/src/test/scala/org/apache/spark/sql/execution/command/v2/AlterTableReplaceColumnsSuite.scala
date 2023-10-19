@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -25,4 +26,18 @@ import org.apache.spark.sql.execution.command
  */
 class AlterTableReplaceColumnsSuite
   extends command.AlterTableReplaceColumnsSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION: " +
+    "Support for DEFAULT column values is not implemented yet") {
+    val sql1 = "ALTER TABLE t1 REPLACE COLUMNS (ym INT default 1)"
+    checkError(
+      exception = intercept[ParseException] {
+        sql(sql1)
+      },
+      errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION",
+      parameters = Map.empty,
+      context = ExpectedContext(sql1, 0, 48)
+    )
+  }
+}

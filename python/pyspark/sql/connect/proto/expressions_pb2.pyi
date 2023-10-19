@@ -469,6 +469,86 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        class Map(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_TYPE_FIELD_NUMBER: builtins.int
+            VALUE_TYPE_FIELD_NUMBER: builtins.int
+            KEYS_FIELD_NUMBER: builtins.int
+            VALUES_FIELD_NUMBER: builtins.int
+            @property
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def keys(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            @property
+            def values(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                key_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                value_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                keys: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                values: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type", b"key_type", "value_type", b"value_type"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type",
+                    b"key_type",
+                    "keys",
+                    b"keys",
+                    "value_type",
+                    b"value_type",
+                    "values",
+                    b"values",
+                ],
+            ) -> None: ...
+
+        class Struct(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            STRUCT_TYPE_FIELD_NUMBER: builtins.int
+            ELEMENTS_FIELD_NUMBER: builtins.int
+            @property
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def elements(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "elements", b"elements", "struct_type", b"struct_type"
+                ],
+            ) -> None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -487,6 +567,8 @@ class Expression(google.protobuf.message.Message):
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
         ARRAY_FIELD_NUMBER: builtins.int
+        MAP_FIELD_NUMBER: builtins.int
+        STRUCT_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -512,6 +594,10 @@ class Expression(google.protobuf.message.Message):
         day_time_interval: builtins.int
         @property
         def array(self) -> global___Expression.Literal.Array: ...
+        @property
+        def map(self) -> global___Expression.Literal.Map: ...
+        @property
+        def struct(self) -> global___Expression.Literal.Struct: ...
         def __init__(
             self,
             *,
@@ -533,6 +619,8 @@ class Expression(google.protobuf.message.Message):
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
             array: global___Expression.Literal.Array | None = ...,
+            map: global___Expression.Literal.Map | None = ...,
+            struct: global___Expression.Literal.Struct | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -563,12 +651,16 @@ class Expression(google.protobuf.message.Message):
                 b"literal_type",
                 "long",
                 b"long",
+                "map",
+                b"map",
                 "null",
                 b"null",
                 "short",
                 b"short",
                 "string",
                 b"string",
+                "struct",
+                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -606,12 +698,16 @@ class Expression(google.protobuf.message.Message):
                 b"literal_type",
                 "long",
                 b"long",
+                "map",
+                b"map",
                 "null",
                 b"null",
                 "short",
                 b"short",
                 "string",
                 b"string",
+                "struct",
+                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -622,26 +718,31 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
-        ) -> typing_extensions.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-        ] | None: ...
+        ) -> (
+            typing_extensions.Literal[
+                "null",
+                "binary",
+                "boolean",
+                "byte",
+                "short",
+                "integer",
+                "long",
+                "float",
+                "double",
+                "decimal",
+                "string",
+                "date",
+                "timestamp",
+                "timestamp_ntz",
+                "calendar_interval",
+                "year_month_interval",
+                "day_time_interval",
+                "array",
+                "map",
+                "struct",
+            ]
+            | None
+        ): ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
         """An unresolved attribute that is not explicitly bound to a specific column, but the column
@@ -652,33 +753,56 @@ class Expression(google.protobuf.message.Message):
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         PLAN_ID_FIELD_NUMBER: builtins.int
+        IS_METADATA_COLUMN_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
         """(Required) An identifier that will be parsed by Catalyst parser. This should follow the
         Spark SQL identifier syntax.
         """
         plan_id: builtins.int
         """(Optional) The id of corresponding connect plan."""
+        is_metadata_column: builtins.bool
+        """(Optional) The requested column is a metadata column."""
         def __init__(
             self,
             *,
             unparsed_identifier: builtins.str = ...,
             plan_id: builtins.int | None = ...,
+            is_metadata_column: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
             self,
-            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+            field_name: typing_extensions.Literal[
+                "_is_metadata_column",
+                b"_is_metadata_column",
+                "_plan_id",
+                b"_plan_id",
+                "is_metadata_column",
+                b"is_metadata_column",
+                "plan_id",
+                b"plan_id",
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_is_metadata_column",
+                b"_is_metadata_column",
                 "_plan_id",
                 b"_plan_id",
+                "is_metadata_column",
+                b"is_metadata_column",
                 "plan_id",
                 b"plan_id",
                 "unparsed_identifier",
                 b"unparsed_identifier",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_is_metadata_column", b"_is_metadata_column"],
+        ) -> typing_extensions.Literal["is_metadata_column"] | None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
         ) -> typing_extensions.Literal["plan_id"] | None: ...
@@ -1003,6 +1127,8 @@ class Expression(google.protobuf.message.Message):
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
     UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
+    CALL_FUNCTION_FIELD_NUMBER: builtins.int
+    NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1037,6 +1163,10 @@ class Expression(google.protobuf.message.Message):
     @property
     def common_inline_user_defined_function(self) -> global___CommonInlineUserDefinedFunction: ...
     @property
+    def call_function(self) -> global___CallFunction: ...
+    @property
+    def named_argument_expression(self) -> global___NamedArgumentExpression: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1060,6 +1190,8 @@ class Expression(google.protobuf.message.Message):
         unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
         | None = ...,
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
+        call_function: global___CallFunction | None = ...,
+        named_argument_expression: global___NamedArgumentExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1067,6 +1199,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "call_function",
+            b"call_function",
             "cast",
             b"cast",
             "common_inline_user_defined_function",
@@ -1081,6 +1215,8 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
+            "named_argument_expression",
+            b"named_argument_expression",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1106,6 +1242,8 @@ class Expression(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "alias",
             b"alias",
+            "call_function",
+            b"call_function",
             "cast",
             b"cast",
             "common_inline_user_defined_function",
@@ -1120,6 +1258,8 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
+            "named_argument_expression",
+            b"named_argument_expression",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1142,24 +1282,29 @@ class Expression(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
-    ) -> typing_extensions.Literal[
-        "literal",
-        "unresolved_attribute",
-        "unresolved_function",
-        "expression_string",
-        "unresolved_star",
-        "alias",
-        "cast",
-        "unresolved_regex",
-        "sort_order",
-        "lambda_function",
-        "window",
-        "unresolved_extract_value",
-        "update_fields",
-        "unresolved_named_lambda_variable",
-        "common_inline_user_defined_function",
-        "extension",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "literal",
+            "unresolved_attribute",
+            "unresolved_function",
+            "expression_string",
+            "unresolved_star",
+            "alias",
+            "cast",
+            "unresolved_regex",
+            "sort_order",
+            "lambda_function",
+            "window",
+            "unresolved_extract_value",
+            "update_fields",
+            "unresolved_named_lambda_variable",
+            "common_inline_user_defined_function",
+            "call_function",
+            "named_argument_expression",
+            "extension",
+        ]
+        | None
+    ): ...
 
 global___Expression = Expression
 
@@ -1371,3 +1516,55 @@ class JavaUDF(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["output_type"] | None: ...
 
 global___JavaUDF = JavaUDF
+
+class CallFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
+    """(Required) Unparsed name of the SQL function."""
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
+        """(Optional) Function arguments. Empty arguments are allowed."""
+    def __init__(
+        self,
+        *,
+        function_name: builtins.str = ...,
+        arguments: collections.abc.Iterable[global___Expression] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments", b"arguments", "function_name", b"function_name"
+        ],
+    ) -> None: ...
+
+global___CallFunction = CallFunction
+
+class NamedArgumentExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    """(Required) The key of the named argument."""
+    @property
+    def value(self) -> global___Expression:
+        """(Required) The value expression of the named argument."""
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+        value: global___Expression | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["value", b"value"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+    ) -> None: ...
+
+global___NamedArgumentExpression = NamedArgumentExpression

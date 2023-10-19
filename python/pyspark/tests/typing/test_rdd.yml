@@ -100,8 +100,8 @@
     reveal_type(sc.parallelize([("a", 1)]).aggregateByKey(zero, seq_func, comb_func))
 
   out: |
-     main:11: note: Revealed type is "pyspark.rdd.RDD[builtins.str*]"
-     main:16: note: Revealed type is "pyspark.rdd.RDD[builtins.int*]"
+     main:11: note: Revealed type is "pyspark.rdd.RDD[builtins.str]"
+     main:16: note: Revealed type is "pyspark.rdd.RDD[builtins.int]"
      main:18: note: Revealed type is "pyspark.rdd.RDD[Tuple[builtins.str, builtins.int]]"
      main:20: note: Revealed type is "Tuple[builtins.str, builtins.int]"
      main:22: note: Revealed type is "builtins.int"

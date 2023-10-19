@@ -140,8 +140,9 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
   /** Check if this broadcast is valid. If not valid, exception is thrown. */
   protected def assertValid(): Unit = {
     if (!_isValid) {
-      throw new SparkException(
-        "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite))
+      throw SparkException.internalError(
+        "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite),
+        category = "BROADCAST")
     }
   }
 

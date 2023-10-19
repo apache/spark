@@ -128,7 +128,7 @@ Project [map_zip_with(double_map#x, cast(float_map#x as map<double,float>), lamb
 SELECT map_zip_with(decimal_map1, decimal_map2, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",
@@ -178,7 +178,7 @@ Project [map_zip_with(cast(decimal_map1#x as map<double,decimal(36,0)>), double_
 SELECT map_zip_with(decimal_map2, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",

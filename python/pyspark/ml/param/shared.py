@@ -787,3 +787,114 @@ class HasMaxBlockSizeInMB(Params):
         Gets the value of maxBlockSizeInMB or its default value.
         """
         return self.getOrDefault(self.maxBlockSizeInMB)
+
+
+class HasNumTrainWorkers(Params):
+    """
+    Mixin for param numTrainWorkers: number of training workers
+    """
+
+    numTrainWorkers: "Param[int]" = Param(
+        Params._dummy(),
+        "numTrainWorkers",
+        "number of training workers",
+        typeConverter=TypeConverters.toInt,
+    )
+
+    def __init__(self) -> None:
+        super(HasNumTrainWorkers, self).__init__()
+        self._setDefault(numTrainWorkers=1)
+
+    def getNumTrainWorkers(self) -> int:
+        """
+        Gets the value of numTrainWorkers or its default value.
+        """
+        return self.getOrDefault(self.numTrainWorkers)
+
+
+class HasBatchSize(Params):
+    """
+    Mixin for param batchSize: number of training batch size
+    """
+
+    batchSize: "Param[int]" = Param(
+        Params._dummy(),
+        "batchSize",
+        "number of training batch size",
+        typeConverter=TypeConverters.toInt,
+    )
+
+    def __init__(self) -> None:
+        super(HasBatchSize, self).__init__()
+
+    def getBatchSize(self) -> int:
+        """
+        Gets the value of batchSize or its default value.
+        """
+        return self.getOrDefault(self.batchSize)
+
+
+class HasLearningRate(Params):
+    """
+    Mixin for param learningRate: learning rate for training
+    """
+
+    learningRate: "Param[float]" = Param(
+        Params._dummy(),
+        "learningRate",
+        "learning rate for training",
+        typeConverter=TypeConverters.toFloat,
+    )
+
+    def __init__(self) -> None:
+        super(HasLearningRate, self).__init__()
+
+    def getLearningRate(self) -> float:
+        """
+        Gets the value of learningRate or its default value.
+        """
+        return self.getOrDefault(self.learningRate)
+
+
+class HasMomentum(Params):
+    """
+    Mixin for param momentum: momentum for training optimizer
+    """
+
+    momentum: "Param[float]" = Param(
+        Params._dummy(),
+        "momentum",
+        "momentum for training optimizer",
+        typeConverter=TypeConverters.toFloat,
+    )
+
+    def __init__(self) -> None:
+        super(HasMomentum, self).__init__()
+
+    def getMomentum(self) -> float:
+        """
+        Gets the value of momentum or its default value.
+        """
+        return self.getOrDefault(self.momentum)
+
+
+class HasFeatureSizes(Params):
+    """
+    Mixin for param featureSizes: input feature size list for input columns of vector assembler
+    """
+
+    featureSizes: "Param[List[int]]" = Param(
+        Params._dummy(),
+        "featureSizes",
+        "input feature size list for input columns of vector assembler",
+        typeConverter=TypeConverters.toListInt,
+    )
+
+    def __init__(self) -> None:
+        super(HasFeatureSizes, self).__init__()
+
+    def getFeatureSizes(self) -> List[int]:
+        """
+        Gets the value of featureSizes or its default value.
+        """
+        return self.getOrDefault(self.featureSizes)

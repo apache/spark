@@ -24,9 +24,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{HashMap => JHashMap, Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -115,12 +115,6 @@ private[hive] class HiveClientImpl(
   private val outputBuffer = new CircularBuffer()
 
   private val shim = version match {
-    case hive.v12 => new Shim_v0_12()
-    case hive.v13 => new Shim_v0_13()
-    case hive.v14 => new Shim_v0_14()
-    case hive.v1_0 => new Shim_v1_0()
-    case hive.v1_1 => new Shim_v1_1()
-    case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
     case hive.v2_1 => new Shim_v2_1()
     case hive.v2_2 => new Shim_v2_2()
@@ -524,7 +518,7 @@ private[hive] class HiveClientImpl(
         case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         case unsupportedType =>
           val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
-          throw QueryCompilationErrors.hiveTableTypeUnsupportedError(tableTypeStr)
+          throw QueryCompilationErrors.hiveTableTypeUnsupportedError(h.getTableName, tableTypeStr)
       },
       schema = schema,
       partitionColumnNames = partCols.map(_.name).toSeq,
@@ -1347,12 +1341,11 @@ private[hive] object HiveClientImpl extends Logging {
         new HiveConf(conf, classOf[HiveConf])
     }
     try {
-      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
-        .invoke(null, hiveConf).asInstanceOf[Hive]
+      Hive.getWithoutRegisterFns(hiveConf)
     } catch {
       // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
       // 2.3.8 don't), therefore here we fallback when encountering the exception.
-      case _: NoSuchMethodException =>
+      case _: NoSuchMethodError =>
         Hive.get(hiveConf)
     }
   }

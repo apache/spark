@@ -19,8 +19,11 @@ import array
 import datetime
 import os
 import unittest
+import random
 import shutil
+import string
 import tempfile
+import uuid
 from collections import defaultdict
 
 from pyspark.errors import (
@@ -29,6 +32,7 @@ from pyspark.errors import (
     PySparkException,
     PySparkValueError,
 )
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -58,6 +62,7 @@ from pyspark.errors.exceptions.connect import (
     AnalysisException,
     ParseException,
     SparkConnectException,
+    SparkUpgradeException,
 )
 
 if should_test_connect:
@@ -73,7 +78,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client import Retrying
+    from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -154,6 +159,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_df_getattr_behavior(self):
+        cdf = self.connect.range(10)
+        sdf = self.spark.range(10)
+
+        sdf._simple_extension = 10
+        cdf._simple_extension = 10
+
+        self.assertEqual(sdf._simple_extension, cdf._simple_extension)
+        self.assertEqual(type(sdf._simple_extension), type(cdf._simple_extension))
+
+        self.assertTrue(hasattr(cdf, "_simple_extension"))
+        self.assertFalse(hasattr(cdf, "_simple_extension_does_not_exsit"))
+
     def test_df_get_item(self):
         # SPARK-41779: test __getitem__
 
@@ -551,20 +569,26 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.assertEqual(sdf.schema, cdf.schema)
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "5", "actual_length": "4"},
+        )
 
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
         # test 1 dim ndarray
         data = np.array([1.0, 2.0, np.nan, 3.0, 4.0, float("NaN"), 5.0])
@@ -598,11 +622,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "5", "actual_length": "4"},
+        )
 
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
@@ -638,6 +665,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+    def test_streaming_local_relation(self):
+        threshold_conf = "spark.sql.session.localRelationCacheThreshold"
+        old_threshold = self.connect.conf.get(threshold_conf)
+        threshold = 1024 * 1024
+        self.connect.conf.set(threshold_conf, threshold)
+        try:
+            suffix = "abcdef"
+            letters = string.ascii_lowercase
+            str = "".join(random.choice(letters) for i in range(threshold)) + suffix
+            data = [[0, str], [1, str]]
+            for i in range(0, 2):
+                cdf = self.connect.createDataFrame(data, ["a", "b"])
+                self.assert_eq(cdf.count(), len(data))
+                self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
+        finally:
+            self.connect.conf.set(threshold_conf, old_threshold)
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
@@ -764,11 +808,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(cdf.toPandas(), sdf.toPandas())
 
         # check error
-        with self.assertRaisesRegex(
-            ValueError,
-            "can not infer schema from empty dataset",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data=[])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_INFER_EMPTY_SCHEMA",
+            message_parameters={},
+        )
 
     def test_create_dataframe_from_arrays(self):
         # SPARK-42021: createDataFrame support array.array
@@ -1190,9 +1237,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
-    def test_sql_with_args(self):
-        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
-        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+    def test_sql_with_named_args(self):
+        sqlText = "SELECT *, element_at(:m, 'a') FROM range(10) WHERE id > :minId"
+        df = self.connect.sql(
+            sqlText, args={"minId": 7, "m": CF.create_map(CF.lit("a"), CF.lit(1))}
+        )
+        df2 = self.spark.sql(sqlText, args={"minId": 7, "m": SF.create_map(SF.lit("a"), SF.lit(1))})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+    def test_sql_with_pos_args(self):
+        sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
+        df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
+        df2 = self.spark.sql(sqlText, args=[SF.array(SF.lit(1)), 7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
@@ -1259,8 +1315,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sdf.drop("a", "x").toPandas(),
         )
         self.assert_eq(
-            cdf.drop(cdf.a, cdf.x).toPandas(),
-            sdf.drop("a", "x").toPandas(),
+            cdf.drop(cdf.a, "x").toPandas(),
+            sdf.drop(sdf.a, "x").toPandas(),
         )
 
     def test_subquery_alias(self) -> None:
@@ -1796,6 +1852,36 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
         )
 
+    def test_different_spark_session_join_or_union(self):
+        df = self.connect.range(10).limit(3)
+
+        spark2 = RemoteSparkSession(connection="sc://localhost")
+        df2 = spark2.range(10).limit(3)
+
+        with self.assertRaises(SessionNotSameException) as e1:
+            df.union(df2).collect()
+        self.check_error(
+            exception=e1.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
+
+        with self.assertRaises(SessionNotSameException) as e2:
+            df.unionByName(df2).collect()
+        self.check_error(
+            exception=e2.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
+
+        with self.assertRaises(SessionNotSameException) as e3:
+            df.join(df2).collect()
+        self.check_error(
+            exception=e3.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
+
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")
 
@@ -1819,7 +1905,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="INVALID_ITEM_FOR_CONTAINER",
             message_parameters={
                 "arg_name": "parameters",
-                "allowed_types": "str, list, float, int",
+                "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
             },
         )
@@ -2073,9 +2159,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue("Optimized Logical Plan" in plan_str)
         self.assertTrue("Physical Plan" in plan_str)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
-        self.assertTrue("unknown" in str(context.exception))
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNKNOWN_EXPLAIN_MODE",
+            message_parameters={"explain_mode": "unknown"},
+        )
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
@@ -2444,11 +2534,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             cdf.groupBy("name").pivot("year").pivot("year").agg(CF.sum(cdf.salary))
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "value should be a bool, float, int or str, but got bytes",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+            message_parameters={
+                "arg_name": "value",
+                "arg_type": "bytes",
+            },
+        )
 
     def test_numeric_aggregation(self):
         # SPARK-41737: test numeric aggregation
@@ -2942,8 +3038,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         for f in (
             "rdd",
-            "foreach",
-            "foreachPartition",
             "checkpoint",
             "localCheckpoint",
         ):
@@ -2954,15 +3048,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41934: Disable unsupported functions.
 
         with self.assertRaises(NotImplementedError):
-            RemoteSparkSession.getActiveSession()
-
-        with self.assertRaises(NotImplementedError):
             RemoteSparkSession.builder.enableHiveSupport()
 
         for f in (
             "newSession",
             "sparkContext",
-            "streams",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
@@ -3156,6 +3246,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             message_parameters={"attr_name": "_jreader"},
         )
 
+    def test_df_caache(self):
+        df = self.connect.range(10)
+        df.cache()
+        self.assert_eq(10, df.count())
+        self.assertTrue(df.is_cached)
+
 
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
@@ -3201,22 +3297,71 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.spark.conf.get("some.conf")
         self._check_no_active_session_error(e.exception)
 
-    def test_error_stack_trace(self):
-        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+    def test_error_enrichment_message(self):
+        with self.sql_conf(
+            {
+                "spark.sql.connect.enrichError.enabled": True,
+                "spark.sql.connect.serverStacktrace.enabled": False,
+                "spark.sql.pyspark.jvmStacktrace.enabled": False,
+            }
+        ):
+            name = "test" * 10000
             with self.assertRaises(AnalysisException) as e:
-                self.spark.sql("select x").collect()
-            self.assertTrue("JVM stacktrace" in e.exception.message)
-            self.assertTrue(
-                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
-            )
-
-        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
-            with self.assertRaises(AnalysisException) as e:
-                self.spark.sql("select x").collect()
+                self.spark.sql("select " + name).collect()
+            self.assertTrue(name in e.exception.message)
             self.assertFalse("JVM stacktrace" in e.exception.message)
-            self.assertFalse(
-                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
-            )
+
+    def test_error_enrichment_jvm_stacktrace(self):
+        with self.sql_conf(
+            {
+                "spark.sql.connect.enrichError.enabled": True,
+                "spark.sql.pyspark.jvmStacktrace.enabled": False,
+            }
+        ):
+            with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": False}):
+                with self.assertRaises(SparkUpgradeException) as e:
+                    self.spark.sql(
+                        """select from_json(
+                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
+                    ).collect()
+                self.assertFalse("JVM stacktrace" in e.exception.message)
+
+            with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": True}):
+                with self.assertRaises(SparkUpgradeException) as e:
+                    self.spark.sql(
+                        """select from_json(
+                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
+                    ).collect()
+                self.assertTrue("JVM stacktrace" in e.exception.message)
+                self.assertTrue("org.apache.spark.SparkUpgradeException:" in e.exception.message)
+                self.assertTrue(
+                    "at org.apache.spark.sql.errors.ExecutionErrors"
+                    ".failToParseDateTimeInNewParserError" in e.exception.message
+                )
+                self.assertTrue("Caused by: java.time.DateTimeException:" in e.exception.message)
+
+    def test_not_hitting_netty_header_limit(self):
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+            with self.assertRaises(AnalysisException):
+                self.spark.sql("select " + "test" * 10000).collect()
+
+    def test_error_stack_trace(self):
+        with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
+            with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+                with self.assertRaises(AnalysisException) as e:
+                    self.spark.sql("select x").collect()
+                self.assertTrue("JVM stacktrace" in e.exception.message)
+                self.assertTrue(
+                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+                )
+
+            with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
+                with self.assertRaises(AnalysisException) as e:
+                    self.spark.sql("select x").collect()
+                self.assertFalse("JVM stacktrace" in e.exception.message)
+                self.assertFalse(
+                    "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+                )
 
         # Create a new session with a different stack trace size.
         self.spark.stop()
@@ -3226,7 +3371,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             .remote("local[4]")
             .getOrCreate()
         )
-        spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
+        spark.conf.set("spark.sql.connect.enrichError.enabled", False)
+        spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", True)
         with self.assertRaises(AnalysisException) as e:
             spark.sql("select x").collect()
         self.assertTrue("JVM stacktrace" in e.exception.message)
@@ -3234,6 +3380,45 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
         )
         spark.stop()
+
+    def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.spark.stop()
+        self.assertIsNotNone(self.spark._client)
+        # Creates a new remote session.
+        other = PySparkSession.builder.remote("sc://other.remote:114/").create()
+        self.assertNotEquals(self.spark, other)
+
+        # Gets currently active session.
+        same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
+        self.assertEquals(other, same)
+        same.stop()
+
+        # Make sure the environment is clean.
+        self.spark.stop()
+        with self.assertRaises(RuntimeError) as e:
+            PySparkSession.builder.create()
+            self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+
+class SparkConnectSessionWithOptionsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder.config("string", "foo")
+            .config("integer", 1)
+            .config("boolean", False)
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
+    def test_config(self):
+        # Config
+        self.assertEqual(self.spark.conf.get("string"), "foo")
+        self.assertEqual(self.spark.conf.get("boolean"), "false")
+        self.assertEqual(self.spark.conf.get("integer"), "1")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -3261,6 +3446,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3276,6 +3463,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3292,6 +3481,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3308,6 +3499,8 @@ class ClientTests(unittest.TestCase):
             backoff_multiplier=1,
             initial_backoff=1,
             max_backoff=10,
+            jitter=0,
+            min_jitter_threshold=0,
         ):
             with attempt:
                 stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3324,6 +3517,8 @@ class ClientTests(unittest.TestCase):
                 max_backoff=50,
                 backoff_multiplier=1,
                 initial_backoff=50,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
@@ -3340,6 +3535,8 @@ class ClientTests(unittest.TestCase):
                 backoff_multiplier=1,
                 initial_backoff=1,
                 max_backoff=10,
+                jitter=0,
+                min_jitter_threshold=0,
             ):
                 with attempt:
                     stub(5, call_wrap, grpc.StatusCode.INTERNAL)
@@ -3359,7 +3556,7 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(AttributeError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, ChannelBuilder, i)
 
     def test_sensible_defaults(self):
         chan = ChannelBuilder("sc://host")
@@ -3367,13 +3564,15 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
+        self.assertRegex(
+            chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
         chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
-        self.assertEqual("Agent123 /3.4", chan.userAgent)
+        self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
@@ -3385,7 +3584,7 @@ class ChannelBuilderTests(unittest.TestCase):
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
-        self.assertEqual(expected, chan.userAgent)
+        self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
@@ -3401,7 +3600,7 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_channel_properties(self):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
-        self.assertEqual("foo", chan.userAgent)
+        self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
@@ -3409,6 +3608,36 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
+
+    def test_metadata(self):
+        id = str(uuid.uuid4())
+        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        self.assertEqual(id, chan.session_id)
+
+        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        md = chan.metadata()
+        for kv in md:
+            self.assertNotIn(
+                kv[0],
+                [
+                    ChannelBuilder.PARAM_SESSION_ID,
+                    ChannelBuilder.PARAM_TOKEN,
+                    ChannelBuilder.PARAM_USER_ID,
+                    ChannelBuilder.PARAM_USER_AGENT,
+                    ChannelBuilder.PARAM_USE_SSL,
+                ],
+                "Metadata must not contain fixed params",
+            )
+
+        with self.assertRaises(ValueError) as ve:
+            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            SparkConnectClient(chan)
+        self.assertIn(
+            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
+        )
+
+        chan = ChannelBuilder("sc://host/")
+        self.assertIsNone(chan.session_id)
 
 
 if __name__ == "__main__":

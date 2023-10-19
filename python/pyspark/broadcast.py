@@ -24,6 +24,7 @@ import pickle
 from typing import (
     overload,
     Any,
+    BinaryIO,
     Callable,
     Dict,
     Generic,
@@ -35,11 +36,11 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
-from typing.io import BinaryIO  # type: ignore[import]
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
 from pyspark.util import print_exec
+from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
@@ -58,7 +59,12 @@ def _from_id(bid: int) -> "Broadcast[Any]":
     from pyspark.broadcast import _broadcastRegistry
 
     if bid not in _broadcastRegistry:
-        raise RuntimeError("Broadcast variable '%s' not loaded!" % bid)
+        raise PySparkRuntimeError(
+            error_class="BROADCAST_VARIABLE_NOT_LOADED",
+            message_parameters={
+                "variable": str(bid),
+            },
+        )
     return _broadcastRegistry[bid]
 
 
@@ -97,7 +103,7 @@ class Broadcast(Generic[T]):
     def __init__(self: "Broadcast[Any]", *, sock_file: str):
         ...
 
-    def __init__(
+    def __init__(  # type: ignore[misc]
         self,
         sc: Optional["SparkContext"] = None,
         value: Optional[T] = None,
@@ -293,7 +299,10 @@ class Broadcast(Generic[T]):
         >>> b.unpersist()
         """
         if self._jbroadcast is None:
-            raise RuntimeError("Broadcast can only be unpersisted in driver")
+            raise PySparkRuntimeError(
+                error_class="INVALID_BROADCAST_OPERATION",
+                message_parameters={"operation": "unpersisted"},
+            )
         self._jbroadcast.unpersist(blocking)
 
     def destroy(self, blocking: bool = False) -> None:
@@ -320,13 +329,19 @@ class Broadcast(Generic[T]):
         >>> b.destroy()
         """
         if self._jbroadcast is None:
-            raise RuntimeError("Broadcast can only be destroyed in driver")
+            raise PySparkRuntimeError(
+                error_class="INVALID_BROADCAST_OPERATION",
+                message_parameters={"operation": "destroyed"},
+            )
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
 
     def __reduce__(self) -> Tuple[Callable[[int], "Broadcast[T]"], Tuple[int]]:
         if self._jbroadcast is None:
-            raise RuntimeError("Broadcast can only be serialized in driver")
+            raise PySparkRuntimeError(
+                error_class="INVALID_BROADCAST_OPERATION",
+                message_parameters={"operation": "serialized"},
+            )
         assert self._pickle_registry is not None
         self._pickle_registry.add(self)
         return _from_id, (self._jbroadcast.id(),)

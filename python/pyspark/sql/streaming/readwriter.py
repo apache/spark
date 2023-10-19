@@ -26,7 +26,12 @@ from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.utils import ForeachBatchFunction
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkAttributeError,
+    PySparkRuntimeError,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
@@ -82,6 +87,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -122,6 +130,9 @@ class DataStreamReader(OptionUtils):
         inference step, and thus speed up data loading.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -172,6 +183,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -198,6 +212,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -205,6 +222,11 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> spark.readStream.options(x="1", y=2)
+        <...streaming.readwriter.DataStreamReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.readStream.options(**{"k1": "v1", "k2": "v2"})
         <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
@@ -232,6 +254,9 @@ class DataStreamReader(OptionUtils):
         :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -319,6 +344,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -402,6 +430,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -452,6 +483,9 @@ class DataStreamReader(OptionUtils):
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -515,6 +549,9 @@ class DataStreamReader(OptionUtils):
         By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -614,6 +651,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Other Parameters
         ----------------
         Extra options
@@ -690,6 +730,9 @@ class DataStreamReader(OptionUtils):
 
         .. versionadded:: 3.1.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         tableName : str
@@ -740,6 +783,9 @@ class DataStreamWriter:
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -770,6 +816,9 @@ class DataStreamWriter:
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Options include:
 
@@ -813,6 +862,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -852,6 +904,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -880,6 +935,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -888,6 +946,11 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.option("x", 1)
+        <...streaming.readwriter.DataStreamWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> df.writeStream.options(**{"k1": "v1", "k2": "v2"})
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order
@@ -919,6 +982,9 @@ class DataStreamWriter:
         to Hive's partitioning scheme.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -962,6 +1028,9 @@ class DataStreamWriter:
         in the associated SparkSession.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1017,6 +1086,9 @@ class DataStreamWriter:
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1117,6 +1189,87 @@ class DataStreamWriter:
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
+    @staticmethod
+    def _construct_foreach_function(
+        f: Union[Callable[[Row], None], "SupportsProcess"]
+    ) -> Callable[[Any, Iterator], Iterator]:
+        from pyspark.taskcontext import TaskContext
+
+        if callable(f):
+            # The provided object is a callable function that is supposed to be called on each row.
+            # Construct a function that takes an iterator and calls the provided function on each
+            # row.
+            def func_without_process(_: Any, iterator: Iterator) -> Iterator:
+                for x in iterator:
+                    f(x)  # type: ignore[operator]
+                return iter([])
+
+            return func_without_process
+
+        else:
+            # The provided object is not a callable function. Then it is expected to have a
+            # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
+            # 'close(error)' methods.
+
+            if not hasattr(f, "process"):
+                raise PySparkAttributeError(
+                    error_class="ATTRIBUTE_NOT_CALLABLE",
+                    message_parameters={"attr_name": "process", "obj_name": "f"},
+                )
+
+            if not callable(getattr(f, "process")):
+                raise PySparkAttributeError(
+                    error_class="ATTRIBUTE_NOT_CALLABLE",
+                    message_parameters={"attr_name": "process", "obj_name": "f"},
+                )
+
+            def doesMethodExist(method_name: str) -> bool:
+                exists = hasattr(f, method_name)
+                if exists and not callable(getattr(f, method_name)):
+                    raise PySparkAttributeError(
+                        error_class="ATTRIBUTE_NOT_CALLABLE",
+                        message_parameters={"attr_name": method_name, "obj_name": "f"},
+                    )
+                return exists
+
+            open_exists = doesMethodExist("open")
+            close_exists = doesMethodExist("close")
+
+            def func_with_open_process_close(partition_id: Any, iterator: Iterator) -> Iterator:
+                epoch_id = cast(TaskContext, TaskContext.get()).getLocalProperty(
+                    "streaming.sql.batchId"
+                )
+                if epoch_id:
+                    int_epoch_id = int(epoch_id)
+                else:
+                    raise PySparkRuntimeError(
+                        error_class="CANNOT_GET_BATCH_ID",
+                        message_parameters={"obj_name": "TaskContext"},
+                    )
+
+                # Check if the data should be processed
+                should_process = True
+                if open_exists:
+                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
+
+                error = None
+
+                try:
+                    if should_process:
+                        for x in iterator:
+                            cast("SupportsProcess", f).process(x)
+                except Exception as ex:
+                    error = ex
+                finally:
+                    if close_exists:
+                        f.close(error)  # type: ignore[union-attr]
+                    if error:
+                        raise error
+
+                return iter([])
+
+            return func_with_open_process_close
+
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -1194,6 +1347,9 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
@@ -1232,77 +1388,8 @@ class DataStreamWriter:
 
         from pyspark.rdd import _wrap_function
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
-        from pyspark.taskcontext import TaskContext
 
-        if callable(f):
-            # The provided object is a callable function that is supposed to be called on each row.
-            # Construct a function that takes an iterator and calls the provided function on each
-            # row.
-            def func_without_process(_: Any, iterator: Iterator) -> Iterator:
-                for x in iterator:
-                    f(x)  # type: ignore[operator]
-                return iter([])
-
-            func = func_without_process
-
-        else:
-            # The provided object is not a callable function. Then it is expected to have a
-            # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
-            # 'close(error)' methods.
-
-            if not hasattr(f, "process"):
-                raise AttributeError("Provided object does not have a 'process' method")
-
-            if not callable(getattr(f, "process")):
-                raise PySparkTypeError(
-                    error_class="ATTRIBUTE_NOT_CALLABLE",
-                    message_parameters={"attr_name": "process", "obj_name": "f"},
-                )
-
-            def doesMethodExist(method_name: str) -> bool:
-                exists = hasattr(f, method_name)
-                if exists and not callable(getattr(f, method_name)):
-                    raise PySparkTypeError(
-                        error_class="ATTRIBUTE_NOT_CALLABLE",
-                        message_parameters={"attr_name": method_name, "obj_name": "f"},
-                    )
-                return exists
-
-            open_exists = doesMethodExist("open")
-            close_exists = doesMethodExist("close")
-
-            def func_with_open_process_close(partition_id: Any, iterator: Iterator) -> Iterator:
-                epoch_id = cast(TaskContext, TaskContext.get()).getLocalProperty(
-                    "streaming.sql.batchId"
-                )
-                if epoch_id:
-                    int_epoch_id = int(epoch_id)
-                else:
-                    raise RuntimeError("Could not get batch id from TaskContext")
-
-                # Check if the data should be processed
-                should_process = True
-                if open_exists:
-                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
-
-                error = None
-
-                try:
-                    if should_process:
-                        for x in iterator:
-                            cast("SupportsProcess", f).process(x)
-                except Exception as ex:
-                    error = ex
-                finally:
-                    if close_exists:
-                        f.close(error)  # type: ignore[union-attr]
-                    if error:
-                        raise error
-
-                return iter([])
-
-            func = func_with_open_process_close  # type: ignore[assignment]
-
+        func = self._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         assert self._spark._sc._jvm is not None
@@ -1327,20 +1414,29 @@ class DataStreamWriter:
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
+
         Notes
         -----
         This API is evolving.
+        This function behaves differently in Spark Connect mode. See examples.
+        In Connect, the provided function doesn't have access to variables defined outside of it.
 
         Examples
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
+        >>> my_value = -1
         >>> def func(batch_df, batch_id):
+        ...     global my_value
+        ...     my_value = 100
         ...     batch_df.collect()
         ...
         >>> q = df.writeStream.foreachBatch(func).start()
         >>> time.sleep(3)
         >>> q.stop()
+        >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
@@ -1370,6 +1466,9 @@ class DataStreamWriter:
         ``spark.sql.sources.default`` will be used.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1455,6 +1554,9 @@ class DataStreamWriter:
         The returned :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.1.0
+
+        .. versionchanged:: 3.5.0
+            Supports Spark Connect.
 
         Parameters
         ----------

@@ -24,9 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class InternalFrameParityTests(
     InternalFrameTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_from_pandas(self):
-        super().test_from_pandas()
+    pass
 
 
 if __name__ == "__main__":

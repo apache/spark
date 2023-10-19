@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.ObjectOperator
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.types._
@@ -110,7 +111,7 @@ object FlatMapGroupsWithStateExecHelper {
 
     private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
     private lazy val stateDeserializerFunc = {
-      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
+      ObjectOperator.deserializeRowToObject(stateDeserializerExpr, toAttributes(stateSchema))
     }
     private lazy val stateDataForGets = StateData()
 
@@ -154,7 +155,7 @@ object FlatMapGroupsWithStateExecHelper {
       AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
 
     private val stateAttributes: Seq[Attribute] = {
-      val encSchemaAttribs = stateEncoder.schema.toAttributes
+      val encSchemaAttribs = toAttributes(stateEncoder.schema)
       if (shouldStoreTimestamp) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
     }
 

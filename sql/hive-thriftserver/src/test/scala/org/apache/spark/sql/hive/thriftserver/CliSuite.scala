@@ -19,14 +19,12 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
-import java.util.Date
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -145,11 +143,8 @@ class CliSuite extends SparkFunSuite {
     val lock = new Object
 
     def captureOutput(source: String)(line: String): Unit = lock.synchronized {
-      // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
-      // add a timestamp to provide more diagnosis information.
-      val newLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
-      log.info(newLine)
-      buffer += newLine
+      logInfo(s"$source> $line")
+      buffer += line
 
       if (line.startsWith("Spark master: ") && line.contains("Application Id: ")) {
         foundMasterAndApplicationIdMessage.trySuccess(())
@@ -563,7 +558,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"),
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
@@ -571,7 +566,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("SparkException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -692,7 +687,7 @@ class CliSuite extends SparkFunSuite {
         // names.
         runCliWithin(1.minute, extraArgs = extraConf)(
           "create table src(key int) using hive;" ->
-            "Hive support is required to CREATE Hive TABLE",
+            "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
           "create table src(key int) using parquet;" -> "")
         cd.countDown()
       }

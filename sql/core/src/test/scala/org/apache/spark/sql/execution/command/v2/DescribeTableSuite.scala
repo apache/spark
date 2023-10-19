@@ -109,7 +109,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`key1`",
-          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
+          "proposal" -> "`key`, `col`"),
         context = ExpectedContext(
           fragment = query,
           start = 0,
@@ -140,7 +140,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
+            "proposal" -> "`key`"),
           context = ExpectedContext(
             fragment = query,
             start = 0,

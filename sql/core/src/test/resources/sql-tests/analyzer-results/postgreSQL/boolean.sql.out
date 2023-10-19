@@ -414,10 +414,10 @@ INSERT INTO BOOLTBL2
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2331",
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "msg" : "[CAST_INVALID_INPUT] The value 'XXX' of the type \"STRING\" cannot be cast to \"BOOLEAN\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 12) ==\n   VALUES (boolean('XXX'))\n           ^^^^^^^^^^^^^^\n",
-    "sqlExpr" : "CAST('XXX' AS BOOLEAN)"
+    "sqlExpr" : "\"XXX\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -744,22 +744,26 @@ Project [((isnul#x OR istrue#x) OR isfalse#x) AS ((isnul OR istrue) OR isfalse)#
 -- !query
 DROP TABLE  BOOLTBL1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL1
 
 
 -- !query
 DROP TABLE  BOOLTBL2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL2
 
 
 -- !query
 DROP TABLE  BOOLTBL3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL3
 
 
 -- !query
 DROP TABLE  BOOLTBL4
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL4`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL4

@@ -18,6 +18,7 @@
 from typing import Dict, Optional, cast
 
 from pyspark.errors.utils import ErrorClassesReader
+from pickle import PicklingError
 
 
 class PySparkException(Exception):
@@ -102,6 +103,12 @@ class AnalysisException(PySparkException):
     """
 
 
+class SessionNotSameException(PySparkException):
+    """
+    Performed the same operation on different SparkSession.
+    """
+
+
 class TempTableAlreadyExistsException(AnalysisException):
     """
     Failed to create temp view since it is already exists.
@@ -123,6 +130,12 @@ class IllegalArgumentException(PySparkException):
 class ArithmeticException(PySparkException):
     """
     Arithmetic exception thrown from Spark with an error class.
+    """
+
+
+class UnsupportedOperationException(PySparkException):
+    """
+    Unsupported operation exception thrown from Spark with an error class.
     """
 
 
@@ -198,7 +211,25 @@ class PySparkAttributeError(PySparkException, AttributeError):
     """
 
 
+class PySparkRuntimeError(PySparkException, RuntimeError):
+    """
+    Wrapper class for RuntimeError to support error classes.
+    """
+
+
 class PySparkAssertionError(PySparkException, AssertionError):
     """
     Wrapper class for AssertionError to support error classes.
+    """
+
+
+class PySparkNotImplementedError(PySparkException, NotImplementedError):
+    """
+    Wrapper class for NotImplementedError to support error classes.
+    """
+
+
+class PySparkPicklingError(PySparkException, PicklingError):
+    """
+    Wrapper class for pickle.PicklingError to support error classes.
     """

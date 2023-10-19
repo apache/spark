@@ -25,13 +25,29 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class GroupedApplyInPandasWithStateTests(
     GroupedApplyInPandasWithStateTestsMixin, ReusedConnectTestCase
 ):
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
     def test_apply_in_pandas_with_state_basic(self):
         super().test_apply_in_pandas_with_state_basic()
 
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_apply_in_pandas_with_state_python_worker_random_failure(self):
-        super().test_apply_in_pandas_with_state_python_worker_random_failure()
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
+    def test_apply_in_pandas_with_state_basic_no_state(self):
+        super().test_apply_in_pandas_with_state_basic()
+
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
+    def test_apply_in_pandas_with_state_basic_no_state_no_data(self):
+        super().test_apply_in_pandas_with_state_basic()
+
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
+    def test_apply_in_pandas_with_state_basic_more_data(self):
+        super().test_apply_in_pandas_with_state_basic()
+
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
+    def test_apply_in_pandas_with_state_basic_fewer_data(self):
+        super().test_apply_in_pandas_with_state_basic()
+
+    @unittest.skip("foreachBatch will be supported in SPARK-42944.")
+    def test_apply_in_pandas_with_state_basic_with_null(self):
+        super().test_apply_in_pandas_with_state_basic()
 
 
 if __name__ == "__main__":

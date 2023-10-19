@@ -39,6 +39,7 @@ import org.apache.spark.rdd.RDD
  * @param partition partition of the RDD this task is associated with
  * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param locs preferred task execution locations for locality scheduling
+ * @param artifacts list of artifacts (may be session-specific) of the job this task belongs to.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -57,19 +58,21 @@ private[spark] class ShuffleMapTask(
     partition: Partition,
     numPartitions: Int,
     @transient private var locs: Seq[TaskLocation],
+    artifacts: JobArtifactSet,
     localProperties: Properties,
     serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
     isBarrier: Boolean = false)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, numPartitions, localProperties,
-    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, numPartitions, artifacts,
+    localProperties, serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) = {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, 1, null, new Properties, null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, 1, null, null, new Properties,
+      null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
@@ -97,8 +100,15 @@ private[spark] class ShuffleMapTask(
     // ShuffleBlockId construction.
     val mapId = if (SparkEnv.get.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
       partitionId
-    } else context.taskAttemptId()
-    dep.shuffleWriterProcessor.write(rdd, dep, mapId, context, partition)
+    } else {
+      context.taskAttemptId()
+    }
+    dep.shuffleWriterProcessor.write(
+      rdd.iterator(partition, context),
+      dep,
+      mapId,
+      partitionId,
+      context)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs

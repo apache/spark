@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -77,7 +77,7 @@ abstract class StringRegexExpression extends BinaryExpression
   }
 }
 
-// scalastyle:off line.contains.tab
+// scalastyle:off line.contains.tab line.size.limit
 /**
  * Simple RegEx pattern matching function
  */
@@ -92,11 +92,14 @@ abstract class StringRegexExpression extends BinaryExpression
           _ matches any one character in the input (similar to . in posix regular expressions)\
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)<br><br>
-          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".<br><br>
+          Since Spark 2.0, string literals are unescaped in our SQL parser, see the unescaping
+          rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, in order to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
+          enabled, the pattern to match "\abc" should be "\abc".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
@@ -105,13 +108,15 @@ abstract class StringRegexExpression extends BinaryExpression
     Examples:
       > SELECT _FUNC_('Spark', '_park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ r'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ r'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
@@ -121,7 +126,7 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-// scalastyle:on line.contains.tab
+// scalastyle:on line.contains.tab line.size.limit
 case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
 
@@ -133,12 +138,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
-  override def toString: String = escapeChar match {
-    case '\\' => s"$left LIKE $right"
-    case c => s"$left LIKE $right ESCAPE '$c'"
+  override def toString: String = {
+    val escapeSuffix = if (escapeChar == '\\') "" else s" ESCAPE '$escapeChar'"
+    s"$left ${prettyName.toUpperCase(Locale.ROOT)} $right" + escapeSuffix
   }
 
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
+  override def sql: String = {
+    val escapeSuffix = if (escapeChar == '\\') "" else s" ESCAPE ${Literal(escapeChar).sql}"
+    s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}" + escapeSuffix
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
@@ -204,11 +212,14 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
           _ matches any one character in the input (similar to . in posix regular expressions)<br><br>
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)<br><br>
-          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-          to match "\abc", the pattern should be "\\abc".<br><br>
+          Since Spark 2.0, string literals are unescaped in our SQL parser, see the unescaping
+          rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, in order to match "\abc", the pattern should be "\\abc".<br><br>
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-          enabled, the pattern to match "\abc" should be "\abc".
+          enabled, the pattern to match "\abc" should be "\abc".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
@@ -217,13 +228,15 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     Examples:
       > SELECT _FUNC_('Spark', '_Park');
       true
+      > SELECT '\\abc' AS S, S _FUNC_ r'\\abc', S _FUNC_ '\\\\abc';
+      \abc	true	true
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\users%';
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
+      > SELECT '%SystemDrive%\\USERS\\John' _FUNC_ r'%SystemDrive%\\Users%';
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SYSTEMDrive/%//Users%' ESCAPE '/';
       true
@@ -409,7 +422,7 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
     copy(child = newChild)
 }
 
-// scalastyle:off line.contains.tab
+// scalastyle:off line.contains.tab line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp) - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
@@ -418,12 +431,14 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
       * regexp - a string expression. The regex string should be a Java regular expression.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
-          parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".
+          parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".
 
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
   """,
   examples = """
     Examples:
@@ -435,13 +450,15 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
       spark.sql.parser.escapedStringLiterals	false
       > SELECT _FUNC_('%SystemDrive%\\Users\\John', '%SystemDrive%\\\\Users.*');
       true
+      > SELECT _FUNC_('%SystemDrive%\\Users\\John', r'%SystemDrive%\\Users.*');
+      true
   """,
   note = """
     Use LIKE to match with simple string pattern.
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-// scalastyle:on line.contains.tab
+// scalastyle:on line.contains.tab line.size.limit
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
@@ -570,11 +587,13 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
-          parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".<br><br>
+          parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
       * rep - a string expression to replace matched substrings.
       * position - a positive integer literal that indicates the position within `str` to begin searching.
           The default is 1. If position is greater than the number of characters in `str`, the result is `str`.
@@ -582,6 +601,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
+       num-num
+      > SELECT _FUNC_('100-200', r'(\d+)', 'num');
        num-num
   """,
   since = "1.5.0",
@@ -602,7 +623,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       return DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "position",
+          "inputName" -> toSQLId("position"),
           "inputType" -> toSQLType(pos.dataType),
           "inputExpr" -> toSQLExpr(pos)
         )
@@ -637,14 +658,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
     if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      try {
-        pattern = Pattern.compile(lastRegex.toString)
-      } catch {
-        case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
-      }
+      val patternAndRegex = RegExpUtils.getPatternAndLastRegex(p, prettyName)
+      pattern = patternAndRegex._1
+      lastRegex = patternAndRegex._2
     }
     if (!r.equals(lastReplacementInUTF8)) {
       // replacement string changed
@@ -675,15 +691,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termResult = ctx.freshName("termResult")
 
-    val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
     val position = ctx.freshName("position")
 
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
 
@@ -695,15 +708,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
     s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        try {
-          $termPattern = $classNamePattern.compile($termLastRegex.toString());
-        } catch (java.util.regex.PatternSyntaxException e) {
-          throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
-        }
-      }
+      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
       if (!$rep.equals($termLastReplacementInUTF8)) {
         // replacement string changed
         $termLastReplacementInUTF8 = $rep.clone();
@@ -713,7 +718,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       int $position = $pos - 1;
       if ($position == 0 || $position < $source.length()) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
-        java.util.regex.Matcher $matcher = $termPattern.matcher($source);
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {
@@ -746,12 +750,10 @@ object RegExpReplace {
 }
 
 object RegExpExtractBase {
-  def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
-    if (groupIndex < 0) {
-      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
-    } else if (groupCount < groupIndex) {
-      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
-        groupCount, groupIndex)
+  def checkGroupIndex(prettyName: String, groupCount: Int, groupIndex: Int): Unit = {
+    if (groupIndex < 0 || groupCount < groupIndex) {
+      throw QueryExecutionErrors.invalidRegexGroupIndexError(
+        prettyName, groupCount, groupIndex)
     }
   }
 }
@@ -777,40 +779,11 @@ abstract class RegExpExtractBase
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
       // regex value changed
-      try {
-        val r = p.asInstanceOf[UTF8String].clone()
-        pattern = Pattern.compile(r.toString)
-        lastRegex = r
-      } catch {
-        case e: PatternSyntaxException =>
-          throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
-      }
+      val patternAndRegex = RegExpUtils.getPatternAndLastRegex(p, prettyName)
+      pattern = patternAndRegex._1
+      lastRegex = patternAndRegex._2
     }
     pattern.matcher(s.toString)
-  }
-
-  protected def initLastMatcherCode(
-      ctx: CodegenContext,
-      subject: String,
-      regexp: String,
-      matcher: String): String = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
-    s"""
-      |if (!$regexp.equals($termLastRegex)) {
-      |  // regex value changed
-      |  try {
-      |    UTF8String r = $regexp.clone();
-      |    $termPattern = $classNamePattern.compile(r.toString());
-      |    $termLastRegex = r;
-      |  } catch (java.util.regex.PatternSyntaxException e) {
-      |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
-      |  }
-      |}
-      |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
-      |""".stripMargin
   }
 }
 
@@ -819,6 +792,7 @@ abstract class RegExpExtractBase
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(str, regexp[, idx]) - Extract the first string in the `str` that match the `regexp`
@@ -830,11 +804,13 @@ abstract class RegExpExtractBase
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
-          parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".<br><br>
+          parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
       * idx - an integer expression that representing the group index. The regex maybe contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
@@ -845,9 +821,12 @@ abstract class RegExpExtractBase
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
+      > SELECT _FUNC_('100-200', r'(\d+)-(\d+)', 1);
+       100
   """,
   since = "1.5.0",
   group = "string_funcs")
+// scalastyle:on line.size.limit
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -857,7 +836,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         UTF8String.EMPTY_UTF8
@@ -884,10 +863,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+        $classNameRegExpExtractBase.checkGroupIndex("$prettyName", $matchResult.groupCount(), $idx);
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {
@@ -911,6 +890,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(str, regexp[, idx]) - Extract all strings in the `str` that match the `regexp`
@@ -922,11 +902,13 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
-          parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".<br><br>
+          parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
       * idx - an integer expression that representing the group index. The regex may contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
           be non-negative. The minimum value of `idx` is 0, which means matching the entire
@@ -937,9 +919,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
        ["100","300"]
+      > SELECT _FUNC_('100-200, 300-400', r'(\d+)-(\d+)', 1);
+       ["100","300"]
   """,
   since = "3.1.0",
   group = "string_funcs")
+// scalastyle:on line.size.limit
 case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -950,7 +935,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     while(m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         matchResults += UTF8String.EMPTY_UTF8
@@ -978,11 +963,14 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     }
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-         | ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+         | ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
          | while ($matcher.find()) {
          |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-         |   $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+         |   $classNameRegExpExtractBase.checkGroupIndex(
+         |     "$prettyName",
+         |     $matchResult.groupCount(),
+         |     $idx);
          |   if ($matchResult.group($idx) == null) {
          |     $matchResults.add(UTF8String.EMPTY_UTF8);
          |   } else {
@@ -1089,14 +1077,18 @@ case class RegExpSubStr(left: Expression, right: Expression)
       * regexp - a string representing a regular expression. The regex string should be a
           Java regular expression.<br><br>
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
-          parser. For example, to match "\abc", a regular expression for `regexp` can be
-          "^\\abc$".<br><br>
+          parser, see the unescaping rules at <a href="https://spark.apache.org/docs/latest/sql-ref-literals.html#string-literal">String Literal</a>.
+          For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".<br><br>
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
-          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".<br><br>
+          It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
+          special characters in the pattern string if exists.
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_(r"\abc", r"^\\abc$");
+       1
       > SELECT _FUNC_('user@spark.apache.org', '@[^.]*');
        5
   """,
@@ -1135,7 +1127,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       s"""
          |try {
          |  $setEvNotNull
-         |  ${initLastMatcherCode(ctx, subject, regexp, matcher)}
+         |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
          |  if ($matcher.find()) {
          |    ${ev.value} = $matcher.toMatchResult().start() + 1;
          |  } else {
@@ -1151,4 +1143,42 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpInStr =
     copy(subject = newFirst, regexp = newSecond, idx = newThird)
+}
+
+object RegExpUtils {
+  def initLastMatcherCode(
+      ctx: CodegenContext,
+      subject: String,
+      regexp: String,
+      matcher: String,
+      prettyName: String): String = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    s"""
+       |if (!$regexp.equals($termLastRegex)) {
+       |  // regex value changed
+       |  try {
+       |    UTF8String r = $regexp.clone();
+       |    $termPattern = $classNamePattern.compile(r.toString());
+       |    $termLastRegex = r;
+       |  } catch (java.util.regex.PatternSyntaxException e) {
+       |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
+       |  }
+       |}
+       |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
+       |""".stripMargin
+  }
+
+  def getPatternAndLastRegex(p: Any, prettyName: String): (Pattern, UTF8String) = {
+    val r = p.asInstanceOf[UTF8String].clone()
+    val pattern = try {
+      Pattern.compile(r.toString)
+    } catch {
+      case e: PatternSyntaxException =>
+        throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
+    }
+    (pattern, r)
+  }
 }

@@ -29,33 +29,7 @@ class OpsOnDiffFramesGroupByExpandingParityTests(
     TestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_count(self):
-        super().test_groupby_expanding_count()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_min(self):
-        super().test_groupby_expanding_min()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_max(self):
-        super().test_groupby_expanding_max()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_mean(self):
-        super().test_groupby_expanding_mean()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_sum(self):
-        super().test_groupby_expanding_sum()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_std(self):
-        super().test_groupby_expanding_std()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_expanding_var(self):
-        super().test_groupby_expanding_var()
+    pass
 
 
 if __name__ == "__main__":

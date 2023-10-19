@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus}
 
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
@@ -28,7 +28,6 @@ object PartitionedFileUtil {
   def splitFiles(
       sparkSession: SparkSession,
       file: FileStatusWithMetadata,
-      filePath: Path,
       isSplitable: Boolean,
       maxSplitBytes: Long,
       partitionValues: InternalRow): Seq[PartitionedFile] = {
@@ -37,20 +36,19 @@ object PartitionedFileUtil {
         val remaining = file.getLen - offset
         val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
         val hosts = getBlockHosts(getBlockLocations(file.fileStatus), offset, size)
-        PartitionedFile(partitionValues, SparkPath.fromPath(filePath), offset, size, hosts,
+        PartitionedFile(partitionValues, SparkPath.fromPath(file.getPath), offset, size, hosts,
           file.getModificationTime, file.getLen, file.metadata)
       }
     } else {
-      Seq(getPartitionedFile(file, filePath, partitionValues))
+      Seq(getPartitionedFile(file, partitionValues))
     }
   }
 
   def getPartitionedFile(
       file: FileStatusWithMetadata,
-      filePath: Path,
       partitionValues: InternalRow): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file.fileStatus), 0, file.getLen)
-    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), 0, file.getLen, hosts,
+    PartitionedFile(partitionValues, SparkPath.fromPath(file.getPath), 0, file.getLen, hosts,
       file.getModificationTime, file.getLen, file.metadata)
   }
 

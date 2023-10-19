@@ -30,26 +30,6 @@ class DateOpsParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lt(self):
-        super().test_lt()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_date_ops import *  # noqa: F401

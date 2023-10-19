@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
@@ -101,6 +101,14 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         .build()
 
       SparkPod(podWithConf, containerWithMount)
+    }
+  }
+
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    if (hasHadoopConf) {
+      Map(HADOOP_CONFIG_MAP_NAME -> existingConfMap.getOrElse(newConfigMapName))
+    } else {
+      Map.empty
     }
   }
 

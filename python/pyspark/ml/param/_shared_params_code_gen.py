@@ -42,6 +42,7 @@ _type_for_type_converter = {
     "TypeConverters.toFloat": "float",
     "TypeConverters.toInt": "int",
     "TypeConverters.toListFloat": "List[float]",
+    "TypeConverters.toListInt": "List[int]",
     "TypeConverters.toListString": "List[str]",
     "TypeConverters.toString": "str",
 }
@@ -331,6 +332,36 @@ if __name__ == "__main__":
             + "depends on specific algorithm. Must be >= 0.",
             "0.0",
             "TypeConverters.toFloat",
+        ),
+        (
+            "numTrainWorkers",
+            "number of training workers",
+            "1",
+            "TypeConverters.toInt",
+        ),
+        (
+            "batchSize",
+            "number of training batch size",
+            None,
+            "TypeConverters.toInt",
+        ),
+        (
+            "learningRate",
+            "learning rate for training",
+            None,
+            "TypeConverters.toFloat",
+        ),
+        (
+            "momentum",
+            "momentum for training optimizer",
+            None,
+            "TypeConverters.toFloat",
+        ),
+        (
+            "featureSizes",
+            "input feature size list for input columns of vector assembler",
+            None,
+            "TypeConverters.toListInt",
         ),
     ]
 
