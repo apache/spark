@@ -2965,12 +2965,7 @@
               <arg>-target:17</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
-              <!--
-                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
-              -->
               <arg>-Wconf:cat=scaladoc:wv</arg>
-              <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
-              <arg>-Wconf:cat=other-nullary-override:wv</arg>
               <!--
                 SPARK-33775 Suppress compilation warnings that contain the following contents.
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
@@ -2978,8 +2973,6 @@
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
               <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
-              <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
-              <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`

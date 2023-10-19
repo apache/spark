@@ -897,7 +897,9 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-30403: AQE should handle InSubquery") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
         " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
       )

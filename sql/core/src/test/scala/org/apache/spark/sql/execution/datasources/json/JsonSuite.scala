@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -1910,6 +1910,50 @@ abstract class JsonSuite
       assert(jsonDF.schema === StructType(Seq()))
       // only the first object should be read
       assert(jsonDF.count() === 1)
+    }
+  }
+
+  test("SPARK-45035: json enable ignoreCorruptFiles/ignoreMissingFiles") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.json(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+        }
+        assert(e2.getCause.isInstanceOf[EOFException])
+        assert(e2.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.json(inputFile.toURI.toString).collect().isEmpty)
+        assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+          .isEmpty)
+      }
+    })
+    withTempPath { dir =>
+      val jsonPath = new Path(dir.getCanonicalPath, "json")
+      val fs = jsonPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.json(jsonPath.toString)
+      val df = spark.read.option("multiLine", true).json(jsonPath.toString)
+      fs.delete(jsonPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
+        assert(e.getCause.getMessage.contains(".json does not exist"))
+      }
+
+      sampledTestData.write.json(jsonPath.toString)
+      val df2 = spark.read.option("multiLine", true).json(jsonPath.toString)
+      fs.delete(jsonPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
     }
   }
 

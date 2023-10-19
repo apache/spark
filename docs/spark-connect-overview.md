@@ -261,7 +261,7 @@ spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
 
 The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
 
-#### Configure programmatically with a connection ctring
+#### Configure programmatically with a connection string
 
 The connection may also be programmatically created using _SparkSession#builder_ as in this example:
 {% highlight scala %}

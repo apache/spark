@@ -248,7 +248,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
 
   def argumentType: AbstractDataType
 
-  override def argumentTypes(): Seq[AbstractDataType] = argumentType :: Nil
+  override def argumentTypes: Seq[AbstractDataType] = argumentType :: Nil
 
   def function: Expression
 

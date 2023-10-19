@@ -198,17 +198,21 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     dataOut.writeInt(exprs.length)
     exprs.zip(tableArgs).foreach { case (expr, is_table) =>
       PythonWorkerUtils.writeUTF(expr.dataType.json, dataOut)
-      if (expr.foldable) {
+      val (key, value) = expr match {
+        case NamedArgumentExpression(k, v) => (Some(k), v)
+        case _ => (None, expr)
+      }
+      if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(expr.eval(), expr.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)
       }
       dataOut.writeBoolean(is_table)
       // If the expr is NamedArgumentExpression, send its name.
-      expr match {
-        case NamedArgumentExpression(key, _) =>
+      key match {
+        case Some(key) =>
           dataOut.writeBoolean(true)
           PythonWorkerUtils.writeUTF(key, dataOut)
         case _ =>
