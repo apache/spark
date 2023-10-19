@@ -429,6 +429,8 @@ def assertDataFrameEqual(
         If set to `True`, the unequal rows are returned as a data set for further debugging.
         If set to `False` (default), the unequal rows are not returned as a data set.
 
+        .. versionadded:: 4.0.0
+
     Notes
     -----
     When `assertDataFrameEqual` fails, the error message uses the Python `difflib` library to
