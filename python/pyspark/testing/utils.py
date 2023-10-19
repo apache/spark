@@ -291,7 +291,13 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertSchemaEqual(actual: StructType, expected: StructType):
+def assertSchemaEqual(
+    actual: StructType,
+    expected: StructType,
+    ignoreNullable: bool = True,
+    ignoreColumnOrder: bool = False,
+    ignoreColumnName: bool = False,
+):
     r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
@@ -303,6 +309,31 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         The DataFrame schema that is being compared or tested.
     expected : StructType
         The expected schema, for comparison with the actual schema.
+    ignoreNullable : bool, default True
+        Specifies whether a column’s nullable property is included when checking for
+        schema equality.
+        When set to `True` (default), the nullable property of the columns being compared
+        is not taken into account and the columns will be considered equal even if they have
+        different nullable settings.
+        When set to `False`, columns are considered equal only if they have the same nullable
+        setting.
+        .. versionadded:: 4.0.0
+    ignoreColumnOrder : bool, default False
+        Specifies whether to compare columns in the order they appear in the DataFrame or by
+        column name.
+        If set to `False` (default), columns are compared in the order they appear in the
+        DataFrames.
+        When set to `True`, a column in the expected DataFrame is compared to the column with the
+        same name in the actual DataFrame.
+        .. versionadded:: 4.0.0
+    ignoreColumnName : bool, default False
+        Specifies whether to fail the initial schema equality check if the column names in the two
+        DataFrames are different.
+        When set to `False` (default), column names are checked and the function fails if they are
+        different.
+        When set to `True`, the function will succeed even if column names are different.
+        Column data types are compared for columns in the order they appear in the DataFrames.
+        .. versionadded:: 4.0.0
 
     Notes
     -----
@@ -311,10 +342,27 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
 
     Examples
     --------
+    >>> from pyspark.pandas.utils import default_session
+    >>> spark = default_session()
     >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
     >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> assertSchemaEqual(s1, s2)  # pass, schemas are identical
+
+    Different schemas with `ignoreNullable=False` would fail.
+
+    >>> s3 = StructType([StructField("names", ArrayType(DoubleType(), True), False)])
+    >>> assertSchemaEqual(s1, s3, ignoreNullable=False)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
+    --- actual
+    +++ expected
+    - StructType([StructField('names', ArrayType(DoubleType(), True), True)])
+    ?                                                                 ^^^
+    + StructType([StructField('names', ArrayType(DoubleType(), True), False)])
+    ?                                                                 ^^^^
+
 
     >>> df1 = spark.createDataFrame(data=[(1, 1000), (2, 3000)], schema=["id", "number"])
     >>> df2 = spark.createDataFrame(data=[("1", 1000), ("2", 5000)], schema=["id", "amount"])
@@ -328,6 +376,26 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
     ?                               ^^                               ^^^^^
     + StructType([StructField('id', StringType(), True), StructField('amount', LongType(), True)])
     ?                               ^^^^                              ++++ ^
+
+    Different schemas (ignoring column order)
+
+    >>> s1 = StructType(
+    ...     [StructField("a", IntegerType(), True), StructField("b", DoubleType(), True)]
+    ... )
+    >>> s2 = StructType(
+    ...     [StructField("b", DoubleType(), True), StructField("a", IntegerType(), True)]
+    ... )
+    >>> assertSchemaEqual(s1, s2, ignoreColumnOrder=True)
+
+    Different schemas (ignoring column names)
+
+    >>> s1 = StructType(
+    ...     [StructField("a", IntegerType(), True), StructField("c", DoubleType(), True)]
+    ... )
+    >>> s2 = StructType(
+    ...     [StructField("b", IntegerType(), True), StructField("d", DoubleType(), True)]
+    ... )
+    >>> assertSchemaEqual(s1, s2, ignoreColumnName=True)
     """
     if not isinstance(actual, StructType):
         raise PySparkAssertionError(
@@ -371,12 +439,26 @@ def assertSchemaEqual(actual: StructType, expected: StructType):
         else:
             return False
 
-    # ignore nullable flag by default
-    if not compare_schemas_ignore_nullable(actual, expected):
+    if ignoreColumnOrder:
+        actual = StructType(sorted(actual, key=lambda x: x.name))
+        expected = StructType(sorted(expected, key=lambda x: x.name))
+
+    if ignoreColumnName:
+        actual = StructType(
+            [StructField(str(i), field.dataType, field.nullable) for i, field in enumerate(actual)]
+        )
+        expected = StructType(
+            [
+                StructField(str(i), field.dataType, field.nullable)
+                for i, field in enumerate(expected)
+            ]
+        )
+
+    if (ignoreNullable and not compare_schemas_ignore_nullable(actual, expected)) or (
+        not ignoreNullable and actual != expected
+    ):
         generated_diff = difflib.ndiff(str(actual).splitlines(), str(expected).splitlines())
-
         error_msg = "\n".join(generated_diff)
-
         raise PySparkAssertionError(
             error_class="DIFFERENT_SCHEMA",
             message_parameters={"error_msg": error_msg},
