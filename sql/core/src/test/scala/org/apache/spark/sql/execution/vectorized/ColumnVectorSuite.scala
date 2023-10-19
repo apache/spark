@@ -727,7 +727,7 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("OutOfBound put operation on OffHeapColumnVector does not crash") {
+  test("out-of-bound put operation on OffHeapColumnVector does not crash") {
     def expectOutOfBoundException()(func: => Unit): Unit = {
       val e = intercept[ArrayIndexOutOfBoundsException] {
         func
