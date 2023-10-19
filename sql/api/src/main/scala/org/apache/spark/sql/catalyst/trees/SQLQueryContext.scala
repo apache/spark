@@ -36,7 +36,7 @@ case class SQLQueryContext(
 
   /**
    * The SQL query context of current node. For example:
-   * == SQL of VIEW v1(line 1, position 25) ==
+   * == SQL of VIEW v1 (line 1, position 25) ==
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */

@@ -164,7 +164,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       // scalastyle:off line.size.limit
       assert(e1.getMessage ===
         """Error running query: [DIVIDE_BY_ZERO] org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error. SQLSTATE: 22012
-          |== SQL(line 1, position 8) ==
+          |== SQL (line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
           |""".stripMargin)

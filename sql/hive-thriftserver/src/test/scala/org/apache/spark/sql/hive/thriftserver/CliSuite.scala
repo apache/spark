@@ -645,7 +645,7 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
       "delete jar dummy.jar;" ->
-        "Syntax error at or near 'jar': missing 'FROM'. SQLSTATE: 42601(line 1, pos 7)")
+        "Syntax error at or near 'jar': missing 'FROM'. SQLSTATE: 42601 (line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {
@@ -720,7 +720,7 @@ class CliSuite extends SparkFunSuite {
       format = ErrorMessageFormat.PRETTY,
       errorMessage =
         """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-          |== SQL(line 1, position 8) ==
+          |== SQL (line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
           |""".stripMargin,
@@ -729,7 +729,7 @@ class CliSuite extends SparkFunSuite {
       format = ErrorMessageFormat.PRETTY,
       errorMessage =
         """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-          |== SQL(line 1, position 8) ==
+          |== SQL (line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
           |

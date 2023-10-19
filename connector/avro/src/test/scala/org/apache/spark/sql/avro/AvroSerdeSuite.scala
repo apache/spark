@@ -54,11 +54,11 @@ class AvroSerdeSuite extends SparkFunSuite {
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(avro, Deserializer, fieldMatch,
         "Cannot convert Avro field 'foo' to SQL field 'foo' because schema is incompatible " +
-          s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType.sql}) SQLSTATE: 42846""")
+          s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType.sql})""")
 
       assertFailedConversionMessage(avro, Serializer, fieldMatch,
         s"Cannot convert SQL field 'foo' to Avro field 'foo' because schema is incompatible " +
-          s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, avroType = "int") SQLSTATE: 42846""")
+          s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, avroType = "int")""")
     }
   }
 
@@ -68,11 +68,11 @@ class AvroSerdeSuite extends SparkFunSuite {
     withFieldMatchType { fieldMatch =>
       assertFailedConversionMessage(avro, Deserializer, fieldMatch,
         "Cannot convert Avro field 'foo.bar' to SQL field 'foo.bar' because schema is " +
-          """incompatible (avroType = "float", sqlType = INT) SQLSTATE: 42846""")
+          """incompatible (avroType = "float", sqlType = INT)""")
 
       assertFailedConversionMessage(avro, Serializer, fieldMatch,
         "Cannot convert SQL field 'foo.bar' to Avro field 'foo.bar' because " +
-          """schema is incompatible (sqlType = INT, avroType = "float") SQLSTATE: 42846""")
+          """schema is incompatible (sqlType = INT, avroType = "float")""")
     }
   }
 
@@ -177,7 +177,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       case Serializer =>
         s"Cannot convert SQL type ${catalystSchema.sql} to Avro type $avroSchema."
     }
-    assert(e.getMessage === expectMsg)
+    assert(e.getMessage.contains(expectMsg))
     assert(e.getCause.getMessage === expectedCauseMessage)
   }
 

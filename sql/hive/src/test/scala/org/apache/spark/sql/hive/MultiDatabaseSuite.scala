@@ -297,7 +297,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |)
             """.stripMargin)
         }
-        checkError(e, errorClass = "SCHEMA_OR_RELATION_NOT_FOUND",
+        checkError(e, errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
           parameters = Map("name" -> "`t:a`"))
       }
 
