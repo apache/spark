@@ -86,7 +86,7 @@ abstract class QueryStageExec extends LeafExecNode {
   protected var _resultOption = new AtomicReference[Option[Any]](None)
 
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
-  def isMaterialized: Boolean = resultOption.get().isDefined
+  final def isMaterialized: Boolean = resultOption.get().isDefined
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -293,9 +293,6 @@ case class TableCacheQueryStageExec(
   }
 
   override protected def doMaterialize(): Future[Any] = future
-
-  override def isMaterialized: Boolean =
-    super.isMaterialized || inMemoryTableScan.isMaterialized
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }

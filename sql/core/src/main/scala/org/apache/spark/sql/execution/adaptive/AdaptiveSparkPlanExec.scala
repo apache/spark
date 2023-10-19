@@ -542,12 +542,13 @@ case class AdaptiveSparkPlanExec(
       }
 
     case i: InMemoryTableScanExec =>
+      // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
+      // hit it the first time, we should always create a new query stage.
       val newStage = newQueryStage(i)
-      val isMaterialized = newStage.isMaterialized
       CreateStageResult(
         newPlan = newStage,
-        allChildStagesMaterialized = isMaterialized,
-        newStages = if (isMaterialized) Seq.empty else Seq(newStage))
+        allChildStagesMaterialized = false,
+        newStages = Seq(newStage))
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
