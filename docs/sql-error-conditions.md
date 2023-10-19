@@ -574,6 +574,12 @@ For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-no
 
 Failed to decode a row to a value of the expressions: `<expressions>`.
 
+### EXPRESSION_ENCODING_FAILED
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to encode a value of the expressions: `<expressions>` to a row.
+
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
 [SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
