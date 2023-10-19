@@ -1225,13 +1225,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
-
-    // Case 5: Similar to case 2, when a RepartitionByExpression has a project and the project
-    // has a child of global Sort, Repartition or RepartitionByExpression we can remove the the
-    // project's child.
-    case r @ RepartitionByExpression(
-        _, project @ Project(_, child @ (Sort(_, true, _) | _: RepartitionOperation)), _, _) =>
-      r.withNewChildren(Seq(project.withNewChildren(child.children)))
   }
 }
 
