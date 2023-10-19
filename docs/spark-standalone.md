@@ -21,7 +21,7 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
+In addition to running on the YARN cluster manager, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
 # Security
 
@@ -104,10 +104,12 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
 - `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
 - `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-connect-server.sh` - Starts a Spark Connect server on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
 - `sbin/stop-workers.sh` - Stops all worker instances on the machines specified in the `conf/workers` file.
+- `sbin/stop-connect-server.sh` - Stops all Spark Connect server instances on the machine the script is executed on.
 - `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
@@ -330,11 +332,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
+  <td>ROCKSDB</td>
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based
-    store used in shuffle service state store. This supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value.
-    The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
+    store used in shuffle service state store. This supports `ROCKSDB` and `LEVELDB` (deprecated) now and `ROCKSDB` as default value.
+    The original data store in `RocksDB/LevelDB` will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>
 </tr>

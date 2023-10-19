@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<TEST>
+    <Header Name="X" SequenceNumber="123"/>
+    <T Number="1" Volume="20"/>
+    <T Number="2" Volume=""/>
+</TEST>

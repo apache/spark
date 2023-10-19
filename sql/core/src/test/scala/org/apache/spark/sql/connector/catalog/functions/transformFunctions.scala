@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connector.catalog.functions
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -36,11 +38,13 @@ object UnboundYearsFunction extends UnboundFunction {
   override def name(): String = "years"
 }
 
-object YearsFunction extends BoundFunction {
+object YearsFunction extends ScalarFunction[Long] {
   override def inputTypes(): Array[DataType] = Array(TimestampType)
   override def resultType(): DataType = LongType
   override def name(): String = "years"
   override def canonicalName(): String = name()
+
+  def invoke(ts: Long): Long = new Timestamp(ts).getYear + 1900
 }
 
 object DaysFunction extends BoundFunction {

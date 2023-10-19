@@ -26,6 +26,7 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
@@ -149,6 +150,9 @@ private[spark] class HadoopDelegationTokenManager(
           creds.addAll(newTokens)
         }
       })
+      if(!currentUser.equals(freshUGI)) {
+        FileSystem.closeAllForUGI(freshUGI)
+      }
     }
   }
 

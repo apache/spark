@@ -16,17 +16,22 @@
  */
 package org.apache.spark.sql.connect.service
 
-import com.google.common.io.CountingOutputStream
-import io.grpc.stub.StreamObserver
+import java.io.File
 import java.nio.file.{Files, Path, Paths}
 import java.util.zip.{CheckedOutputStream, CRC32}
+
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import com.google.common.io.CountingOutputStream
+import io.grpc.StatusRuntimeException
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -45,8 +50,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   // several [[AddArtifactsRequest]]s.
   private var chunkedArtifact: StagedChunkedArtifact = _
   private var holder: SessionHolder = _
-  private def artifactManager: SparkConnectArtifactManager =
-    SparkConnectArtifactManager.getOrCreateArtifactManager
 
   override def onNext(req: AddArtifactsRequest): Unit = {
     if (this.holder == null) {
@@ -78,12 +81,13 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   override def onError(throwable: Throwable): Unit = {
-    Utils.deleteRecursively(stagingDir.toFile)
+    cleanUpStagedArtifacts()
     responseObserver.onError(throwable)
   }
 
   protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
-    artifactManager.addArtifact(holder.session, artifact.path, artifact.stagedPath)
+    require(holder != null)
+    holder.addArtifact(artifact.path, artifact.stagedPath, artifact.fragment)
   }
 
   /**
@@ -97,7 +101,12 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
-        addStagedArtifactToArtifactManager(artifact)
+        if (artifact.path.startsWith(
+            SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
+          holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
+        } else {
+          addStagedArtifactToArtifactManager(artifact)
+        }
       }
       artifact.summary()
     }.toSeq
@@ -106,16 +115,20 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   protected def cleanUpStagedArtifacts(): Unit = Utils.deleteRecursively(stagingDir.toFile)
 
   override def onCompleted(): Unit = {
-    val artifactSummaries = flushStagedArtifacts()
-    // Add the artifacts to the session and return the summaries to the client.
-    val builder = proto.AddArtifactsResponse.newBuilder()
-    artifactSummaries.foreach(summary => builder.addArtifacts(summary))
-    // Delete temp dir
-    cleanUpStagedArtifacts()
+    try {
+      val artifactSummaries = flushStagedArtifacts()
+      // Add the artifacts to the session and return the summaries to the client.
+      val builder = proto.AddArtifactsResponse.newBuilder()
+      artifactSummaries.foreach(summary => builder.addArtifacts(summary))
+      // Delete temp dir
+      cleanUpStagedArtifacts()
 
-    // Send the summaries and close
-    responseObserver.onNext(builder.build())
-    responseObserver.onCompleted()
+      // Send the summaries and close
+      responseObserver.onNext(builder.build())
+      responseObserver.onCompleted()
+    } catch {
+      case e: StatusRuntimeException => onError(e)
+    }
   }
 
   /**
@@ -146,8 +159,31 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
    * Handles rebuilding an artifact from bytes sent over the wire.
    */
   class StagedArtifact(val name: String) {
-    val path: Path = Paths.get(name)
-    val stagedPath: Path = stagingDir.resolve(path)
+    // Workaround to keep the fragment.
+    val (canonicalFileName: String, fragment: Option[String]) =
+      if (name.startsWith(s"archives${File.separator}")) {
+        val splits = name.split("#")
+        assert(splits.length <= 2, "'#' in the path is not supported for adding an archive.")
+        if (splits.length == 2) {
+          (splits(0), Some(splits(1)))
+        } else {
+          (splits(0), None)
+        }
+      } else {
+        (name, None)
+      }
+
+    val path: Path = Paths.get(canonicalFileName)
+    val stagedPath: Path =
+      try {
+        ArtifactUtils.concatenatePaths(stagingDir, path)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new IllegalArgumentException(
+            s"Artifact with name: $name is invalid. The `name` " +
+              s"must be a relative path and cannot reference parent/sibling/nephew directories.")
+        case NonFatal(e) => throw e
+      }
 
     Files.createDirectories(stagedPath.getParent)
 

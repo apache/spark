@@ -145,7 +145,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
   test("handling total size of results larger than maxResultSize") {
     sc = new SparkContext("local", "test", conf)
     val scheduler = new DummyTaskSchedulerImpl(sc)
-    val spyScheduler = spy(scheduler)
+    val spyScheduler = spy[DummyTaskSchedulerImpl](scheduler)
     val resultGetter = new TaskResultGetter(sc.env, spyScheduler)
     scheduler.taskResultGetter = resultGetter
     val myTsm = new TaskSetManager(spyScheduler, FakeTask.createTaskSet(2), 1) {
@@ -258,7 +258,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Set up custom TaskResultGetter and TaskSchedulerImpl spy
     sc = new SparkContext("local", "test", conf)
     val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
-    val spyScheduler = spy(scheduler)
+    val spyScheduler = spy[TaskSchedulerImpl](scheduler)
     val resultGetter = new MyTaskResultGetter(sc.env, spyScheduler)
     val newDAGScheduler = new DAGScheduler(sc, spyScheduler)
     scheduler.taskResultGetter = resultGetter

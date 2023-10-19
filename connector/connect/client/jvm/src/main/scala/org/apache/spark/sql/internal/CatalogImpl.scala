@@ -67,6 +67,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Returns a list of databases (namespaces) which name match the specify pattern and available
+   * within the current catalog.
+   *
+   * @since 3.5.0
+   */
+  override def listDatabases(pattern: String): Dataset[Database] = {
+    sparkSession.newDataset(CatalogImpl.databaseEncoder) { builder =>
+      builder.getCatalogBuilder.getListDatabasesBuilder.setPattern(pattern)
+    }
+  }
+
+  /**
    * Returns a list of tables/views in the current database (namespace). This includes all
    * temporary views.
    *
@@ -90,6 +102,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Returns a list of tables/views in the specified database (namespace) which name match the
+   * specify pattern (the name can be qualified with catalog). This includes all temporary views.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listTables(dbName: String, pattern: String): Dataset[Table] = {
+    sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
+      builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName).setPattern(pattern)
+    }
+  }
+
+  /**
    * Returns a list of functions registered in the current database (namespace). This includes all
    * temporary functions.
    *
@@ -109,6 +134,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def listFunctions(dbName: String): Dataset[Function] = {
     sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName)
+    }
+  }
+
+  /**
+   * Returns a list of functions registered in the specified database (namespace) which name match
+   * the specify pattern (the name can be qualified with catalog). This includes all built-in and
+   * temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function] = {
+    sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
+      builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName).setPattern(pattern)
     }
   }
 
@@ -482,10 +521,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * cached before, then it will also be uncached.
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark
-   * application,
-   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM global_temp.view1`.
+   * application, i.e. it will be automatically dropped when the application terminates. It's tied
+   * to a system preserved database `global_temp`, and we must use the qualified name to refer a
+   * global temp view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @param viewName
    *   the unqualified name of the temporary view to be dropped.
@@ -652,6 +690,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     sparkSession
       .newDataset(CatalogImpl.catalogEncoder) { builder =>
         builder.getCatalogBuilder.getListCatalogsBuilder
+      }
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern and available in this
+   * session.
+   *
+   * @since 3.5.0
+   */
+  override def listCatalogs(pattern: String): Dataset[CatalogMetadata] =
+    sparkSession
+      .newDataset(CatalogImpl.catalogEncoder) { builder =>
+        builder.getCatalogBuilder.getListCatalogsBuilder.setPattern(pattern)
       }
 }
 

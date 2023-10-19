@@ -22,13 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
 class EWMParityTests(EWMTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase, TestUtils):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ewm_mean(self):
-        super().test_ewm_mean()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_groupby_ewm_func(self):
-        super().test_groupby_ewm_func()
+    pass
 
 
 if __name__ == "__main__":

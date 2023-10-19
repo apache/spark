@@ -68,7 +68,7 @@ Project [udf(val)#x, cate#x, sum(val) OVER (PARTITION BY cate ORDER BY udf(val) 
 SELECT val_long, udf(cate), sum(val_long) OVER(PARTITION BY cate ORDER BY udf(val_long)
 ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY udf(cate), val_long
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "sqlState" : "42K09",
@@ -219,7 +219,7 @@ Project [val#x, udf(cate)#x, sum(val) OVER (PARTITION BY cate ORDER BY val DESC 
 SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate)
 ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
   "sqlState" : "42K09",
@@ -242,7 +242,7 @@ org.apache.spark.sql.AnalysisException
 SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate)
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
@@ -263,7 +263,7 @@ org.apache.spark.sql.AnalysisException
 SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val), cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
   "sqlState" : "42K09",
@@ -285,7 +285,7 @@ org.apache.spark.sql.AnalysisException
 SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY current_timestamp
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
   "sqlState" : "42K09",
@@ -308,7 +308,7 @@ org.apache.spark.sql.AnalysisException
 SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY val
 RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY udf(cate), val
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
   "sqlState" : "42K09",

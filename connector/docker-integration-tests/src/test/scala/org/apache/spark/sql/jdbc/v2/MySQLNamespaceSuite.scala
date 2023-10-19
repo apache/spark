@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkSQLFeatureNotSupportedException
 import org.apache.spark.sql.connector.catalog.NamespaceChange
@@ -73,7 +73,8 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2280"
+      errorClass = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
+      parameters = Map("namespace" -> "`foo`")
     )
     assert(catalog.namespaceExists(Array("foo")) === false)
     catalog.createNamespace(Array("foo"), Map.empty[String, String].asJava)
@@ -84,13 +85,25 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
           Array("foo"),
           NamespaceChange.setProperty("comment", "comment for foo"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2280")
+      errorClass = "UNSUPPORTED_FEATURE.COMMENT_NAMESPACE",
+      parameters = Map("namespace" -> "`foo`")
+    )
 
     checkError(
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2281")
+      errorClass = "UNSUPPORTED_FEATURE.REMOVE_NAMESPACE_COMMENT",
+      parameters = Map("namespace" -> "`foo`")
+    )
+
+    checkError(
+      exception = intercept[SparkSQLFeatureNotSupportedException] {
+        catalog.dropNamespace(Array("foo"), cascade = false)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
+      parameters = Map("namespace" -> "`foo`")
+    )
     catalog.dropNamespace(Array("foo"), cascade = true)
     assert(catalog.namespaceExists(Array("foo")) === false)
   }

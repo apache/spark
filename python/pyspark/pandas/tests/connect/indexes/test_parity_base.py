@@ -29,30 +29,6 @@ class IndexesParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_append(self):
-        super().test_append()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop_duplicates(self):
-        super().test_drop_duplicates()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_factorize(self):
-        super().test_factorize()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_index_drop_duplicates(self):
-        super().test_index_drop_duplicates()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_monotonic(self):
-        super().test_monotonic()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_series(self):
-        super().test_to_series()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.indexes.test_parity_base import *  # noqa: F401

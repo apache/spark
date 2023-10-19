@@ -20,7 +20,6 @@ from typing import Any, Callable, Generic, List, Optional
 
 import numpy as np
 
-from pyspark import SparkContext
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 from pyspark.pandas.missing.window import (
@@ -31,8 +30,6 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExponentialMoving,
     MissingPandasLikeExponentialMovingGroupby,
 )
-
-# For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
@@ -588,6 +585,10 @@ class Rolling(RollingLike[FrameLike]):
         ----------
         quantile : float
             Value between 0 and 1 providing the quantile to compute.
+
+            .. deprecated:: 4.0.0
+                This will be renamed to ‘q’ in a future version.
+
         accuracy : int, optional
             Default accuracy of approximation. Larger value means better accuracy.
             The relative error can be deduced by 1.0 / accuracy.
@@ -2448,11 +2449,11 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         unified_alpha = self._compute_unified_alpha()
 
         def mean(scol: Column) -> Column:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            col_ewm = SF.ewm(scol, unified_alpha, self._ignore_na)
             return F.when(
                 F.count(F.when(~scol.isNull(), 1).otherwise(None)).over(self._unbounded_window)
                 >= self._min_periods,
-                Column(sql_utils.ewm(scol._jc, unified_alpha, self._ignore_na)).over(self._window),
+                col_ewm.over(self._window),
             ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)

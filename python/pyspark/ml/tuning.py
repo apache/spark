@@ -19,7 +19,6 @@ import os
 import sys
 import itertools
 from multiprocessing.pool import ThreadPool
-
 from typing import (
     Any,
     Callable,
@@ -58,7 +57,6 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
-
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -184,7 +182,7 @@ class ParamGridBuilder:
         if isinstance(args[0], dict):
             self.baseOn(*args[0].items())
         else:
-            for (param, value) in args:
+            for param, value in args:
                 self.addGrid(param, [value])
 
         return self
@@ -461,7 +459,7 @@ class _ValidatorSharedReadWrite:
         evaluator = instance.getEvaluator()
         uidMap = MetaAlgorithmReadWrite.getUidMap(estiamtor)
 
-        for elem in [evaluator] + list(uidMap.values()):  # type: ignore[arg-type]
+        for elem in [evaluator] + list(uidMap.values()):
             if not isinstance(elem, MLWritable):
                 raise ValueError(
                     f"Validator write will fail because it contains {elem.uid} "

@@ -101,4 +101,5 @@ Project [CASE WHEN (1 > 2) THEN (cast(1 as double) / cast(0 as double)) ELSE cas
 -- !query
 DROP TABLE conditional_t
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`conditional_t`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.conditional_t

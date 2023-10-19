@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.exec._
 import org.apache.hadoop.hive.ql.udf.generic._
@@ -63,7 +63,7 @@ private[hive] case class HiveSimpleUDF(
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
@@ -135,7 +135,7 @@ private[hive] case class HiveGenericUDF(
   private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
 
   override def eval(input: InternalRow): Any = {
-    children.zipWithIndex.map {
+    children.zipWithIndex.foreach {
       case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
@@ -239,7 +239,7 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     function.process(wrap(inputProjection(input), wrappers, udtInput, inputDataTypes))
     collector.collectRows()
@@ -262,7 +262,7 @@ private[hive] case class HiveGenericUDTF(
     }
   }
 
-  override def terminate(): TraversableOnce[InternalRow] = {
+  override def terminate(): IterableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     function.close()
     collector.collectRows()

@@ -87,7 +87,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
         outputCommitCoordinator =
-          spy(new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
+          spy[OutputCommitCoordinator](
+            new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
@@ -95,7 +96,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
-    val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
+    val mockTaskScheduler = spy[TaskSchedulerImpl](
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
     doAnswer { (invoke: InvocationOnMock) =>
       // Submit the tasks, then force the task scheduler to dequeue the
@@ -159,7 +161,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
-      0 until rdd.partitions.size, resultHandler, () => ())
+      0 until rdd.partitions.size, resultHandler, ())
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {

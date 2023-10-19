@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
@@ -61,7 +61,7 @@ private[sql] object AvroUtils extends Logging {
           new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(avroSchema).dataType match {
+    SchemaConverters.toSqlType(avroSchema, options).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:

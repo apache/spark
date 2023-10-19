@@ -31,10 +31,15 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   private def init(): Unit = {
     val threadDumpEnabled =
       parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)
+    val heapHistogramEnabled =
+      parent.sc.isDefined && parent.conf.get(UI_HEAP_HISTOGRAM_ENABLED)
 
-    attachPage(new ExecutorsPage(this, threadDumpEnabled))
+    attachPage(new ExecutorsPage(this, threadDumpEnabled, heapHistogramEnabled))
     if (threadDumpEnabled) {
       attachPage(new ExecutorThreadDumpPage(this, parent.sc))
+    }
+    if (heapHistogramEnabled) {
+      attachPage(new ExecutorHeapHistogramPage(this, parent.sc))
     }
   }
 
@@ -42,7 +47,8 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
 private[ui] class ExecutorsPage(
     parent: SparkUITab,
-    threadDumpEnabled: Boolean)
+    threadDumpEnabled: Boolean,
+    heapHistogramEnabled: Boolean)
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -52,6 +58,7 @@ private[ui] class ExecutorsPage(
         <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
         <script>setThreadDumpEnabled({threadDumpEnabled})</script>
+        <script>setHeapHistogramEnabled({heapHistogramEnabled})</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

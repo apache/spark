@@ -21,7 +21,7 @@ import java.io.{File, RandomAccessFile}
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
@@ -452,7 +452,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     val newConf = conf.clone
       .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
       .set(TEST_NO_STAGE_RETRY, false)
-      .set("spark.stage.maxConsecutiveAttempts", "1")
+      .set(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS, 1)
     sc = new SparkContext("local-cluster[2, 1, 2048]", "test", newConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     // materialize the shuffle map outputs
@@ -502,7 +502,7 @@ class InterleaveIterators[T, R](
   class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
     def hasNext: Boolean = sub.hasNext
 
-    def next: E = {
+    def next(): E = {
       barrier.await()
       sub.next()
     }

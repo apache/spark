@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import platform
 from decimal import Decimal
 import os
 import pydoc
@@ -27,9 +27,8 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark import StorageLevel
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -155,6 +154,30 @@ class DataFrameTestsMixin:
         self.assertEqual(df3.drop("name", "age").columns, ["height"])
         self.assertEqual(df3.drop("name", df3.age, "unknown").columns, ["height"])
         self.assertEqual(df3.drop("name", "age", df3.height).columns, [])
+
+    def test_drop_empty_column(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+
+        self.assertEqual(df.drop().columns, ["age", "name"])
+        self.assertEqual(df.drop(*[]).columns, ["age", "name"])
+
+    def test_drop_column_name_with_dot(self):
+        df = (
+            self.spark.range(1, 3)
+            .withColumn("first.name", lit("Peter"))
+            .withColumn("city.name", lit("raleigh"))
+            .withColumn("state", lit("nc"))
+        )
+
+        self.assertEqual(df.drop("first.name").columns, ["id", "city.name", "state"])
+        self.assertEqual(df.drop("city.name").columns, ["id", "first.name", "state"])
+        self.assertEqual(df.drop("first.name", "city.name").columns, ["id", "state"])
+        self.assertEqual(
+            df.drop("first.name", "city.name", "unknown.unknown").columns, ["id", "state"]
+        )
+        self.assertEqual(
+            df.drop("unknown.unknown").columns, ["id", "first.name", "city.name", "state"]
+        )
 
     def test_dropna(self):
         schema = StructType(
@@ -621,11 +644,48 @@ class DataFrameTestsMixin:
             df1.join(df2.hint("broadcast"), "id").explain(True)
             self.assertEqual(1, buf.getvalue().count("BroadcastHashJoin"))
 
+    def test_coalesce_hints_with_string_parameter(self):
+        with self.sql_conf({"spark.sql.adaptive.coalescePartitions.enabled": False}):
+            df = self.spark.createDataFrame(
+                zip(["A", "B"] * 2**9, range(2**10)),
+                StructType([StructField("a", StringType()), StructField("n", IntegerType())]),
+            )
+            with io.StringIO() as buf, redirect_stdout(buf):
+                # COALESCE
+                coalesce = df.hint("coalesce", 2)
+                coalesce.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("Coalesce 2"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REPARTITION_BY_RANGE
+                range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
+                range_partitioned.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REPARTITION_BY_NUM"), 1)
+                buf.truncate(0)
+                buf.seek(0)
+
+                # REBALANCE
+                rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
+                rebalanced1.explain(True)
+                rebalanced2 = df.hint("REBALANCE", 2)
+                rebalanced2.explain(True)
+                rebalanced3 = df.hint("REBALANCE", 2, "a")
+                rebalanced3.explain(True)
+                rebalanced4 = df.hint("REBALANCE", functions.col("a"))
+                rebalanced4.explain(True)
+                output = buf.getvalue()
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
+                self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
+
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")
         such_a_nice_list = ["itworks1", "itworks2", "itworks3"]
-        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list)
+        int_list = [1, 2, 3]
+        hinted_df = df.hint("my awesome hint", 1.2345, "what", such_a_nice_list, int_list)
 
         self.assertIsInstance(df.hint("broadcast", []), type(df))
         self.assertIsInstance(df.hint("broadcast", ["foo", "bar"]), type(df))
@@ -984,6 +1044,23 @@ class DataFrameTestsMixin:
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
+    def test_toDF_with_string(self):
+        df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
+        data = [("John", 30), ("Alice", 25), ("Bob", 28)]
+
+        result = df.toDF("key", "value")
+        self.assertEqual(result.schema.simpleString(), "struct<key:string,value:bigint>")
+        self.assertEqual(result.collect(), data)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.toDF("key", None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_STR",
+            message_parameters={"arg_name": "cols", "arg_type": "NoneType"},
+        )
+
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)
@@ -1004,13 +1081,13 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "Length of object", lambda: rdd.toDF("key: int").collect()
+            Exception, "LENGTH_SHOULD_BE_THE_SAME", lambda: rdd.toDF("key: int").collect()
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType\\(\\) can not accept",
+            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 
@@ -1023,6 +1100,23 @@ class DataFrameTestsMixin:
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_print_schema(self):
+        df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.printSchema(1)
+            self.assertEqual(1, buf.getvalue().count("long"))
+            self.assertEqual(0, buf.getvalue().count("_1"))
+            self.assertEqual(0, buf.getvalue().count("_2"))
+
+            buf.truncate(0)
+            buf.seek(0)
+
+            df.printSchema(2)
+            self.assertEqual(3, buf.getvalue().count("long"))
+            self.assertEqual(1, buf.getvalue().count("_1"))
+            self.assertEqual(1, buf.getvalue().count("_2"))
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")
@@ -1044,7 +1138,6 @@ class DataFrameTestsMixin:
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
@@ -1341,10 +1434,8 @@ class DataFrameTestsMixin:
         self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        pandas_requirement_message
-        or pyarrow_requirement_message
-        or "Pyarrow version must be 2.0.0 or higher",
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_to_pandas_for_array_of_struct(self):
         for is_arrow_enabled in [True, False]:
@@ -1437,7 +1528,11 @@ class DataFrameTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(),
+        "Fails in PyPy Python 3.8, should enable.",
+    )
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd

@@ -47,6 +47,7 @@ message JobData {
   optional int64 completion_time = 5;
   repeated int64 stage_ids = 6;
   optional string job_group = 7;
+  repeated string job_tags = 21;
   JobExecutionStatus status = 8;
   int32 num_tasks = 9;
   int32 num_active_tasks = 10;

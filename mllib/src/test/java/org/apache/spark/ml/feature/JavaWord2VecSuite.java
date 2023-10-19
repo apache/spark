@@ -19,8 +19,8 @@ package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
@@ -53,7 +53,7 @@ public class JavaWord2VecSuite extends SharedSparkSession {
 
     for (Row r : result.select("result").collectAsList()) {
       double[] polyFeatures = ((Vector) r.get(0)).toArray();
-      Assert.assertEquals(3, polyFeatures.length);
+      Assertions.assertEquals(3, polyFeatures.length);
     }
   }
 }

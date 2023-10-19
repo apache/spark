@@ -27,7 +27,6 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner
 import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.scalatest.concurrent.TimeLimits.failAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, TestUtils}

@@ -29,6 +29,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf.{CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, MIN_BATCHES_TO_RETAIN}
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
+import org.apache.spark.tags.SlowSQLTest
 
 class ContinuousSuiteBase extends StreamTest {
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
@@ -89,6 +90,7 @@ class ContinuousSuiteBase extends StreamTest {
   override protected val defaultTrigger = Trigger.Continuous(100)
 }
 
+@SlowSQLTest
 class ContinuousSuite extends ContinuousSuiteBase {
   import IntegratedUDFTestUtils._
   import testImplicits._
@@ -297,6 +299,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
   }
 }
 
+@SlowSQLTest
 class ContinuousStressSuite extends ContinuousSuiteBase {
   import testImplicits._
 
@@ -372,6 +375,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
   }
 }
 
+@SlowSQLTest
 class ContinuousMetaSuite extends ContinuousSuiteBase {
   import testImplicits._
 

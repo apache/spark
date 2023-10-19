@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
@@ -206,5 +207,9 @@ trait AnalysisTest extends PlanTest {
 
   protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
     intercept[ParseException](parser(sqlText))
+  }
+
+  protected def internalException(parser: String => Any)(sqlText: String): SparkException = {
+    intercept[SparkException](parser(sqlText))
   }
 }

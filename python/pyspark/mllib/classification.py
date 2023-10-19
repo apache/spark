@@ -73,7 +73,7 @@ class LinearClassificationModel(LinearModel):
         """
         self._threshold = value
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def threshold(self) -> Optional[float]:
         """
@@ -214,7 +214,7 @@ class LogisticRegressionModel(LinearClassificationModel):
                 self._numClasses - 1, self._dataWithBiasSize
             )
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def numFeatures(self) -> int:
         """
@@ -222,7 +222,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         """
         return self._numFeatures
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def numClasses(self) -> int:
         """

@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.connect.common
 
-import com.google.protobuf.ByteString
 import java.io.{InputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
+
+import com.google.protobuf.ByteString
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 

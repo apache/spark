@@ -64,8 +64,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.yarn.principal",
       "spark.kerberos.keytab",
       "spark.kerberos.principal",
-      UI_FILTERS.key,
-      "spark.mesos.driver.frameworkId")
+      UI_FILTERS.key)
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
@@ -173,7 +172,7 @@ object Checkpoint extends Logging {
       // to find classes, which maybe the wrong class loader. Hence, an inherited version
       // of ObjectInputStream is used to explicitly use the current thread's default class
       // loader to find and load classes. This is a well know Java issue and has popped up
-      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+      // in other places (e.g., https://issues.apache.org/jira/browse/GROOVY-1627)
       val zis = compressionCodec.compressedInputStream(inputStream)
       ois = new ObjectInputStreamWithLoader(zis,
         Thread.currentThread().getContextClassLoader)

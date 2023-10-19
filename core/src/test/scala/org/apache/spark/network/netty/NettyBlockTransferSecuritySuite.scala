@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.Network
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.util.ThreadUtils
 
@@ -126,13 +127,16 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     when(blockManager.getLocalBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
-    val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,
+    val serializerManager0 = new SerializerManager(new JavaSerializer(conf0), conf0)
+    val exec0 = new NettyBlockTransferService(
+      conf0, securityManager0, serializerManager0, "localhost", "localhost", 0,
       1)
     exec0.init(blockManager)
 
     val securityManager1 = new SecurityManager(conf1)
-    val exec1 = new NettyBlockTransferService(conf1, securityManager1, "localhost", "localhost", 0,
-      1)
+    val serializerManager1 = new SerializerManager(new JavaSerializer(conf1), conf1)
+    val exec1 = new NettyBlockTransferService(
+      conf1, securityManager1, serializerManager1, "localhost", "localhost", 0, 1)
     exec1.init(blockManager)
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {

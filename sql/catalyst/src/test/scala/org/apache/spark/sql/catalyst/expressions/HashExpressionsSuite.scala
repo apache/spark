@@ -29,7 +29,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
@@ -731,7 +731,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
-    val toRow = RowEncoder(inputSchema).createSerializer()
+    val toRow = ExpressionEncoder(inputSchema).createSerializer()
     val seed = scala.util.Random.nextInt()
     test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {

@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
@@ -454,6 +454,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   def printMasterAndAppId(): Unit = {
     val master = SparkSQLEnv.sparkContext.master
     val appId = SparkSQLEnv.sparkContext.applicationId
+    SparkSQLEnv.sparkContext.uiWebUrl.foreach {
+      webUrl => console.printInfo(s"Spark Web UI available at $webUrl")
+    }
     console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 

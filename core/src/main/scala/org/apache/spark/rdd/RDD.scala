@@ -420,7 +420,7 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
+  def flatMap[U: ClassTag](f: T => IterableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.flatMap(cleanF))
   }
@@ -1204,7 +1204,7 @@ abstract class RDD[T: ClassTag](
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
-   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * and one operation for merging two U's, as in scala.IterableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    *
@@ -1679,8 +1679,8 @@ abstract class RDD[T: ClassTag](
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
-    if (conf.get(DYN_ALLOCATION_ENABLED) &&
-        conf.contains(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)) {
+    if (Utils.isDynamicAllocationEnabled(conf) &&
+      conf.contains(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)) {
       logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
         "which removes executors along with their cached blocks. If you must use both " +
         "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +

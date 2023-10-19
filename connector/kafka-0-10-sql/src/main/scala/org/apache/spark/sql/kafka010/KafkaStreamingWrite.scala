@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
@@ -39,7 +40,7 @@ private[kafka010] class KafkaStreamingWrite(
     schema: StructType)
   extends StreamingWrite {
 
-  validateQuery(schema.toAttributes, producerParams, topic)
+  validateQuery(DataTypeUtils.toAttributes(schema), topic)
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): KafkaStreamWriterFactory =
@@ -69,6 +70,6 @@ private case class KafkaStreamWriterFactory(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new KafkaDataWriter(topic, producerParams, schema.toAttributes)
+    new KafkaDataWriter(topic, producerParams, DataTypeUtils.toAttributes(schema))
   }
 }

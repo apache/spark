@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Read.DataSource
@@ -190,6 +190,24 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
   def csv(path: String): DataFrame = format("csv").load(path)
 
   /**
+   * Loads a XML file stream and returns the result as a `DataFrame`.
+   *
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using `schema`.
+   *
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   *
+   * You can find the XML-specific options for reading XML file stream in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 4.0.0
+   */
+  def xml(path: String): DataFrame = format("xml").load(path)
+
+  /**
    * Loads a ORC file stream, returning the result as a `DataFrame`.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
@@ -216,6 +234,24 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * @since 3.5.0
    */
   def parquet(path: String): DataFrame = format("parquet").load(path)
+
+  /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName
+   *   The name of the table
+   * @since 3.5.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    sparkSession.newDataFrame { builder =>
+      builder.getReadBuilder
+        .setIsStreaming(true)
+        .getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(sourceBuilder.getOptionsMap)
+    }
+  }
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named

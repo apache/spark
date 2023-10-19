@@ -21,7 +21,9 @@ import java.util.concurrent.Semaphore
 
 import scala.util.control.NonFatal
 
-import ammonite.util.Bind
+import ammonite.compiler.CodeClassWrapper
+import ammonite.compiler.iface.CodeWrapper
+import ammonite.util.{Bind, Imports, Name, Util}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SparkSession
@@ -75,7 +77,7 @@ object ConnectRepl {
       }
 
     // Build the session.
-    val spark = SparkSession.builder().client(client).build()
+    val spark = SparkSession.builder().client(client).getOrCreate()
     val sparkBind = new Bind("spark", spark)
 
     // Add the proper imports and register a [[ClassFinder]].
@@ -88,10 +90,13 @@ object ConnectRepl {
         |
         |spark.registerClassFinder(new AmmoniteClassFinder(repl.sess))
         |""".stripMargin
-
+    // Please note that we make ammonite generate classes instead of objects.
+    // Classes tend to have superior serialization behavior when using UDFs.
     val main = ammonite.Main(
       welcomeBanner = Option(splash),
       predefCode = predefCode,
+      replCodeWrapper = ExtendedCodeClassWrapper,
+      scriptCodeWrapper = ExtendedCodeClassWrapper,
       inputStream = inputStream,
       outputStream = outputStream,
       errorStream = errorStream)
@@ -101,5 +106,27 @@ object ConnectRepl {
     } else {
       main.run(sparkBind)
     }
+  }
+}
+
+/**
+ * [[CodeWrapper]] that makes sure new Helper classes are always registered as an outer scope.
+ */
+@DeveloperApi
+object ExtendedCodeClassWrapper extends CodeWrapper {
+  override def wrapperPath: Seq[Name] = CodeClassWrapper.wrapperPath
+  override def apply(
+      code: String,
+      source: Util.CodeSource,
+      imports: Imports,
+      printCode: String,
+      indexedWrapper: Name,
+      extraCode: String): (String, String, Int) = {
+    val (top, bottom, level) =
+      CodeClassWrapper(code, source, imports, printCode, indexedWrapper, extraCode)
+    // Make sure we register the Helper before anything else, so outer scopes work as expected.
+    val augmentedTop = top +
+      "\norg.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)\n"
+    (augmentedTop, bottom, level)
   }
 }

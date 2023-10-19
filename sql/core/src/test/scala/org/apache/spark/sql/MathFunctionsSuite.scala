@@ -18,7 +18,10 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.Date
+import java.text.SimpleDateFormat
 import java.time.Period
+import java.util.Locale
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
@@ -428,6 +431,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT sign(10), signum(-11)"),
       Row(1, -1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(signum(lit(10)), signum(lit(-11))),
+      Row(1, -1))
   }
 
   test("pow / power") {
@@ -436,6 +443,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT pow(1, 2), power(2, 1)"),
       Seq((1, 2)).toDF().select(pow(lit(1), lit(2)), pow(lit(2), lit(1)))
+    )
+
+    checkAnswer(
+      sql("SELECT pow(1, 2), power(2, 1)"),
+      Seq((1, 2)).toDF().select(power(lit(1), lit(2)), power(lit(2), lit(1)))
     )
   }
 
@@ -595,12 +607,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT negative(1), negative(0), negative(-1)"),
       Row(-1, 0, 1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(negative(lit(1)), negative(lit(0)), negative(lit(-1))),
+      Row(-1, 0, 1))
   }
 
   test("positive") {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
+
+    checkAnswer(df.select(positive(col("a"))), Row(1))
+    checkAnswer(df.select(positive(col("b"))), Row(-1))
   }
 
   test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
@@ -616,6 +635,107 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach { case ((value, start, end, num), expected) =>
       val df = Seq((value, start, end, num)).toDF("v", "s", "e", "n")
       checkAnswer(df.selectExpr("width_bucket(v, s, e, n)"), Row(expected))
+      checkAnswer(df.select(width_bucket(col("v"), col("s"), col("e"), col("n"))), Row(expected))
     }
+  }
+
+  test("width_bucket with numbers") {
+    val df1 = Seq(
+      (5.3, 0.2, 10.6, 5), (-2.1, 1.3, 3.4, 3),
+      (8.1, 0.0, 5.7, 4), (-0.9, 5.2, 0.5, 2)
+    ).toDF("v", "min", "max", "n")
+
+    checkAnswer(
+      df1.selectExpr("width_bucket(v, min, max, n)"),
+      df1.select(width_bucket(col("v"), col("min"), col("max"), col("n")))
+    )
+  }
+
+  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
+  val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+
+  test("try_add") {
+    val df = Seq((1982, 15)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_add(birth, age)"), Seq(Row(1997)))
+    checkAnswer(df.select(try_add(col("birth"), col("age"))), Seq(Row(1997)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_add(d, i)"),
+      df1.select(try_add(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(i))"),
+      df1.select(try_add(column("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_add(column("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_add(make_interval(i), make_interval(i))"),
+      df1.select(try_add(make_interval(col("i")), make_interval(col("i")))))
+  }
+
+  test("try_avg") {
+    val df = Seq((1982, 15), (1990, 11)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_avg(age)"), Seq(Row(13)))
+    checkAnswer(df.select(try_avg(col("age"))), Seq(Row(13)))
+  }
+
+  test("try_divide") {
+    val df = Seq((2000, 10), (2050, 5)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_divide(birth, age)"), Seq(Row(200.0), Row(410.0)))
+    checkAnswer(df.select(try_divide(col("birth"), col("age"))), Seq(Row(200.0), Row(410.0)))
+
+    val df1 = Seq((1, 2)).toDF("year", "month")
+
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 2)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(2))))
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 0)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(0))))
+  }
+
+  test("try_element_at") {
+    val df = Seq((Array(1, 2, 3), 2)).toDF("a", "b")
+    checkAnswer(df.selectExpr("try_element_at(a, b)"), Seq(Row(2)))
+    checkAnswer(df.select(try_element_at(col("a"), col("b"))), Seq(Row(2)))
+  }
+
+  test("try_multiply") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_multiply(a, b)"), Seq(Row(6)))
+    checkAnswer(df.select(try_multiply(col("a"), col("b"))), Seq(Row(6)))
+
+    checkAnswer(df.selectExpr("try_multiply(make_interval(a), b)"),
+      df.select(try_multiply(make_interval(col("a")), col("b"))))
+  }
+
+  test("try_subtract") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_subtract(a, b)"), Seq(Row(-1)))
+    checkAnswer(df.select(try_subtract(col("a"), col("b"))), Seq(Row(-1)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_subtract(d, i)"),
+      df1.select(try_subtract(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(i))"),
+      df1.select(try_subtract(col("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_subtract(col("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_subtract(make_interval(i), make_interval(i))"),
+      df1.select(try_subtract(make_interval(col("i")), make_interval(col("i")))))
+  }
+
+  test("try_sum") {
+    val df = Seq((2, 3), (5, 6)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_sum(a)"), Seq(Row(7)))
+    checkAnswer(df.select(try_sum(col("a"))), Seq(Row(7)))
   }
 }

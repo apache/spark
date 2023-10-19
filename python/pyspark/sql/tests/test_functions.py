@@ -59,9 +59,14 @@ class FunctionsTestsMixin:
             "typedlit",  # Scala only
             "typedLit",  # Scala only
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
-            "negate",  # equivalent to python -expression
             "not",  # equivalent to python ~expression
+            "any",  # equivalent to python ~some
+            "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "random",  # namespace conflict with python built-in module
+            "uuid",  # namespace conflict with python built-in module
+            "chr",  # namespace conflict with python built-in function
+            "session_user",  # Scala only for now, needs implementation
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
@@ -376,6 +381,13 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ["data"])
         actual = df.select(F.array_contains(df.data, "1").alias("b")).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
+
+    def test_levenshtein_function(self):
+        df = self.spark.createDataFrame([("kitten", "sitting")], ["l", "r"])
+        actual_without_threshold = df.select(F.levenshtein(df.l, df.r).alias("b")).collect()
+        self.assertEqual([Row(b=3)], actual_without_threshold)
+        actual_with_threshold = df.select(F.levenshtein(df.l, df.r, 2).alias("b")).collect()
+        self.assertEqual([Row(b=-1)], actual_with_threshold)
 
     def test_between_function(self):
         df = self.spark.createDataFrame(
@@ -702,6 +714,52 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "len", "arg_type": "float"},
         )
 
+    def test_percentile(self):
+        actual = list(
+            chain.from_iterable(
+                [
+                    re.findall("(percentile\\(.*\\))", str(x))
+                    for x in [
+                        F.percentile(F.col("foo"), F.lit(0.5)),
+                        F.percentile(F.col("bar"), 0.25, 2),
+                        F.percentile(F.col("bar"), [0.25, 0.5, 0.75]),
+                        F.percentile(F.col("foo"), (0.05, 0.95), 100),
+                        F.percentile("foo", 0.5),
+                        F.percentile("bar", [0.1, 0.9], F.lit(10)),
+                    ]
+                ]
+            )
+        )
+
+        expected = [
+            "percentile(foo, 0.5, 1)",
+            "percentile(bar, 0.25, 2)",
+            "percentile(bar, array(0.25, 0.5, 0.75), 1)",
+            "percentile(foo, array(0.05, 0.95), 100)",
+            "percentile(foo, 0.5, 1)",
+            "percentile(bar, array(0.1, 0.9), 10)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
+    def test_median(self):
+        actual = list(
+            chain.from_iterable(
+                [
+                    re.findall("(median\\(.*\\))", str(x))
+                    for x in [
+                        F.median(F.col("foo")),
+                    ]
+                ]
+            )
+        )
+
+        expected = [
+            "median(foo)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
     def test_percentile_approx(self):
         actual = list(
             chain.from_iterable(
@@ -973,10 +1031,10 @@ class FunctionsTestsMixin:
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
-        with self.assertRaisesRegex(tpe, "too big"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] too big"):
             df.select(F.assert_true(df.id < 2, "too big")).toDF("val").collect()
 
-        with self.assertRaisesRegex(tpe, "2000000"):
+        with self.assertRaisesRegex(tpe, r"\[USER_RAISED_EXCEPTION\] 2000000.0"):
             df.select(F.assert_true(df.id < 2, df.id * 1e6)).toDF("val").collect()
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1136,10 +1194,16 @@ class FunctionsTestsMixin:
                 expected_spark_dtypes, self.spark.range(1).select(F.lit(arr).alias("b")).dtypes
             )
         arr = np.array([1, 2]).astype(np.uint)
-        with self.assertRaisesRegex(
-            TypeError, "The type of array scalar '%s' is not supported" % arr.dtype
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.spark.range(1).select(F.lit(arr).alias("b"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+            message_parameters={
+                "dtype": "uint64",
+            },
+        )
 
     def test_binary_math_function(self):
         funcs, expected = zip(
@@ -1217,6 +1281,27 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "schema", "arg_type": "int"},
         )
 
+    def test_schema_of_xml(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.schema_of_xml(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "xml", "arg_type": "int"},
+        )
+
+    def test_from_xml(self):
+        df = self.spark.range(10)
+        with self.assertRaises(PySparkTypeError) as pe:
+            F.from_xml(df.id, 1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
     def test_greatest(self):
         df = self.spark.range(10)
         with self.assertRaises(PySparkValueError) as pe:
@@ -1267,6 +1352,17 @@ class FunctionsTestsMixin:
             error_class="NOT_COLUMN_OR_INT",
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
+
+    # SPARK-45216: Fix non-deterministic seeded Dataset APIs
+    def test_non_deterministic_with_seed(self):
+        df = self.spark.createDataFrame([([*range(0, 10, 1)],)], ["a"])
+
+        r = F.rand()
+        r2 = F.randn()
+        r3 = F.shuffle("a")
+        res = df.select(r, r, r2, r2, r3, r3).collect()
+        for i in range(3):
+            self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

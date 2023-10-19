@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -212,7 +213,7 @@ object PushDownUtils {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    cleaned.toAttributes.map {
+    toAttributes(cleaned).map {
       // we have to keep the attribute id during transformation
       a => a.withExprId(nameToAttr(a.name).exprId)
     }

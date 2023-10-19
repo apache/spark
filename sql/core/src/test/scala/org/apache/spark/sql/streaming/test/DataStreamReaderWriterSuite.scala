@@ -36,6 +36,7 @@ import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 object LastOptions {
@@ -108,6 +109,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
+@SlowSQLTest
 class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
@@ -119,16 +121,16 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("write cannot be called on streaming datasets") {
-    val e = intercept[AnalysisException] {
-      spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()
-        .write
-        .save()
-    }
-    Seq("'write'", "not", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream
+          .format("org.apache.spark.sql.streaming.test")
+          .load()
+          .write
+          .save()
+      },
+      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      parameters = Map("methodName" -> "`write`"))
   }
 
   test("resolve default source") {

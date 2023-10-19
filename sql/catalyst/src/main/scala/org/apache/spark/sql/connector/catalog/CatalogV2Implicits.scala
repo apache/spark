@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, QuotingUtils}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
@@ -109,7 +110,7 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {
-    def quoted: String = namespace.map(quoteIfNeeded).mkString(".")
+    def quoted: String = QuotingUtils.quoted(namespace)
   }
 
   implicit class FunctionIdentifierHelper(ident: FunctionIdentifier) {
@@ -125,11 +126,7 @@ private[sql] object CatalogV2Implicits {
 
   implicit class IdentifierHelper(ident: Identifier) {
     def quoted: String = {
-      if (ident.namespace.nonEmpty) {
-        ident.namespace.map(quoteIfNeeded).mkString(".") + "." + quoteIfNeeded(ident.name)
-      } else {
-        quoteIfNeeded(ident.name)
-      }
+      QuotingUtils.quoted(ident)
     }
 
     def original: String = ident.namespace() :+ ident.name() mkString "."
@@ -187,7 +184,7 @@ private[sql] object CatalogV2Implicits {
 
   implicit class ColumnsHelper(columns: Array[Column]) {
     def asSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
-    def toAttributes: Seq[AttributeReference] = asSchema.toAttributes
+    def toAttributes: Seq[AttributeReference] = DataTypeUtils.toAttributes(asSchema)
   }
 
   def parseColumnPath(name: String): Seq[String] = {

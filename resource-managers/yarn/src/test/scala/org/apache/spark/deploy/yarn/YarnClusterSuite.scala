@@ -29,7 +29,6 @@ import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
@@ -652,7 +651,7 @@ private object YarnClusterDriver extends Logging with Matchers {
           "NM_HTTP_PORT" -> YarnContainerInfoHelper.getNodeManagerHttpPort(container = None),
           "NM_HTTP_ADDRESS" -> YarnContainerInfoHelper.getNodeManagerHttpAddress(container = None),
           "CLUSTER_ID" -> YarnContainerInfoHelper.getClusterId(yarnConf).getOrElse(""),
-          "CONTAINER_ID" -> ConverterUtils.toString(containerId),
+          "CONTAINER_ID" -> YarnContainerInfoHelper.convertToString(containerId),
           "USER" -> user,
           "LOG_FILES" -> "stderr,stdout")
 

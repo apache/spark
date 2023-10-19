@@ -16,7 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since
@@ -268,7 +267,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         return self._java_obj
 
     @staticmethod
-    def _from_java(java_stage: "JavaObject") -> "JP":
+    def _from_java(java_stage: "JavaObject") -> "JP":  # type: ignore
         """
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
@@ -422,7 +421,6 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
-
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through
             # using common base classes between estimators and models.
@@ -449,7 +447,7 @@ class JavaPredictionModel(PredictionModel[T], JavaModel, _PredictorParams):
     (Private) Java Model for prediction tasks (regression and classification).
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def numFeatures(self) -> int:
         """

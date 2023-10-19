@@ -19,7 +19,8 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+
 import org.apache.commons.collections4.MapUtils
 
 import org.apache.spark.status.StageDataWrapper

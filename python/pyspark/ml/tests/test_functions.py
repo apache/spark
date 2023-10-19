@@ -14,18 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
-import pandas as pd
 import unittest
+
+import numpy as np
 
 from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
 from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
 class PredictBatchUDFTests(SparkSessionTestCase):
     def setUp(self):
+        import pandas as pd
+
         super(PredictBatchUDFTests, self).setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
@@ -71,6 +83,11 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         # multiple column input, single input => ERROR
         with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
             preds = self.df.withColumn("preds", identity("a", "b")).toPandas()
+
+        # batch_size 1
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=1)
+        preds = self.df.withColumn("preds", identity("a")).toPandas()
+        self.assertTrue(preds["a"].equals(preds["preds"]))
 
     def test_identity_multi(self):
         # single input model

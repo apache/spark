@@ -22,13 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ReshapeParityTests(ReshapeTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_get_dummies_date_datetime(self):
-        super().test_get_dummies_date_datetime()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_merge_asof(self):
-        super().test_merge_asof()
+    pass
 
 
 if __name__ == "__main__":

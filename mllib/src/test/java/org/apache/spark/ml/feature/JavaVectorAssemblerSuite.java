@@ -21,8 +21,8 @@ import java.util.Arrays;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
@@ -54,7 +54,7 @@ public class JavaVectorAssemblerSuite extends SharedSparkSession {
       .setInputCols(new String[]{"x", "y", "z", "n"})
       .setOutputCol("features");
     Dataset<Row> output = assembler.transform(dataset);
-    Assert.assertEquals(
+    Assertions.assertEquals(
       Vectors.sparse(6, new int[]{1, 2, 4, 5}, new double[]{1.0, 2.0, 3.0, 10.0}),
       output.select("features").first().<Vector>getAs(0));
   }

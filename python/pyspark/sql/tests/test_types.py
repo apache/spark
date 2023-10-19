@@ -26,8 +26,9 @@ import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
+    DataType,
     ByteType,
     ShortType,
     IntegerType,
@@ -36,6 +37,7 @@ from pyspark.sql.types import (
     TimestampType,
     DayTimeIntervalType,
     YearMonthIntervalType,
+    CalendarIntervalType,
     MapType,
     StringType,
     CharType,
@@ -66,6 +68,7 @@ from pyspark.testing.sqlutils import (
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
@@ -906,8 +909,13 @@ class TypesTestsMixin:
         self.assertEqual(
             _merge_type(ArrayType(LongType()), ArrayType(LongType())), ArrayType(LongType())
         )
-        with self.assertRaisesRegex(TypeError, "element in array"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), LongType())),
@@ -919,8 +927,13 @@ class TypesTestsMixin:
             MapType(StringType(), LongType()),
         )
 
-        with self.assertRaisesRegex(TypeError, "value of map"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -929,11 +942,16 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -961,7 +979,7 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "element in array field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]
@@ -970,6 +988,11 @@ class TypesTestsMixin:
                     [StructField("f1", ArrayType(DoubleType())), StructField("f2", StringType())]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -993,7 +1016,7 @@ class TypesTestsMixin:
                 ]
             ),
         )
-        with self.assertRaisesRegex(TypeError, "value of map field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [
@@ -1008,6 +1031,11 @@ class TypesTestsMixin:
                     ]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -1110,9 +1138,15 @@ class TypesTestsMixin:
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
+                message_parameters={"field_name": "myarray"},
+            )
 
     def test_repr(self):
         instances = [
@@ -1131,6 +1165,7 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             ShortType(),
+            CalendarIntervalType(),
             ArrayType(StringType()),
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
@@ -1172,6 +1207,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
@@ -1238,6 +1275,31 @@ class TypesTestsMixin:
         schema3 = self.spark.sql("SELECT INTERVAL '8' MONTH AS interval").schema
         self.assertEqual(schema3.fields[0].dataType, YearMonthIntervalType(1, 1))
 
+    def test_calendar_interval_type_constructor(self):
+        self.assertEqual(CalendarIntervalType().simpleString(), "interval")
+
+        with self.assertRaisesRegex(TypeError, "takes 1 positional argument but 2 were given"):
+            CalendarIntervalType(3)
+
+    def test_calendar_interval_type(self):
+        schema1 = self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_calendar_interval_type_with_sf(self):
+        schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("long"), LongType())
+        self.assertEqual(
+            DataType.fromDDL("a: int, b: string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, b string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
@@ -1291,6 +1353,15 @@ class DataTypeTests(unittest.TestCase):
         # test __repr__ with unicode values
         self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
 
+    # SPARK-44643: test __repr__ with empty Row
+    def test_row_repr_with_empty_row(self):
+        self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
+        self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
+
+        EmptyRow = Row()
+        self.assertEqual(repr(Row(a=EmptyRow())), "Row(a=Row())")
+        self.assertEqual(repr(Row(EmptyRow())), "<Row(Row())>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
@@ -1304,17 +1375,31 @@ class DataTypeTests(unittest.TestCase):
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
-class DataTypeVerificationTests(unittest.TestCase):
+class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
-        self.assertRaisesRegex(
-            ValueError,
-            "test_name",
-            lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None),
+        with self.assertRaises(PySparkValueError) as pe:
+            _make_type_verifier(StringType(), nullable=False, name="test_name")(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_NONE",
+            message_parameters={
+                "arg_name": "obj",
+            },
         )
 
         schema = StructType([StructField("a", StructType([StructField("b", IntegerType())]))])
-        self.assertRaisesRegex(
-            TypeError, "field b in field a", lambda: _make_type_verifier(schema)([["data"]])
+        with self.assertRaises(PySparkTypeError) as pe:
+            _make_type_verifier(schema)([["data"]])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+            message_parameters={
+                "data_type": "IntegerType()",
+                "obj_name": "data",
+                "obj_type": "str",
+            },
         )
 
     def test_verify_type_ok_nullable(self):

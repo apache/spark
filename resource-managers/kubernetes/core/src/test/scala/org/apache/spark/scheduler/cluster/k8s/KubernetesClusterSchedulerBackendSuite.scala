@@ -174,7 +174,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   }
 
   test("Remove executor") {
-    val backend = spy(schedulerBackendUnderTest)
+    val backend = spy[KubernetesClusterSchedulerBackend](schedulerBackendUnderTest)
     when(backend.isExecutorActive(any())).thenReturn(false)
     when(backend.isExecutorActive(mockitoEq("2"))).thenReturn(true)
 

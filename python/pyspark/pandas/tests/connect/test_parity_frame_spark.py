@@ -24,19 +24,19 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class SparkFrameMethodsParityTests(
     SparkFrameMethodsTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on checkpoint which is not supported from Spark Connect.")
     def test_checkpoint(self):
         super().test_checkpoint()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on RDD which is not supported from Spark Connect.")
     def test_coalesce(self):
         super().test_coalesce()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on localCheckpoint which is not supported from Spark Connect.")
     def test_local_checkpoint(self):
         super().test_local_checkpoint()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on RDD which is not supported from Spark Connect.")
     def test_repartition(self):
         super().test_repartition()
 

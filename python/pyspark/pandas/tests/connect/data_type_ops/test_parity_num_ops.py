@@ -30,38 +30,6 @@ class NumOpsParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_astype(self):
-        super().test_astype()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_eq(self):
-        super().test_eq()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lt(self):
-        super().test_lt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_mul(self):
-        super().test_mul()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ne(self):
-        super().test_ne()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops import *  # noqa: F401

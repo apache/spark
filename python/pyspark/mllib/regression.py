@@ -117,13 +117,13 @@ class LinearModel:
         self._coeff = _convert_to_vector(weights)
         self._intercept = float(intercept)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def weights(self) -> Vector:
         """Weights computed for every feature."""
         return self._coeff
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def intercept(self) -> float:
         """Intercept computed for this model."""

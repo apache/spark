@@ -196,37 +196,42 @@ ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('MIN('val), None)], For
 -- !query
 EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 -- !query analysis
-ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, ExtendedMode
+ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, false, ExtendedMode
 
 
 -- !query
 DROP TABLE explain_temp1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp1
 
 
 -- !query
 DROP TABLE explain_temp2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp2
 
 
 -- !query
 DROP TABLE explain_temp3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp3
 
 
 -- !query
 DROP TABLE explain_temp4
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp4`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp4
 
 
 -- !query
 DROP TABLE explain_temp5
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`explain_temp5`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.explain_temp5
 
 
 -- !query
@@ -244,4 +249,5 @@ ExplainCommand 'Project [*], SimpleMode
 -- !query
 DROP TABLE t
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t

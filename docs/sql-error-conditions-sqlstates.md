@@ -700,6 +700,21 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 
 </table>
+## Class `HY`: CLI-specific condition
+
+<table class="table table-striped">
+<thead><tr><th>SQLSTATE</th><th>Description and issuing error classes</th></tr></thead>
+<tr>
+  <td>HY008</td>
+  <td>operation canceled</td>
+</tr>
+<tr>
+  <td></td>
+  <td><a href="sql-error-conditions.html#operation_canceled">OPERATION_CANCELED</a>
+  </td>
+</tr>
+
+</table>
 ## Class `XX`: internal error
 
 <table class="table table-striped">

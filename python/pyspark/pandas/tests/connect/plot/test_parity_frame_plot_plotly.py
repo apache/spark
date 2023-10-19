@@ -24,15 +24,15 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class DataFramePlotPlotlyParityTests(
     DataFramePlotPlotlyTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist_layout_kwargs(self):
         super().test_hist_layout_kwargs()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist_plot(self):
         super().test_hist_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_kde_plot(self):
         super().test_kde_plot()
 

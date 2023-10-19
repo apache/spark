@@ -29,14 +29,16 @@ import org.scalatest.concurrent.Waiters.Waiter
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, Row, SparkSession}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.ui.StreamingQueryStatusListener
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.JsonProtocol
 
+@SlowSQLTest
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
@@ -165,6 +167,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
+              === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
@@ -190,6 +194,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
+              === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
@@ -262,7 +268,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
@@ -280,11 +286,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(newEvent.id === event.id)
       assert(newEvent.runId === event.runId)
       assert(newEvent.exception === event.exception)
+      assert(newEvent.errorClassOnException === event.errorClassOnException)
     }
 
-    val exception = new RuntimeException("exception")
+    val exception = SparkException.internalError("testpurpose")
     testSerialization(
-      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage)))
+      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID,
+        Some(exception.getMessage), Some(exception.getErrorClass)))
   }
 
   test("only one progress event per interval when no data") {
@@ -306,9 +314,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       try {
         var numTriggers = 0
         val input = new MemoryStream[Int](0, sqlContext) {
-          override def latestOffset(): OffsetV2 = {
+          override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
             numTriggers += 1
-            super.latestOffset()
+            super.latestOffset(startOffset, limit)
           }
         }
         val clock = new StreamManualClock()
@@ -323,9 +331,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
-        // `recentProgress` should not receive any events
+        // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.isEmpty
+          q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
         testStream(input.toDS)(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
@@ -516,7 +524,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
-          // checkProgressEvent(1),
           AdvanceManualClock(10),
           checkProgressEvent(1),
           AdvanceManualClock(90),

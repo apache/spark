@@ -98,6 +98,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
       // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
       Some(StringType)
+    } else if (sqlType == Types.VARCHAR && typeName.equals("JSON")) {
+      // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
+      // Explicitly converts it into StringType here.
+      Some(StringType)
     } else None
   }
 
@@ -184,11 +188,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   }
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
-    throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedCommentNamespaceError(schema)
   }
 
   override def removeSchemaCommentQuery(schema: String): String = {
-    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError(schema)
   }
 
   // CREATE INDEX syntax
@@ -292,7 +296,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     if (cascade) {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     } else {
-      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
+      throw QueryExecutionErrors.unsupportedDropNamespaceError(schema)
     }
   }
 

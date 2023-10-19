@@ -288,6 +288,7 @@ object InterpretedUnsafeProjection {
    * portion of the array object. Primitives take up to 8 bytes, depending on the size of the
    * underlying data type.
    */
+  @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | StringType | BinaryType | CalendarIntervalType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8

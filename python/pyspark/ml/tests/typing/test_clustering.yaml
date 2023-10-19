@@ -27,7 +27,7 @@
     reveal_type(local_model)
     reveal_type(local_model.setFeaturesCol("foo"))
   out: |
-    main:4: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel*"
-    main:5: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel*"
+    main:4: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel"
+    main:5: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel"
     main:8: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel"
-    main:9: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel*"
+    main:9: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel"

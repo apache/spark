@@ -17,32 +17,31 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
+import java.io.{EOFException, File}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
-import java.util.zip.GZIPOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -1448,37 +1447,47 @@ abstract class CSVSuite
     }
   }
 
-  test("Enabling/disabling ignoreCorruptFiles") {
-    val inputFile = File.createTempFile("input-", ".gz")
-    try {
-      // Create a corrupt gzip file
-      val byteOutput = new ByteArrayOutputStream()
-      val gzip = new GZIPOutputStream(byteOutput)
-      try {
-        gzip.write(Array[Byte](1, 2, 3, 4))
-      } finally {
-        gzip.close()
-      }
-      val bytes = byteOutput.toByteArray
-      val o = new FileOutputStream(inputFile)
-      try {
-        // It's corrupt since we only write half of bytes into the file.
-        o.write(bytes.take(bytes.length / 2))
-      } finally {
-        o.close()
-      }
+  test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
+    withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
         assert(e.getCause.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        val e2 = intercept[SparkException] {
+          spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+        }
+        assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
+        assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+        assert(spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+          .isEmpty)
       }
-    } finally {
-      inputFile.delete()
+    })
+    withTempPath { dir =>
+      val csvPath = new Path(dir.getCanonicalPath, "csv")
+      val fs = csvPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.csv(csvPath.toString)
+      val df = spark.read.option("multiLine", true).csv(csvPath.toString)
+      fs.delete(csvPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
+        assert(e.getCause.getMessage.contains(".csv does not exist"))
+      }
+
+      sampledTestData.write.csv(csvPath.toString)
+      val df2 = spark.read.option("multiLine", true).csv(csvPath.toString)
+      fs.delete(csvPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
     }
   }
 
@@ -1853,7 +1862,7 @@ abstract class CSVSuite
 
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
-      import collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       val schema = new StructType()
         .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
         .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
@@ -3095,8 +3104,11 @@ abstract class CSVSuite
       }
       checkError(
         exception = exception,
-        errorClass = "_LEGACY_ERROR_TEMP_1150",
-        parameters = Map("field" -> colName, "fieldType" -> "binary", "format" -> "CSV")
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> s"`$colName`",
+          "columnType" -> "\"BINARY\"",
+          "format" -> "CSV")
       )
     }
   }
@@ -3218,7 +3230,7 @@ class CSVv1Suite extends CSVSuite {
 
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[2015,Chevy,Volt,null,null]",
           "failFastMode" -> "FAILFAST")

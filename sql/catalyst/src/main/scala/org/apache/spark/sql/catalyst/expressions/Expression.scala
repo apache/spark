@@ -460,7 +460,7 @@ trait NonSQLExpression extends Expression {
     transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
-      case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
+      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
     }.toString
   }
 }
@@ -1410,4 +1410,6 @@ case class MultiCommutativeOp(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     this.copy(operands = newChildren)(originalRoot)
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = originalRoot :: Nil
 }

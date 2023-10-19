@@ -22,17 +22,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class NamespaceParityTests(NamespaceTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_concat_index_axis(self):
-        super().test_concat_index_axis()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_concat_multiindex_sort(self):
-        super().test_concat_multiindex_sort()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_get_index_map(self):
-        super().test_get_index_map()
+    pass
 
 
 if __name__ == "__main__":

@@ -25,37 +25,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class UDTOpsParityTests(
     UDTOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_eq(self):
-        super().test_eq()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_from_to_pandas(self):
-        super().test_from_to_pandas()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_isnull(self):
-        super().test_isnull()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lt(self):
-        super().test_lt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ne(self):
-        super().test_ne()
+    pass
 
 
 if __name__ == "__main__":

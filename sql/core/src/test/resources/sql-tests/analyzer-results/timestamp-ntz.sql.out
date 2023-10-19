@@ -16,7 +16,7 @@ Project [to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(Ame
 -- !query
 select to_timestamp_ntz(to_date(null)), to_timestamp_ntz(to_date('2016-12-31'))
 -- !query analysis
-Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles)), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles)), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(2016-12-31))#x]
+Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(2016-12-31))#x]
 +- OneRowRelation
 
 

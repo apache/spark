@@ -18,6 +18,7 @@
 import pandas as pd
 import numpy as np
 import re
+import unittest
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -253,10 +254,10 @@ class SeriesStringTestsMixin:
         def repl(m):
             return m.group(0)[::-1]
 
-        self.check_func(lambda x: x.str.replace(r"[a-z]+", repl))
+        self.check_func(lambda x: x.str.replace("[a-z]+", repl, regex=True))
         # compiled regex with flags
-        regex_pat = re.compile(r"WHITESPACE", flags=re.IGNORECASE)
-        self.check_func(lambda x: x.str.replace(regex_pat, "---"))
+        regex_pat = re.compile("WHITESPACE", flags=re.IGNORECASE)
+        self.check_func(lambda x: x.str.replace(regex_pat, "---", regex=True))
 
     def test_string_rfind(self):
         self.check_func(lambda x: x.str.rfind("a"))
