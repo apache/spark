@@ -845,11 +845,26 @@ def read_udtf(pickleSer, infile, eval_type):
             "the query again."
         )
 
+    # This determines which result columns have nullable types.
+    def check_nullable_column(i: int, data_type: DataType, nullable: bool) -> None:
+        if not nullable:
+            nullable_columns.add(i)
+        elif isinstance(data_type, ArrayType):
+            check_nullable_column(i, data_type.elementType, data_type.containsNull)
+        elif isinstance(data_type, StructType):
+            for subfield in data_type.fields:
+                check_nullable_column(i, subfield.dataType, subfield.nullable)
+        elif isinstance(data_type, MapType):
+            check_nullable_column(i, data_type.valueType, data_type.valueContainsNull)
+
+    nullable_columns: set[int] = set()
+    for i, field in enumerate(return_type.fields):
+        check_nullable_column(i, field.dataType, field.nullable)
+
     # Compares each UDTF output row against the output schema for this particular UDTF call,
     # raising an error if the two are incompatible.
-    def check_output_row_against_schema(row: Any) -> None:
-        nonlocal return_type
-        for result_column_index in range(len(return_type)):
+    def check_output_row_against_schema(row: Any, expected_schema: StructType) -> None:
+        for result_column_index in nullable_columns:
 
             def check_for_none_in_non_nullable_column(
                 value: Any, data_type: DataType, nullable: bool
@@ -876,19 +891,12 @@ def read_udtf(pickleSer, infile, eval_type):
                             sub_value, data_type.elementType, data_type.containsNull
                         )
                 elif isinstance(data_type, StructType) and isinstance(value, Row):
-                    for field_name, field_value in value.asDict().items():
-                        subfield: StructField = data_type[field_name]
+                    for i in range(len(value)):
                         check_for_none_in_non_nullable_column(
-                            field_value, subfield.dataType, subfield.nullable
+                            value[i], data_type[i].dataType, data_type[i].nullable
                         )
-                elif isinstance(data_type, MapType):
-                    if isinstance(value, dict):
-                        items = value.items()
-                    elif isinstance(value, Row):
-                        items = value.asDict().items()
-                    else:
-                        return
-                    for map_key, map_value in items:
+                elif isinstance(data_type, MapType) and isinstance(value, dict):
+                    for map_key, map_value in value.items():
                         check_for_none_in_non_nullable_column(
                             map_key, data_type.keyType, nullable=False
                         )
@@ -896,7 +904,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             map_value, data_type.valueType, data_type.valueContainsNull
                         )
 
-            field: StructField = return_type[result_column_index]
+            field: StructField = expected_schema[result_column_index]
             if row is not None:
                 check_for_none_in_non_nullable_column(
                     list(row)[result_column_index], field.dataType, field.nullable
@@ -941,7 +949,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     result, return_type, assign_cols_by_name=False, truncate_return_schema=False
                 )
                 for result_tuple in result.itertuples():
-                    check_output_row_against_schema(list(result_tuple))
+                    check_output_row_against_schema(list(result_tuple), return_type)
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -1036,7 +1044,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             },
                         )
 
-                check_output_row_against_schema(result)
+                check_output_row_against_schema(result, return_type)
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
