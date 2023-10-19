@@ -253,7 +253,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       assert(result7.collect()(0)(1) === "tbl")
       assert(result7.collect()(0)(3) ===
         s"""Namespace: $namespace
-           |Table: tbl
+           |Table: $table
            |Type: MANAGED
            |Location: s3://bucket/path
            |Provider: _
@@ -287,8 +287,8 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
         assert(result.collect()(0).length == 4)
         assert(result.collect()(0)(1) === "tbl")
         assert(result.collect()(0)(3) ===
-          s"""Namespace: ns1.ns2
-             |Table: tbl
+          s"""Namespace: $namespace
+             |Table: $table
              |Type: MANAGED
              |Provider: _
              |Owner: ${Utils.getCurrentUserName()}
@@ -302,7 +302,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
         assert(result.collect()(1).length == 4)
         assert(result.collect()(1)(1) === table1)
         assert(result.collect()(1)(3) ===
-          s"""Namespace: ns1.ns2
+          s"""Namespace: $namespace
              |Table: $table1
              |Type: MANAGED
              |Provider: _
@@ -317,7 +317,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
         assert(result.collect()(2).length == 4)
         assert(result.collect()(2)(1) === table2)
         assert(result.collect()(2)(3) ===
-          s"""Namespace: ns1.ns2
+          s"""Namespace: $namespace
              |Table: $table2
              |Type: MANAGED
              |Provider: _
