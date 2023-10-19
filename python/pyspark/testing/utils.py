@@ -396,6 +396,7 @@ def assertDataFrameEqual(
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
+    returnUnequalRows=False,
 ):
     r"""
     A util function to assert equality between `actual` and `expected`
@@ -424,6 +425,9 @@ def assertDataFrameEqual(
     atol : float, optional
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
+    returnUnequalRows: bool, False
+        If set to `True`, the unequal rows are returned as a data set for further debugging.
+        If set to `False` (default), the unequal rows are not returned as a data set.
 
     Notes
     -----
@@ -475,6 +479,24 @@ def assertDataFrameEqual(
     ! Row(id='1', amount=1001.0)
     Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
+
+    The `returnUnequalRows` parameter can be used to return the rows that did not match
+    in the assertion. This can be useful for debugging or further analysis.
+
+    >>> df1 = spark.createDataFrame(
+    ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
+    >>> df2 = spark.createDataFrame(
+    ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
+    >>> try:
+    ...     assertDataFrameEqual(df1, df2, returnUnequalRows=True)
+    ... except PySparkAssertionError as e:
+    ...     spark.createDataFrame(e.data).show()  # doctest: +NORMALIZE_WHITESPACE
+    +-----------+-----------+
+    |         _1|         _2|
+    +-----------+-----------+
+    |{1, 1000.0}|{1, 1001.0}|
+    |{3, 2000.0}|{3, 2003.0}|
+    +-----------+-----------+
     """
     if actual is None and expected is None:
         return True
@@ -581,7 +603,7 @@ def assertDataFrameEqual(
     def assert_rows_equal(rows1: List[Row], rows2: List[Row]):
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
-        diff_rows = False
+        diff_rows = []
 
         rows_str1 = ""
         rows_str2 = ""
@@ -592,7 +614,7 @@ def assertDataFrameEqual(
             rows_str2 += str(r2) + "\n"
             if not compare_rows(r1, r2):
                 diff_rows_cnt += 1
-                diff_rows = True
+                diff_rows.append((r1, r2))
 
         generated_diff = _context_diff(
             actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
@@ -603,9 +625,9 @@ def assertDataFrameEqual(
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
+            data = diff_rows if returnUnequalRows else None
             raise PySparkAssertionError(
-                error_class="DIFFERENT_ROWS",
-                message_parameters={"error_msg": error_msg},
+                error_class="DIFFERENT_ROWS", message_parameters={"error_msg": error_msg}, data=data
             )
 
     # convert actual and expected to list
