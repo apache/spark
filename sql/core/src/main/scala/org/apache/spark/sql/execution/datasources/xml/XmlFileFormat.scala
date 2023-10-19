@@ -42,11 +42,10 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
   def getXmlOptions(
       sparkSession: SparkSession,
       parameters: Map[String, String]): XmlOptions = {
-    val rowTagOpt = parameters.get(XmlOptions.ROW_TAG)
-    require(rowTagOpt.isDefined, s"'${XmlOptions.ROW_TAG}' option is required.")
     new XmlOptions(parameters,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
+      true)
   }
 
   override def isSplitable(

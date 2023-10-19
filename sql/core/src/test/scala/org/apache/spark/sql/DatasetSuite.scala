@@ -1558,8 +1558,8 @@ class DatasetSuite extends QueryTest
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level Product or row object"))
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getCause.getMessage.contains("top level Product or row object"))
   }
 
   test("dropDuplicates") {
@@ -2603,6 +2603,21 @@ class DatasetSuite extends QueryTest
         errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> classOf[Array[Int]].getName))
     }
+  }
+
+  test("Some(null) is unsupported when creating dataset") {
+    // Create our own encoder to avoid multiple encoders with different suffixes
+    implicit val enc: ExpressionEncoder[Option[String]] = ExpressionEncoder()
+    val exception = intercept[org.apache.spark.SparkRuntimeException] {
+      spark.createDataset(Seq(Some(""), None, Some(null)))
+    }
+    checkError(
+      exception = exception,
+      errorClass = "EXPRESSION_ENCODING_FAILED",
+      parameters = Map(
+        "expressions" -> enc.serializer.map(
+          _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n"))
+    )
   }
 
   test("SPARK-45386: persist with StorageLevel.NONE should give correct count") {

@@ -699,7 +699,13 @@ object DataSource extends Logging {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)
-    cls.getDeclaredConstructor().newInstance() match {
+    val instance = try {
+      cls.getDeclaredConstructor().newInstance()
+    } catch {
+      // Throw the original error from the data source implementation.
+      case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+    }
+    instance match {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>

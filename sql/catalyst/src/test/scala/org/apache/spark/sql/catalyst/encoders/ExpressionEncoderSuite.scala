@@ -25,19 +25,20 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{Encoder, Encoders}
+import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.{ClosureCleaner, Utils}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -138,7 +139,8 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
-class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
+class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
+  with QueryErrorsBase {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
@@ -576,6 +578,25 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
   }
 
+  test("throw exception for unexpected serializer") {
+    val schema = new StructType()
+      .add("key", StringType)
+      .add("value", BinaryType)
+
+    val encoder = ExpressionEncoder(schema, lenient = true)
+    val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
+    val exception = intercept[org.apache.spark.SparkRuntimeException] {
+      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+    }
+    checkError(
+      exception = exception,
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      parameters = Map(
+        "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
+        "expr" -> toSQLExpr(unexpectedSerializer))
+    )
+  }
+
   encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
   encodeDecodeTest((null, FooEnum.E1, FooEnum.E2), "Tuple with Null and scala Enum")
   encodeDecodeTest(Seq(FooEnum.E1, null), "Seq with scala Enum")
@@ -652,7 +673,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
             val e = intercept[RuntimeException] {
               toRow(bigNumeric)
             }
-            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getMessage.contains("Failed to encode a value of the expressions:"))
             assert(e.getCause.getClass === classOf[SparkArithmeticException])
           }
         }
