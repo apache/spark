@@ -156,7 +156,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
-      new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
+      new java.util.HashMap(customMetrics.view.mapValues(long2Long).toMap.asJava)
 
     // We now don't report number of shuffle partitions inside the state operator. Instead,
     // it will be filled when the stream query progress is reported

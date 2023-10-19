@@ -385,7 +385,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
         // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
         // `mapValues` is lazy and we need to force it to materialize
-        m.mapValues(mapChild).view.force.toMap
+        m.view.mapValues(mapChild).view.force.toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -806,7 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         Some(arg.asInstanceOf[BaseType].clone())
       // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
       // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-      case m: Map[_, _] => m.mapValues {
+      case m: Map[_, _] => m.view.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           arg.asInstanceOf[BaseType].clone()
         case other => other

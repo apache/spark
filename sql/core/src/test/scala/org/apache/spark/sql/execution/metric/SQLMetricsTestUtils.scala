@@ -216,8 +216,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])],
       enableWholeStage: Boolean = false): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
-      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+    val expectedMetricsPredicates = expectedMetrics.view.mapValues { case (nodeName, nodeMetrics) =>
+      (nodeName, nodeMetrics.view.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
         }).toMap)

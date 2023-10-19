@@ -1292,8 +1292,8 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =
-      mutableNodesForGroup.mapValues(_.toArray).toMap
-    val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.mapValues(_.toMap).toMap
+      mutableNodesForGroup.view.mapValues(_.toArray).toMap
+    val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.view.mapValues(_.toMap).toMap
     (nodesForGroup, treeToNodeToIndexInfo)
   }
 
