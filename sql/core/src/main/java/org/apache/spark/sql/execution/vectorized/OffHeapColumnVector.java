@@ -48,6 +48,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
    * in number of elements, not number of bytes.
    */
   public static OffHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
+    assertNonNegativeCapacity(capacity);
     OffHeapColumnVector[] vectors = new OffHeapColumnVector[fields.length];
     for (int i = 0; i < fields.length; i++) {
       vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
@@ -64,9 +65,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long lengthData;
   private long offsetData;
 
+  private long nullsCapacity;
+  private long dataCapacity;
+  private long lengthDataCapacity;
+  private long offsetDataCapacity;
+
   public OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
-
+    assertNonNegativeCapacity(capacity);
     nulls = 0;
     data = 0;
     lengthData = 0;
@@ -95,6 +101,10 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     data = 0;
     lengthData = 0;
     offsetData = 0;
+    nullsCapacity = 0;
+    dataCapacity = 0;
+    lengthDataCapacity = 0;
+    offsetDataCapacity = 0;
   }
 
   //
@@ -103,28 +113,34 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNull(int rowId) {
+    assertNullsWithinCapacity(rowId);
     Platform.putByte(null, nulls + rowId, (byte) 0);
   }
 
   @Override
   public void putNull(int rowId) {
+    if (isAllNull) return; // Skip writing nulls to all-null vector.
+    assertNullsWithinCapacity(rowId);
+    if (!isNullAt(rowId)) ++numNulls;
     Platform.putByte(null, nulls + rowId, (byte) 1);
-    ++numNulls;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (isAllNull) return; // Skip writing nulls to all-null vector.
     long offset = nulls + rowId;
+    assertNullsWithinCapacity(rowId + count);
     for (int i = 0; i < count; ++i, ++offset) {
+      if (!isNullAt(rowId + i)) ++numNulls;
       Platform.putByte(null, offset, (byte) 1);
     }
-    numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
     long offset = nulls + rowId;
+    assertNullsWithinCapacity(rowId + count);
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
     }
@@ -132,7 +148,9 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
+    if (isAllNull) return true;
+    assertNullsWithinCapacity(rowId);
+    return Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -141,12 +159,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBoolean(int rowId, boolean value) {
+    assertDataWithinCapacity(rowId, 0);
     Platform.putByte(null, data + rowId, (byte)((value) ? 1 : 0));
   }
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
     byte v = (byte)((value) ? 1 : 0);
+    assertDataWithinCapacity(rowId + count, 0);
     for (int i = 0; i < count; ++i) {
       Platform.putByte(null, data + rowId + i, v);
     }
@@ -154,6 +174,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, byte src) {
+    assertDataWithinCapacity(rowId + 8, 0);
     Platform.putByte(null, data + rowId, (byte)(src & 1));
     Platform.putByte(null, data + rowId + 1, (byte)(src >>> 1 & 1));
     Platform.putByte(null, data + rowId + 2, (byte)(src >>> 2 & 1));
@@ -165,12 +186,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
+  public boolean getBoolean(int rowId) {
+    assertDataWithinCapacity(rowId, 0);
+    return Platform.getByte(null, data + rowId) == 1;
+  }
 
   @Override
   public boolean[] getBooleans(int rowId, int count) {
     assert(dictionary == null);
     boolean[] array = new boolean[count];
+    assertDataWithinCapacity(rowId + count, 0);
     for (int i = 0; i < count; ++i) {
       array[i] = (Platform.getByte(null, data + rowId + i) == 1);
     }
@@ -183,12 +208,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putByte(int rowId, byte value) {
+    assertDataWithinCapacity(rowId, 0);
     Platform.putByte(null, data + rowId, value);
 
   }
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
+    assertDataWithinCapacity(rowId + count, 0);
     for (int i = 0; i < count; ++i) {
       Platform.putByte(null, data + rowId + i, value);
     }
@@ -196,12 +223,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 0);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, null, data + rowId, count);
   }
 
   @Override
   public byte getByte(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 0);
       return Platform.getByte(null, data + rowId);
     } else {
       return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
@@ -212,12 +241,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public byte[] getBytes(int rowId, int count) {
     assert(dictionary == null);
     byte[] array = new byte[count];
+    assertDataWithinCapacity(rowId + count, 0);
     Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
     return array;
   }
 
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
+    assert(dictionary == null);
+    assertDataWithinCapacity(rowId + count, 0);
     return UTF8String.fromAddress(null, data + rowId, count);
   }
 
@@ -232,12 +264,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShort(int rowId, short value) {
+    assertDataWithinCapacity(rowId, 1);
     Platform.putShort(null, data + 2L * rowId, value);
   }
 
   @Override
   public void putShorts(int rowId, int count, short value) {
     long offset = data + 2L * rowId;
+    assertDataWithinCapacity(rowId + count, 1);
     for (int i = 0; i < count; ++i, offset += 2) {
       Platform.putShort(null, offset, value);
     }
@@ -245,12 +279,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShorts(int rowId, int count, short[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 1);
     Platform.copyMemory(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2L,
         null, data + 2L * rowId, count * 2L);
   }
 
   @Override
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 1);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 2L, count * 2L);
   }
@@ -258,6 +294,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 1);
       return Platform.getShort(null, data + 2L * rowId);
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
@@ -268,6 +305,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public short[] getShorts(int rowId, int count) {
     assert(dictionary == null);
     short[] array = new short[count];
+    assertDataWithinCapacity(rowId + count, 1);
     Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
     return array;
   }
@@ -278,12 +316,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInt(int rowId, int value) {
+    assertDataWithinCapacity(rowId, 2);
     Platform.putInt(null, data + 4L * rowId, value);
   }
 
   @Override
   public void putInts(int rowId, int count, int value) {
     long offset = data + 4L * rowId;
+    assertDataWithinCapacity(rowId + count, 2);
     for (int i = 0; i < count; ++i, offset += 4) {
       Platform.putInt(null, offset, value);
     }
@@ -291,18 +331,21 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInts(int rowId, int count, int[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(src, Platform.INT_ARRAY_OFFSET + srcIndex * 4L,
         null, data + 4L * rowId, count * 4L);
   }
 
   @Override
   public void putInts(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 4L, count * 4L);
   }
 
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 2);
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
           null, data + 4L * rowId, count * 4L);
@@ -319,6 +362,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public int getInt(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 2);
       return Platform.getInt(null, data + 4L * rowId);
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
@@ -329,6 +373,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public int[] getInts(int rowId, int count) {
     assert(dictionary == null);
     int[] array = new int[count];
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
     return array;
   }
@@ -342,6 +387,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public int getDictId(int rowId) {
     assert(dictionary == null)
             : "A ColumnVector dictionary should not have a dictionary for itself.";
+    assertDataWithinCapacity(rowId, 2);
     return Platform.getInt(null, data + 4L * rowId);
   }
 
@@ -351,12 +397,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLong(int rowId, long value) {
+    assertDataWithinCapacity(rowId, 3);
     Platform.putLong(null, data + 8L * rowId, value);
   }
 
   @Override
   public void putLongs(int rowId, int count, long value) {
     long offset = data + 8L * rowId;
+    assertDataWithinCapacity(rowId + count, 3);
     for (int i = 0; i < count; ++i, offset += 8) {
       Platform.putLong(null, offset, value);
     }
@@ -364,18 +412,21 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLongs(int rowId, int count, long[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(src, Platform.LONG_ARRAY_OFFSET + srcIndex * 8L,
         null, data + 8L * rowId, count * 8L);
   }
 
   @Override
   public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 8L, count * 8L);
   }
 
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 3);
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
           null, data + 8L * rowId, count * 8L);
@@ -392,6 +443,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public long getLong(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 3);
       return Platform.getLong(null, data + 8L * rowId);
     } else {
       return dictionary.decodeToLong(dictionaryIds.getDictId(rowId));
@@ -402,6 +454,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public long[] getLongs(int rowId, int count) {
     assert(dictionary == null);
     long[] array = new long[count];
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);
     return array;
   }
@@ -412,12 +465,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloat(int rowId, float value) {
+    assertDataWithinCapacity(rowId, 2);
     Platform.putFloat(null, data + rowId * 4L, value);
   }
 
   @Override
   public void putFloats(int rowId, int count, float value) {
     long offset = data + 4L * rowId;
+    assertDataWithinCapacity(rowId + count, 2);
     for (int i = 0; i < count; ++i, offset += 4) {
       Platform.putFloat(null, offset, value);
     }
@@ -425,12 +480,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, float[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(src, Platform.FLOAT_ARRAY_OFFSET + srcIndex * 4L,
         null, data + 4L * rowId, count * 4L);
   }
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         null, data + rowId * 4L, count * 4L);
   }
@@ -442,6 +499,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       long offset = data + 4L * rowId;
+      assertDataWithinCapacity(rowId + count, 2);
       for (int i = 0; i < count; ++i, offset += 4) {
         Platform.putFloat(null, offset, bb.getFloat(srcIndex + (4 * i)));
       }
@@ -451,6 +509,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public float getFloat(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 2);
       return Platform.getFloat(null, data + rowId * 4L);
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
@@ -461,6 +520,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public float[] getFloats(int rowId, int count) {
     assert(dictionary == null);
     float[] array = new float[count];
+    assertDataWithinCapacity(rowId + count, 2);
     Platform.copyMemory(null, data + rowId * 4L, array, Platform.FLOAT_ARRAY_OFFSET, count * 4L);
     return array;
   }
@@ -472,12 +532,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDouble(int rowId, double value) {
+    assertDataWithinCapacity(rowId, 3);
     Platform.putDouble(null, data + rowId * 8L, value);
   }
 
   @Override
   public void putDoubles(int rowId, int count, double value) {
     long offset = data + 8L * rowId;
+    assertDataWithinCapacity(rowId + count, 3);
     for (int i = 0; i < count; ++i, offset += 8) {
       Platform.putDouble(null, offset, value);
     }
@@ -485,12 +547,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex * 8L,
       null, data + 8L * rowId, count * 8L);
   }
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
       null, data + rowId * 8L, count * 8L);
   }
@@ -502,6 +566,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       long offset = data + 8L * rowId;
+      assertDataWithinCapacity(rowId + count, 3);
       for (int i = 0; i < count; ++i, offset += 8) {
         Platform.putDouble(null, offset, bb.getDouble(srcIndex + (8 * i)));
       }
@@ -511,6 +576,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public double getDouble(int rowId) {
     if (dictionary == null) {
+      assertDataWithinCapacity(rowId, 3);
       return Platform.getDouble(null, data + rowId * 8L);
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
@@ -521,6 +587,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public double[] getDoubles(int rowId, int count) {
     assert(dictionary == null);
     double[] array = new double[count];
+    assertDataWithinCapacity(rowId + count, 3);
     Platform.copyMemory(null, data + rowId * 8L, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8L);
     return array;
   }
@@ -537,11 +604,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int getArrayLength(int rowId) {
+    assertLengthWithinCapacity(rowId);
     return Platform.getInt(null, lengthData + 4L * rowId);
   }
 
   @Override
   public int getArrayOffset(int rowId) {
+    assertOffsetWithinCapacity(rowId);
     return Platform.getInt(null, offsetData + 4L * rowId);
   }
 
@@ -549,6 +618,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
+    assertLengthWithinCapacity(rowId);
+    assertOffsetWithinCapacity(rowId);
     Platform.putInt(null, lengthData + 4L * rowId, length);
     Platform.putInt(null, offsetData + 4L * rowId, result);
     return result;
@@ -557,36 +628,85 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
+    if (isAllNull) return; // Skip allocation for all-null vector.
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
+    assertNonNegativeCapacity(oldCapacity);
+    assertNonNegativeCapacity(newCapacity);
+    if (oldCapacity != 0 && newCapacity <= oldCapacity) {
+      throw new RuntimeException("Invalid capacity. " +
+              "Old capacity = " + oldCapacity + ", requested new capacity = " + newCapacity);
+    }
     if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4L, newCapacity * 4L);
       this.offsetData =
           Platform.reallocateMemory(offsetData, oldCapacity * 4L, newCapacity * 4L);
+      this.lengthDataCapacity = newCapacity * 4L;
+      this.offsetDataCapacity = newCapacity * 4L;
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
+      this.dataCapacity = newCapacity;
     } else if (type instanceof ShortType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 2L, newCapacity * 2L);
+      this.dataCapacity = newCapacity * 2L;
     } else if (type instanceof IntegerType || type instanceof FloatType ||
         type instanceof DateType || DecimalType.is32BitDecimalType(type) ||
         type instanceof YearMonthIntervalType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
+      this.dataCapacity = newCapacity * 4L;
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type) || type instanceof TimestampType ||
         type instanceof TimestampNTZType || type instanceof DayTimeIntervalType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
+      this.dataCapacity = newCapacity * 8L;
     } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
     this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
+    this.nullsCapacity = newCapacity;
     Platform.setMemory(nulls + oldCapacity, (byte)0, newCapacity - oldCapacity);
     capacity = newCapacity;
   }
 
   @Override
   protected OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+    assertNonNegativeCapacity(capacity);
     return new OffHeapColumnVector(capacity, type);
+  }
+
+  static void assertNonNegativeCapacity(int capacity) {
+    if (capacity < 0) {
+      throw new RuntimeException("Negative capacity");
+    }
+  }
+
+  private void assertNullsWithinCapacity(long rowId) {
+    if (rowId < 0 || rowId > nullsCapacity) {
+      throw new RuntimeException("OffHeapColumnVector tried to access index: " + rowId +
+          " but the nulls vector has capacity: " + nullsCapacity);
+    }
+  }
+
+  private void assertDataWithinCapacity(long rowId, int bitShift) {
+    if (rowId < 0 || (rowId << bitShift) > dataCapacity) {
+      throw new RuntimeException("OffHeapColumnVector tried to access index: " + rowId +
+          " but the data vector has capacity: " + dataCapacity);
+    }
+  }
+
+  private void assertLengthWithinCapacity(long rowId) {
+    if (rowId < 0 || (rowId << 2) > lengthDataCapacity) {
+      throw new RuntimeException("OffHeapColumnVector tried to access index: " + rowId +
+          " but the length vector has capacity: " + lengthDataCapacity);
+    }
+  }
+
+  private void assertOffsetWithinCapacity(long rowId) {
+    if (rowId < 0 || (rowId << 2) > offsetDataCapacity) {
+      throw new RuntimeException("OffHeapColumnVector tried to access index: " + rowId +
+          " but the offset vector has capacity: " + offsetDataCapacity);
+    }
   }
 }
