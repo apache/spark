@@ -121,7 +121,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         func(name)
       },
       errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
-      parameters = Map("name" -> name)
+      parameters = Map("name" -> toSQLId(name))
     )
   }
 

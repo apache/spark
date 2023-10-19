@@ -993,7 +993,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
-      messageParameters = Map("name" -> name))
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {

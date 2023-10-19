@@ -2041,7 +2041,7 @@
   },
   "INVALID_SCHEMA_OR_RELATION_NAME" : {
     "message" : [
-      "`<name>` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
     ],
     "sqlState" : "42602"
   },
