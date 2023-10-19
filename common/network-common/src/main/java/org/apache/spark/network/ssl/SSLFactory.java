@@ -410,9 +410,8 @@ public class SSLFactory {
     String[] enabledProtocols =
       ((requestedProtocol == null || requestedProtocol.isEmpty()) ?
         defaultProtocols : new String[]{requestedProtocol});
-    List<String> protocols = new ArrayList<String>();
 
-    addIfSupported(supportedProtocols, protocols, enabledProtocols);
+    List<String> protocols = addIfSupported(supportedProtocols, enabledProtocols);
     if (!protocols.isEmpty()) {
       return protocols.toArray(new String[protocols.size()]);
     } else {
@@ -441,9 +440,8 @@ public class SSLFactory {
     };
     String[] enabledCiphers =
       ((requestedCiphers == null || requestedCiphers.length == 0) ? baseCiphers : requestedCiphers);
-    List<String> ciphers = new ArrayList<String>();
 
-    addIfSupported(supportedCiphers, ciphers, enabledCiphers);
+    List<String> ciphers = addIfSupported(supportedCiphers, enabledCiphers);
     if (!ciphers.isEmpty()) {
       return ciphers.toArray(new String[ciphers.size()]);
     } else {
@@ -457,7 +455,8 @@ public class SSLFactory {
       engine.getSupportedCipherSuites(), engine.getEnabledCipherSuites(), requestedCiphers);
   }
 
-  private static void addIfSupported(String[] supported, List<String> enabled, String... names) {
+  private static List<String> addIfSupported(String[] supported, String... names) {
+    List<String> enabled = new ArrayList<>();
     for (String n : names) {
       for (String s : supported) {
         if (n.equals(s)) {
@@ -466,5 +465,6 @@ public class SSLFactory {
         }
       }
     }
+    return enabled;
   }
 }
