@@ -66,8 +66,4 @@ jobs:
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
         GIT_REF: ${{ matrix.branch }}
-        # SPARK-45546 adds this environment variable to split the publish snapshot process into two steps:
-        # first package, then deploy. This is intended to reduce the resource pressure of deploy.
-        # When PACKAGE_BEFORE_DEPLOY is not set to true, it will revert to the one-step deploy method.
-        PACKAGE_BEFORE_DEPLOY: true
       run: ./dev/create-release/release-build.sh publish-snapshot
