@@ -396,7 +396,7 @@ def assertDataFrameEqual(
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
-    returnUnequalRows=False,
+    includeDiffRows=False,
 ):
     r"""
     A util function to assert equality between `actual` and `expected`
@@ -425,9 +425,9 @@ def assertDataFrameEqual(
     atol : float, optional
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
-    returnUnequalRows: bool, False
-        If set to `True`, the unequal rows are returned as a data set for further debugging.
-        If set to `False` (default), the unequal rows are not returned as a data set.
+    includeDiffRows: bool, False
+        If set to `True`, the unequal rows are included in PySparkAssertionError for further
+        debugging. If set to `False` (default), the unequal rows are not returned as a data set.
 
         .. versionadded:: 4.0.0
 
@@ -482,15 +482,15 @@ def assertDataFrameEqual(
     Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
 
-    The `returnUnequalRows` parameter can be used to return the rows that did not match
-    in the assertion. This can be useful for debugging or further analysis.
+    The `includeDiffRows` parameter can be used to include the rows that did not match
+    in the PySparkAssertionError. This can be useful for debugging or further analysis.
 
     >>> df1 = spark.createDataFrame(
     ...     data=[("1", 1000.00), ("2", 3000.00), ("3", 2000.00)], schema=["id", "amount"])
     >>> df2 = spark.createDataFrame(
     ...     data=[("1", 1001.00), ("2", 3000.00), ("3", 2003.00)], schema=["id", "amount"])
     >>> try:
-    ...     assertDataFrameEqual(df1, df2, returnUnequalRows=True)
+    ...     assertDataFrameEqual(df1, df2, includeDiffRows=True)
     ... except PySparkAssertionError as e:
     ...     spark.createDataFrame(e.data).show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------+-----------+
@@ -627,7 +627,7 @@ def assertDataFrameEqual(
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
-            data = diff_rows if returnUnequalRows else None
+            data = diff_rows if includeDiffRows else None
             raise PySparkAssertionError(
                 error_class="DIFFERENT_ROWS", message_parameters={"error_msg": error_msg}, data=data
             )
