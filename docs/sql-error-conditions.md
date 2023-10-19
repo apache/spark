@@ -574,6 +574,12 @@ For more details see [EXPECT_VIEW_NOT_TABLE](sql-error-conditions-expect-view-no
 
 Failed to decode a row to a value of the expressions: `<expressions>`.
 
+### EXPRESSION_ENCODING_FAILED
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to encode a value of the expressions: `<expressions>` to a row.
+
 ### EXPRESSION_TYPE_IS_NOT_ORDERABLE
 
 [SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1940,6 +1946,12 @@ Parameter `<paramIndex>` of function `<functionName>` requires the `<requiredTyp
 [SQLSTATE: 4274K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot invoke function `<functionName>` because it contains positional argument(s) following the named argument assigned to `<parameterName>`; please rearrange them so the positional arguments come first and then retry the query again.
+
+### UNEXPECTED_SERIALIZER_FOR_CLASS
+
+[SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The class `<className>` has an unexpected expression serializer. Expects "STRUCT" or "IF" which returns "STRUCT" but found `<expr>`.
 
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
