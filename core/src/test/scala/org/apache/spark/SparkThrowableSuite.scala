@@ -430,7 +430,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+        " SQLSTATE: 42703"
     )
   }
 
