@@ -2928,7 +2928,7 @@ class SparkConnectPlanner(
     }
 
     // This is filled when a foreach batch runner started for Python.
-    var foreachBatchRunnerCleaner: Option[StreamingForeachBatchHelper.RunnerCleaner] = None
+    var foreachBatchRunnerCleaner: Option[AutoCloseable] = None
 
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
