@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.IOUtils
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -49,6 +50,25 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   private val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
   private val appId = conf.getAppId
 
+  def copyRdd(bm: BlockManager, blockId: BlockId): Boolean = {
+    bm.getLocalBytes(blockId) match {
+      case Some(data) =>
+        val hash = JavaUtils.nonNegativeHash(blockId.name)
+        val path = new Path(fallbackPath, s"$appId/rdd/$hash/${blockId.name}")
+        Utils.tryWithResource(fallbackFileSystem.create(path)) {
+          os =>
+            Utils.tryWithResource(data.toInputStream()) {
+              is =>
+                IOUtils.copyBytes(is, os, hadoopConf)
+            }
+        }
+        FallbackStorage.reportBlockStatus(bm, blockId, data.size)
+        true
+      case None =>
+        logWarning(s"Block not found: ${blockId}")
+        false
+    }
+  }
   // Visible for testing
   def copy(
       shuffleBlockInfo: ShuffleBlockInfo,
@@ -152,6 +172,28 @@ private[spark] object FallbackStorage extends Logging {
     assert(blockManager.master != null)
     blockManager.master.updateBlockInfo(
       FALLBACK_BLOCK_MANAGER_ID, blockId, StorageLevel.DISK_ONLY, memSize = 0, dataLength)
+  }
+
+  /**
+   * Read a ManagedBuffer for cached RDD.
+   */
+  def readRddBlock(conf: SparkConf, blockId: BlockId): ManagedBuffer = {
+    logInfo(s"Read $blockId")
+    val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
+    val appId = conf.getAppId
+    blockId match {
+      case RDDBlockId(_, _) =>
+      case _ =>
+        throw new IllegalArgumentException("unexpected rdd block id format: " + blockId)
+    }
+    val hash = JavaUtils.nonNegativeHash(blockId.name)
+    val path = new Path(fallbackPath, s"$appId/rdd/$hash/${blockId.name}")
+    Utils.tryWithResource(fallbackFileSystem.open(path)) { inputStream =>
+      val array = IOUtils.readFullyToByteArray(inputStream)
+      new NioManagedBuffer(ByteBuffer.wrap(array))
+    }
   }
 
   /**

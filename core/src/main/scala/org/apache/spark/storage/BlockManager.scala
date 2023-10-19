@@ -1180,8 +1180,12 @@ private[spark] class BlockManager(
       val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
-        val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
-          blockId.toString, tempFileManager)
+        val buf = if (loc == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
+          FallbackStorage.readRddBlock(conf, blockId)
+        } else {
+          blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
+            blockId.toString, tempFileManager)
+        }
         if (blockSize > 0 && buf.size() == 0) {
           throw SparkException.internalError("Empty buffer received for non empty block " +
             s"when fetching remote block $blockId from $loc", category = "STORAGE")

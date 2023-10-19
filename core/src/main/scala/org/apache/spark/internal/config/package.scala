@@ -523,6 +523,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_MAX_THREADS =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.maxThreads")
+        .doc("Maximum number of threads to use in fallback storage I/O.")
+        .version("4.0.0")
+        .intConf
+        .checkValue(_ > 0, "The maximum number of threads should be positive")
+        .createWithDefault(8)
+
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
       .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +

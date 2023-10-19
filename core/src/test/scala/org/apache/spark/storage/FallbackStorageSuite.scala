@@ -17,6 +17,8 @@
 package org.apache.spark.storage
 
 import java.io.{DataOutputStream, File, FileOutputStream, InputStream, IOException}
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import scala.concurrent.duration._
@@ -24,8 +26,9 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, LocalFileSystem, Path, PositionedReadable, Seekable}
+import org.apache.hadoop.io.IOUtils
 import org.mockito.{ArgumentMatchers => mc}
-import org.mockito.Mockito.{mock, never, verify, when}
+import org.mockito.Mockito.{atLeast, mock, never, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
@@ -36,9 +39,11 @@ import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.Utils.tryWithResource
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -331,6 +336,52 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         assert(rdd3.sortByKey().count() == 2)
         assert(sc.getExecutorIds().nonEmpty)
       }
+    }
+  }
+
+  test("SPARK-45612: test cached rdd migration to fallback storage") {
+    val conf = new SparkConf(false)
+        .set("spark.app.id", "testId")
+        .set(SHUFFLE_COMPRESS, false)
+        .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+        .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
+          Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    val blockTransferService = mock(classOf[BlockTransferService])
+    val bm = mock(classOf[BlockManager])
+    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+    when(bm.master).thenReturn(bmm)
+
+    val storedBlockId1 = RDDBlockId(0, 0)
+    val storedBlock1 =
+      new ReplicateBlock(storedBlockId1, Seq(BlockManagerId("replicaHolder", "host1", 1)), 1)
+
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    when(bm.getPeers(mc.any()))
+        .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
+
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+        .thenReturn(Seq(storedBlock1))
+    val bufferData = "abc".getBytes(StandardCharsets.UTF_8)
+    val buffer = new ChunkedByteBuffer(ByteBuffer.wrap(bufferData))
+    when(bm.getLocalBytes(mc.eq(storedBlock1.blockId)))
+        .thenReturn(Some(new ByteBufferBlockData(buffer, false)))
+    val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
+
+    try {
+      bmDecomManager.start()
+      eventually(timeout(10.second), interval(10.milliseconds)) {
+        verify(bm, atLeast(1)).replicateBlock(
+          mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
+        val buffer = FallbackStorage.readRddBlock(conf, storedBlockId1)
+        val bytes = new Array[Byte](buffer.size().toInt)
+        IOUtils.readFully(buffer.createInputStream(), bytes, 0, buffer.size().toInt)
+        assert(bytes sameElements bufferData)
+        assert(!bmDecomManager.rddBlocksLeft)
+      }
+    } finally {
+      bmDecomManager.stop()
     }
   }
 }
