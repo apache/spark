@@ -1087,7 +1087,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
-  test("SPARK-45604: schema mismatch failure error on timestamp_nz to array<timestamp_nz>") {
+  test("SPARK-45604: schema mismatch failure error on timestamp_ntz to array<timestamp_ntz>") {
     import testImplicits._
 
     withTempPath { dir =>
