@@ -2526,8 +2526,10 @@ class SparkConnectPlanner(
         posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
         tracker)
     } else if (!args.isEmpty) {
-      session.sql(getSqlCommand.getSql,
-        args.asScala.view.mapValues(transformLiteral).toMap, tracker)
+      session.sql(
+        getSqlCommand.getSql,
+        args.asScala.view.mapValues(transformLiteral).toMap,
+        tracker)
     } else if (!posArgs.isEmpty) {
       session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
     } else {
@@ -3263,8 +3265,7 @@ class SparkConnectPlanner(
           proto.GetResourcesCommandResult
             .newBuilder()
             .putAllResources(
-              session.sparkContext.resources
-                .view
+              session.sparkContext.resources.view
                 .mapValues(resource =>
                   proto.ResourceInformation
                     .newBuilder()
