@@ -207,10 +207,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.streamingForeachBatchRunnerCleanerCache
         .registerCleanerForQuery(query2, cleaner2)
 
-      val (runner1, runner2) = (
-        cleaner1.asInstanceOf[RunnerCleaner].runner,
-        cleaner2.asInstanceOf[RunnerCleaner].runner
-      )
+      val (runner1, runner2) =
+        (cleaner1.asInstanceOf[RunnerCleaner].runner, cleaner2.asInstanceOf[RunnerCleaner].runner)
 
       // assert both python processes are running
       assert(!runner1.isWorkerStopped().get)
