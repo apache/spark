@@ -720,8 +720,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   private void assertNullsWithinCapacity(long rowId) {
     if (rowId < 0 || rowId > nullsCapacity) {
-      throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " + rowId +
-          " but the nulls vector has capacity: " + nullsCapacity);
+      throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " +
+           rowId + " but the nulls vector has capacity: " + nullsCapacity);
     }
   }
 
