@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private final Logger logger = LoggerFactory.getLogger(SslMessageEncoder.class);
+  private static final Logger logger = LoggerFactory.getLogger(SslMessageEncoder.class);
 
   private SslMessageEncoder() {}
 

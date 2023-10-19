@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.util.JavaUtils;
 
 public class SSLFactory {
-  private final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
 
   /**
    * For a configuration specifying keystore/truststore files
@@ -105,8 +105,6 @@ public class SSLFactory {
     nettyServerSslContext = SslContextBuilder
       .forServer(b.certChain, b.privateKey, b.keyPassword)
       .sslProvider(getSslProvider(b))
-      .sessionCacheSize(0)
-      .sessionTimeout(0)
       .build();
   }
 
@@ -135,7 +133,7 @@ public class SSLFactory {
           try {
             ((ReloadingX509TrustManager) trustManagers[i]).destroy();
           } catch (InterruptedException ex) {
-            logger.error("Interrupted while destroying trust manager: " + ex.toString(), ex);
+            logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
           }
         }
       }
@@ -287,27 +285,9 @@ public class SSLFactory {
       String requestedProtocol,
       KeyManager[] keyManagers,
       TrustManager[] trustManagers) throws GeneralSecurityException {
-    SSLContext sslContext = getSSLContextInstance(requestedProtocol);
+    SSLContext sslContext = SSLContext.getInstance(requestedProtocol);
     sslContext.init(keyManagers, trustManagers, null);
     return sslContext;
-  }
-
-  /**
-   * Get the {@link SSLContext} for the specified <tt>requestedProtocol</tt>
-   * if available, or the default {@link SSLContext}
-   * @param requestedProtocol The protocol to use
-   * @return The built {@link SSLContext}
-   * @throws NoSuchAlgorithmException
-   */
-  private static SSLContext getSSLContextInstance(String requestedProtocol)
-      throws NoSuchAlgorithmException {
-    SSLContext context = null;
-    try {
-      context = SSLContext.getInstance(requestedProtocol);
-    } catch (Exception e) {
-      context = SSLContext.getDefault();
-    }
-    return context;
   }
 
   /**
@@ -371,11 +351,6 @@ public class SSLFactory {
     if (trustStore == null || !trustStore.exists()) {
       return credulousTrustStoreManagers();
     } else {
-      if (trustStorePassword == null) {
-        throw new KeyStoreException(
-          "trustStorePassword cannot be null. Please configure spark.ssl.rpc.trustStorePassword");
-      }
-
       if (trustStoreReloadingEnabled) {
         ReloadingX509TrustManager reloading = new ReloadingX509TrustManager(
           KeyStore.getDefaultType(), trustStore, trustStorePassword, trustStoreReloadIntervalMs);
@@ -389,16 +364,13 @@ public class SSLFactory {
 
   private static TrustManager[] defaultTrustManagers(File trustStore, String trustStorePassword)
       throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
-    InputStream input = Files.asByteSource(trustStore).openStream();
-    try {
+    try (InputStream input = Files.asByteSource(trustStore).openStream()) {
       KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-      ks.load(input, trustStorePassword.toCharArray());
+      ks.load(input, null != trustStorePassword ? trustStorePassword.toCharArray() : null);
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
         TrustManagerFactory.getDefaultAlgorithm());
       tmf.init(ks);
       return tmf.getTrustManagers();
-    } finally {
-      JavaUtils.closeQuietly(input);
     }
   }
 
@@ -409,7 +381,7 @@ public class SSLFactory {
       KeyManagerFactory.getDefaultAlgorithm());
     factory.init(
       loadKeyStore(keyStore, keyStorePassword),
-      (keyStorePassword != null ? keyStorePassword.toCharArray() : null)
+      keyStorePassword != null ? keyStorePassword.toCharArray() : null
     );
 
     return factory.getKeyManagers();
@@ -422,15 +394,10 @@ public class SSLFactory {
         "keyStore cannot be null. Please configure spark.ssl.rpc.keyStore");
     }
 
-    if (keyStorePassword == null) {
-      throw new KeyStoreException(
-        "keyStorePassword cannot be null. Please configure spark.ssl.rpc.keyStorePassword");
-    }
-
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     FileInputStream fin = new FileInputStream(keyStore);
     try {
-      ks.load(fin, keyStorePassword.toCharArray());
+      ks.load(fin, keyStorePassword != null ? keyStorePassword.toCharArray() : null);
       return ks;
     } finally {
       JavaUtils.closeQuietly(fin);
