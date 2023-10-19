@@ -405,7 +405,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTableExtended(
-        ResolvedNamespace(catalog, ns), pattern,
+        ResolvedNamespace(catalog, ns),
+        pattern,
         partitionSpec @ (None | Some(_: ResolvedPartitionSpec)),
         output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, Some(pattern), true,
