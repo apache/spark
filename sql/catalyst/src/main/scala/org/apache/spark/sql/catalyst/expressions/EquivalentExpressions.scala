@@ -22,7 +22,7 @@ import java.util.Objects
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LAMBDA_VARIABLE, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -163,18 +163,13 @@ class EquivalentExpressions(
     case _ => Nil
   }
 
-  private def supportedExpression(e: Expression) = {
-    !e.exists {
-      // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
-      // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      case _: LambdaVariable => true
-
+  private def supportedExpression(e: Expression): Boolean = {
+    // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
+    // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
+    !(e.containsPattern(LAMBDA_VARIABLE) ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
-      case _: PlanExpression[_] => Utils.isInRunningSparkTask
-
-      case _ => false
-    }
+      (e.containsPattern(PLAN_EXPRESSION) && Utils.isInRunningSparkTask))
   }
 
   /**
@@ -244,13 +239,9 @@ class EquivalentExpressions(
  * Wrapper around an Expression that provides semantic equality.
  */
 case class ExpressionEquals(e: Expression) {
-  private def getHeight(tree: Expression): Int = {
-    tree.children.map(getHeight).reduceOption(_ max _).getOrElse(0) + 1
-  }
-
   // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
   // only be a parent of expr2 if expr1.height is larger than expr2.height.
-  lazy val height = getHeight(e)
+  def height: Int = e.height
 
   override def equals(o: Any): Boolean = o match {
     case other: ExpressionEquals => e.semanticEquals(other.e) && height == other.height
