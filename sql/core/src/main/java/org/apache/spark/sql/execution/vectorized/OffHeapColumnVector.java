@@ -710,7 +710,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return new OffHeapColumnVector(capacity, type);
   }
 
-  static void assertNonNegativeCapacity(int capacity) {
+  private static void assertNonNegativeCapacity(int capacity) {
     if (capacity < 0) {
       throw new RuntimeException("Negative capacity");
     }
