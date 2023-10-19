@@ -398,6 +398,7 @@ def assertDataFrameEqual(
     checkRowOrder: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-8,
+    ignoreNullable: bool = True,
     ignoreColumnOrder: bool = False,
     ignoreColumnName: bool = False,
     ignoreColumnType: bool = False,
@@ -431,6 +432,16 @@ def assertDataFrameEqual(
     atol : float, optional
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
+    ignoreNullable : bool, default True
+        Specifies whether a column’s nullable property is included when checking for
+        schema equality.
+        When set to `True` (default), the nullable property of the columns being compared
+        is not taken into account and the columns will be considered equal even if they have
+        different nullable settings.
+        When set to `False`, columns are considered equal only if they have the same nullable
+        setting.
+
+        .. versionadded:: 4.0.0
     ignoreColumnOrder : bool, default False
         Specifies whether to compare columns in the order they appear in the DataFrame or by
         column name.
@@ -524,6 +535,35 @@ def assertDataFrameEqual(
     ! Row(id='1', amount=1001.0)
       Row(id='2', amount=3000.0)
     ! Row(id='3', amount=2003.0)
+
+    Example for ignoreNullable
+
+    >>> from pyspark.sql.types import StructType, StructField, StringType, LongType
+    >>> df1_nullable = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")],
+    ...     schema=StructType(
+    ...         [StructField("amount", LongType(), True), StructField("id", StringType(), True)]
+    ...     )
+    ... )
+    >>> df2_nullable = spark.createDataFrame(
+    ...     data=[(1000, "1"), (5000, "2")],
+    ...     schema=StructType(
+    ...         [StructField("amount", LongType(), True), StructField("id", StringType(), False)]
+    ...     )
+    ... )
+    >>> assertDataFrameEqual(df1_nullable, df2_nullable, ignoreNullable=True)  # pass
+    >>> assertDataFrameEqual(
+    ...     df1_nullable, df2_nullable, ignoreNullable=False
+    ... )  # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+    ...
+    PySparkAssertionError: [DIFFERENT_SCHEMA] Schemas do not match.
+    --- actual
+    +++ expected
+    - StructType([StructField('amount', LongType(), True), StructField('id', StringType(), True)])
+    ?                                                                                      ^^^
+    + StructType([StructField('amount', LongType(), True), StructField('id', StringType(), False)])
+    ?                                                                                      ^^^^
 
     Example for ignoreColumnOrder
 
@@ -755,10 +795,20 @@ def assertDataFrameEqual(
                 message_parameters={"error_msg": error_msg},
             )
 
-    # convert actual and expected to list
+    # only compare schema if expected is not a List
     if not isinstance(actual, list) and not isinstance(expected, list):
-        # only compare schema if expected is not a List
-        assertSchemaEqual(actual.schema, expected.schema)
+        if ignoreNullable:
+            assertSchemaEqual(actual.schema, expected.schema)
+        elif actual.schema != expected.schema:
+            generated_diff = difflib.ndiff(
+                str(actual.schema).splitlines(), str(expected.schema).splitlines()
+            )
+            error_msg = "\n".join(generated_diff)
+
+            raise PySparkAssertionError(
+                error_class="DIFFERENT_SCHEMA",
+                message_parameters={"error_msg": error_msg},
+            )
 
     if not isinstance(actual, list):
         actual_list = actual.collect()
