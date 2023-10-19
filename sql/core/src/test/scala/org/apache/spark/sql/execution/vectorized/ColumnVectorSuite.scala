@@ -738,36 +738,36 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     val shortVector = new OffHeapColumnVector(80, ShortType)
     shortVector.putShort(0, 1)
     shortVector.putShort(40, 1)
-    shortVector.putShort(79, 1)
-    expectOutOfBoundException() {shortVector.putShort(80, 1)}
+    shortVector.putShort(80, 1)
+    expectOutOfBoundException() {shortVector.putShort(81, 1)}
     expectOutOfBoundException() {shortVector.putShort(-1, 1)}
 
     val longVector = new OffHeapColumnVector(80, LongType)
     longVector.putLong(0, 1)
     longVector.putLong(40, 1)
-    longVector.putLong(79, 1)
-    expectOutOfBoundException() {longVector.putLong(80, 1)}
+    longVector.putLong(80, 1)
+    expectOutOfBoundException() {longVector.putLong(81, 1)}
     expectOutOfBoundException() {longVector.putLong(-1, 1)}
 
     val intVector = new OffHeapColumnVector(80, IntegerType)
     intVector.putInt(0, 1)
     intVector.putInt(40, 1)
-    intVector.putInt(79, 1)
-    expectOutOfBoundException() {intVector.putInt(80, 1)}
+    intVector.putInt(80, 1)
+    expectOutOfBoundException() {intVector.putInt(81, 1)}
     expectOutOfBoundException() {intVector.putInt(-1, 1)}
 
     // nulls
     intVector.putNull(0)
     intVector.putNull(40)
-    intVector.putNull(79)
-    expectOutOfBoundException() {intVector.putNull(80)}
+    intVector.putNull(80)
+    expectOutOfBoundException() {intVector.putNull(81)}
     expectOutOfBoundException() {intVector.putNull(-1)}
 
     val arrayVector = new OffHeapColumnVector(80, arrayType)
     arrayVector.putArray(0, 0, 1)
     arrayVector.putArray(40, 0, 1)
-    arrayVector.putArray(79, 0, 1)
-    expectOutOfBoundException() {arrayVector.putArray(80, 0, 1)}
+    arrayVector.putArray(80, 0, 1)
+    expectOutOfBoundException() {arrayVector.putArray(81, 0, 1)}
     expectOutOfBoundException() {arrayVector.putArray(-1, 0, 1)}
   }
 }

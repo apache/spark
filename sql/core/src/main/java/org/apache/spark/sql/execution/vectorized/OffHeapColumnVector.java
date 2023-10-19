@@ -719,28 +719,28 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   private void assertNullsWithinCapacity(long rowId) {
-    if (rowId < 0 || rowId >= nullsCapacity) {
+    if (rowId < 0 || rowId > nullsCapacity) {
       throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " + rowId +
           " but the nulls vector has capacity: " + nullsCapacity);
     }
   }
 
   private void assertDataWithinCapacity(long rowId, int bitShift) {
-    if (rowId < 0 || (rowId << bitShift) >= dataCapacity) {
+    if (rowId < 0 || (rowId << bitShift) > dataCapacity) {
       throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " +
           (rowId << bitShift) + " but the data vector has capacity: " + dataCapacity);
     }
   }
 
   private void assertLengthWithinCapacity(long rowId) {
-    if (rowId < 0 || (rowId << 2) >= lengthDataCapacity) {
+    if (rowId < 0 || (rowId << 2) > lengthDataCapacity) {
       throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " +
           (rowId << 2) + " but the length vector has capacity: " + lengthDataCapacity);
     }
   }
 
   private void assertOffsetWithinCapacity(long rowId) {
-    if (rowId < 0 || (rowId << 2) >= offsetDataCapacity) {
+    if (rowId < 0 || (rowId << 2) > offsetDataCapacity) {
       throw new ArrayIndexOutOfBoundsException("OffHeapColumnVector tried to access index: " +
           (rowId << 2) + " but the offset vector has capacity: " + offsetDataCapacity);
     }
