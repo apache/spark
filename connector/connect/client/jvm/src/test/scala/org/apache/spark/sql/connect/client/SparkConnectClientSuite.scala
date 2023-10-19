@@ -270,7 +270,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(
       "sc://host:123/;user_agent=a945",
       isCorrect = true,
-      client => assert(client.userAgent == "a945")),
+      client => assert(client.userAgent.contains("a945"))),
     TestPackURI("scc://host:12", isCorrect = false),
     TestPackURI("http://host", isCorrect = false),
     TestPackURI("sc:/host:1234/path", isCorrect = false),
@@ -290,7 +290,16 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=true", isCorrect = true),
     TestPackURI("sc://host:123/;use_ssl=false;token=mySecretToken", isCorrect = false),
     TestPackURI("sc://host:123/;token=mySecretToken;use_ssl=false", isCorrect = false),
-    TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true))
+    TestPackURI("sc://host:123/;param1=value1;param2=value2", isCorrect = true),
+    TestPackURI(
+      "sc://SPARK-45486",
+      isCorrect = true,
+      client => {
+        assert(client.userAgent.contains("spark/"))
+        assert(client.userAgent.contains("scala/"))
+        assert(client.userAgent.contains("jvm/"))
+        assert(client.userAgent.contains("os/"))
+      }))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()

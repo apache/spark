@@ -48,14 +48,14 @@ class KafkaRDDSuite extends SparkFunSuite {
 
   private var sc: SparkContext = _
 
-  override def beforeAll: Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll: Unit = {
+  override def afterAll(): Unit = {
     try {
       try {
         if (sc != null) {

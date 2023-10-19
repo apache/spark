@@ -728,7 +728,6 @@ class Frame(object, metaclass=ABCMeta):
         DataFrame.to_delta
         DataFrame.to_table
         DataFrame.to_parquet
-        DataFrame.to_spark_io
 
         Examples
         --------

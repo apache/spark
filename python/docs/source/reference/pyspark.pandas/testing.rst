@@ -16,26 +16,18 @@
     under the License.
 
 
-===================
-Pandas API on Spark
-===================
+.. _api.testing:
 
-This page gives an overview of all public pandas API on Spark.
+=======
+Testing
+=======
+.. currentmodule:: pyspark.pandas
 
-.. note::
-   pandas API on Spark follows the API specifications of latest pandas release.
+Assertion functions
+-------------------
+.. autosummary::
+   :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   io
-   general_functions
-   series
-   frame
-   indexing
-   window
-   groupby
-   resampling
-   ml
-   extensions
-   testing
+   testing.assert_frame_equal
+   testing.assert_series_equal
+   testing.assert_index_equal

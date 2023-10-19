@@ -1178,7 +1178,7 @@ Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include 
 
 ### INVALID_SQL_ARG
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The argument `<name>` of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`.
 
@@ -1344,7 +1344,7 @@ The query does not include a GROUP BY clause. Add GROUP BY or turn it into the w
 
 ### MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The expression `<expr>` does not support more than one source.
 
@@ -2191,7 +2191,7 @@ Literals of the type `<unsupportedType>` are not supported. Supported types are 
 
 ### UNTYPED_SCALA_UDF
 
-SQLSTATE: none assigned
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
