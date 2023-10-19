@@ -919,7 +919,7 @@ struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
 -- !query
 SELECT '1.23' :: int
 -- !query schema
-struct<1.23:int>
+struct<CAST(1.23 AS INT):int>
 -- !query output
 1
 
@@ -927,7 +927,7 @@ struct<1.23:int>
 -- !query
 SELECT 'abc' :: int
 -- !query schema
-struct<abc:int>
+struct<CAST(abc AS INT):int>
 -- !query output
 NULL
 
@@ -935,7 +935,7 @@ NULL
 -- !query
 SELECT '12345678901234567890123' :: long
 -- !query schema
-struct<12345678901234567890123:bigint>
+struct<CAST(12345678901234567890123 AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -943,7 +943,7 @@ NULL
 -- !query
 SELECT '' :: int
 -- !query schema
-struct<:int>
+struct<CAST( AS INT):int>
 -- !query output
 NULL
 
@@ -951,7 +951,7 @@ NULL
 -- !query
 SELECT NULL :: int
 -- !query schema
-struct<NULL:int>
+struct<CAST(NULL AS INT):int>
 -- !query output
 NULL
 
@@ -959,7 +959,7 @@ NULL
 -- !query
 SELECT '123.a' :: int
 -- !query schema
-struct<123.a:int>
+struct<CAST(123.a AS INT):int>
 -- !query output
 NULL
 
@@ -967,7 +967,7 @@ NULL
 -- !query
 SELECT '-2147483648' :: int
 -- !query schema
-struct<-2147483648:int>
+struct<CAST(-2147483648 AS INT):int>
 -- !query output
 -2147483648
 
@@ -975,7 +975,7 @@ struct<-2147483648:int>
 -- !query
 SELECT HEX('abc' :: binary)
 -- !query schema
-struct<hex(abc):string>
+struct<hex(CAST(abc AS BINARY)):string>
 -- !query output
 616263
 
@@ -983,7 +983,7 @@ struct<hex(abc):string>
 -- !query
 SELECT HEX((123 :: byte) :: binary)
 -- !query schema
-struct<hex(123):string>
+struct<hex(CAST(CAST(123 AS TINYINT) AS BINARY)):string>
 -- !query output
 7B
 
@@ -991,7 +991,7 @@ struct<hex(123):string>
 -- !query
 SELECT 'interval 3 month 1 hour' :: interval
 -- !query schema
-struct<interval 3 month 1 hour:interval>
+struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query output
 3 months 1 hours
 
@@ -999,7 +999,7 @@ struct<interval 3 month 1 hour:interval>
 -- !query
 SELECT interval 3 day 1 second :: string
 -- !query schema
-struct<INTERVAL '3 00:00:01' DAY TO SECOND:string>
+struct<CAST(INTERVAL '3 00:00:01' DAY TO SECOND AS STRING):string>
 -- !query output
 INTERVAL '3 00:00:01' DAY TO SECOND
 
@@ -1007,7 +1007,7 @@ INTERVAL '3 00:00:01' DAY TO SECOND
 -- !query
 select ' 1 ' :: DOUBLE
 -- !query schema
-struct< 1 :double>
+struct<CAST( 1  AS DOUBLE):double>
 -- !query output
 1.0
 
@@ -1015,7 +1015,7 @@ struct< 1 :double>
 -- !query
 select '1.0 ' :: DEC
 -- !query schema
-struct<1.0 :decimal(10,0)>
+struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
 -- !query output
 1
 
@@ -1023,8 +1023,8 @@ struct<1.0 :decimal(10,0)>
 -- !query
 select '\t\t true \n\r ' :: boolean
 -- !query schema
-struct<		 true 
- :boolean>
+struct<CAST(		 true 
+  AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -1032,7 +1032,7 @@ true
 -- !query
 select '2022-01-01 00:00:00' :: timestamp
 -- !query schema
-struct<2022-01-01 00:00:00:timestamp>
+struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output
 2022-01-01 00:00:00
 
@@ -1040,7 +1040,7 @@ struct<2022-01-01 00:00:00:timestamp>
 -- !query
 select interval '-10-2' year to month :: smallint
 -- !query schema
-struct<INTERVAL '-10-2' YEAR TO MONTH:smallint>
+struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
 -- !query output
 -122
 
@@ -1048,7 +1048,7 @@ struct<INTERVAL '-10-2' YEAR TO MONTH:smallint>
 -- !query
 select -10L :: interval second
 -- !query schema
-struct<-10:interval second>
+struct<CAST(-10 AS INTERVAL SECOND):interval second>
 -- !query output
 -0 00:00:10.000000000
 
@@ -1056,7 +1056,7 @@ struct<-10:interval second>
 -- !query
 select interval '08:11:10.001' hour to second :: decimal(10, 4)
 -- !query schema
-struct<INTERVAL '08:11:10.001' HOUR TO SECOND:decimal(10,4)>
+struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,4)>
 -- !query output
 29470.0010
 
@@ -1064,7 +1064,7 @@ struct<INTERVAL '08:11:10.001' HOUR TO SECOND:decimal(10,4)>
 -- !query
 select 10.123456BD :: interval day to second
 -- !query schema
-struct<10.123456:interval day to second>
+struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query output
 0 00:00:10.123456000
 
@@ -1072,7 +1072,7 @@ struct<10.123456:interval day to second>
 -- !query
 SELECT '1.23' :: int :: long
 -- !query schema
-struct<1.23:bigint>
+struct<CAST(CAST(1.23 AS INT) AS BIGINT):bigint>
 -- !query output
 1
 
@@ -1080,7 +1080,7 @@ struct<1.23:bigint>
 -- !query
 SELECT '2147483648' :: long :: int
 -- !query schema
-struct<2147483648:int>
+struct<CAST(CAST(2147483648 AS BIGINT) AS INT):int>
 -- !query output
 -2147483648
 
@@ -1088,7 +1088,7 @@ struct<2147483648:int>
 -- !query
 SELECT CAST('2147483648' :: long AS int)
 -- !query schema
-struct<CAST(2147483648 AS INT):int>
+struct<CAST(CAST(2147483648 AS BIGINT) AS INT):int>
 -- !query output
 -2147483648
 
@@ -1096,7 +1096,7 @@ struct<CAST(2147483648 AS INT):int>
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query schema
-struct<map(1, 123, 2, 456)[1]:int>
+struct<CAST(map(1, 123, 2, 456)[1] AS INT):int>
 -- !query output
 123
 
