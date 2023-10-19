@@ -1174,7 +1174,7 @@ For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-``<name>`` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _.
+`<name>` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _.
 
 ### INVALID_SET_SYNTAX
 
