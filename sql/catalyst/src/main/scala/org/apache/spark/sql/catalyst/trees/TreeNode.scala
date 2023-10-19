@@ -173,6 +173,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
+  lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
+
   // Copied from Scala 2.13.1
   // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
   // to prevent the issue https://github.com/scala/bug/issues/10495
