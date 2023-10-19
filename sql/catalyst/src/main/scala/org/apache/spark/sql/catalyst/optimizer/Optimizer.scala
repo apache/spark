@@ -1225,6 +1225,17 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
+    // Case 5: case 2 with a Project
+    case r @ RepartitionByExpression(_,
+        project @ Project(_, child @ (Sort(_, true, _) | _: RepartitionOperation)), _, _) =>
+      r.withNewChildren(Seq(project.withNewChildren(child.children)))
+    // Case 6: case 3 with a Project
+    case r @ RebalancePartitions(_,
+        project @ Project(_, child @ (_: Sort | _: RepartitionOperation)), _, _) =>
+      r.withNewChildren(Seq(project.withNewChildren(child.children)))
+    // Case 7: case 4 with a Project
+    case r @ RebalancePartitions(_, project @ Project(_, child: RebalancePartitions), _, _) =>
+      r.withNewChildren(Seq(project.withNewChildren(child.children)))
   }
 }
 

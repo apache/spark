@@ -222,4 +222,25 @@ class CollapseRepartitionSuite extends PlanTest {
       comparePlans(optimized, expected)
     }
   }
+
+  test("SPARK-45607: Collapse repartition operators with a project") {
+    val query1 = testRelation
+      .distribute($"a")(10)
+      .select($"a", $"b", $"a" + $"b")
+      .distribute($"a")(20)
+    val optimized1 = Optimize.execute(query1.analyze)
+
+    val query2 = testRelation
+      .orderBy($"b".asc)
+      .select($"a", $"b", $"a" + $"b")
+      .distribute($"a")(20)
+    val optimized2 = Optimize.execute(query2.analyze)
+
+    val correctAnswer = testRelation
+      .select($"a", $"b", $"a" + $"b")
+      .distribute($"a")(20).analyze
+
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
+  }
 }
