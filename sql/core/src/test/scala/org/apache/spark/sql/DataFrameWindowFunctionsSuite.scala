@@ -1521,4 +1521,116 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       assert(windows.size === 1)
     }
   }
+
+  test("SPARK-45543: InferWindowGroupLimit causes bug " +
+    "if the other window functions haven't the same window frame as the rank-like functions") {
+    val df = Seq(
+      (1, "Dave", 1, 2020),
+      (2, "Dave", 1, 2021),
+      (3, "Dave", 2, 2022),
+      (4, "Dave", 3, 2023),
+      (5, "Dave", 3, 2024),
+      (6, "Mark", 2, 2022),
+      (7, "Mark", 3, 2023),
+      (8, "Mark", 3, 2024),
+      (9, "Amy", 6, 2021),
+      (10, "Amy", 5, 2022),
+      (11, "Amy", 6, 2023),
+      (12, "Amy", 7, 2024),
+      (13, "John", 7, 2024)).toDF("id", "name", "score", "year")
+
+    val window = Window.partitionBy($"year").orderBy($"score".desc)
+    val window2 = window.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    val window3 = window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+        // The other window functions have the same window frame as the rank-like functions.
+        // df2, df3 and df4 can apply InferWindowGroupLimit
+        val df2 = df
+          .withColumn("rn", row_number().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df2.filter("rn=1"), Seq(
+          Row(1, "Dave", 1, 2020, 1, Array(1)),
+          Row(9, "Amy", 6, 2021, 1, Array(6)),
+          Row(10, "Amy", 5, 2022, 1, Array(5)),
+          Row(11, "Amy", 6, 2023, 1, Array(6)),
+          Row(12, "Amy", 7, 2024, 1, Array(7))
+        ))
+
+        val df3 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df3.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3))
+        ))
+
+        val df4 = df
+          .withColumn("rank", dense_rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df4.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3)),
+          Row(5, "Dave", 3, 2024, 2, Array(7, 7, 3)),
+          Row(8, "Mark", 3, 2024, 2, Array(7, 7, 3, 3))
+        ))
+
+        // The other window functions haven't the same window frame as the rank-like functions.
+        // df5, df6 and df7 cannot apply InferWindowGroupLimit
+        val df5 = df
+          .withColumn("rn", row_number().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df5.filter("rn=1"), Seq(
+          Row(1, "Dave", 1, 2020, 1, Array(1)),
+          Row(9, "Amy", 6, 2021, 1, Array(6, 1)),
+          Row(10, "Amy", 5, 2022, 1, Array(5, 2, 2)),
+          Row(11, "Amy", 6, 2023, 1, Array(6, 3, 3)),
+          Row(12, "Amy", 7, 2024, 1, Array(7, 7, 3, 3))
+        ))
+
+        val df6 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df6.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3))
+        ))
+
+        val df7 = df
+          .withColumn("rank", dense_rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df7.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3)),
+          Row(5, "Dave", 3, 2024, 2, Array(7, 7, 3, 3)),
+          Row(8, "Mark", 3, 2024, 2, Array(7, 7, 3, 3))
+        ))
+      }
+    }
+  }
 }

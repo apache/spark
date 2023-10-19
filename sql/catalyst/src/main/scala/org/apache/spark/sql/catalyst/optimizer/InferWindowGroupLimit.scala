@@ -52,10 +52,19 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     if (limits.nonEmpty) Some(limits.min) else None
   }
 
-  private def support(
+  /**
+   * All window expressions should use the same expanding window, so that
+   * we can safely do the early stop.
+   */
+  private def isExpandingWindow(
       windowExpression: NamedExpression): Boolean = windowExpression match {
-    case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(_, _,
+    case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
+    case _ => false
+  }
+
+  private def support(windowFunction: Expression): Boolean = windowFunction match {
+    case _: Rank | _: DenseRank | _: RowNumber => true
     case _ => false
   }
 
@@ -65,10 +74,11 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     plan.transformWithPruning(_.containsAllPatterns(FILTER, WINDOW), ruleId) {
       case filter @ Filter(condition,
         window @ Window(windowExpressions, partitionSpec, orderSpec, child))
-        if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.exists(support) &&
+        if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.forall(isExpandingWindow) &&
           orderSpec.nonEmpty =>
         val limits = windowExpressions.collect {
-          case alias @ Alias(WindowExpression(rankLikeFunction, _), _) if support(alias) =>
+          case alias @ Alias(WindowExpression(rankLikeFunction, _), _)
+            if support(rankLikeFunction) =>
             extractLimits(condition, alias.toAttribute).map((_, rankLikeFunction))
         }.flatten
 
