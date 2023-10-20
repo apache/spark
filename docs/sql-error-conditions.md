@@ -1953,6 +1953,18 @@ Cannot invoke function `<functionName>` because it contains positional argument(
 
 The class `<className>` has an unexpected expression serializer. Expects "STRUCT" or "IF" which returns "STRUCT" but found `<expr>`.
 
+### UNEXPECTED_VALUE_FOR_LENGTH_IN_SLICE_FUNCTION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unexpected value for length in function `<prettyName>`: length must be greater than or equal to 0.
+
+### UNEXPECTED_VALUE_FOR_START_IN_SLICE_FUNCTION
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unexpected value for start in function `<prettyName>`: SQL array indices start at 1.
+
 ### UNKNOWN_PROTOBUF_MESSAGE_TYPE
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2096,6 +2108,12 @@ Unsupported data type `<typeName>`.
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 The `<format>` datasource doesn't support the column `<columnName>` of the type `<columnType>`.
+
+### UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The size function doesn't support the operand type `<dataType>`.
 
 ### [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupported-default-value-error-class.html)
 

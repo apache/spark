@@ -86,6 +86,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
   }
 
+  test("Unsupported data type for size()") {
+    val exception = intercept[org.apache.spark.SparkUnsupportedOperationException] {
+      Size(Literal.create("str", StringType)).eval(EmptyRow)
+    }
+    checkError(
+      exception = exception,
+      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION",
+      parameters = Map(
+        "dataType" -> StringType.getClass.getCanonicalName
+      ))
+  }
+
   test("MapKeys/MapValues") {
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))

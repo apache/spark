@@ -1370,21 +1370,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unsupportedOperandTypeForSizeFunctionError(
       dataType: DataType): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2156",
+      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION",
       messageParameters = Map(
         "dataType" -> dataType.getClass.getCanonicalName))
   }
 
   def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2157",
+      errorClass = "UNEXPECTED_VALUE_FOR_START_IN_SLICE_FUNCTION",
       messageParameters = Map(
         "prettyName" -> prettyName))
   }
 
   def unexpectedValueForLengthInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2158",
+      errorClass = "UNEXPECTED_VALUE_FOR_LENGTH_IN_SLICE_FUNCTION",
       messageParameters = Map(
         "prettyName" -> prettyName))
   }

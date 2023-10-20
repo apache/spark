@@ -3029,6 +3029,18 @@
     ],
     "sqlState" : "42846"
   },
+  "UNEXPECTED_VALUE_FOR_LENGTH_IN_SLICE_FUNCTION" : {
+    "message" : [
+      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
+    ],
+    "sqlState" : "22003"
+  },
+  "UNEXPECTED_VALUE_FOR_START_IN_SLICE_FUNCTION" : {
+    "message" : [
+      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
+    ],
+    "sqlState" : "22003"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
@@ -3212,6 +3224,12 @@
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION" : {
+    "message" : [
+      "The size function doesn't support the operand type <dataType>."
+    ],
+    "sqlState" : "42K09"
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
@@ -5732,21 +5750,6 @@
   "_LEGACY_ERROR_TEMP_2155" : {
     "message" : [
       "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2156" : {
-    "message" : [
-      "The size function doesn't support the operand type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2157" : {
-    "message" : [
-      "Unexpected value for start in function <prettyName>: SQL array indices start at 1."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2158" : {
-    "message" : [
-      "Unexpected value for length in function <prettyName>: length must be greater than or equal to 0."
     ]
   },
   "_LEGACY_ERROR_TEMP_2159" : {
