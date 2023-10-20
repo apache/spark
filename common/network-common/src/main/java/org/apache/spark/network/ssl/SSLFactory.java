@@ -28,7 +28,10 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -366,7 +369,9 @@ public class SSLFactory {
       throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
     try (InputStream input = Files.asByteSource(trustStore).openStream()) {
       KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-      ks.load(input, null != trustStorePassword ? trustStorePassword.toCharArray() : null);
+      char[] passwordCharacters = trustStorePassword != null?
+        trustStorePassword.toCharArray() : null;
+      ks.load(input, passwordCharacters);
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
         TrustManagerFactory.getDefaultAlgorithm());
       tmf.init(ks);
@@ -379,11 +384,8 @@ public class SSLFactory {
           KeyStoreException, IOException, UnrecoverableKeyException {
     KeyManagerFactory factory = KeyManagerFactory.getInstance(
       KeyManagerFactory.getDefaultAlgorithm());
-    factory.init(
-      loadKeyStore(keyStore, keyStorePassword),
-      keyStorePassword != null ? keyStorePassword.toCharArray() : null
-    );
-
+    char[] passwordCharacters = keyStorePassword != null? keyStorePassword.toCharArray() : null;
+    factory.init(loadKeyStore(keyStore, keyStorePassword), passwordCharacters);
     return factory.getKeyManagers();
   }
 
@@ -397,7 +399,8 @@ public class SSLFactory {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     FileInputStream fin = new FileInputStream(keyStore);
     try {
-      ks.load(fin, keyStorePassword != null ? keyStorePassword.toCharArray() : null);
+      char[] passwordCharacters = keyStorePassword != null? keyStorePassword.toCharArray() : null;
+      ks.load(fin, passwordCharacters);
       return ks;
     } finally {
       JavaUtils.closeQuietly(fin);
@@ -457,12 +460,10 @@ public class SSLFactory {
 
   private static List<String> addIfSupported(String[] supported, String... names) {
     List<String> enabled = new ArrayList<>();
+    Set<String> supportedSet = new HashSet<>(Arrays.asList(supported));
     for (String n : names) {
-      for (String s : supported) {
-        if (n.equals(s)) {
-          enabled.add(s);
-          break;
-        }
+      if (supportedSet.contains(n)) {
+        enabled.add(n);
       }
     }
     return enabled;

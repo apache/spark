@@ -180,7 +180,8 @@ public final class ReloadingX509TrustManager
     canonicalPath = latestCanonicalFile.getPath();
     lastLoaded = latestCanonicalFile.lastModified();
     try (FileInputStream in = new FileInputStream(latestCanonicalFile)) {
-      ks.load(in, null != password ? password.toCharArray() : null);
+      char[] passwordCharacters = password != null? password.toCharArray() : null;
+      ks.load(in, passwordCharacters);
       logger.debug("Loaded truststore '" + file + "'");
     }
 
