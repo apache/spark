@@ -246,6 +246,9 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
         jira_id = default_jira_id
+        if jira_id == "":
+            print("JIRA ID not found, skipping.")
+            return
 
     try:
         issue = asf_jira.issue(jira_id)
