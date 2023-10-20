@@ -118,6 +118,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
+### CANNOT_ALTER_PARTITION_COLUMN
+
+[SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2298,3 +2304,5 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+
