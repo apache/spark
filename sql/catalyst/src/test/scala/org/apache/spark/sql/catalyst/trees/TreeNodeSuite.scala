@@ -891,7 +891,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       objectType = Some("VIEW"),
       objectName = Some("some_view"))
     val expectedSummary =
-      """== SQL of VIEW some_view(line 3, position 39) ==
+      """== SQL of VIEW some_view (line 3, position 39) ==
         |...7890 + 1234567890 + 1234567890, cast('a'
         |                                   ^^^^^^^^
         |as /* comment */
