@@ -2046,7 +2046,7 @@ class DataFrameWriter(OptionUtils):
     def xml(
         self,
         path: str,
-        rowTag: str,
+        rowTag: Optional[str] = None,
         mode: Optional[str] = None,
         attributePrefix: Optional[str] = None,
         valueTag: Optional[str] = None,

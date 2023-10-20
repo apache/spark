@@ -118,7 +118,7 @@ class DataSourcesTestsMixin:
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         xsdPath = tempfile.mkdtemp()
-        xsdString = '''<?xml version="1.0" encoding="UTF-8" ?>
+        xsdString = """<?xml version="1.0" encoding="UTF-8" ?>
           <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
             <xs:element name="person">
               <xs:complexType>
@@ -128,29 +128,34 @@ class DataSourcesTestsMixin:
                 </xs:sequence>
               </xs:complexType>
             </xs:element>
-          </xs:schema>'''
+          </xs:schema>"""
         with open(os.path.join(xsdPath, "people.xsd"), "w") as f:
             _ = f.write(xsdString)
-        df = self.spark.createDataFrame([
-            ("Hyukjin", 100), ("Aria", 101), ("Arin", 102)
-        ]).toDF("name", "age")
+        df = self.spark.createDataFrame([("Hyukjin", 100), ("Aria", 101), ("Arin", 102)]).toDF(
+            "name", "age"
+        )
         df.write.xml(tmpPath, rootTag="people", rowTag="person")
-        people = self.spark.read.xml(tmpPath, rowTag="person",
-            rowValidationXSDPath=os.path.join(xsdPath, "people.xsd"))
+        people = self.spark.read.xml(
+            tmpPath, rowTag="person", rowValidationXSDPath=os.path.join(xsdPath, "people.xsd")
+        )
         expected = [
             Row(age=100, name="Hyukjin"),
             Row(age=101, name="Aria"),
             Row(age=102, name="Arin"),
         ]
         self.assertEqual(people.sort("age").collect(), expected)
-        self.assertEqual(people.schema, StructType([StructField("age", LongType(), True),
-            StructField("name", StringType(), True)]))
+        self.assertEqual(
+            people.schema,
+            StructType(
+                [StructField("age", LongType(), True), StructField("name", StringType(), True)]
+            ),
+        )
         shutil.rmtree(tmpPath)
         shutil.rmtree(xsdPath)
 
     def test_xml_sampling_ratio(self):
         rdd = self.spark.sparkContext.range(0, 100, 1, 1).map(
-            lambda x: '<p><a>0.1</a></p>' if x == 1 else '<p><a>%s</a></p>' % str(x)
+            lambda x: "<p><a>0.1</a></p>" if x == 1 else "<p><a>%s</a></p>" % str(x)
         )
         schema = self.spark.read.option("samplingRatio", 0.5).xml(rdd).schema
         self.assertEqual(schema, StructType([StructField("a", LongType(), True)]))
