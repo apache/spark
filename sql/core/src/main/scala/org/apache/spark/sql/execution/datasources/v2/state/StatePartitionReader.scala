@@ -18,12 +18,25 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeRow}
-import org.apache.spark.sql.connector.read.PartitionReader
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+/** An implementation of partition reader factor for State data source. */
+class StatePartitionReaderFactory(
+    storeConf: StateStoreConf,
+    hadoopConf: SerializableConfiguration,
+    schema: StructType) extends PartitionReaderFactory {
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    new StatePartitionReader(storeConf, hadoopConf,
+      partition.asInstanceOf[StateStoreInputPartition], schema)
+  }
+}
+
+/** An implementation of partition reader for State data source. */
 class StatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
@@ -34,15 +47,15 @@ class StatePartitionReader(
   private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
 
   private lazy val store = {
-    val stateStoreId = StateStoreId(partition.stateCheckpointRootLocation,
-      partition.operatorId, partition.partition, partition.storeName)
+    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
+      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
     // TODO: This does not handle the case of session window aggregation; we don't have an
     //  information whether the state store uses prefix scan or not. We will have to add such
     //  information to determine the right encoder/decoder for the data.
     StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
-      numColsPrefixKey = 0, version = partition.batchId + 1, storeConf = storeConf,
+      numColsPrefixKey = 0, version = partition.sourceOptions.batchId + 1, storeConf = storeConf,
       hadoopConf = hadoopConf.value)
   }
 

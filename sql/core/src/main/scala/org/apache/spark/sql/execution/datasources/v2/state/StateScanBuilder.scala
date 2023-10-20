@@ -24,43 +24,32 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.{JoinSideValues, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+/** FIXME: ...TBD... */
 class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
-    stateCheckpointRootLocation: String,
-    batchId: Long,
-    operatorId: Long,
-    storeName: String,
-    joinSide: JoinSideValues,
+    sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf) extends ScanBuilder {
-  override def build(): Scan = new StateScan(session, schema, stateCheckpointRootLocation,
-    batchId, operatorId, storeName, joinSide, stateStoreConf)
+  override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf)
 }
 
+/** FIXME: ...TBD... */
 class StateStoreInputPartition(
     val partition: Int,
     val queryId: UUID,
-    val stateCheckpointRootLocation: String,
-    val batchId: Long,
-    val operatorId: Long,
-    val storeName: String,
-    val joinSide: JoinSideValues) extends InputPartition
+    val sourceOptions: StateSourceOptions) extends InputPartition
 
+/** FIXME: ...TBD... */
 class StateScan(
     session: SparkSession,
     schema: StructType,
-    stateCheckpointRootLocation: String,
-    batchId: Long,
-    operatorId: Long,
-    storeName: String,
-    joinSide: JoinSideValues,
+    sourceOptions: StateSourceOptions,
     stateStoreConf: StateStoreConf) extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -78,7 +67,9 @@ class StateScan(
     })
 
     if (partitions.headOption.isEmpty) {
-      Array.empty[InputPartition]
+      // FIXME: add test case for this
+      throw new IllegalArgumentException("The state does not have any partition. Please double " +
+        s"check that the query points to the valid state. options: $sourceOptions")
     } else {
       // just a dummy query id because we are actually not running streaming query
       val queryId = UUID.randomUUID()
@@ -93,24 +84,25 @@ class StateScan(
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
       partitionNums.map {
-        pn => new StateStoreInputPartition(pn, queryId, stateCheckpointRootLocation,
-          batchId, operatorId, storeName, joinSide)
+        pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
       }.toArray
     }
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = joinSide match {
+  override def createReaderFactory(): PartitionReaderFactory = sourceOptions.joinSide match {
     case JoinSideValues.left =>
       val userFacingSchema = schema
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
-        stateCheckpointRootLocation, operatorId.toInt, LeftSide, excludeAuxColumns = false)
+        sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, LeftSide,
+        excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.right =>
       val userFacingSchema = schema
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
-        stateCheckpointRootLocation, operatorId.toInt, RightSide, excludeAuxColumns = false)
+        sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, RightSide,
+        excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
@@ -120,13 +112,20 @@ class StateScan(
 
   override def toBatch: Batch = this
 
-  // FIXME: show more configs?
-  override def description(): String = s"StateScan " +
-    s"[stateCkptLocation=$stateCheckpointRootLocation]" +
-    s"[batchId=$batchId][operatorId=$operatorId][storeName=$storeName]" +
-    s"[joinSide=$joinSide]"
+  override def description(): String = {
+    val desc = s"StateScan " +
+      s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
+      s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
+      s"[storeName=${sourceOptions.storeName}]"
+
+    if (sourceOptions.joinSide != JoinSideValues.none) {
+      desc + s"[joinSide=${sourceOptions.joinSide}]"
+    } else {
+      desc
+    }
+  }
 
   private def stateCheckpointPartitionsLocation: Path = {
-    new Path(stateCheckpointRootLocation, s"$operatorId")
+    new Path(sourceOptions.stateCheckpointLocation, sourceOptions.operatorId.toString)
   }
 }

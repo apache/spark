@@ -20,50 +20,53 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.{JoinSideValues, StateSourceOptions}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+/** FIXME: ...TBD... */
 class StateTable(
     session: SparkSession,
     override val schema: StructType,
-    stateCheckpointLocation: String,
-    batchId: Long,
-    operatorId: Int,
-    storeName: String,
-    joinSide: JoinSideValues,
+    sourceOptions: StateSourceOptions,
     stateConf: StateStoreConf)
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
 
   if (!isValidSchema(schema)) {
-    throw new AnalysisException("The fields of schema should be 'key' and 'value', " +
-      "and each field should have corresponding fields (they should be a StructType)")
+    // FIXME: this has to probably be an internal error, because users won't be able to specify
+    //   a schema.
+    throw new IllegalStateException(s"Invalid schema is provided. Provided schema: $schema for " +
+      s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
+      s"${sourceOptions.operatorId} , storeName: ${sourceOptions.storeName}, " +
+      s"joinSide: ${sourceOptions.joinSide}")
   }
 
-  override def name(): String =
-    s"state-table-ckpt-$stateCheckpointLocation-batch-$batchId-operator-$operatorId-" +
-      s"store-$storeName-joinside-$joinSide-stateconf-$stateConf"
+  override def name(): String = {
+    val desc = s"StateTable " +
+      s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
+      s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
+      s"[storeName=${sourceOptions.storeName}]"
+
+    if (sourceOptions.joinSide != JoinSideValues.none) {
+      desc + s"[joinSide=${sourceOptions.joinSide}]"
+    } else {
+      desc
+    }
+  }
 
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, stateCheckpointLocation, batchId, operatorId, storeName,
-      joinSide, stateConf)
+    new StateScanBuilder(session, schema, sourceOptions, stateConf)
 
-  // FIXME: pop more critical configurations from stateConf?
-  override def properties(): util.Map[String, String] = Map(
-    "stateCheckpointLocation" -> stateCheckpointLocation,
-    "batchId" -> batchId.toString,
-    "operatorId" -> operatorId.toString,
-    "storeName" -> storeName,
-    "joinSide" -> joinSide.toString).asJava
+  override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
   private def isValidSchema(schema: StructType): Boolean = {
     if (schema.fieldNames.toSeq != Seq("key", "value")) {

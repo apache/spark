@@ -65,7 +65,7 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getCompositeKeyStreamingAggregationQuery(
+  private def getCompositeKeyStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, String, Long, Long, Int, Int)] = {
     inputData.toDF()
       .selectExpr("value", "value % 2 AS groupKey",
@@ -127,7 +127,7 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getLargeDataStreamingAggregationQuery(
+  private def getLargeDataStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, Long, Long, Int, Int)] = {
     inputData.toDF()
       .selectExpr("value", "value % 10 AS groupKey")
@@ -166,7 +166,8 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
+  private def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
+    // FIXME: dropDuplicates with some columns
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
@@ -218,7 +219,7 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getDropDuplicatesWithinWatermarkQuery(
+  private def getDropDuplicatesWithinWatermarkQuery(
       inputData: MemoryStream[(String, Int)]): DataFrame = {
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"_2"))
@@ -255,7 +256,7 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getFlatMapGroupsWithStateQuery(
+  private def getFlatMapGroupsWithStateQuery(
       inputData: MemoryStream[(String, Long)]): Dataset[(String, Int, Long, Boolean)] = {
     // scalastyle:off line.size.limit
     // This test code is borrowed from Sessionization example, with modification a bit to run with testStream
@@ -328,7 +329,7 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  protected def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
+  private def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 

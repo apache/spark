@@ -25,50 +25,35 @@ import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class HDFSBackedStateDataSourceV2ReadSuite extends StateDataSourceV2ReadSuite {
-  private var oldProviderClass: String = _
+class StateDataSourceNegativeTestSuite extends StreamTest {
+  /*
+  FIXME: ...
+    Can we add some test cases for failure conditions too ?
+    not a stateful query
+    schema is invalid
+    options passed are invalid
+    etc
+    ?
+    But maybe I can revisit the case where the schema "file" is corrupted.
+   */
+}
 
+class HDFSBackedStateDataSourceV2ReadSuite extends StateDataSourceV2ReadSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    oldProviderClass = spark.conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[HDFSBackedStateStoreProvider].getName)
-  }
-
-  override def afterAll(): Unit = {
-    if (oldProviderClass != null) {
-      spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, oldProviderClass)
-    } else {
-      spark.conf.unset(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
-    }
-
-    super.afterAll()
   }
 }
 
 class RocksDBStateDataSourceV2ReadSuite extends StateDataSourceV2ReadSuite {
-  private var oldProviderClass: String = _
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    oldProviderClass = spark.conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
-  }
-
-  override def afterAll(): Unit = {
-    if (oldProviderClass != null) {
-      spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, oldProviderClass)
-    } else {
-      spark.conf.unset(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
-    }
-
-    super.afterAll()
   }
 }
 
@@ -99,14 +84,12 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         val batchId = 2
 
         val stateReadDf = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           // explicitly specifying batch ID and operator ID to test out the functionality
           .option(StateDataSourceV2.PARAM_BATCH_ID, batchId)
           .option(StateDataSourceV2.PARAM_OPERATOR_ID, operatorId)
           .load()
-
-        logInfo(s"Schema: ${stateReadDf.schema.treeString}")
 
         val resultDf = stateReadDf
           .selectExpr("key.groupKey AS key_groupKey", "value.count AS value_cnt",
@@ -137,12 +120,10 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         runCompositeKeyStreamingAggregationQuery(tempDir.getAbsolutePath)
 
         val stateReadDf = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
-        // skip version and operator ID to test out functionalities
+          // skip version and operator ID to test out functionalities
           .load()
-
-        logInfo(s"Schema: ${stateReadDf.schema.treeString}")
 
         val resultDf = stateReadDf
           .selectExpr("key.groupKey AS key_groupKey", "key.fruit AS key_fruit",
@@ -169,12 +150,10 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       runDropDuplicatesQuery(tempDir.getAbsolutePath)
 
       val stateReadDf = spark.read
-        .format("preview-statestore")
+        .format("statestore")
         .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
-
-      logInfo(s"Schema: ${stateReadDf.schema.treeString}")
 
       val resultDf = stateReadDf
         .selectExpr("key.value AS key_value", "CAST(key.eventTime AS LONG) AS key_eventTime_long")
@@ -182,7 +161,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       checkAnswer(resultDf, Seq(Row(45, 45)))
 
       val stateReadDf2 = spark.read
-        .format("preview-statestore")
+        .format("statestore")
         .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
         .option(StateDataSourceV2.PARAM_BATCH_ID, 0)
         .load()
@@ -201,12 +180,10 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)
 
       val stateReadDf = spark.read
-        .format("preview-statestore")
+        .format("statestore")
         .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
-
-      logInfo(s"Schema: ${stateReadDf.schema.treeString}")
 
       val resultDf = stateReadDf
         .selectExpr("key._1 AS key_1", "value.expiresAtMicros AS value_expiresAtMicros")
@@ -215,7 +192,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         Seq(Row("b", 24000000), Row("d", 27000000)))
 
       val stateReadDf2 = spark.read
-        .format("preview-statestore")
+        .format("statestore")
         .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
         .option(StateDataSourceV2.PARAM_BATCH_ID, 4)
         .load()
@@ -247,7 +224,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
 
         val stateReadDf = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           .load()
 
@@ -314,7 +291,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       withTempDir { tempDir =>
         runStreamStreamJoinQuery(tempDir.getAbsolutePath)
         val stateReaderForLeft = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           .option(StateDataSourceV2.PARAM_JOIN_SIDE, "left")
 
@@ -331,7 +308,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         )
 
         val stateReaderForRight = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           .option(StateDataSourceV2.PARAM_JOIN_SIDE, "right")
 
@@ -348,7 +325,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         )
 
         val stateReaderForRightKeyToNumValues = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           .option(StateDataSourceV2.PARAM_STORE_NAME,
             "right-keyToNumValues")
@@ -363,7 +340,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         )
 
         val stateReaderForRightKeyWithIndexToValue = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           .option(StateDataSourceV2.PARAM_STORE_NAME,
             "right-keyWithIndexToValue")
@@ -395,6 +372,9 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
     }
   }
 
+  // FIXME: Can we just have some tests running with combination of some shuffle partition values
+  //  and the available codecs ?
+
   test("Use different configs than session config") {
     withTempDir { tempDir =>
       withSQLConf(
@@ -416,14 +396,12 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
         val batchId = 2
 
         val stateReadDf = spark.read
-          .format("preview-statestore")
+          .format("statestore")
           .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
           // explicitly specifying batch ID and operator ID to test out the functionality
           .option(StateDataSourceV2.PARAM_BATCH_ID, batchId)
           .option(StateDataSourceV2.PARAM_OPERATOR_ID, operatorId)
           .load()
-
-        logInfo(s"Schema: ${stateReadDf.schema.treeString}")
 
         val resultDf = stateReadDf
           .selectExpr("key.groupKey AS key_groupKey", "value.count AS value_cnt",
@@ -468,7 +446,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       query.stop()
 
       val stateReadDf = spark.read
-        .format("preview-statestore")
+        .format("statestore")
         .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
         // skip version and operator ID to test out functionalities
         .load()
@@ -476,9 +454,7 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
       assert(!stateReadDf.schema.exists(_.name == "_partition_id"),
       "metadata column should not be exposed until it is explicitly specified!")
 
-      logInfo(s"Schema: ${stateReadDf.schema.treeString}")
-
-      val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS).toInt
+      val numShufflePartitions = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
 
       val resultDf = stateReadDf
         .selectExpr("key.value AS key_value", "value.count AS value_count", "_partition_id")

@@ -23,8 +23,9 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
-
+/** FIXME: ...TBD... */
 object StreamStreamJoinStateHelper {
+  /** FIXME: explain the parameter `excludeAuxColumns` */
   def readSchema(
       session: SparkSession,
       stateCheckpointLocation: String,
@@ -39,6 +40,7 @@ object StreamStreamJoinStateHelper {
       .add("value", valueSchema)
   }
 
+  /** FIXME: explain the parameter `excludeAuxColumns` */
   def readKeyValueSchema(
       session: SparkSession,
       stateCheckpointLocation: String,

@@ -187,6 +187,12 @@ class SymmetricHashJoinStateManager(
     }
   }
 
+  /**
+   * Perform a full scan to provide all available data.
+   *
+   * This produces an iterator over the (key, value, match) tuples. Callers are expected
+   * to consume fully to clean up underlying iterators correctly.
+   */
   def iterator: Iterator[KeyToValuePair] = {
     new NextIterator[KeyToValuePair] {
       // Reuse this object to avoid creation+GC overhead.

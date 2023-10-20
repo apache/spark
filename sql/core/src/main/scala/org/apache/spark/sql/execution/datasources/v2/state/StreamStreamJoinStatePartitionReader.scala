@@ -18,9 +18,9 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.read.PartitionReader
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
@@ -29,6 +29,19 @@ import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, Symmetric
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
+/** FIXME: ...TBD... */
+class StreamStreamJoinStatePartitionReaderFactory(
+    storeConf: StateStoreConf,
+    hadoopConf: SerializableConfiguration,
+    userFacingSchema: StructType,
+    stateSchema: StructType) extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    new StreamStreamJoinStatePartitionReader(storeConf, hadoopConf,
+      partition.asInstanceOf[StateStoreInputPartition], userFacingSchema, stateSchema)
+  }
+}
+
+/** FIXME: ...TBD... */
 class StreamStreamJoinStatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
@@ -51,6 +64,13 @@ class StreamStreamJoinStatePartitionReader(
       throw new IllegalStateException("Unexpected join side for stream-stream read!")
   }
 
+  /*
+   * This is to handle the difference of schema across state format versions. The major difference
+   * is whether we have added new field(s) in addition to the fields from input schema.
+   *
+   * - version 1: no additional field
+   * - version 2: the field "matched" is added to the last
+   */
   private val (inputAttributes, formatVersion) = {
     val maybeMatchedColumn = valueSchema.last
     val (fields, version) = {
@@ -77,8 +97,9 @@ class StreamStreamJoinStatePartitionReader(
   private lazy val iter = {
     if (joinStateManager == null) {
       val stateInfo = StatefulOperatorStateInfo(
-        partition.stateCheckpointRootLocation, partition.queryId, partition.operatorId,
-        partition.batchId + 1, -1)
+        partition.sourceOptions.stateCheckpointLocation.toString,
+        partition.queryId, partition.sourceOptions.operatorId,
+        partition.sourceOptions.batchId + 1, -1)
       joinStateManager = new SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
@@ -121,7 +142,18 @@ class StreamStreamJoinStatePartitionReader(
     }
   }
 
-  override def get(): InternalRow = current
+  private val joinedRow = new JoinedRow()
+
+  private def addMetadata(row: InternalRow): InternalRow = {
+    val metadataRow = new GenericInternalRow(
+      StateTable.METADATA_COLUMNS.map(_.name()).map {
+        case "_partition_id" => partition.partition.asInstanceOf[Any]
+      }.toArray
+    )
+    joinedRow.withLeft(row).withRight(metadataRow)
+  }
+
+  override def get(): InternalRow = addMetadata(current)
 
   override def close(): Unit = {
     current = null
