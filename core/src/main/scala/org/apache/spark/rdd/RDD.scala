@@ -2176,6 +2176,6 @@ object RDD {
  * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
  * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
-private[spark] object DeterministicLevel extends Enumeration {
+object DeterministicLevel extends Enumeration {
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }
