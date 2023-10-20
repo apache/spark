@@ -916,7 +916,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
-            def func(iterator):
+            def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
@@ -925,7 +925,8 @@ class DataFrameReader(OptionUtils):
                     yield x
 
             keyed = path.mapPartitions(func)
-            keyed._bypass_serializer = True
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             # There isn't any jvm api for creating a dataframe from rdd storing XML.
             # We can do it through creating a jvm dataset first and using the jvm api
