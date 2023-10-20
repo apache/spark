@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/** FIXME: ...TBD... */
+/** An implementation of [[ScanBuilder]] for State Store data source. */
 class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
@@ -39,13 +39,13 @@ class StateScanBuilder(
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf)
 }
 
-/** FIXME: ...TBD... */
+/** An implementation of [[InputPartition]] for State Store data source. */
 class StateStoreInputPartition(
     val partition: Int,
     val queryId: UUID,
     val sourceOptions: StateSourceOptions) extends InputPartition
 
-/** FIXME: ...TBD... */
+/** An implementation of [[Scan]] with [[Batch]] for State Store data source. */
 class StateScan(
     session: SparkSession,
     schema: StructType,
@@ -67,7 +67,6 @@ class StateScan(
     })
 
     if (partitions.headOption.isEmpty) {
-      // FIXME: add test case for this
       throw new IllegalArgumentException("The state does not have any partition. Please double " +
         s"check that the query points to the valid state. options: $sourceOptions")
     } else {

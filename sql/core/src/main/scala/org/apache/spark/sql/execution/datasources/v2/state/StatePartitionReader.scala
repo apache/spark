@@ -24,7 +24,10 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCon
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/** An implementation of partition reader factor for State data source. */
+/**
+ * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
+ * general read from a state store instance, rather than specific to the operator.
+ */
 class StatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
@@ -36,7 +39,10 @@ class StatePartitionReaderFactory(
   }
 }
 
-/** An implementation of partition reader for State data source. */
+/**
+ * An implementation of [[PartitionReader]] for State data source. This is used to support
+ * general read from a state store instance, rather than specific to the operator.
+ */
 class StatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,

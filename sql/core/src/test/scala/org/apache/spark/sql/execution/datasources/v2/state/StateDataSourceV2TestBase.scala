@@ -167,7 +167,6 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
   }
 
   private def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
-    // FIXME: dropDuplicates with some columns
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")

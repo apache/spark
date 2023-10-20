@@ -23,9 +23,13 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
-/** FIXME: ...TBD... */
+/**
+ * A helper object to read the state schema for stream-stream join.
+ *
+ * The parameter `excludeAuxColumns` in methods represents whether the result schema should
+ * include the columns the operator added in addition to the input schema.
+ */
 object StreamStreamJoinStateHelper {
-  /** FIXME: explain the parameter `excludeAuxColumns` */
   def readSchema(
       session: SparkSession,
       stateCheckpointLocation: String,
@@ -40,7 +44,6 @@ object StreamStreamJoinStateHelper {
       .add("value", valueSchema)
   }
 
-  /** FIXME: explain the parameter `excludeAuxColumns` */
   def readKeyValueSchema(
       session: SparkSession,
       stateCheckpointLocation: String,

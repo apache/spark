@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** FIXME: ...TBD... */
+/** An implementation of [[Table]] with [[SupportsRead]] for State Store data source. */
 class StateTable(
     session: SparkSession,
     override val schema: StructType,
@@ -40,8 +40,6 @@ class StateTable(
   import StateTable._
 
   if (!isValidSchema(schema)) {
-    // FIXME: this has to probably be an internal error, because users won't be able to specify
-    //   a schema.
     throw new IllegalStateException(s"Invalid schema is provided. Provided schema: $schema for " +
       s"checkpoint location: ${sourceOptions.stateCheckpointLocation} , operatorId: " +
       s"${sourceOptions.operatorId} , storeName: ${sourceOptions.storeName}, " +

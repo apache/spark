@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import java.util
 import java.util.UUID
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, RuntimeConfig, SparkSession}
+import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues.JoinSideValues
@@ -33,7 +35,9 @@ import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** Class to register the state data source as `statestore` and provide the table instance. */
+/**
+ * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
+ */
 class StateDataSourceV2 extends TableProvider with DataSourceRegister {
   import StateDataSourceV2._
 
@@ -62,26 +66,33 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
     }
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
-    val (keySchema, valueSchema) = sourceOptions.joinSide match {
-      case JoinSideValues.left =>
-        StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-          sourceOptions.operatorId, LeftSide)
 
-      case JoinSideValues.right =>
-        StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-          sourceOptions.operatorId, RightSide)
+    try {
+      val (keySchema, valueSchema) = sourceOptions.joinSide match {
+        case JoinSideValues.left =>
+          StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
+            sourceOptions.operatorId, LeftSide)
 
-      case JoinSideValues.none =>
-        val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
-          partitionId, sourceOptions.storeName)
-        val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-        val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-        manager.readSchemaFile()
+        case JoinSideValues.right =>
+          StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
+            sourceOptions.operatorId, RightSide)
+
+        case JoinSideValues.none =>
+          val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
+            partitionId, sourceOptions.storeName)
+          val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+          val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+          manager.readSchemaFile()
+      }
+
+      new StructType()
+        .add("key", keySchema)
+        .add("value", valueSchema)
+    } catch {
+      case NonFatal(e) =>
+        throw new IllegalArgumentException("Fail to read the state schema. Either the file " +
+          s"does not exist, or the file is corrupted. options: $sourceOptions", e)
     }
-
-    new StructType()
-      .add("key", keySchema)
-      .add("value", valueSchema)
   }
 
   private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
@@ -98,7 +109,7 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
         StateStoreConf(clonedRuntimeConf.sqlConf)
 
       case _ =>
-        throw new AnalysisException(s"The offset log for $batchId does not exist, " +
+        throw new IllegalStateException(s"The offset log for $batchId does not exist, " +
           s"checkpoint location $checkpointLocation")
     }
   }
@@ -140,7 +151,7 @@ object StateDataSourceV2 {
         hadoopConf: Configuration,
         options: CaseInsensitiveStringMap): StateSourceOptions = {
       val checkpointLocation = Option(options.get(PARAM_PATH)).orElse {
-        throw new AnalysisException(s"'$PARAM_PATH' must be specified.")
+        throw new IllegalArgumentException(s"'$PARAM_PATH' must be specified.")
       }.get
 
       val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
@@ -149,14 +160,29 @@ object StateDataSourceV2 {
         Some(getLastCommittedBatch(sparkSession, resolvedCpLocation))
       }.get
 
+      if (batchId < 0) {
+        throw new IllegalArgumentException(s"'${PARAM_BATCH_ID} cannot be negative.")
+      }
+
       val operatorId = Option(options.get(PARAM_OPERATOR_ID)).map(_.toInt)
         .orElse(Some(0)).get
+
+      if (operatorId < 0) {
+        throw new IllegalArgumentException(s"'${PARAM_OPERATOR_ID} cannot be negative.")
+      }
 
       val storeName = Option(options.get(PARAM_STORE_NAME))
         .getOrElse(StateStoreId.DEFAULT_STORE_NAME)
 
-      val joinSide = Option(options.get(PARAM_JOIN_SIDE))
-        .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
+      val joinSide = try {
+        Option(options.get(PARAM_JOIN_SIDE))
+          .map(JoinSideValues.withName).getOrElse(JoinSideValues.none)
+      } catch {
+        case _: NoSuchElementException =>
+          // convert to IllegalArgumentException
+          throw new IllegalArgumentException(s"Incorrect value of the option " +
+            s"'$PARAM_JOIN_SIDE'. Valid values are ${JoinSideValues.values.mkString(",")}")
+      }
 
       if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
         throw new IllegalArgumentException(s"The options '$PARAM_JOIN_SIDE' and " +
@@ -178,10 +204,9 @@ object StateDataSourceV2 {
       val commitLog = new CommitLog(session, new Path(checkpointLocation, "commits").toString)
       commitLog.getLatest() match {
         case Some((lastId, _)) => lastId
-        case None => throw new AnalysisException("No committed batch found, " +
+        case None => throw new IllegalStateException("No committed batch found, " +
           s"checkpoint location: $checkpointLocation")
       }
     }
   }
 }
-

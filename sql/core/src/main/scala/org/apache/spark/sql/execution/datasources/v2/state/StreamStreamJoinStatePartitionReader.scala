@@ -29,7 +29,10 @@ import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, Symmetric
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
-/** FIXME: ...TBD... */
+/**
+ * An implementation of [[PartitionReaderFactory]] for State Store data source, specifically
+ * to build a [[PartitionReader]] for reading the state from stream-stream join.
+ */
 class StreamStreamJoinStatePartitionReaderFactory(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
@@ -41,7 +44,10 @@ class StreamStreamJoinStatePartitionReaderFactory(
   }
 }
 
-/** FIXME: ...TBD... */
+/**
+ * An implementation of [[PartitionReader]] for State Store data source, specifically to read
+ * the partition for the state from stream-stream join.
+ */
 class StreamStreamJoinStatePartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
