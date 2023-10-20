@@ -824,7 +824,7 @@ class DataFrameReader(OptionUtils):
     def xml(
         self,
         path: Union[str, List[str], RDD[str]],
-        rowTag: str,
+        rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
         attributePrefix: Optional[str] = None,

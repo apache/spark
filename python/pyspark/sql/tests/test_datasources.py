@@ -148,6 +148,13 @@ class DataSourcesTestsMixin:
         shutil.rmtree(tmpPath)
         shutil.rmtree(xsdPath)
 
+    def test_xml_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1).map(
+            lambda x: '<p><a>0.1</a></p>' if x == 1 else '<p><a>%s</a></p>' % str(x)
+        )
+        schema = self.spark.read.option("samplingRatio", 0.5).xml(rdd).schema
+        self.assertEqual(schema, StructType([StructField("a", LongType(), True)]))
+
     def test_read_multiple_orc_file(self):
         df = self.spark.read.orc(
             [
