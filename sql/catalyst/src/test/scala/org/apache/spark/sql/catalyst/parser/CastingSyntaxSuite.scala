@@ -69,6 +69,7 @@ class CastingSyntaxSuite extends AnalysisTest {
   test("arithmetic expressions") {
     assertEqual("(a - b) :: int", Cast('a - 'b, IntegerType))
     assertEqual("(a * b) :: int", Cast('a * 'b, IntegerType))
+    assertEqual("a + b :: int", 'a + Cast('b, IntegerType))
   }
 
   test("star expansion") {
