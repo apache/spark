@@ -175,6 +175,31 @@ trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
       .select($"eventTime".cast("long").as[Long])
   }
 
+  protected def runDropDuplicatesQueryWithColumnSpecified(checkpointRoot: String): Unit = {
+    val inputData = MemoryStream[(String, Int)]
+    val deduplicated = getDropDuplicatesQueryWithColumnSpecified(inputData)
+
+    testStream(deduplicated, OutputMode.Append())(
+      StartStream(checkpointLocation = checkpointRoot),
+
+      AddData(inputData, ("A", 1), ("B", 2), ("C", 3)),
+      CheckAnswer(("A", 1), ("B", 2), ("C", 3)),
+      assertNumStateRows(total = 3, updated = 3),
+
+      AddData(inputData, ("B", 4), ("D", 5)),
+      CheckNewAnswer(("D", 5)),
+      assertNumStateRows(total = 4, updated = 1)
+    )
+  }
+
+  private def getDropDuplicatesQueryWithColumnSpecified(
+      inputData: MemoryStream[(String, Int)]): Dataset[(String, Int)] = {
+    inputData.toDS()
+      .selectExpr("_1 AS col1", "_2 AS col2")
+      .dropDuplicates("col1")
+      .as[(String, Int)]
+  }
+
   protected def runDropDuplicatesWithinWatermarkQuery(checkpointRoot: String): Unit = {
     val inputData = MemoryStream[(String, Int)]
     val deduplicated = getDropDuplicatesWithinWatermarkQuery(inputData)

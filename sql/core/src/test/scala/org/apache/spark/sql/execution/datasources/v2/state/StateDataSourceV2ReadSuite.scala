@@ -175,6 +175,34 @@ abstract class StateDataSourceV2ReadSuite extends StateDataSourceV2TestBase with
     }
   }
 
+  test("dropDuplicates with column specified") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
+
+      val stateReadDf = spark.read
+        .format("statestore")
+        .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
+        // skip version and operator ID to test out functionalities
+        .load()
+
+      val resultDf = stateReadDf
+        .selectExpr("key.col1 AS key_col1")
+
+      checkAnswer(resultDf, Seq(Row("A"), Row("B"), Row("C"), Row("D")))
+
+      val stateReadDf2 = spark.read
+        .format("statestore")
+        .option(StateDataSourceV2.PARAM_PATH, tempDir.getAbsolutePath)
+        .option(StateDataSourceV2.PARAM_BATCH_ID, 0)
+        .load()
+
+      val resultDf2 = stateReadDf2
+        .selectExpr("key.col1 AS key_col1")
+
+      checkAnswer(resultDf2, Seq(Row("A"), Row("B"), Row("C")))
+    }
+  }
+
   test("dropDuplicatesWithinWatermark") {
     withTempDir { tempDir =>
       runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)

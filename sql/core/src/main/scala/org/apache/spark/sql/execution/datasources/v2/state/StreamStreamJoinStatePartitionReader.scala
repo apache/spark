@@ -57,7 +57,7 @@ class StreamStreamJoinStatePartitionReader(
   private val userFacingValueSchema = SchemaUtil.getSchemaAsDataType(userFacingSchema, "value")
     .asInstanceOf[StructType]
 
-  private val joinSide: JoinSide = partition.joinSide match {
+  private val joinSide: JoinSide = partition.sourceOptions.joinSide match {
     case JoinSideValues.left => LeftSide
     case JoinSideValues.right => RightSide
     case JoinSideValues.none =>
