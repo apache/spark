@@ -244,11 +244,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
       val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
-      ExecutePlanResponse.ObservedMetrics
+      val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
         .addAllValues(cols.asJava)
-        .build()
+      if (row.schema != null) {
+        metrics.addAllKeys(row.schema.fieldNames.toList.asJava)
+      }
+      metrics.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse
