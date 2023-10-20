@@ -526,6 +526,96 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>
