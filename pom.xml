@@ -118,7 +118,7 @@
     <maven.version>3.9.5</maven.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.5</asm.version>
+    <asm.version>9.6</asm.version>
     <slf4j.version>2.0.9</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -475,7 +475,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.23</version>
+        <version>4.24</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
