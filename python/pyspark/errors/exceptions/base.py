@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
-from typing import Dict, Optional, cast, Iterable
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING
 
 from pyspark.errors.utils import ErrorClassesReader
-from pyspark.sql.types import Row
 from pickle import PicklingError
+
+if TYPE_CHECKING:
+    from pyspark.sql.types import Row
 
 
 class PySparkException(Exception):
@@ -32,7 +34,7 @@ class PySparkException(Exception):
         message: Optional[str] = None,
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
-        data: Optional[Iterable[Row]] = None,
+        data: Optional[Iterable["Row"]] = None,
     ):
         # `message` vs `error_class` & `message_parameters` are mutually exclusive.
         assert (message is not None and (error_class is None and message_parameters is None)) or (
