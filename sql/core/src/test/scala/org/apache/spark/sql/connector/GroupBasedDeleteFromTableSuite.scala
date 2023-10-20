@@ -96,27 +96,14 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     }
   }
 
-  test("delete runtime group filtering (DPP enabled)") {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
-      checkDeleteRuntimeGroupFiltering()
-    }
-  }
-
-  test("delete runtime group filtering (DPP disabled)") {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-      checkDeleteRuntimeGroupFiltering()
-    }
-  }
-
-  test("delete runtime group filtering (AQE enabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      checkDeleteRuntimeGroupFiltering()
-    }
-  }
-
-  test("delete runtime group filtering (AQE disabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      checkDeleteRuntimeGroupFiltering()
+  test("delete runtime group filtering") {
+    Seq(true, false).foreach { dppEnabled =>
+      Seq(true, false).foreach { aqeEnabled =>
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dppEnabled.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          checkDeleteRuntimeGroupFiltering()
+        }
+      }
     }
   }
 
