@@ -367,8 +367,6 @@ def assertPandasOnSparkEqual(
 
     .. deprecated:: 3.5.1
         `assertPandasOnSparkEqual` will be removed in Spark 4.0.0.
-        Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal`
-        and `ps.testing.assert_index_equal` instead.
 
     Parameters
     ----------
@@ -423,9 +421,7 @@ def assertPandasOnSparkEqual(
     >>> assertPandasOnSparkEqual(s1, s2, almost=True)  # pass, ps.Index obj are almost equal
     """
     warnings.warn(
-        "`assertPandasOnSparkEqual` will be removed in Spark 4.0.0. "
-        "Use `ps.testing.assert_frame_equal`, `ps.testing.assert_series_equal` "
-        "and `ps.testing.assert_index_equal` instead.",
+        "`assertPandasOnSparkEqual` will be removed in Spark 4.0.0. ",
         FutureWarning,
     )
     if actual is None and expected is None:
