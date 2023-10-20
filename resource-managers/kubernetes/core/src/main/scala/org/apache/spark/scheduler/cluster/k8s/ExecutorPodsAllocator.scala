@@ -187,7 +187,7 @@ class ExecutorPodsAllocator(
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
     schedulerKnownNewlyCreatedExecs ++=
-      newlyCreatedExecutors.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
+      newlyCreatedExecutors.view.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
     newlyCreatedExecutors --= schedulerKnownNewlyCreatedExecs.keySet
 
     // For all executors we've created against the API but have not seen in a snapshot
@@ -239,7 +239,7 @@ class ExecutorPodsAllocator(
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
-    val notDeletedPods = lastSnapshot.executorPods.filterKeys(!_deletedExecutorIds.contains(_))
+    val notDeletedPods = lastSnapshot.executorPods.view.filterKeys(!_deletedExecutorIds.contains(_))
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
