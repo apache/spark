@@ -326,9 +326,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "name", "age"
             )
             df.write.xml(tmpPath, rootTag="people", rowTag="person")
-            people = self.spark.read.xml(
-                tmpPath, rowTag="person", rowValidationXSDPath=xsdFile
-            )
+            people = self.spark.read.xml(tmpPath, rowTag="person", rowValidationXSDPath=xsdFile)
             peopleConnect = self.connect.read.xml(
                 tmpPath, rowTag="person", rowValidationXSDPath=xsdFile
             )
