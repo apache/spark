@@ -126,6 +126,9 @@ private[connect] object ErrorUtils extends Logging {
                 .setFragment(queryCtx.fragment())
                 .build())
           }
+          if (sparkThrowable.getSqlState != null) {
+            sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
+          }
           sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>

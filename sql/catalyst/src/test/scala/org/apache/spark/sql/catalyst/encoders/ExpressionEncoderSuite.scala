@@ -673,7 +673,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
             val e = intercept[RuntimeException] {
               toRow(bigNumeric)
             }
-            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getMessage.contains("Failed to encode a value of the expressions:"))
             assert(e.getCause.getClass === classOf[SparkArithmeticException])
           }
         }
