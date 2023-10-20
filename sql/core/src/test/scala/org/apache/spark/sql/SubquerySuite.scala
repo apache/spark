@@ -2712,4 +2712,28 @@ class SubquerySuite extends QueryTest
         expected)
     }
   }
+
+  test("SPARK-45584: subquery execution should not fail with ORDER BY and LIMIT") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 USING PARQUET
+          |AS SELECT * FROM VALUES
+          |(1, "a"),
+          |(2, "a"),
+          |(3, "a") t(id, value)
+          |""".stripMargin)
+      val df = sql(
+        """
+          |WITH t2 AS (
+          |  SELECT * FROM t1 ORDER BY id
+          |)
+          |SELECT *, (SELECT COUNT(*) FROM t2) FROM t2 LIMIT 10
+          |""".stripMargin)
+      // This should not fail with IllegalArgumentException.
+      checkAnswer(
+        df,
+        Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
+    }
+  }
 }
