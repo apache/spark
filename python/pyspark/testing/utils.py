@@ -606,6 +606,7 @@ def assertDataFrameEqual(
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []
+        has_diff_rows = False
 
         rows_str1 = ""
         rows_str2 = ""
@@ -616,13 +617,15 @@ def assertDataFrameEqual(
             rows_str2 += str(r2) + "\n"
             if not compare_rows(r1, r2):
                 diff_rows_cnt += 1
-                diff_rows.append((r1, r2))
+                has_diff_rows = True
+                if includeDiffRows:
+                    diff_rows.append((r1, r2))
 
         generated_diff = _context_diff(
             actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
         )
 
-        if diff_rows:
+        if has_diff_rows:
             error_msg = "Results do not match: "
             percent_diff = (diff_rows_cnt / len(zipped)) * 100
             error_msg += "( %.5f %% )" % percent_diff
