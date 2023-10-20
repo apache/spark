@@ -823,7 +823,7 @@ class DataFrameReader(OptionUtils):
 
     def xml(
         self,
-        path: PathOrPaths,
+        path: Union[str, List[str], RDD[str]],
         rowTag: str,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -853,7 +853,7 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str or list
+        path : str, list or :class:`RDD`
             string, or list of strings, for input path(s),
             or RDD of Strings storing XML rows.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
