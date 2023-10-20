@@ -58,9 +58,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
       + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
-    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', -128, "
+    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-      + "42.75, 1.0000000000000002)").executeUpdate()
+      + "42.75, 1.0000000000000002, -128)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
