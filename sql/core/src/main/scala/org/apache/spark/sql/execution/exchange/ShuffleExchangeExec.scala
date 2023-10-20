@@ -275,10 +275,10 @@ object ShuffleExchangeExec {
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
-      case HashPartitioning(_, n) =>
+      case h: HashPartitioningBase =>
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
-        new PartitionIdPassthrough(n)
+        new PartitionIdPassthrough(h.numPartitions)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -325,7 +325,7 @@ object ShuffleExchangeExec {
           position += 1
           position
         }
-      case h: HashPartitioning =>
+      case h: HashPartitioningBase =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(sortingExpressions, _) =>
