@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.util.Try
-
 import org.apache.spark.annotation.Stable
 
 /**
@@ -40,32 +38,4 @@ class DoubleType private() extends FractionalType {
  * @since 1.3.0
  */
 @Stable
-case object DoubleType extends DoubleType {
-
-  // refer to scala.math.Numeric.BigDecimalAsIfIntegral
-  trait DoubleIsConflicted extends Numeric[Double] {
-    def plus(x: Double, y: Double): Double = x + y
-    def minus(x: Double, y: Double): Double = x - y
-    def times(x: Double, y: Double): Double = x * y
-    def negate(x: Double): Double = -x
-    def fromInt(x: Int): Double = x.toDouble
-    def toInt(x: Double): Int = x.toInt
-    def toLong(x: Double): Long = x.toLong
-    def toFloat(x: Double): Float = x.toFloat
-    def toDouble(x: Double): Double = x
-    // logic in Numeric base trait mishandles abs(-0.0)
-    override def abs(x: Double): Double = math.abs(x)
-    def parseString(str: String): Option[Double] =
-      Try(java.lang.Double.parseDouble(str)).toOption
-
-  }
-
-  trait DoubleAsIfIntegral extends DoubleIsConflicted with Integral[Double] {
-    def quot(x: Double, y: Double): Double = (BigDecimal(x) quot BigDecimal(y)).doubleValue
-    def rem(x: Double, y: Double): Double = (BigDecimal(x) remainder BigDecimal(y)).doubleValue
-  }
-
-  object DoubleAsIfIntegral extends DoubleAsIfIntegral {
-    override def compare(x: Double, y: Double): Int = java.lang.Double.compare(x, y)
-  }
-}
+case object DoubleType extends DoubleType
