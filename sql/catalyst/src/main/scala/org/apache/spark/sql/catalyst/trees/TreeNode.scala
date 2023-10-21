@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.hashing.MurmurHash3
 
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
@@ -175,30 +176,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
   lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
 
-  // Copied from Scala 2.13.1
-  // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
-  // to prevent the issue https://github.com/scala/bug/issues/10495
-  // TODO(SPARK-30848): Remove this once we drop Scala 2.12.
-  private final def productHash(x: Product, seed: Int, ignorePrefix: Boolean = false): Int = {
-    val arr = x.productArity
-    // Case objects have the hashCode inlined directly into the
-    // synthetic hashCode method, but this method should still give
-    // a correct result if passed a case object.
-    if (arr == 0) {
-      x.productPrefix.hashCode
-    } else {
-      var h = seed
-      if (!ignorePrefix) h = scala.util.hashing.MurmurHash3.mix(h, x.productPrefix.hashCode)
-      var i = 0
-      while (i < arr) {
-        h = scala.util.hashing.MurmurHash3.mix(h, x.productElement(i).##)
-        i += 1
-      }
-      scala.util.hashing.MurmurHash3.finalizeHash(h, arr)
-    }
-  }
-
-  private lazy val _hashCode: Int = productHash(this, scala.util.hashing.MurmurHash3.productSeed)
+  private lazy val _hashCode: Int = MurmurHash3.productHash(this)
   override def hashCode(): Int = _hashCode
 
   /**

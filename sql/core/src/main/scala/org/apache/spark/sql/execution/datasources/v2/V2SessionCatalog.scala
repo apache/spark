@@ -150,7 +150,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+    properties.view.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
       case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
     }.toMap
   }
