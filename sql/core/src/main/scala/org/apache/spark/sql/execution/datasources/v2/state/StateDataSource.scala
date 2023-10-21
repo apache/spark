@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSource.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
@@ -38,8 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
  */
-class StateDataSourceV2 extends TableProvider with DataSourceRegister {
-  import StateDataSourceV2._
+class StateDataSource extends TableProvider with DataSourceRegister {
+  import StateDataSource._
 
   private lazy val session: SparkSession = SparkSession.active
 
@@ -117,7 +117,7 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
   override def supportsExternalMetadata(): Boolean = false
 }
 
-object StateDataSourceV2 {
+object StateDataSource {
   val PARAM_PATH = "path"
   val PARAM_BATCH_ID = "batchId"
   val PARAM_OPERATOR_ID = "operatorId"

@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.{JoinSideValues, StateSourceOptions}
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSource.{JoinSideValues, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.StructType

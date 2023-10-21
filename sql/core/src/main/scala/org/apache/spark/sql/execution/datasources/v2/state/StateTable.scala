@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceV2.{JoinSideValues, StateSourceOptions}
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSource.{JoinSideValues, StateSourceOptions}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}

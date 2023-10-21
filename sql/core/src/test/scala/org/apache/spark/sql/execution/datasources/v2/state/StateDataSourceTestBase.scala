@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-trait StateDataSourceV2TestBase extends StreamTest with StateStoreMetricsTest {
+trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
   import testImplicits._
 
   protected def runCompositeKeyStreamingAggregationQuery(checkpointRoot: String): Unit = {
