@@ -96,7 +96,7 @@ object ParquetOptions extends DataSourceOptions {
     "lzo" -> CompressionCodecName.LZO,
     "brotli" -> CompressionCodecName.BROTLI,
     "lz4" -> CompressionCodecName.LZ4,
-    "lz4raw" -> CompressionCodecName.LZ4_RAW,
+    "lz4_raw" -> CompressionCodecName.LZ4_RAW,
     "zstd" -> CompressionCodecName.ZSTD)
 
   def getParquetCompressionCodecName(name: String): String = {

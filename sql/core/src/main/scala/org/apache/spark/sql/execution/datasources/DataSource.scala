@@ -796,7 +796,7 @@ object DataSource extends Logging {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    val optionsWithoutPath = options.view.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
       locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
