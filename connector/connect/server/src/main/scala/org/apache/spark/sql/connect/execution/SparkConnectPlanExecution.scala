@@ -27,7 +27,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -47,9 +47,6 @@ import org.apache.spark.util.ThreadUtils
  */
 private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
 
-  private val sessionHolder = executeHolder.sessionHolder
-  private val session = executeHolder.session
-
   def handlePlan(responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse]): Unit = {
     val request = executeHolder.request
     if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
@@ -57,12 +54,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
     val planner = new SparkConnectPlanner(executeHolder)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val dataframe =
-      Dataset.ofRows(
-        sessionHolder.session,
-        planner.transformRelation(request.getPlan.getRoot),
-        tracker)
+    val dataframe = planner.transformRelationAsDataset(request.getPlan.getRoot)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
