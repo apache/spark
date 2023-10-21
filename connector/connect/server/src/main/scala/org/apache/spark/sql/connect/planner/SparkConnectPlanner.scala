@@ -115,7 +115,8 @@ class SparkConnectPlanner(
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
-  // The root of the query plan is a relation and we apply the transformations to it.
+  // Some relation transform need to create Dataset, then get the logical plan from the Dataset.
+  // This method used to reuse the Dataset instead to discard it.
   def transformRelationAsDataset(rel: proto.Relation): Dataset[Row] = {
     val dataset = rel.getRelTypeCase match {
       case proto.Relation.RelTypeCase.DROP => transformDropAsDataset(rel.getDrop)
@@ -146,7 +147,7 @@ class SparkConnectPlanner(
         Dataset.ofRows(
           session,
           transformRelation(rel),
-          executeHolder.eventsManager.createQueryPlanningTracker)
+          executeHolder.eventsManager.createQueryPlanningTracker())
       case _ =>
         Dataset.ofRows(session, transformRelation(rel))
     }
@@ -157,6 +158,7 @@ class SparkConnectPlanner(
     dataset
   }
 
+  // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
     val plan = rel.getRelTypeCase match {
       // DataFrame API
@@ -1046,20 +1048,21 @@ class SparkConnectPlanner(
 
   private def transformWithColumnsRenamedAsDataset(
       rel: proto.WithColumnsRenamed): Dataset[Row] = {
-    transformRelationAsDataset(rel.getInput)
-      .withColumnsRenamed(rel.getRenameColumnsMapMap)
-  }
-
-  private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
     if (rel.getRenamesCount > 0) {
       val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
         (rename.getColName, rename.getNewColName)
       }.unzip
-      transformWithColumnsRenamedAsDataset(rel).logicalPlan
+      transformRelationAsDataset(rel.getInput)
+        .withColumnsRenamed(colNames, newColNames)
     } else {
       // for backward compatibility
-      transformWithColumnsRenamedAsDataset(rel).logicalPlan
+      transformRelationAsDataset(rel.getInput)
+        .withColumnsRenamed(rel.getRenameColumnsMapMap)
     }
+  }
+
+  private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
+    transformWithColumnsRenamedAsDataset(rel).logicalPlan
   }
 
   private def transformWithColumnsAsDataset(rel: proto.WithColumns): Dataset[Row] = {

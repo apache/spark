@@ -47,13 +47,15 @@ import org.apache.spark.util.ThreadUtils
  */
 private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder) {
 
+  private val sessionHolder = executeHolder.sessionHolder
+
   def handlePlan(responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse]): Unit = {
     val request = executeHolder.request
     if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-    val planner = new SparkConnectPlanner(executeHolder)
+    val planner = new SparkConnectPlanner(sessionHolder, Some(executeHolder))
     val dataframe = planner.transformRelationAsDataset(request.getPlan.getRoot)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
