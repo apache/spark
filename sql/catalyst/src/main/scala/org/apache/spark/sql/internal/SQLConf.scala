@@ -4516,6 +4516,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+    val ENABLE_SUBQUERY_EVALUATION =
+    buildConf("spark.sql.subquery.eval.enabled")
+      .internal()
+      .doc("When true, uncorrelated scalar subqueries will be evaluated in the optimizer")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5397,6 +5405,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyRaiseErrorWithoutErrorClass: Boolean =
       getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)
+
+  def enableSubqueryEvaluation: Boolean = getConf(ENABLE_SUBQUERY_EVALUATION)
 
   /** ********************** SQLConf functionality methods ************ */
 

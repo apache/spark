@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -31,12 +32,14 @@ import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggreg
 class SparkOptimizer(
     catalogManager: CatalogManager,
     catalog: SessionCatalog,
-    experimentalMethods: ExperimentalMethods)
+    experimentalMethods: ExperimentalMethods,
+    spark: SparkSession)
   extends Optimizer(catalogManager) {
 
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     Seq(SchemaPruning) :+
+      new ExecuteUncorrelatedScalarSubquery(spark) :+
       GroupBasedRowLevelOperationScanPlanning :+
       V1Writes :+
       V2ScanRelationPushDown :+

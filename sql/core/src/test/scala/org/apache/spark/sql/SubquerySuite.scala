@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -2733,6 +2733,28 @@ class SubquerySuite extends QueryTest
       checkAnswer(
         df,
         Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
+    }
+  }
+
+  test("SPARK-45621: Add feature to evaluate subquery before push down filter Optimizer rule") {
+    withTempView("t1", "t2") {
+      withSQLConf(SQLConf.ENABLE_SUBQUERY_EVALUATION.key -> "true") {
+        sql("create temporary view t1(a int) using parquet")
+        sql("create temporary view t2(b int) using parquet")
+        val plan = sql("select * from t2 where b > (select max(a) from t1)")
+        val executedPlan = stripAQEPlan(plan.queryExecution.executedPlan)
+        // Make sure the subquery is evaluated before push down filter.
+        val subqueries = executedPlan.collect {
+          case p => p.subqueries
+        }.flatten
+        assert(subqueries.isEmpty)
+        // Make sure the push down filter is pushed down to the data source.
+        val scan = executedPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        val dataFilters = scan.asInstanceOf[FileSourceScanExec].dataFilters
+        assert(dataFilters.nonEmpty)
+        val pushDownFilter = dataFilters.find(_.isInstanceOf[GreaterThan]).get
+        assert(pushDownFilter.asInstanceOf[GreaterThan].right.isInstanceOf[Literal])
+      }
     }
   }
 }
