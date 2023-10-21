@@ -385,11 +385,11 @@ public class SSLFactory {
     KeyManagerFactory factory = KeyManagerFactory.getInstance(
       KeyManagerFactory.getDefaultAlgorithm());
     char[] passwordCharacters = keyStorePassword != null? keyStorePassword.toCharArray() : null;
-    factory.init(loadKeyStore(keyStore, keyStorePassword), passwordCharacters);
+    factory.init(loadKeyStore(keyStore, passwordCharacters), passwordCharacters);
     return factory.getKeyManagers();
   }
 
-  private static KeyStore loadKeyStore(File keyStore, String keyStorePassword)
+  private static KeyStore loadKeyStore(File keyStore, char[] keyStorePassword)
       throws KeyStoreException, IOException, CertificateException, NoSuchAlgorithmException {
     if (keyStore == null) {
       throw new KeyStoreException(
@@ -399,8 +399,7 @@ public class SSLFactory {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     FileInputStream fin = new FileInputStream(keyStore);
     try {
-      char[] passwordCharacters = keyStorePassword != null? keyStorePassword.toCharArray() : null;
-      ks.load(fin, passwordCharacters);
+      ks.load(fin, keyStorePassword);
       return ks;
     } finally {
       JavaUtils.closeQuietly(fin);
