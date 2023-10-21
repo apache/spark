@@ -25,7 +25,7 @@ object SimpleTypedAggregator {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .master("local")
       .appName("common typed aggregator implementations")
       .getOrCreate()

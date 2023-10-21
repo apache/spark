@@ -62,7 +62,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -82,7 +82,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -97,7 +97,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript", "nvidia")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -178,7 +178,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -200,11 +200,11 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       val treqs = new TaskResourceRequests()
       treqs.cpus(i)
       rprofBuilder.require(ereqs).require(treqs)
-      val rprof = rprofBuilder.build
+      val rprof = rprofBuilder.build()
       rpmanager.addResourceProfile(rprof)
       if (i == checkId) rpAlreadyExist = Some(rprof)
     }
-    val rpNotMatch = new ResourceProfileBuilder().build
+    val rpNotMatch = new ResourceProfileBuilder().build()
     assert(rpmanager.getEquivalentProfile(rpNotMatch).isEmpty,
       s"resourceProfile should not have existed")
 
@@ -214,7 +214,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val treqs = new TaskResourceRequests()
     treqs.cpus(checkId)
     rprofBuilder.require(ereqs).require(treqs)
-    val rpShouldMatch = rprofBuilder.build
+    val rpShouldMatch = rprofBuilder.build()
 
     val equivProf = rpmanager.getEquivalentProfile(rpShouldMatch)
     assert(equivProf.nonEmpty)

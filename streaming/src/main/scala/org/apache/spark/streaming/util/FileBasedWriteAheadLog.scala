@@ -59,7 +59,7 @@ private[streaming] class FileBasedWriteAheadLog(
   import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
-  private val callerName = getCallerName
+  private val callerName = getCallerName()
 
   private val threadpoolName = {
     "WriteAheadLogManager" + callerName.map(c => s" for $c").getOrElse("")

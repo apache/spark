@@ -1450,7 +1450,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val seed = if (ctx.seed != null) {
       ctx.seed.getText.toLong
     } else {
-      (math.random * 1000).toLong
+      (math.random() * 1000).toLong
     }
 
     ctx.sampleMethod() match {

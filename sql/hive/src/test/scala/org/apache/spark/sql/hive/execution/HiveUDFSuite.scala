@@ -493,7 +493,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
       assert(answer1.contains("data1") || answer1.contains("data2"))
 
-      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count()
       assert(count2 == 2)
       sql("DROP TABLE external_t5")
     }
@@ -515,7 +515,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
       assert(answer3.contains("external_parquet"))
 
-      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count()
       assert(count3 == 1)
       sql("DROP TABLE external_parquet")
     }
@@ -527,7 +527,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
     assert(answer4.contains("parquet_tmp"))
 
-    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count()
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
   }

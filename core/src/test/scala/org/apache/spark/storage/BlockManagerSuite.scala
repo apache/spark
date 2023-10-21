@@ -2212,7 +2212,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val sortedBlocks = blocks.sortBy(b => (b.shuffleId, b.mapId))
 
     val resolver = mock(classOf[MigratableResolver])
-    when(resolver.getStoredShuffles).thenReturn(blocks)
+    when(resolver.getStoredShuffles()).thenReturn(blocks)
 
     val bm = mock(classOf[BlockManager])
     when(bm.migratableResolver).thenReturn(resolver)

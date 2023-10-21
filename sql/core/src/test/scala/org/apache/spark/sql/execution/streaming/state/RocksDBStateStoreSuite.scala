@@ -75,7 +75,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   test("RocksDB confs are passed correctly from SparkSession to db instance") {
     val sparkConf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       // Set the session confs that should be passed into RocksDB
       val testConfs = Seq(
         ("spark.sql.streaming.stateStore.providerClass",

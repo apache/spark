@@ -87,8 +87,8 @@ object CommandUtils extends Logging {
     }
 
     // set auth secret to env variable if needed
-    if (securityMgr.isAuthenticationEnabled) {
-      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
+    if (securityMgr.isAuthenticationEnabled()) {
+      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey())
     }
     // set SSL env variables if needed
     newEnvironment ++= securityMgr.getEnvironmentForSslRpcPasswords

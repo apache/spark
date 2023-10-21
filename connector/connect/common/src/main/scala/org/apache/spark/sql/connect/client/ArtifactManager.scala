@@ -171,7 +171,7 @@ class ArtifactManager(
       return
     }
 
-    val promise = Promise[Seq[ArtifactSummary]]
+    val promise = Promise[Seq[ArtifactSummary]]()
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
