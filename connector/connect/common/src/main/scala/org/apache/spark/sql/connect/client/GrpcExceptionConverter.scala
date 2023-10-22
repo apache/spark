@@ -323,21 +323,19 @@ private[client] object GrpcExceptionConverter {
 
     val queryContext = error.getSparkThrowable.getQueryContextsList.asScala.map { queryCtx =>
       new QueryContext {
+        override def contextType(): QueryContextType = queryCtx.getContextType match {
+          case FetchErrorDetailsResponse.QueryContext.ContextType.DATASET =>
+            QueryContextType.Dataset
+          case _ => QueryContextType.SQL
+        }
         override def objectType(): String = queryCtx.getObjectType
-
         override def objectName(): String = queryCtx.getObjectName
-
         override def startIndex(): Int = queryCtx.getStartIndex
-
         override def stopIndex(): Int = queryCtx.getStopIndex
-
         override def fragment(): String = queryCtx.getFragment
-
-        // TODO(MaxGekk): Invoke proper methods from QueryContext
-        override def callSite(): String = ""
-        override def code(): String = ""
-        override def contextType(): QueryContextType = QueryContextType.SQL
-        override def summary(): String = ""
+        override def callSite(): String = queryCtx.getCallSite
+        override def code(): String = queryCtx.getCode
+        override def summary(): String = queryCtx.getSummary
       }
     }.toArray
 
