@@ -1174,6 +1174,21 @@ class TypesTestsMixin:
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
 
+    def test_tree_string(self):
+        schema = StructType(
+            [StructField("level1", StructType([StructField("f1", StringType(), True)]), True)]
+        )
+        self.assertEqual(
+            schema.treeString(),
+            "".join(
+                [
+                    "root\n |-- level1: struct (nullable = true)\n",
+                    " |    |-- f1: string (nullable = true)\n",
+                ]
+            ),
+        )
+        self.assertEqual(schema.treeString(1), "root\n |-- level1: struct (nullable = true)\n")
+
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.
         self.assertEqual(DayTimeIntervalType().simpleString(), "interval day to second")

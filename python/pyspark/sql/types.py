@@ -1216,13 +1216,40 @@ class StructType(DataType):
         """
         return list(self.names)
 
-    def treeString(self, maxDepth: int = 0) -> str:
+    def treeString(self, maxDepth: Optional[int] = None) -> str:
+        """Return tree representation of the schema
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        maxDepth : int, optional, default None
+            Depth of the schema for nested schemas.
+
+        Examples
+        --------
+        >>> from pyspark.sql.types import *
+        >>> s = StructType(
+        ... [StructField("level1", StructType([StructField("f1", StringType(), True)]), True)]
+        ... )
+
+        >>> s.treeString()
+        'root\n |-- level1: struct (nullable = true)\n |    |-- f1: string (nullable = true)\n'
+        >>> print(s.treeString())
+        root
+         |-- level1: struct (nullable = true)
+         |    |-- f1: string (nullable = true)
+
+        >>> print(s.treeString(1))
+        root
+         |-- level1: struct (nullable = true)
+        """
         from pyspark.sql import SparkSession
 
         # Intentionally uses SparkSession so one implementation can be shared with/without
         # Spark Connect.
         schema = SparkSession.active().createDataFrame(data=[], schema=self)._jdf.schema()
-        if maxDepth > 0:
+        if maxDepth:
             string = schema.treeString(maxDepth)
         else:
             string = schema.treeString()
