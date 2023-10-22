@@ -438,10 +438,13 @@ object Cast extends QueryErrorsBase {
  * session local timezone by an analyzer [[ResolveTimeZone]].
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`." +
+          " `expr` :: `type` alternative casting syntax is also supported.",
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
+       10
+      > SELECT '10' :: int;
        10
   """,
   since = "1.0.0",

@@ -426,17 +426,49 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
         if children.nonEmpty =>
-        val (newPlan, newCond) = decorrelate(sub, plan)
-        val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
+
+        def mayHaveCountBugAgg(a: Aggregate): Boolean = {
+          a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
+            case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
+            case _ => false
+          })
+        }
+
+        // The below logic controls handling count bug for scalar subqueries in
+        // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
+        // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
+        // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
+        // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
+        // not introduced.
+        val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+          // Handle count bug only if there exists lower level Aggs with count bugs. It does not
+          // matter if the top level agg is count bug vulnerable or not, because:
+          // 1. If the top level agg is count bug vulnerable, it can be handled in
+          // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
+          // E.g. COUNT(COUNT + COUNT)
+          // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
+          // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+          case agg: Aggregate => !agg.child.exists {
+            case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
+            case _ => false
+          }
+          case _ => false
+        })
+        val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
+          // For idempotency, we must save this variable the first time this rule is run, because
+          // decorrelation introduces a GROUP BY is if one wasn't already present.
+          mayHaveCountBugOld.get
+        } else if (handleCountBugInDecorrelate) {
+          // Count bug was already handled in the above decorrelate function call.
+          false
+        } else {
           // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
           // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
           // no COUNT bug.
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
-        } else {
-          // For idempotency, we must save this variable the first time this rule is run, because
-          // decorrelation introduces a GROUP BY is if one wasn't already present.
-          mayHaveCountBugOld.get
         }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug))

@@ -88,8 +88,8 @@ private[sql] trait DataTypeErrorsBase {
     "\"" + elem + "\""
   }
 
-  def getSummary(context: QueryContext): String = {
-    if (context == null) "" else context.summary
+  def getSummary(sqlContext: QueryContext): String = {
+    if (sqlContext == null) "" else sqlContext.summary
   }
 
   def getQueryContext(context: QueryContext): Array[QueryContext] = {

@@ -1753,8 +1753,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("alter table t alter column i set default false")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1246",
-        parameters = Map("name" -> "i", "fieldNames" -> "[`s`, `q`]"))
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`", "columnName" -> "`i`")
+      )
     }
   }
 

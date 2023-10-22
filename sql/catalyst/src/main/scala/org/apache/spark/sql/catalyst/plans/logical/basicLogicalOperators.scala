@@ -762,7 +762,7 @@ object View {
     // as optimization configs but they are still needed during the view resolution.
     // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
     // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+    val retainedConfigs = activeConf.getAllConfs.view.filterKeys(key =>
       Seq(
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",

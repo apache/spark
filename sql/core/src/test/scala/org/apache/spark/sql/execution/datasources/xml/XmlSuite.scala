@@ -1209,10 +1209,9 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       "<ROW><year>2015</year><make>Chevy</make><model>Volt</model><comment>No</comment></ROW>")
     val xmlRDD = spark.sparkContext.parallelize(data)
     val ds = spark.createDataset(xmlRDD)(Encoders.STRING)
-    assert(spark.read.option("rowTag", "ROW").xml(ds).collect().length === 3)
+    assert(spark.read.xml(ds).collect().length === 3)
   }
 
-  import testImplicits._
   test("from_xml basic test") {
     val xmlData =
       """<parent foo="bar"><pid>14ft3</pid>
