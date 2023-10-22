@@ -56,8 +56,8 @@ class TextSocketContinuousStream(
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String],
-    ExpressionEncoder[Timestamp])
+  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String](),
+    ExpressionEncoder[Timestamp]())
 
   @GuardedBy("this")
   private var socket: Socket = _

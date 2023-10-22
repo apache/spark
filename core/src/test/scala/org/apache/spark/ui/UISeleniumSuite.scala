@@ -340,7 +340,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       // Simulate fetch failures:
       val mappedData = data.map { x =>
-        val taskContext = TaskContext.get
+        val taskContext = TaskContext.get()
         if (taskContext.taskAttemptId() == 1) {
           // Cause the post-shuffle stage to fail on its first attempt with a single task failure
           val env = SparkEnv.get
@@ -820,10 +820,10 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   test("description for empty jobs") {
     withSpark(newSparkContext()) { sc =>
-      sc.emptyRDD[Int].collect
+      sc.emptyRDD[Int].collect()
       val description = "This is my job"
       sc.setJobDescription(description)
-      sc.emptyRDD[Int].collect
+      sc.emptyRDD[Int].collect()
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")

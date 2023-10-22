@@ -258,7 +258,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
             |INSERT INTO TABLE t1 VALUES(2.28, cast("2021-08-08" as date))
             |""".stripMargin)
         val df = spark.sql("select sum(id) from t1 where id is not null")
-        assert(df.count == 1)
+        assert(df.count() == 1)
         checkDisableBucketedScan(query = "SELECT SUM(id) FROM t1 WHERE id is not null",
           expectedNumScanWithAutoScanEnabled = 1, expectedNumScanWithAutoScanDisabled = 1)
       }

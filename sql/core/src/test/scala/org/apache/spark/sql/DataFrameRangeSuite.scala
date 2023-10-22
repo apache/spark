@@ -35,77 +35,77 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
   test("SPARK-7150 range api") {
     // numSlice is greater than length
     val res1 = spark.range(0, 10, 1, 15).select("id")
-    assert(res1.count == 10)
+    assert(res1.count() == 10)
     assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
 
     val res2 = spark.range(3, 15, 3, 2).select("id")
-    assert(res2.count == 4)
+    assert(res2.count() == 4)
     assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
 
     val res3 = spark.range(1, -2).select("id")
-    assert(res3.count == 0)
+    assert(res3.count() == 0)
 
     // start is positive, end is negative, step is negative
     val res4 = spark.range(1, -2, -2, 6).select("id")
-    assert(res4.count == 2)
+    assert(res4.count() == 2)
     assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
 
     // start, end, step are negative
     val res5 = spark.range(-3, -8, -2, 1).select("id")
-    assert(res5.count == 3)
+    assert(res5.count() == 3)
     assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
 
     // start, end are negative, step is positive
     val res6 = spark.range(-8, -4, 2, 1).select("id")
-    assert(res6.count == 2)
+    assert(res6.count() == 2)
     assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
 
     val res7 = spark.range(-10, -9, -20, 1).select("id")
-    assert(res7.count == 0)
+    assert(res7.count() == 0)
 
     if (!conf.ansiEnabled) {
       val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
-      assert(res8.count == 3)
+      assert(res8.count() == 3)
       assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
 
       val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
-      assert(res9.count == 2)
+      assert(res9.count() == 2)
       assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
     }
 
     // only end provided as argument
     val res10 = spark.range(10).select("id")
-    assert(res10.count == 10)
+    assert(res10.count() == 10)
     assert(res10.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
 
     val res11 = spark.range(-1).select("id")
-    assert(res11.count == 0)
+    assert(res11.count() == 0)
 
     // using the default slice number
     val res12 = spark.range(3, 15, 3).select("id")
-    assert(res12.count == 4)
+    assert(res12.count() == 4)
     assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
 
     // difference between range start and end does not fit in a 64-bit integer
     val n = 9L * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
     val res13 = spark.range(-n, n, n / 9).select("id")
-    assert(res13.count == 18)
+    assert(res13.count() == 18)
 
     // range with non aggregation operation
-    val res14 = spark.range(0, 100, 2).toDF.filter("50 <= id")
-    val len14 = res14.collect.length
+    val res14 = spark.range(0, 100, 2).toDF().filter("50 <= id")
+    val len14 = res14.collect().length
     assert(len14 == 25)
 
-    val res15 = spark.range(100, -100, -2).toDF.filter("id <= 0")
-    val len15 = res15.collect.length
+    val res15 = spark.range(100, -100, -2).toDF().filter("id <= 0")
+    val len15 = res15.collect().length
     assert(len15 == 50)
 
-    val res16 = spark.range(-1500, 1500, 3).toDF.filter("0 <= id")
-    val len16 = res16.collect.length
+    val res16 = spark.range(-1500, 1500, 3).toDF().filter("0 <= id")
+    val len16 = res16.collect().length
     assert(len16 == 500)
 
-    val res17 = spark.range(10, 0, -1, 1).toDF.sortWithinPartitions("id")
-    assert(res17.collect === (1 to 10).map(i => Row(i)).toArray)
+    val res17 = spark.range(10, 0, -1, 1).toDF().sortWithinPartitions("id")
+    assert(res17.collect() === (1 to 10).map(i => Row(i)).toArray)
   }
 
   testWithWholeStageCodegenOnAndOff("Range with randomized parameters") { codegenEnabled =>
@@ -184,7 +184,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSparkSession with Eventua
     "inconsistent with SparkContext.range()") { _ =>
     val start = java.lang.Long.MAX_VALUE - 3
     val end = java.lang.Long.MIN_VALUE + 2
-    assert(spark.range(start, end, 1).collect.length == 0)
-    assert(spark.range(start, start, 1).collect.length == 0)
+    assert(spark.range(start, end, 1).collect().length == 0)
+    assert(spark.range(start, start, 1).collect().length == 0)
   }
 }

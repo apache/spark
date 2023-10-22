@@ -371,7 +371,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark("String Read/Write", count * iters, output = output)
     benchmark.addCase("On Heap")(column(MemoryMode.ON_HEAP))
     benchmark.addCase("Off Heap")(column(MemoryMode.OFF_HEAP))
-    benchmark.run
+    benchmark.run()
   }
 
   def arrayAccess(iters: Int): Unit = {
@@ -442,7 +442,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     benchmark.addCase("On Heap Read Elements") { _ => readArrayElements(true) }
     benchmark.addCase("Off Heap Read Elements") { _ => readArrayElements(false) }
 
-    benchmark.run
+    benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
