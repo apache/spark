@@ -2962,7 +2962,7 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-target:17</arg>
+              <arg>-target:${java.version}</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
               <arg>-Wconf:cat=scaladoc:wv</arg>
