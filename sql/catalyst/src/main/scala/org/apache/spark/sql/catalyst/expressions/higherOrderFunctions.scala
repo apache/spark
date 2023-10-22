@@ -338,9 +338,9 @@ case class ArrayTransform(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val result = new GenericArrayData(new Array[Any](arr.numElements))
+    val result = new GenericArrayData(new Array[Any](arr.numElements()))
     var i = 0
-    while (i < arr.numElements) {
+    while (i < arr.numElements()) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
@@ -605,9 +605,9 @@ case class ArrayFilter(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val buffer = new mutable.ArrayBuffer[Any](arr.numElements)
+    val buffer = new mutable.ArrayBuffer[Any](arr.numElements())
     var i = 0
-    while (i < arr.numElements) {
+    while (i < arr.numElements()) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
@@ -685,7 +685,7 @@ case class ArrayExists(
     var exists = false
     var foundNull = false
     var i = 0
-    while (i < arr.numElements && !exists) {
+    while (i < arr.numElements() && !exists) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       val ret = f.eval(inputRow)
       if (ret == null) {
@@ -766,7 +766,7 @@ case class ArrayForAll(
     var forall = true
     var foundNull = false
     var i = 0
-    while (i < arr.numElements && forall) {
+    while (i < arr.numElements() && forall) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       val ret = f.eval(inputRow)
       if (ret == null) {
@@ -936,9 +936,9 @@ case class TransformKeys(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
-    val resultKeys = new GenericArrayData(new Array[Any](map.numElements))
+    val resultKeys = new GenericArrayData(new Array[Any](map.numElements()))
     var i = 0
-    while (i < map.numElements) {
+    while (i < map.numElements()) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val result = InternalRow.copyValue(functionForEval.eval(inputRow))
@@ -988,9 +988,9 @@ case class TransformValues(
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
-    val resultValues = new GenericArrayData(new Array[Any](map.numElements))
+    val resultValues = new GenericArrayData(new Array[Any](map.numElements()))
     var i = 0
-    while (i < map.numElements) {
+    while (i < map.numElements()) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val v = InternalRow.copyValue(functionForEval.eval(inputRow))

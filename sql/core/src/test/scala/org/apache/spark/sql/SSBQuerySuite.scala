@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.resourceToString
 class SSBQuerySuite extends BenchmarkQueryTest {
 
   override def beforeAll(): Unit = {
-    super.beforeAll
+    super.beforeAll()
 
     sql(
       """

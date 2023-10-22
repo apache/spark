@@ -1558,25 +1558,25 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case ByteType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
-          context = getContextOrNull)
+          context = getContextOrNull())
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>

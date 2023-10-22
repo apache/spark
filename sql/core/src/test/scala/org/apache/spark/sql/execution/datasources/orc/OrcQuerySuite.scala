@@ -413,7 +413,7 @@ abstract class OrcQueryTest extends OrcTest {
           // results. So, this checks if the number of result is less than the original count
           // of data, and then checks if it contains the expected data.
           assert(
-            sourceDf.count < 10 && expectedData.subsetOf(data),
+            sourceDf.count() < 10 && expectedData.subsetOf(data),
             s"No data was filtered for predicate: $pred")
         }
 

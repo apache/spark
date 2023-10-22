@@ -179,7 +179,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
     inputDim: Int): BucketedRandomProjectionLSHModel = {
     val rng = new Random($(seed))
     val localNumHashTables = $(numHashTables)
-    val values = Array.fill(localNumHashTables * inputDim)(rng.nextGaussian)
+    val values = Array.fill(localNumHashTables * inputDim)(rng.nextGaussian())
     var i = 0
     while (i < localNumHashTables) {
       val offset = i * inputDim

@@ -1253,7 +1253,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(isErrorOccurred)
     // if the try, catch and finally blocks don't throw exceptions
     Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
-    TaskContext.unset
+    TaskContext.unset()
   }
 
   test("load extensions") {

@@ -88,6 +88,6 @@ private case object DatabricksDialect extends JdbcDialect {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 }

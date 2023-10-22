@@ -109,7 +109,7 @@ object StatFunctions extends Logging {
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
-    calculateCorrImpl(df, cols).head.getDouble(0)
+    calculateCorrImpl(df, cols).head().getDouble(0)
   }
 
   private[sql] def calculateCorrImpl(
@@ -144,7 +144,7 @@ object StatFunctions extends Logging {
    * @return the covariance of the two columns.
    */
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
-    calculateCovImpl(df, cols).head.getDouble(0)
+    calculateCovImpl(df, cols).head().getDouble(0)
   }
 
   private[sql] def calculateCovImpl(df: DataFrame, cols: Seq[String]): DataFrame = {

@@ -99,7 +99,7 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(env, scheduler) {
 
   // Use the current thread so we can access its results synchronously
-  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService
+  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService()
 
   // DirectTaskResults that we receive from the executors
   private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
