@@ -1248,7 +1248,7 @@ class StructType(DataType):
 
         # Intentionally uses SparkSession so one implementation can be shared with/without
         # Spark Connect.
-        schema = SparkSession.active().createDataFrame(data=[], schema=self)._jdf.schema()
+        schema = SparkSession.active().createDataFrame(data=[], schema=self).schema()
         if maxDepth:
             string = schema.treeString(maxDepth)
         else:
