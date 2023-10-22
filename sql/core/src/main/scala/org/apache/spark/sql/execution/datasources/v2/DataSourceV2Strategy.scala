@@ -409,7 +409,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         pattern,
         partitionSpec @ (None | Some(_: ResolvedPartitionSpec)),
         output) =>
-      ShowTablesExec(output, catalog.asTableCatalog, ns, Some(pattern), true,
+      ShowTablesExec(output, catalog.asTableCatalog, ns, Some(pattern), isExtended = true,
         partitionSpec.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
     case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>

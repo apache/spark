@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits.TableHelper
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * Physical plan node for showing tables.
@@ -51,14 +51,13 @@ case class ShowTablesExec(
       // Show the information of tables.
       val identifiers = catalog.listTables(namespace.toArray)
       identifiers.map { identifier =>
-        if (pattern.map(StringUtils.filterPattern(
-          Seq(identifier.name()), _).nonEmpty).getOrElse(true)) {
+        if (pattern.forall(StringUtils.filterPattern(Seq(identifier.name()), _).nonEmpty)) {
           val isTemp = isTempView(identifier)
           if (isExtended) {
             val table = catalog.loadTable(identifier)
-            val information = extendedTable(identifier, table)
-            rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp,
-              s"$information\n")
+              val information = extendedTable(identifier, table)
+              rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp,
+                s"$information\n")
           } else {
             rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp)
           }
@@ -70,9 +69,8 @@ case class ShowTablesExec(
       val table = catalog.loadTable(identifier)
       val isTemp = isTempView(identifier)
       val information = extendedPartition(identifier, table.asPartitionable, partitionSpec.get)
-      rows += toCatalystRow(namespace.quoted, table.name(), isTemp, s"$information\n")
+      rows += toCatalystRow(namespace.quoted, identifier.name(), isTemp, s"$information\n")
     }
-
     rows.toSeq
   }
 
@@ -116,14 +114,17 @@ case class ShowTablesExec(
     }
 
     // Partition Provider & Partition Columns
-    if (table.isPartitionable && !table.asPartitionable.partitionSchema().isEmpty) {
+    var partitionColumns = new StructType()
+    if (table.supportsPartitions && table.asPartitionable.partitionSchema().nonEmpty) {
+      partitionColumns = table.asPartitionable.partitionSchema()
       results.put("Partition Provider", "Catalog")
       results.put("Partition Columns", table.asPartitionable.partitionSchema().map(
-        field => quoteIdentifier(field.name)).mkString(", "))
+        field => quoteIdentifier(field.name)).mkString("[", ", ", "]"))
     }
 
-    if (table.isReadable) {
-      if (table.schema().nonEmpty) results.put("Schema", table.schema().treeString)
+    if (table.schema().nonEmpty) {
+      val dataColumns = table.schema().filterNot(partitionColumns.contains)
+      results.put("Schema", StructType(dataColumns ++ partitionColumns).treeString)
     }
 
     results.map { case (key, value) =>
@@ -141,7 +142,7 @@ case class ShowTablesExec(
     val partitionSchema = partitionTable.partitionSchema()
     val (names, ident) = (resolvedPartitionSpec.names, resolvedPartitionSpec.ident)
     val partitionIdentifiers = partitionTable.listPartitionIdentifiers(names.toArray, ident)
-    if (partitionIdentifiers.length == 0) {
+    if (partitionIdentifiers.isEmpty) {
       throw QueryExecutionErrors.notExistPartitionError(identifier.toString, ident, partitionSchema)
     }
     val row = partitionIdentifiers.head
@@ -171,6 +172,6 @@ case class ShowTablesExec(
 
     results.map { case (key, value) =>
       if (value.isEmpty) key else s"$key: $value"
-    }.mkString("", "\n", "\n")
+    }.mkString("", "\n", "")
   }
 }

@@ -2464,7 +2464,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1231",
       messageParameters = Map(
         "key" -> key,
-        "tblName" -> tblName))
+        "tblName" -> toSQLId(tblName)))
   }
 
   def invalidPartitionSpecError(
@@ -2476,7 +2476,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "specKeys" -> specKeys,
         "partitionColumnNames" -> partitionColumnNames.mkString(", "),
-        "tableName" -> tableName))
+        "tableName" -> toSQLId(tableName)))
   }
 
   def columnAlreadyExistsError(columnName: String): Throwable = {
