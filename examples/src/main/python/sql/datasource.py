@@ -456,8 +456,7 @@ def xml_dataset_example(spark: SparkSession) -> None:
     xmlRDD = spark.sparkContext.parallelize(xmlStrings)
     otherPeople = spark.read \
         .option("rowTag", "person") \
-        .format("xml") \
-        .load(xmlRDD)
+        .xml(xmlRDD)
     otherPeople.show()
     # +---+---------+----------+
     # |age|      job|      name|
