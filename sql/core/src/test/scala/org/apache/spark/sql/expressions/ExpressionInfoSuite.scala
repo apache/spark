@@ -115,7 +115,9 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
       "org.apache.spark.sql.catalyst.expressions.Remainder",
       // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length")
+      "org.apache.spark.sql.catalyst.expressions.Length",
+      // Examples demonstrate alternative syntax, see SPARK-45574
+      "org.apache.spark.sql.catalyst.expressions.Cast")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName

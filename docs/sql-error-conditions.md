@@ -118,6 +118,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
+### CANNOT_ALTER_PARTITION_COLUMN
+
+[SQLSTATE: 428FR](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1175,6 +1181,12 @@ For more details see [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-
 The input schema `<inputSchema>` is not a valid schema string.
 
 For more details see [INVALID_SCHEMA](sql-error-conditions-invalid-schema-error-class.html)
+
+### INVALID_SCHEMA_OR_RELATION_NAME
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+`<name>` is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _.
 
 ### INVALID_SET_SYNTAX
 
@@ -2298,3 +2310,5 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
+
+
