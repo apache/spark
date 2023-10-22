@@ -1216,6 +1216,18 @@ class StructType(DataType):
         """
         return list(self.names)
 
+    def treeString(self, maxDepth: int = 0) -> str:
+        from pyspark.sql import SparkSession
+
+        # Intentionally uses SparkSession so one implementation can be shared with/without
+        # Spark Connect.
+        schema = SparkSession.active().createDataFrame(data=[], schema=self)._jdf.schema()
+        if maxDepth > 0:
+            string = schema.treeString(maxDepth)
+        else:
+            string = schema.treeString()
+        return string
+
     def needConversion(self) -> bool:
         # We need convert Row()/namedtuple into tuple()
         return True
