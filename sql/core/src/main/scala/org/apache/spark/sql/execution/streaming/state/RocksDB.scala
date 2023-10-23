@@ -559,12 +559,12 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString,
-        acquiredThreadInfo.toString, timeWaitedMs, stackTraceOutput)
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
+        acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
       logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
     }
   }
@@ -898,8 +898,8 @@ case class AcquiredThreadInfo() {
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =
-        s"partition ${tc.partitionId}.${tc.attemptNumber} in stage " +
-          s"${tc.stageId}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId}"
+        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
+          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
       s", task: $taskDetails"
     } else ""
 

@@ -1015,12 +1015,12 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo, brotli, lz4, lz4raw, zstd.")
+      "snappy, gzip, lzo, brotli, lz4, lz4_raw, zstd.")
     .version("1.1.1")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(
-      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4raw", "zstd"))
+      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4_raw", "zstd"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -1558,7 +1558,7 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "disabled by default. Currently, the optimization rules enabled by this configuration " +
+        "enabled by default. The optimization rules enabled by this configuration " +
         s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
       .version("3.2.0")
       .booleanConf
@@ -4455,6 +4455,25 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled")
+      .internal()
+      .doc("Decorrelate predicate (in and exists) subqueries with correlated references in join " +
+        "predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION =
+    buildConf("spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled")
+      .internal()
+      .doc("When true, optimize uncorrelated IN subqueries in join predicates by rewriting them " +
+        s"to joins. This interacts with ${LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key} because it " +
+        "can rewrite IN predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -4484,6 +4503,15 @@ object SQLConf {
         "not return the `[USER_RAISED_EXCEPTION]` prefix." +
         "For example, `raise_error('error!')` returns `error!` instead of " +
         "`[USER_RAISED_EXCEPTION] Error!`.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING =
+    buildConf("spark.sql.legacy.scalarSubqueryCountBugBehavior")
+      .internal()
+      .doc("When set to true, restores legacy behavior of potential incorrect count bug " +
+        "handling for scalar subqueries.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

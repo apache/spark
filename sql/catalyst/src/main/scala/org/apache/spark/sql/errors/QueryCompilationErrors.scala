@@ -992,8 +992,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1065",
-      messageParameters = Map("name" -> name))
+      errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
@@ -2099,6 +2099,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.typeName))
   }
 
+  def unsupportedCorrelatedSubqueryInJoinConditionError(
+      unsupportedSubqueryExpressions: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+      messageParameters = Map("subqueryExpression" ->
+        unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
@@ -2577,6 +2586,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "newType"-> toSQLType(newColumn.dataType)))
   }
 
+  def cannotAlterPartitionColumn(
+      tableName: String,
+      columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+      messageParameters =
+        Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
+    )
+  }
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1246",

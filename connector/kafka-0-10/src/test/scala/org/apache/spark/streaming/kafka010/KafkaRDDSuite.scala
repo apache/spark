@@ -24,14 +24,12 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import kafka.log.{LogCleaner, UnifiedLog}
-import kafka.server.BrokerTopicStats
+import kafka.log.{CleanerConfig, LogCleaner, LogConfig, ProducerStateManagerConfig, UnifiedLog}
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
-import org.apache.kafka.storage.internals.log.{CleanerConfig, LogConfig, LogDirFailureChannel, ProducerStateManagerConfig}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -50,18 +48,18 @@ class KafkaRDDSuite extends SparkFunSuite {
 
   private var sc: SparkContext = _
 
-  override def beforeAll: Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll: Unit = {
+  override def afterAll(): Unit = {
     try {
       try {
         if (sc != null) {
-          sc.stop
+          sc.stop()
           sc = null
         }
       } finally {
@@ -79,7 +77,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     "bootstrap.servers" -> kafkaTestUtils.brokerAddress,
     "key.deserializer" -> classOf[StringDeserializer],
     "value.deserializer" -> classOf[StringDeserializer],
-    "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}"
+    "group.id" -> s"test-consumer-${Random.nextInt()}-${System.currentTimeMillis}"
   ).asJava
 
   private val preferredHosts = LocationStrategies.PreferConsistent
@@ -92,13 +90,13 @@ class KafkaRDDSuite extends SparkFunSuite {
     val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
     val logProps = new ju.Properties()
-    logProps.put(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT)
-    logProps.put(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, java.lang.Float.valueOf(0.1f))
+    logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
+    logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
     val producerIdExpirationMs = Int.MaxValue
-    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs, false)
-    val logConfig = new LogConfig(logProps)
+    val producerStateManagerConfig = new ProducerStateManagerConfig(producerIdExpirationMs)
+    val logConfig = LogConfig(logProps)
     val log = UnifiedLog(
       dir,
       logConfig,
@@ -122,7 +120,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     log.roll()
     logs.put(topicPartition, log)
 
-    val cleaner = new LogCleaner(new CleanerConfig(false), Array(dir), logs, logDirFailureChannel)
+    val cleaner = new LogCleaner(CleanerConfig(), Array(dir), logs, logDirFailureChannel)
     cleaner.startup()
     cleaner.awaitCleaned(new TopicPartition(topic, partition), log.activeSegment.baseOffset, 1000)
 
@@ -132,7 +130,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
 
   test("basic usage") {
-    val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
+    val topic = s"topicbasic-${Random.nextInt()}-${System.currentTimeMillis}"
     kafkaTestUtils.createTopic(topic)
     val messages = Array("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages)
@@ -144,13 +142,13 @@ class KafkaRDDSuite extends SparkFunSuite {
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
       .map(_.value)
 
-    val received = rdd.collect.toSet
+    val received = rdd.collect().toSet
     assert(received === messages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count === messages.size)
-    assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
-    assert(!rdd.isEmpty)
+    assert(rdd.count() === messages.size)
+    assert(rdd.countApprox(0).getFinalValue().mean === messages.size)
+    assert(!rdd.isEmpty())
     assert(rdd.take(1).size === 1)
     assert(rdd.take(1).head === messages.head)
     assert(rdd.take(messages.size + 10).size === messages.size)
@@ -158,7 +156,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
-    assert(emptyRdd.isEmpty)
+    assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
@@ -174,7 +172,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     compactConf.set("spark.streaming.kafka.allowNonConsecutiveOffsets", "true")
     sc.stop()
     sc = new SparkContext(compactConf)
-    val topic = s"topiccompacted-${Random.nextInt}-${System.currentTimeMillis}"
+    val topic = s"topiccompacted-${Random.nextInt()}-${System.currentTimeMillis}"
 
     val messages = Array(
       ("a", "1"),
@@ -214,13 +212,13 @@ class KafkaRDDSuite extends SparkFunSuite {
       val dir = new File(kafkaTestUtils.brokerLogDir, topic + "-0")
       assert(dir.listFiles().exists(_.getName.endsWith(".deleted")))
     }
-    val received = rdd.collect.toSet
+    val received = rdd.collect().toSet
     assert(received === compactedMessages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count === compactedMessages.size)
-    assert(rdd.countApprox(0).getFinalValue.mean === compactedMessages.size)
-    assert(!rdd.isEmpty)
+    assert(rdd.count() === compactedMessages.size)
+    assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.size)
+    assert(!rdd.isEmpty())
     assert(rdd.take(1).size === 1)
     assert(rdd.take(1).head === compactedMessages.head)
     assert(rdd.take(messages.size + 10).size === compactedMessages.size)
@@ -228,7 +226,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
-    assert(emptyRdd.isEmpty)
+    assert(emptyRdd.isEmpty())
 
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
@@ -241,7 +239,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
-    val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"
+    val topic = s"topicboundary-${Random.nextInt()}-${System.currentTimeMillis}"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
 
@@ -258,7 +256,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
 
     assert(rangeCount === sentCount, "offset range didn't include all sent messages")
-    assert(rdd.map(_.offset).collect.sorted === (0 until sentCount).toArray,
+    assert(rdd.map(_.offset).collect().sorted === (0 until sentCount).toArray,
       "didn't get all sent messages")
 
     // this is the "0 messages" case
@@ -270,7 +268,7 @@ class KafkaRDDSuite extends SparkFunSuite {
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
 
-    assert(rdd2.map(_.value).collect.size === 0, "got messages when there shouldn't be any")
+    assert(rdd2.map(_.value).collect().size === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
     val rdd3 = KafkaUtils.createRDD[String, String](sc, kafkaParams,
@@ -279,7 +277,7 @@ class KafkaRDDSuite extends SparkFunSuite {
     // send lots of messages after rdd was defined, they shouldn't show up
     kafkaTestUtils.sendMessages(topic, Map("extra" -> 22))
 
-    assert(rdd3.map(_.value).collect.head === sentOnlyOne.keys.head,
+    assert(rdd3.map(_.value).collect().head === sentOnlyOne.keys.head,
       "didn't get exactly one message")
   }
 

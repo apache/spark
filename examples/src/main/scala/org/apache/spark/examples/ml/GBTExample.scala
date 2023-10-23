@@ -136,7 +136,7 @@ object GBTExample {
 
   def run(params: Params): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"GBTExample with $params")
       .getOrCreate()
 

@@ -304,7 +304,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
   def failFirstCommitAttempt(iter: Iterator[Int]): Unit = {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
-      if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+      if (ctx.attemptNumber() == 0) failingOutputCommitter else successfulOutputCommitter)
   }
 
   private def runCommitWithProvidedCommitter(
@@ -324,9 +324,9 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     // Create TaskAttemptContext.
     // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
     // around by taking a mod. We expect that no task will be attempted 2 billion times.
-    val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
+    val taskAttemptId = (ctx.taskAttemptId() % Int.MaxValue).toInt
     val attemptId = new TaskAttemptID(
-      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId()), taskAttemptId)
     val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
 
     committer.setupTask(taskContext)
