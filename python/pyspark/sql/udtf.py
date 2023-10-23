@@ -48,17 +48,17 @@ class AnalyzeArgument:
 
     Parameters
     ----------
-    dataType : :class:`DataType`
+    data_type : :class:`DataType`
         The argument's data type
     value : Optional[Any]
         The calculated value if the argument is foldable; otherwise None
-    isTable : bool
+    is_table : bool
         If True, the argument is a table argument.
     """
 
-    dataType: DataType
+    data_type: DataType
     value: Optional[Any]
-    isTable: bool
+    is_table: bool
 
 
 @dataclass(frozen=True)
@@ -97,25 +97,25 @@ class AnalyzeResult:
     ----------
     schema : :class:`StructType`
         The schema that the Python UDTF will return.
-    withSinglePartition : bool
+    with_single_partition : bool
         If true, the UDTF is specifying for Catalyst to repartition all rows of the input TABLE
         argument to one collection for consumption by exactly one instance of the correpsonding
         UDTF class.
-    partitionBy : Sequence[PartitioningColumn]
+    partition_by : Sequence[PartitioningColumn]
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
         partition the input TABLE argument by. In this case, calls to the UDTF may not include any
         explicit PARTITION BY clause, in which case Catalyst will return an error. This option is
-        mutually exclusive with 'withSinglePartition'.
-    orderBy: Sequence[OrderingColumn]
+        mutually exclusive with 'with_single_partition'.
+    order_by: Sequence[OrderingColumn]
         If non-empty, this is a sequence of columns that the UDTF is specifying for Catalyst to
-        sort the input TABLE argument by. Note that the 'partitionBy' list must also be non-empty
+        sort the input TABLE argument by. Note that the 'partition_by' list must also be non-empty
         in this case.
     """
 
     schema: StructType
-    withSinglePartition: bool = False
-    partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
-    orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+    with_single_partition: bool = False
+    partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
+    order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
 
 
 def _create_udtf(
