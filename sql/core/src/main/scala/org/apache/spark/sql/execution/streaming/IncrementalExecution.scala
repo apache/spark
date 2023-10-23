@@ -199,7 +199,7 @@ class IncrementalExecution(
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
       UnaryExecNode(agg,
       StateStoreRestoreExec(_, None, _, child))) =>
-        val aggStateInfo = nextStatefulOperationStateInfo
+        val aggStateInfo = nextStatefulOperationStateInfo()
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
@@ -218,7 +218,7 @@ class IncrementalExecution(
       stateFormatVersion,
       UnaryExecNode(agg,
       SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
-        val aggStateInfo = nextStatefulOperationStateInfo
+        val aggStateInfo = nextStatefulOperationStateInfo()
         SessionWindowStateStoreSaveExec(
           keys,
           session,
@@ -241,7 +241,7 @@ class IncrementalExecution(
         StreamingDeduplicateExec(
           keys,
           child,
-          Some(nextStatefulOperationStateInfo),
+          Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None)
 
@@ -249,7 +249,7 @@ class IncrementalExecution(
         StreamingDeduplicateWithinWatermarkExec(
           keys,
           child,
-          Some(nextStatefulOperationStateInfo),
+          Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None)
 
@@ -257,7 +257,7 @@ class IncrementalExecution(
         // We set this to true only for the first batch of the streaming query.
         val hasInitialState = (currentBatchId == 0L && m.hasInitialState)
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
@@ -266,7 +266,7 @@ class IncrementalExecution(
 
       case m: FlatMapGroupsInPandasWithStateExec =>
         m.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None
@@ -274,14 +274,14 @@ class IncrementalExecution(
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None
         )
 
       case l: StreamingGlobalLimitExec =>
         l.copy(
-          stateInfo = Some(nextStatefulOperationStateInfo),
+          stateInfo = Some(nextStatefulOperationStateInfo()),
           outputMode = Some(outputMode))
     }
   }

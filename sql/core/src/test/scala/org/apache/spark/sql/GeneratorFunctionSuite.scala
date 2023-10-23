@@ -442,7 +442,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-30998: Unsupported nested inner generators") {
     checkError(
       exception = intercept[AnalysisException] {
-        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect()
       },
       errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       parameters = Map("expression" -> "\"explode(explode(v))\""))
@@ -509,12 +509,12 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-39061: inline should handle null struct") {
-    testNullStruct
+    testNullStruct()
   }
 
   test("SPARK-39496: inline eval path should handle null struct") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      testNullStruct
+      testNullStruct()
     }
   }
 

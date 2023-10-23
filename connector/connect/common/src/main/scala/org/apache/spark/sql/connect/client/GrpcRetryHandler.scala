@@ -75,7 +75,7 @@ private[sql] class GrpcRetryHandler(
     }
 
     override def next(): U = {
-      retryIter(_.next)
+      retryIter(_.next())
     }
 
     override def hasNext: Boolean = {

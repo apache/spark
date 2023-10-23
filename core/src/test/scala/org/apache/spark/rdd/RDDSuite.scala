@@ -61,9 +61,9 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(nums.toLocalIterator.toList === List(1, 2, 3, 4))
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
     assert(dups.distinct().count() === 4)
-    assert(dups.distinct().count === 4)  // Can distinct and count be called without parentheses?
-    assert(dups.distinct().collect === dups.distinct().collect)
-    assert(dups.distinct(2).collect === dups.distinct().collect)
+    assert(dups.distinct().count() === 4)  // Can distinct and count be called without parentheses?
+    assert(dups.distinct().collect() === dups.distinct().collect())
+    assert(dups.distinct(2).collect() === dups.distinct().collect())
     assert(nums.reduce(_ + _) === 10)
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
@@ -320,7 +320,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("empty RDD") {
     val empty = new EmptyRDD[Int](sc)
-    assert(empty.count === 0)
+    assert(empty.count() === 0)
     assert(empty.collect().size === 0)
 
     val thrown = intercept[UnsupportedOperationException]{
@@ -662,7 +662,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
     nums = sc.parallelize(1 to 2, 2)
     assert(nums.take(2147483638).size === 2)
-    assert(nums.takeAsync(2147483638).get.size === 2)
+    assert(nums.takeAsync(2147483638).get().size === 2)
   }
 
   test("top with predefined ordering") {
@@ -1117,7 +1117,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       sc.parallelize(Seq(new BadSerializable, new BadSerializable)).collect()
     }
     // Check that the context has not crashed
-    sc.parallelize(1 to 100).map(x => x*2).collect
+    sc.parallelize(1 to 100).map(x => x * 2).collect()
   }
 
   /** A contrived RDD that allows the manual addition of dependencies after creation. */
@@ -1165,7 +1165,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val rdd: RDD[Int] = sc.parallelize(1 to 100)
     val rdd2: RDD[Int] = sc.parallelize(1 to 100)
     val thrown = intercept[SparkException] {
-      rdd.map(x => x * rdd2.count).collect()
+      rdd.map(x => x * rdd2.count()).collect()
     }
     assert(thrown.getMessage.contains("SPARK-5063"))
   }

@@ -897,7 +897,7 @@ case class SessionWindowStateStoreSaveExec(
         val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
         numUpdatedStateRows += upserted
         numRemovedStateRows += deleted
-        curValuesOnKey.clear
+        curValuesOnKey.clear()
       }
     }
 

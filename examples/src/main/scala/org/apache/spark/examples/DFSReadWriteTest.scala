@@ -104,7 +104,7 @@ object DFSReadWriteTest {
 
     println("Creating SparkSession")
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("DFS Read Write Test")
       .getOrCreate()
 

@@ -144,5 +144,5 @@ private[spark] class YarnAllocatorNodeHealthTracker(
     allocatorExcludedNodeList.retain { (_, expiryTime) => expiryTime > now }
   }
 
-  refreshExcludedNodes
+  refreshExcludedNodes()
 }

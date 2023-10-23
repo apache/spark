@@ -69,7 +69,7 @@ DECLARE [ OR REPLACE ] [ VARIABLE ]
 ### Examples
 
 ```sql
--- The dense form of declaring a variabel with default
+-- The dense form of declaring a variable with default
 DECLARE five = 5;
 
 -- STRING variable initialialized to `NULL`

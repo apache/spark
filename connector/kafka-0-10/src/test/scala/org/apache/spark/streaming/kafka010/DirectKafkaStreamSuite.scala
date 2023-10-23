@@ -90,7 +90,7 @@ class DirectKafkaStreamSuite
     kp.put("bootstrap.servers", kafkaTestUtils.brokerAddress)
     kp.put("key.deserializer", classOf[StringDeserializer])
     kp.put("value.deserializer", classOf[StringDeserializer])
-    kp.put("group.id", s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}")
+    kp.put("group.id", s"test-consumer-${Random.nextInt()}-${System.currentTimeMillis}")
     extra.foreach(e => kp.put(e._1, e._2))
     kp
   }
@@ -138,7 +138,7 @@ class DirectKafkaStreamSuite
         val partSize = all.size
         val rangeSize = off.untilOffset - off.fromOffset
         Iterator((partSize, rangeSize))
-      }.collect
+      }.collect()
 
       // Verify whether number of elements in each partition
       // matches with the corresponding offset range
@@ -204,7 +204,7 @@ class DirectKafkaStreamSuite
         val partSize = all.size
         val rangeSize = off.untilOffset - off.fromOffset
         Iterator((partSize, rangeSize))
-      }.collect
+      }.collect()
 
       // Verify whether number of elements in each partition
       // matches with the corresponding offset range
@@ -255,9 +255,9 @@ class DirectKafkaStreamSuite
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer.poll(0)
+      s.consumer().poll(0)
       assert(
-        s.consumer.position(topicPartition) >= offsetBeforeStart,
+        s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
       )
       s
@@ -311,9 +311,9 @@ class DirectKafkaStreamSuite
           kafkaParams.asScala,
           Map(topicPartition -> 11L)),
         new DefaultPerPartitionConfig(sparkConf))
-      s.consumer.poll(0)
+      s.consumer().poll(0)
       assert(
-        s.consumer.position(topicPartition) >= offsetBeforeStart,
+        s.consumer().position(topicPartition) >= offsetBeforeStart,
         "Start offset not from latest"
       )
       s

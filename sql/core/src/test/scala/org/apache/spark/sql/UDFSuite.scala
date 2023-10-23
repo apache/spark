@@ -377,7 +377,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("f", (a: Int) => a)
       val outputStream = new java.io.ByteArrayOutputStream()
       Console.withOut(outputStream) {
-        spark.sql("SELECT f(a._1) FROM x").show
+        spark.sql("SELECT f(a._1) FROM x").show()
       }
       assert(outputStream.toString.contains("f(a._1)"))
     }

@@ -83,7 +83,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   protected def getBrokers = {
-    val c = consumer
+    val c = consumer()
     val result = new ju.HashMap[TopicPartition, String]()
     val hosts = new ju.HashMap[TopicPartition, String]()
     val assignments = c.assignment().iterator()
@@ -187,7 +187,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
    * Returns the latest (highest) available offsets, taking new partitions into account.
    */
   protected def latestOffsets(): Map[TopicPartition, Long] = {
-    val c = consumer
+    val c = consumer()
     paranoidPoll(c)
     val parts = c.assignment().asScala
 
@@ -247,7 +247,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val metadata = Map(
       "offsets" -> offsetRanges.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
-    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+    val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets
@@ -256,7 +256,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   override def start(): Unit = {
-    val c = consumer
+    val c = consumer()
     paranoidPoll(c)
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
@@ -296,14 +296,14 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
     var osr = commitQueue.poll()
     while (null != osr) {
-      val tp = osr.topicPartition
+      val tp = osr.topicPartition()
       val x = m.get(tp)
       val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
       m.put(tp, new OffsetAndMetadata(offset))
       osr = commitQueue.poll()
     }
     if (!m.isEmpty) {
-      consumer.commitAsync(m, commitCallback.get)
+      consumer().commitAsync(m, commitCallback.get)
     }
   }
 

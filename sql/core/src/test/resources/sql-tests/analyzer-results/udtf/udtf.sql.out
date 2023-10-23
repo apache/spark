@@ -453,6 +453,66 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTempViewCommand t1

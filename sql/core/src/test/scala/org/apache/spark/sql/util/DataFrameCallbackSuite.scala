@@ -112,7 +112,7 @@ class DataFrameCallbackSuite extends QueryTest
 
     val df = Seq(1).toDF("i")
 
-    df.foreach(r => f)
+    df.foreach(r => f())
     df.reduce((x, y) => x)
 
     sparkContext.listenerBus.waitUntilEmpty()

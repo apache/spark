@@ -749,7 +749,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @since 3.5.0
    */
-  def getJobTags(): util.Set[String] = sc.getJobTags.asJava
+  def getJobTags(): util.Set[String] = sc.getJobTags().asJava
 
   /**
    * Clear the current thread's job tags.

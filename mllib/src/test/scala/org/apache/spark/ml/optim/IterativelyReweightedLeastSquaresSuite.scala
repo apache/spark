@@ -116,7 +116,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
-      val yMean = instances2.map(_.label).mean
+      val yMean = instances2.map(_.label).mean()
       val newInstances = instances2.map { instance =>
         val mu = (instance.label + yMean) / 2.0
         val eta = math.log(mu)

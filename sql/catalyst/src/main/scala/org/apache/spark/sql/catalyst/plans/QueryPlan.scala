@@ -67,7 +67,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
     while (exprIterator.hasNext) {
-      bits.union(exprIterator.next.treePatternBits)
+      bits.union(exprIterator.next().treePatternBits)
     }
     bits
   }

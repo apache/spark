@@ -110,7 +110,7 @@ class LeastSquaresBlockAggregatorSuite extends SparkFunSuite with MLlibTestSpark
   test("check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
-    val coefVec = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble))
+    val coefVec = Vectors.dense(Array.fill(numFeatures)(rng.nextDouble()))
     val block = InstanceBlock.fromInstances(instances)
 
     val agg = getNewAggregator(instances, coefVec, fitIntercept = true)

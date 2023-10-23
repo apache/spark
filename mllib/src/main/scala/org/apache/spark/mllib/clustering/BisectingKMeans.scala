@@ -157,7 +157,7 @@ class BisectingKMeans private (
       instances: RDD[(Vector, Double)],
       handlePersistence: Boolean,
       instr: Option[Instrumentation]): BisectingKMeansModel = {
-    val d = instances.map(_._1.size).first
+    val d = instances.map(_._1.size).first()
     logInfo(s"Feature dimension: $d.")
 
     val dMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)

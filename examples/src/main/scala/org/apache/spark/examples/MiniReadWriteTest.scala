@@ -97,7 +97,7 @@ object MiniReadWriteTest {
 
     println("Creating SparkSession")
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("Mini Read Write Test")
       .getOrCreate()
 

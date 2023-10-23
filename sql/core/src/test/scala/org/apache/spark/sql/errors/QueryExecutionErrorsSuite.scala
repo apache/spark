@@ -103,7 +103,7 @@ class QueryExecutionErrorsSuite
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -117,7 +117,7 @@ class QueryExecutionErrorsSuite
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
         parameters = Map(
@@ -154,7 +154,7 @@ class QueryExecutionErrorsSuite
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       checkError(
         exception = intercept[SparkException] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
@@ -172,7 +172,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,

@@ -2051,6 +2051,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
@@ -3981,11 +3987,6 @@
       "<msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0061" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0062" : {
     "message" : [
       "<msg>."
@@ -4206,11 +4207,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {

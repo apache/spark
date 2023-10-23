@@ -2514,7 +2514,7 @@ class SparkConnectPlanner(
     val namedArguments = getSqlCommand.getNamedArgumentsMap
     val posArgs = getSqlCommand.getPosArgsList
     val posArguments = getSqlCommand.getPosArgumentsList
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val df = if (!namedArguments.isEmpty) {
       session.sql(
         getSqlCommand.getSql,
@@ -2727,7 +2727,7 @@ class SparkConnectPlanner(
       replace = createView.getReplace,
       viewType = viewType)
 
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     Dataset.ofRows(session, plan, tracker).queryExecution.commandExecuted
     executeHolder.eventsManager.postFinished()
   }
@@ -2745,7 +2745,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.write
@@ -2817,7 +2817,7 @@ class SparkConnectPlanner(
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
@@ -2876,7 +2876,7 @@ class SparkConnectPlanner(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
     // Call manually as writeStream does not trigger ReadyForExecution
     tracker.setReadyForExecution()
@@ -3085,7 +3085,7 @@ class SparkConnectPlanner(
           val exception_builder = StreamingQueryCommandResult.ExceptionResult
             .newBuilder()
           exception_builder
-            .setExceptionMessage(e.toString)
+            .setExceptionMessage(e.toString())
             .setErrorClass(e.getErrorClass)
 
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))

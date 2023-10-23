@@ -601,7 +601,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         assert(!userCheckpointPath.exists(), s"$userCheckpointPath should not exist")
         withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
           val queryName = "test_query"
-          val ds = MemoryStream[Int].toDS
+          val ds = MemoryStream[Int].toDS()
           ds.writeStream
             .format("memory")
             .queryName(queryName)
@@ -623,7 +623,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     withTempDir { checkpointPath =>
       withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
         val queryName = "test_query"
-        val ds = MemoryStream[Int].toDS
+        val ds = MemoryStream[Int].toDS()
         ds.writeStream.format("memory").queryName(queryName).start().stop()
         // Should use query name to create a folder in `checkpointPath`
         val queryCheckpointDir = new File(checkpointPath, queryName)
@@ -639,7 +639,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     import testImplicits._
     withTempDir { checkpointPath =>
       withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath) {
-        val ds = MemoryStream[Int].toDS
+        val ds = MemoryStream[Int].toDS()
         ds.writeStream.format("console").start().stop()
         // Should create a random folder in `checkpointPath`
         assert(
@@ -655,7 +655,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     withTempDir { checkpointPath =>
       withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath,
         SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
-        val ds = MemoryStream[Int].toDS
+        val ds = MemoryStream[Int].toDS()
         val query = ds.writeStream.format("console").start()
         assert(checkpointPath.exists())
         query.stop()
@@ -666,7 +666,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   test("temp checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
-    val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    val query = MemoryStream[Int].toDS().writeStream.format("console").start()
     query.processAllAvailable()
     val checkpointDir = new Path(
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
@@ -690,7 +690,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   private def testTempCheckpointWithFailedQuery(checkpointMustBeDeleted: Boolean): Unit = {
     import testImplicits._
     val input = MemoryStream[Int]
-    val query = input.toDS.map(_ / 0).writeStream.format("console").start()
+    val query = input.toDS().map(_ / 0).writeStream.format("console").start()
     val checkpointDir = new Path(
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())

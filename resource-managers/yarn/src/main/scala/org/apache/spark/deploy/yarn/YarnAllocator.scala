@@ -344,7 +344,7 @@ private[yarn] class YarnAllocator(
         val gpuResource = sparkConf.get(YARN_GPU_DEVICE)
         val fpgaResource = sparkConf.get(YARN_FPGA_DEVICE)
         getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
-          customSparkResources.filterKeys { r =>
+          customSparkResources.view.filterKeys { r =>
             (r == gpuResource || r == fpgaResource)
           }
       } else {
