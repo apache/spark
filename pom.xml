@@ -3010,7 +3010,7 @@
                 Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
               -->
               <arg>-Wconf:msg=legacy-binding:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Wrap `enum` in backticks to use it as an identifier:e</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>

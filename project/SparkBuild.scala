@@ -264,7 +264,7 @@ object SparkBuild extends PomBuild {
         // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
         // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
         "-Wconf:msg=legacy-binding:s",
-        "-Wconf:cat=deprecation&msg=Wrap `enum` in backticks to use it as an identifier:e"
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
       )
     }
   )
