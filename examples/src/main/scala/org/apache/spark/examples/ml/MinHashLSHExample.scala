@@ -34,7 +34,7 @@ object MinHashLSHExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("MinHashLSHExample")
       .getOrCreate()
 

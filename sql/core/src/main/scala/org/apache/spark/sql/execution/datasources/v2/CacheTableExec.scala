@@ -41,7 +41,7 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
     val storageLevel = CaseInsensitiveMap(options).get(storageLevelKey)
       .map(s => StorageLevel.fromString(s.toUpperCase(Locale.ROOT)))
       .getOrElse(conf.defaultCacheStorageLevel)
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
+    val withoutStorageLevel = options.view.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
     if (withoutStorageLevel.nonEmpty) {
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }

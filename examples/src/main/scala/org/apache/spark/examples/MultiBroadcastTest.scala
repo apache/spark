@@ -29,7 +29,7 @@ object MultiBroadcastTest {
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("Multi-Broadcast Test")
       .getOrCreate()
 

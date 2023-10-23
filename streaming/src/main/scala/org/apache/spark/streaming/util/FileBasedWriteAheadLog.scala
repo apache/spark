@@ -59,7 +59,7 @@ private[streaming] class FileBasedWriteAheadLog(
   import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
-  private val callerName = getCallerName
+  private val callerName = getCallerName()
 
   private val threadpoolName = {
     "WriteAheadLogManager" + callerName.map(c => s" for $c").getOrElse("")
@@ -314,8 +314,10 @@ private[streaming] object FileBasedWriteAheadLog {
     val groupSize = taskSupport.parallelismLevel.max(8)
 
     source.grouped(groupSize).flatMap { group =>
+      // scalastyle:off parvector
       val parallelCollection = new ParVector(group.toVector)
       parallelCollection.tasksupport = taskSupport
+      // scalastyle:on parvector
       parallelCollection.map(handler)
     }.flatten
   }

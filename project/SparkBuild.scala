@@ -232,16 +232,19 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation:wv,any:e",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
-        "-Wconf:cat=lint-multiarg-infix:wv",
-        "-Wconf:cat=other-nullary-override:wv",
         // SPARK-33775 Suppress compilation warnings that contain the following contents.
         // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
         //  fixed.
         "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
-        "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-        "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-        "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+        // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
+        // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
+        //  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.rdd.RDDSuite:s",
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.scheduler.TaskSetManagerSuite:s",
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s",
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:

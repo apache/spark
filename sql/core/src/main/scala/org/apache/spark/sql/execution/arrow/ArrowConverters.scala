@@ -219,7 +219,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
       rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
-      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get)
+      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
@@ -228,7 +228,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
     new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
-        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get) {
+        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
     }.next()
   }

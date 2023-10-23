@@ -31,9 +31,8 @@ import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, SafeModeAction}
 import org.apache.hadoop.hdfs.DistributedFileSystem
-import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -204,7 +203,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (!Utils.isTesting) {
       ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
     } else {
-      ThreadUtils.sameThreadExecutorService
+      ThreadUtils.sameThreadExecutorService()
     }
   }
 
@@ -1158,7 +1157,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
     /* true to check only for Active NNs status */
-    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET, true)
+    dfs.setSafeMode(SafeModeAction.GET, true)
   }
 
   /**
@@ -1288,7 +1287,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
-        override def onSwitchToDiskStoreSuccess: Unit = {
+        override def onSwitchToDiskStoreSuccess(): Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)

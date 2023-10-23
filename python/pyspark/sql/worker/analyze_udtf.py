@@ -83,7 +83,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
         else:
             value = None
         is_table = read_bool(infile)  # is table argument
-        argument = AnalyzeArgument(data_type=dt, value=value, is_table=is_table)
+        argument = AnalyzeArgument(dataType=dt, value=value, isTable=is_table)
 
         is_named_arg = read_bool(infile)
         if is_named_arg:
@@ -129,14 +129,14 @@ def main(infile: IO, outfile: IO) -> None:
         # Return the pickled 'AnalyzeResult' class instance.
         pickleSer._write_with_length(result, outfile)
         # Return whether the "with single partition" property is requested.
-        write_int(1 if result.with_single_partition else 0, outfile)
+        write_int(1 if result.withSinglePartition else 0, outfile)
         # Return the list of partitioning columns, if any.
-        write_int(len(result.partition_by), outfile)
-        for partitioning_col in result.partition_by:
+        write_int(len(result.partitionBy), outfile)
+        for partitioning_col in result.partitionBy:
             write_with_length(partitioning_col.name.encode("utf-8"), outfile)
         # Return the requested input table ordering, if any.
-        write_int(len(result.order_by), outfile)
-        for ordering_col in result.order_by:
+        write_int(len(result.orderBy), outfile)
+        for ordering_col in result.orderBy:
             write_with_length(ordering_col.name.encode("utf-8"), outfile)
             write_int(1 if ordering_col.ascending else 0, outfile)
             if ordering_col.overrideNullsFirst is None:

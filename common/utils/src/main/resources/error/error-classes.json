@@ -104,6 +104,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -982,6 +988,12 @@
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
+    ],
+    "sqlState" : "42846"
+  },
+  "EXPRESSION_ENCODING_FAILED" : {
+    "message" : [
+      "Failed to encode a value of the expressions: <expressions> to a row."
     ],
     "sqlState" : "42846"
   },
@@ -2039,6 +2051,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
@@ -2048,7 +2066,8 @@
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
-    ]
+    ],
+    "sqlState" : "42K08"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -2387,7 +2406,8 @@
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
@@ -3031,6 +3051,12 @@
       "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
+  },
+  "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
+    "message" : [
+      "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
+    ],
+    "sqlState" : "42846"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -3706,7 +3732,8 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
@@ -3977,11 +4004,6 @@
       "<msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0061" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0062" : {
     "message" : [
       "<msg>."
@@ -4202,11 +4224,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {
@@ -5719,17 +5736,6 @@
   "_LEGACY_ERROR_TEMP_2150" : {
     "message" : [
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2152" : {
-    "message" : [
-      "Error while encoding: <e>",
-      "<expressions>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2153" : {
-    "message" : [
-      "class <clsName> has unexpected serializer: <objSerializer>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2154" : {

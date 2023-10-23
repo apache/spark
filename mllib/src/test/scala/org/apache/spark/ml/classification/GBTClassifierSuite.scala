@@ -369,13 +369,13 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(3)
       .setLossType("logistic")
-    val model3 = gbt.fit(trainData.toDF)
+    val model3 = gbt.fit(trainData.toDF())
     val model1 = new GBTClassificationModel("gbt-cls-model-test1",
       model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures, model3.numClasses)
     val model2 = new GBTClassificationModel("gbt-cls-model-test2",
       model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
 
-    val evalArr = model3.evaluateEachIteration(validationData.toDF)
+    val evalArr = model3.evaluateEachIteration(validationData.toDF())
     val remappedValidationData = validationData.map {
       case LabeledPoint(label, features) =>
         Instance(label * 2 - 1, 1.0, features)

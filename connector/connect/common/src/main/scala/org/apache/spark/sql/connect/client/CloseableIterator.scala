@@ -33,7 +33,7 @@ private[sql] abstract class WrappedCloseableIterator[E] extends CloseableIterato
 
   override def next(): E = innerIterator.next()
 
-  override def hasNext(): Boolean = innerIterator.hasNext
+  override def hasNext: Boolean = innerIterator.hasNext
 
   override def close(): Unit = innerIterator match {
     case it: CloseableIterator[E] => it.close()

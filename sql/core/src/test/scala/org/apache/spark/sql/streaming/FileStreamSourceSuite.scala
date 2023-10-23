@@ -1304,7 +1304,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q.awaitTermination(streamingTimeout.toMillis))
         assert(q.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 3).map(_.toString).toDF())
       } finally {
         q.stop()
       }
@@ -1317,7 +1317,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       try {
         assert(q2.awaitTermination(streamingTimeout.toMillis))
         assert(q2.recentProgress.count(_.numInputRows != 0) == 1) // only one trigger was run
-        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF)
+        checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 5).map(_.toString).toDF())
       } finally {
         q2.stop()
       }
@@ -2410,7 +2410,7 @@ class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
 }
 
 object ExistsThrowsExceptionFileSystem {
-  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt())}fs"
 }
 
 class CountListingLocalFileSystem extends RawLocalFileSystem {
@@ -2428,7 +2428,7 @@ class CountListingLocalFileSystem extends RawLocalFileSystem {
 }
 
 object CountListingLocalFileSystem {
-  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt)}fs"
+  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt())}fs"
   val pathToNumListStatusCalled = new mutable.HashMap[String, AtomicLong]
 
   def resetCount(): Unit = pathToNumListStatusCalled.clear()

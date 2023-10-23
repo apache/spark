@@ -183,7 +183,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
 
     // query option in the create table path.
     sql(
@@ -192,6 +192,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
-    assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+    assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
 }

@@ -778,7 +778,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     import org.apache.spark.sql.functions._
 
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val knownUser = data.select(max("user")).as[Int].first()
     val unknownUser = knownUser + 10
     val knownItem = data.select(max("item")).as[Int].first()
@@ -815,7 +815,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val model = new ALS().fit(data)
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
       testTransformer[Rating[Int]](data, model.setColdStartStrategy(s), "prediction") { _ => }
@@ -845,8 +845,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   test("recommendForAllUsers with k <, = and > num_items") {
     val model = getALSModel
-    val numUsers = model.userFactors.count
-    val numItems = model.itemFactors.count
+    val numUsers = model.userFactors.count()
+    val numItems = model.itemFactors.count()
     val expected = Map(
       0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
       1 -> Seq((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
@@ -865,8 +865,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   test("recommendForAllItems with k <, = and > num_users") {
     val model = getALSModel
-    val numUsers = model.userFactors.count
-    val numItems = model.itemFactors.count
+    val numUsers = model.userFactors.count()
+    val numItems = model.itemFactors.count()
     val expected = Map(
       3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
       4 -> Seq((0, 44f), (2, 30f), (1, 26f)),
@@ -888,13 +888,13 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
-    val numItems = model.itemFactors.count
+    val numItems = model.itemFactors.count()
     val expected = Map(
       0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
       2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
     )
     val userSubset = expected.keys.toSeq.toDF("user")
-    val numUsersSubset = userSubset.count
+    val numUsersSubset = userSubset.count()
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
@@ -910,13 +910,13 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
-    val numUsers = model.userFactors.count
+    val numUsers = model.userFactors.count()
     val expected = Map(
       3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
       6 -> Seq((0, 28f), (2, 18f), (1, 16f))
     )
     val itemSubset = expected.keys.toSeq.toDF("item")
-    val numItemsSubset = itemSubset.count
+    val numItemsSubset = itemSubset.count()
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
@@ -939,7 +939,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val singleUserRecs = model.recommendForUserSubset(users, k)
     val dupUserRecs = model.recommendForUserSubset(dupUsers, k)
       .as[(Int, Seq[(Int, Float)])].collect().toMap
-    assert(singleUserRecs.count == dupUserRecs.size)
+    assert(singleUserRecs.count() == dupUserRecs.size)
     checkRecommendations(singleUserRecs, dupUserRecs, "item")
 
     val items = Seq(3, 4, 5).toDF("item")
@@ -947,7 +947,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val singleItemRecs = model.recommendForItemSubset(items, k)
     val dupItemRecs = model.recommendForItemSubset(dupItems, k)
       .as[(Int, Seq[(Int, Float)])].collect().toMap
-    assert(singleItemRecs.count == dupItemRecs.size)
+    assert(singleItemRecs.count() == dupItemRecs.size)
     checkRecommendations(singleItemRecs, dupItemRecs, "user")
   }
 
@@ -981,7 +981,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val model = new ALS()
       .setMaxIter(2)
       .setImplicitPrefs(true)
@@ -1045,7 +1045,7 @@ class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
-        val spark = SparkSession.builder
+        val spark = SparkSession.builder()
           .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
