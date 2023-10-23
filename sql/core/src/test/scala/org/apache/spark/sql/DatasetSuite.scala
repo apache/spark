@@ -2632,7 +2632,7 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-45022: exact DatasetQueryContext call site") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val df = Seq(1).toDS
+      val df = Seq(1).toDS()
       var callSitePattern: String = null
       checkError(
         exception = intercept[AnalysisException] {
