@@ -266,7 +266,7 @@ case class CollectTopK(
       > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
        a|b
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-       ""
+
   """,
   group = "agg_funcs",
   since = "4.0.0")
