@@ -329,7 +329,7 @@ case class ListAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def dataType: DataType = StringType
 
