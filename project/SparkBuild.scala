@@ -263,8 +263,7 @@ object SparkBuild extends PomBuild {
         // from a superclass shadow symbols defined in an outer scope. Such references are
         // ambiguous in Scala 3. To continue using the inherited symbol, write `this.stop`.
         // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
-        "-Wconf:msg=legacy-binding:s",
-        "-Wconf:cat=deprecation&msg=method retain in trait MapOps is deprecated:e"
+        "-Wconf:msg=legacy-binding:s"
       )
     }
   )
