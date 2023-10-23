@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -39,8 +39,7 @@ import org.apache.spark.util.BoundedPriorityQueue
  * We have to store all the collected elements in memory, and so notice that too many elements
  * can cause GC paused and eventually OutOfMemory Errors.
  */
-abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T]
-  with UnaryLike[Expression] {
+abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T] {
 
   val child: Expression
 
@@ -105,7 +104,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
+  with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -151,7 +151,7 @@ case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase {
+  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -216,7 +216,8 @@ case class CollectTopK(
     num: Int,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
+    inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]]
+  with UnaryLike[Expression] {
   assert(num > 0)
 
   def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
@@ -272,43 +273,38 @@ case class CollectTopK(
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal.create(",", StringType),
-    orderExpression: Option[Expression] = Option.empty,
+    orderExpression: Expression,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
+  with BinaryLike[Expression] {
 
   def this(child: Expression) =
-    this(child, Literal.create(",", StringType), Option.empty, false, 0, 0)
+    this(child, Literal.create(",", StringType), child, false, 0, 0)
   def this(child: Expression, delimiter: Expression) =
-    this(child, delimiter, Option.empty, false, 0, 0)
+    this(child, delimiter, child, false, 0, 0)
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
   override protected lazy val bufferElementType: DataType = {
-    if (orderExpression.isDefined) {
-      ArrayType(StructType(Seq(
-        StructField("value", child.dataType),
-        StructField("sortOrder", orderExpression.get.dataType))), containsNull = false)
-    } else {
-      child.dataType
-    }
+    StructType(Seq(
+      StructField("value", child.dataType),
+      StructField("sortOrder", orderExpression.dataType)))
   }
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
-      val sortedCounts = if (orderExpression.isDefined) {
-        val ordering = PhysicalDataType.ordering(orderExpression.get.dataType)
-        if (reverse) {
-          buffer.asInstanceOf[mutable.ArrayBuffer[(Any, Any)]].toSeq.sortBy(_._2)(ordering
-            .asInstanceOf[Ordering[Any]].reverse).map(_._1)
-        } else {
-          buffer.asInstanceOf[mutable.ArrayBuffer[(Any, Any)]].toSeq.sortBy(_._2)(ordering
-            .asInstanceOf[Ordering[Any]]).map(_._1)
-        }
+      val ordering = PhysicalDataType.ordering(orderExpression.dataType)
+      val sorted = if (reverse) {
+        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
+          child.dataType))
       } else {
-        buffer.toSeq
+        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
+          child.dataType))
       }
-      UTF8String.fromString(sortedCounts.map(_.toString)
+      UTF8String.fromString(sorted.map(_.toString)
         .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
     } else {
       UTF8String.fromString("")
@@ -318,12 +314,8 @@ case class ListAgg(
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
     if (value != null) {
-      if (orderExpression.isDefined) {
-        buffer += ((convertToBufferElement(value),
-          convertToBufferElement(orderExpression.get.eval(input))))
-      } else {
-        buffer += convertToBufferElement(value)
-      }
+      buffer += InternalRow.apply(convertToBufferElement(value),
+        convertToBufferElement(orderExpression.eval(input)))
     }
     buffer
   }
@@ -341,6 +333,13 @@ case class ListAgg(
 
   override def dataType: DataType = StringType
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
+  override def left: Expression = child
+
+  override def right: Expression = orderExpression
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = {
+    copy(child = newLeft, orderExpression = newRight)
+  }
 }

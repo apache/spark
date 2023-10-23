@@ -2227,15 +2227,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
     val listAgg = if (ctx.delimiter != null) {
       sortOrder.direction match {
-        case Ascending => ListAgg(column, Literal(ctx.delimiter.getText), Some(sortOrder.child),
+        case Ascending => ListAgg(column, Literal(ctx.delimiter.getText), sortOrder.child,
           false)
-        case Descending => ListAgg(column, Literal(ctx.delimiter.getText), Some(sortOrder.child),
+        case Descending => ListAgg(column, Literal(ctx.delimiter.getText), sortOrder.child,
           true)
       }
     } else {
       sortOrder.direction match {
-        case Ascending => ListAgg(column, Literal(","), Some(sortOrder.child), false)
-        case Descending => ListAgg(column, Literal(","), Some(sortOrder.child), true)
+        case Ascending => ListAgg(column, Literal(","), sortOrder.child, false)
+        case Descending => ListAgg(column, Literal(","), sortOrder.child, true)
       }
     }
     val aggregateExpression = listAgg.toAggregateExpression(isDistinct)
