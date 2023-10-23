@@ -759,7 +759,7 @@ class HashedRelationSuite extends SharedSparkSession {
       val res = new UnsafeRow(1)
       val it = map.get(1L, res)
       assert(it.hasNext)
-      assert(it.next.getLong(0) == 1)
+      assert(it.next().getLong(0) == 1)
       assert(it.hasNext != ignoresDuplicatedKey)
       map.free()
     }

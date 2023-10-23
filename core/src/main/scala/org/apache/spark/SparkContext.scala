@@ -1688,7 +1688,7 @@ class SparkContext(config: SparkConf) extends Logging {
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal, serializedOnly)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
@@ -2417,7 +2417,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.logLineage", false)) {
@@ -2539,7 +2539,7 @@ class SparkContext(config: SparkConf) extends Logging {
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
     assertNotStopped()
-    val callSite = getCallSite
+    val callSite = getCallSite()
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
     val cleanedFunc = clean(func)
@@ -2569,7 +2569,7 @@ class SparkContext(config: SparkConf) extends Logging {
   {
     assertNotStopped()
     val cleanF = clean(processPartition)
-    val callSite = getCallSite
+    val callSite = getCallSite()
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
@@ -2733,7 +2733,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = {
     assertNotStopped()
-    taskScheduler.defaultParallelism
+    taskScheduler.defaultParallelism()
   }
 
   /**
@@ -2803,7 +2803,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val addedArchivePaths = allAddedArchives.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
         schedulingMode, addedJarPaths, addedFilePaths, addedArchivePaths,
-        env.metricsSystem.metricsProperties.asScala.toMap)
+        env.metricsSystem.metricsProperties().asScala.toMap)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }

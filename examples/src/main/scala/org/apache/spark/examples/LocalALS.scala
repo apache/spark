@@ -134,10 +134,10 @@ object LocalALS {
   }
 
   private def randomVector(n: Int): RealVector =
-    new ArrayRealVector(Array.fill(n)(math.random))
+    new ArrayRealVector(Array.fill(n)(math.random()))
 
   private def randomMatrix(rows: Int, cols: Int): RealMatrix =
-    new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random))
+    new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random()))
 
 }
 // scalastyle:on println

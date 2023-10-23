@@ -449,11 +449,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
         val err1 = intercept[SparkException] {
-          df.selectExpr("parsed.a").collect
+          df.selectExpr("parsed.a").collect()
         }
 
         val err2 = intercept[SparkException] {
-          df.selectExpr("parsed.b").collect
+          df.selectExpr("parsed.b").collect()
         }
 
         assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
@@ -475,7 +475,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
-    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
       (YearMonthIntervalType(), "INTERVAL '1-2' YEAR TO MONTH", Period.of(1, 2, 0)),
       (YearMonthIntervalType(YEAR), "INTERVAL '1' YEAR", Period.of(1, 0, 0)),
@@ -502,7 +502,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35999: Make from_csv/to_csv to handle day-time intervals properly") {
-    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF()
     Seq(
       (DayTimeIntervalType(), "INTERVAL '1 02:03:04' DAY TO SECOND",
         Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
@@ -547,7 +547,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36490: Make from_csv/to_csv to handle timestamp_ntz type properly") {
     val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
-    val df = Seq(localDT).toDF
+    val df = Seq(localDT).toDF()
     val toCsvDF = df.select(to_csv(struct($"value")) as "csv")
     checkAnswer(toCsvDF, Row("2021-08-12T15:16:23.000"))
     val fromCsvDF = toCsvDF

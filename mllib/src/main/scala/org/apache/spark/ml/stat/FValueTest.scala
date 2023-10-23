@@ -124,7 +124,7 @@ private[ml] object FValueTest {
         if (iter.hasNext) {
           val array = Array.ofDim[Double](numFeatures)
           while (iter.hasNext) {
-            val (label, features) = iter.next
+            val (label, features) = iter.next()
             val yDiff = label - yMean
             if (yDiff != 0) {
               features.iterator.zip(xMeans.iterator)

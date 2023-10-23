@@ -612,7 +612,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
-      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
+      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines()
         .filter { line =>
           !line.startsWith("log4j") && !line.startsWith("usage")
         }

@@ -55,7 +55,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
 
-    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
+    val sparkSession = SparkSession.builder().config(conf).getOrCreate()
 
     // Set default configs. Individual cases will change them if necessary.
     sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
@@ -135,7 +135,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
@@ -280,7 +280,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir,
           spark.sql(s"SELECT named_struct('f', CAST(value as ${dataType.sql})) as col FROM t1"),
@@ -338,7 +338,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).map { x =>
+        spark.range(values).map(_ => Random.nextLong()).map { x =>
           val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
           val mapOfStructColumn = Map(
             s"$x" -> (x * 0.1, (x, s"$x" * 100)),
@@ -404,7 +404,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
@@ -453,7 +453,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
@@ -502,7 +502,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
@@ -703,7 +703,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         val middle = width / 2
         val selectExpr = (1 to width).map(i => s"value as c$i")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))

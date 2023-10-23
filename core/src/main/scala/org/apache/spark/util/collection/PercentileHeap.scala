@@ -47,16 +47,16 @@ private[spark] class PercentileHeap(percentage: Double = 0.5) {
    * returned `sorted(p)` where `p = (sorted.length * percentage).toInt`.
    */
   def percentile(): Double = {
-    if (isEmpty) throw new NoSuchElementException("empty")
+    if (isEmpty()) throw new NoSuchElementException("empty")
     largeHeap.peek
   }
 
   def insert(x: Double): Unit = {
-    if (isEmpty) {
+    if (isEmpty()) {
       largeHeap.offer(x)
     } else {
       val p = largeHeap.peek
-      val growBot = ((size + 1) * percentage).toInt > smallHeap.size
+      val growBot = ((size() + 1) * percentage).toInt > smallHeap.size
       if (growBot) {
         if (x < p) {
           smallHeap.offer(-x)

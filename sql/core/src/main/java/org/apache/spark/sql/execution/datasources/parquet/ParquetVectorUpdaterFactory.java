@@ -109,7 +109,8 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
+        } else if (isTimestamp(sparkType) &&
+            isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongUpdater();
@@ -117,7 +118,8 @@ public class ParquetVectorUpdaterFactory {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
+        } else if (isTimestamp(sparkType) &&
+            isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongAsMicrosUpdater();
@@ -1147,6 +1149,10 @@ public class ParquetVectorUpdaterFactory {
       return d.precision() == 20 && d.scale() == 0;
     }
     return false;
+  }
+
+  private static boolean isTimestamp(DataType dt) {
+    return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
   }
 
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {

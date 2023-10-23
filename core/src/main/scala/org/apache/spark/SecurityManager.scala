@@ -304,7 +304,7 @@ private[spark] class SecurityManager(
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
   def getSecretKey(): String = {
-    if (isAuthenticationEnabled) {
+    if (isAuthenticationEnabled()) {
       val creds = UserGroupInformation.getCurrentUser().getCredentials()
       Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
         .map { bytes => new String(bytes, UTF_8) }
@@ -396,7 +396,7 @@ private[spark] class SecurityManager(
       aclUsers: Set[String],
       aclGroups: Set[String]): Boolean = {
     if (user == null ||
-        !aclsEnabled ||
+        !aclsEnabled() ||
         aclUsers.contains(WILDCARD_ACL) ||
         aclUsers.contains(user) ||
         aclGroups.contains(WILDCARD_ACL)) {

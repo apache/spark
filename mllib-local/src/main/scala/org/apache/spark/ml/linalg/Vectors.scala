@@ -806,7 +806,7 @@ class SparseVector @Since("2.0.0") (
         s += 1
       }
     }
-    new SparseVector(ns, indexBuff.result, valueBuff.result)
+    new SparseVector(ns, indexBuff.result(), valueBuff.result())
   }
 
   private[spark] override def iterator: Iterator[(Int, Double)] = {
