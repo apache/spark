@@ -57,7 +57,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             ident, "ADD COLUMN with qualified column")
         }
         if (!c.nullable) {
-          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
+          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError()
         }
       }
       AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
@@ -72,7 +72,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           catalog, ident, "ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
-        throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
+        throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError()
       }
       if (a.position.isDefined) {
         throw QueryCompilationErrors.unsupportedTableOperationError(

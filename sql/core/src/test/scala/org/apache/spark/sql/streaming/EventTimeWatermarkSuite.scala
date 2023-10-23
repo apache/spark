@@ -911,7 +911,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
             (MONTHS_PER_YEAR * DAYS_PER_MONTH + 2 * DAYS_PER_MONTH) * MILLIS_PER_DAY)
         ).foreach { case (delayThresholdVariants, expectedMs) =>
           delayThresholdVariants.foreach { case delayThreshold =>
-            val df = MemoryStream[Int].toDF
+            val df = MemoryStream[Int].toDF()
               .withColumn("eventTime", timestamp_seconds($"value"))
               .withWatermark("eventTime", delayThreshold)
             val eventTimeAttr = df.queryExecution.analyzed.output.find(a => a.name == "eventTime")
@@ -932,7 +932,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
           "interval '1 2:3:4' day to hour",
           "interval '1 2' year to month").foreach { delayThreshold =>
           intercept[AnalysisException] {
-            val df = MemoryStream[Int].toDF
+            val df = MemoryStream[Int].toDF()
               .withColumn("eventTime", timestamp_seconds($"value"))
               .withWatermark("eventTime", delayThreshold)
           }
@@ -944,10 +944,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   private def dfWithMultipleWatermarks(
       input1: MemoryStream[Int],
       input2: MemoryStream[Int]): Dataset[_] = {
-    val df1 = input1.toDF
+    val df1 = input1.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-    val df2 = input2.toDF
+    val df2 = input2.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "15 seconds")
     df1.union(df2).select($"eventTime".cast("int"))

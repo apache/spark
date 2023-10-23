@@ -1100,7 +1100,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             val remoteDir2 = dir2.getCanonicalPath
@@ -1108,7 +1108,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
-              db.getWriteBufferManagerAndCache
+              db.getWriteBufferManagerAndCache()
             }
 
             if (boundedMemoryUsage == "true") {

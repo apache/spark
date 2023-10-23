@@ -303,6 +303,62 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.spark.read.json(path=d, primitivesAsString=True).toPandas(),
             )
 
+    def test_xml(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        xsdPath = tempfile.mkdtemp()
+        xsdString = """<?xml version="1.0" encoding="UTF-8" ?>
+          <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+            <xs:element name="person">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="name" type="xs:string" />
+                  <xs:element name="age" type="xs:long" />
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:schema>"""
+        try:
+            xsdFile = os.path.join(xsdPath, "people.xsd")
+            with open(xsdFile, "w") as f:
+                _ = f.write(xsdString)
+            df = self.spark.createDataFrame([("Hyukjin", 100), ("Aria", 101), ("Arin", 102)]).toDF(
+                "name", "age"
+            )
+            df.write.xml(tmpPath, rootTag="people", rowTag="person")
+            people = self.spark.read.xml(tmpPath, rowTag="person", rowValidationXSDPath=xsdFile)
+            peopleConnect = self.connect.read.xml(
+                tmpPath, rowTag="person", rowValidationXSDPath=xsdFile
+            )
+            self.assert_eq(people.toPandas(), peopleConnect.toPandas())
+            expected = [
+                Row(age=100, name="Hyukjin"),
+                Row(age=101, name="Aria"),
+                Row(age=102, name="Arin"),
+            ]
+            expectedSchema = StructType(
+                [StructField("age", LongType(), True), StructField("name", StringType(), True)]
+            )
+
+            self.assertEqual(people.sort("age").collect(), expected)
+            self.assertEqual(people.schema, expectedSchema)
+
+            for schema in [
+                "age INT, name STRING",
+                expectedSchema,
+            ]:
+                people = self.spark.read.xml(
+                    tmpPath, rowTag="person", rowValidationXSDPath=xsdFile, schema=schema
+                )
+                peopleConnect = self.connect.read.xml(
+                    tmpPath, rowTag="person", rowValidationXSDPath=xsdFile, schema=schema
+                )
+                self.assert_eq(people.toPandas(), peopleConnect.toPandas())
+
+        finally:
+            shutil.rmtree(tmpPath)
+            shutil.rmtree(xsdPath)
+
     def test_parquet(self):
         # SPARK-41445: Implement DataFrameReader.parquet
         with tempfile.TemporaryDirectory() as d:

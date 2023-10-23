@@ -89,8 +89,8 @@ object Analytics {
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
-        println(s"GRAPHX: Number of vertices ${graph.vertices.count}")
-        println(s"GRAPHX: Number of edges ${graph.edges.count}")
+        println(s"GRAPHX: Number of vertices ${graph.vertices.count()}")
+        println(s"GRAPHX: Number of edges ${graph.edges.count()}")
 
         val pr = (numIterOpt match {
           case Some(numIter) => PageRank.run(graph, numIter)

@@ -74,8 +74,8 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
 
     // Verify that receiver was started
     assert(receiver.callsRecorder.calls === Seq("onStart"))
-    assert(executor.isReceiverStarted)
-    assert(receiver.isStarted)
+    assert(executor.isReceiverStarted())
+    assert(receiver.isStarted())
     assert(!receiver.isStopped())
     assert(receiver.otherThread.isAlive)
     eventually(timeout(100.milliseconds), interval(10.milliseconds)) {
@@ -111,8 +111,8 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     receiver.restart("restarting", null, 100)
     eventually(timeout(10.seconds), interval(10.milliseconds)) {
       // below verification ensures for now receiver is already restarted
-      assert(receiver.isStarted)
-      assert(!receiver.isStopped)
+      assert(receiver.isStarted())
+      assert(!receiver.isStopped())
       assert(receiver.receiving)
 
       // both receiver supervisor and receiver should be stopped first, and started
@@ -127,7 +127,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     // Verify that stopping actually stops the thread
     failAfter(1.second) {
       receiver.stop("test")
-      assert(receiver.isStopped)
+      assert(receiver.isStopped())
       assert(!receiver.otherThread.isAlive)
 
       // The thread that started the executor should complete

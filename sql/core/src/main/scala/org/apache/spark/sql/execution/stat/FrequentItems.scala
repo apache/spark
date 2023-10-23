@@ -122,7 +122,7 @@ case class CollectFrequentItems(
       input: mutable.Map[Any, Long]): mutable.Map[Any, Long] = {
     val otherIter = input.iterator
     while (otherIter.hasNext) {
-      val (key, count) = otherIter.next
+      val (key, count) = otherIter.next()
       add(buffer, key, count)
     }
     buffer

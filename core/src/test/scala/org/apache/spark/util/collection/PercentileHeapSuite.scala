@@ -26,7 +26,7 @@ class PercentileHeapSuite extends SparkFunSuite {
   test("When PercentileHeap is empty, NoSuchElementException is thrown.") {
     val medianHeap = new PercentileHeap(0.5)
     intercept[NoSuchElementException] {
-      medianHeap.percentile
+      medianHeap.percentile()
     }
   }
 
@@ -38,8 +38,8 @@ class PercentileHeapSuite extends SparkFunSuite {
   private def testPercentileFor(nums: Seq[Int], percentage: Double) = {
     val h = new PercentileHeap(percentage)
     Random.shuffle(nums).foreach(h.insert(_))
-    assert(h.size == nums.length)
-    assert(h.percentile == percentile(nums, percentage))
+    assert(h.size() == nums.length)
+    assert(h.percentile() == percentile(nums, percentage))
   }
 
   private val tests = Seq(
@@ -68,7 +68,7 @@ class PercentileHeapSuite extends SparkFunSuite {
       val h = new PercentileHeap(0.95)
       shuffled.foreach { x =>
         h.insert(x)
-        for (_ <- 0 until h.size) h.percentile
+        for (_ <- 0 until h.size()) h.percentile()
       }
       System.nanoTime() - start
     }

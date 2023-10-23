@@ -137,7 +137,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
-    when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
     when(kubernetesClient.persistentVolumeClaims()).thenReturn(persistentVolumeClaims)
     when(persistentVolumeClaims.inNamespace("default")).thenReturn(pvcWithNamespace)
@@ -504,7 +504,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Newly created executors (both acknowledged and not) are cleaned up.
     waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
-    when(schedulerBackend.getExecutorIds).thenReturn(Seq("1", "3", "4"))
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1", "3", "4"))
     snapshotsStore.notifySubscribers()
     // SPARK-34361: even as 1, 3 and 4 are not timed out as they are considered as known PODs so
     // this is why they are not counted into the outstanding PODs and /they are not removed even
@@ -586,7 +586,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podsWithNamespace).resource(podWithAttachedContainerForId(7, rp.id))
 
     // 1) make 1 POD known by the scheduler backend for each resource profile
-    when(schedulerBackend.getExecutorIds).thenReturn(Seq("1", "4"))
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1", "4"))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 5,
       "scheduler backend known PODs are not outstanding")
@@ -594,7 +594,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
     // 2) make 1 extra POD known by the scheduler backend for each resource profile
     // and make some to pending
-    when(schedulerBackend.getExecutorIds).thenReturn(Seq("1", "2", "4", "5"))
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1", "2", "4", "5"))
     snapshotsStore.updatePod(pendingExecutor(2, defaultProfile.id))
     snapshotsStore.updatePod(pendingExecutor(3, defaultProfile.id))
     snapshotsStore.updatePod(pendingExecutor(5, rp.id))

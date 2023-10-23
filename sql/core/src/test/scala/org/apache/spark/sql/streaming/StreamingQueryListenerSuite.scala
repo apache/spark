@@ -66,7 +66,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
           if (q.exception.isEmpty) {
-            assert(clock.isStreamWaitingAt(clock.getTimeMillis))
+            assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
           }
         }
         if (q.exception.isDefined) {
@@ -210,7 +210,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
-      testStream(MemoryStream[Int].toDS)(
+      testStream(MemoryStream[Int].toDS())(
         StartStream(),
         StopStream
       )
@@ -241,7 +241,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
-        testStream(MemoryStream[Int].toDS)(
+        testStream(MemoryStream[Int].toDS())(
           StartStream(),
           Assert(listener.startEvent !== null, "onQueryStarted not called before query returned"),
           StopStream,
@@ -335,7 +335,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         actions += AssertOnQuery { q =>
           q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
-        testStream(input.toDS)(actions.toSeq: _*)
+        testStream(input.toDS())(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numIdleEvent > 1 && numIdleEvent <= 11)
@@ -355,7 +355,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       collector1.reset()
       collector2.reset()
       val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
-      testStream(mem.toDS)(
+      testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )

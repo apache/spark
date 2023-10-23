@@ -31,7 +31,7 @@ object SparkConnectServer extends Logging {
   def main(args: Array[String]): Unit = {
     // Set the active Spark Session, and starts SparkEnv instance (via Spark Context)
     logInfo("Starting Spark session.")
-    val session = SparkSession.builder.getOrCreate()
+    val session = SparkSession.builder().getOrCreate()
     try {
       try {
         SparkConnectService.start(session.sparkContext)
