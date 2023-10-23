@@ -295,7 +295,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
-  override def createShuffleSpec(distribution: ClusteredDistribution): HashShuffleSpec =
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     HashShuffleSpec(this, distribution)
 
   /**
@@ -737,8 +737,8 @@ case class HashShuffleSpec(
 }
 
 case class CoalescedHashShuffleSpec(
-    from: HashShuffleSpec,
-    partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
+    from: ShuffleSpec,
+    @transient partitions: Seq[CoalescedBoundary]) extends ShuffleSpec {
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>
