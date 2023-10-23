@@ -28,6 +28,6 @@ class SslYarnShuffleServiceWithRocksDBBackendSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
+      forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
   }
 }
