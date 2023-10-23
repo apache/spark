@@ -614,7 +614,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b")
       df.createTempView("v")
 
-      if (defaultSerDe == "hive-serde") {
+      if (defaultSerDe() == "hive-serde") {
         checkAnswer(sql(
           """
             |SELECT TRANSFORM(a, b)

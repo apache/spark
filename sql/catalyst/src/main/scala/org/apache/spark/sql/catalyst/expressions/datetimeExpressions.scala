@@ -49,7 +49,7 @@ trait TimeZoneAwareExpression extends Expression {
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   final override val nodePatterns: Seq[TreePattern] =
-    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal()
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
@@ -1017,7 +1017,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -1073,7 +1073,7 @@ case class UnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   def this() = {
@@ -1409,7 +1409,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal(TimestampFormatter.defaultPattern))
+    this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def dataType: DataType = StringType

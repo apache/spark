@@ -633,7 +633,7 @@ class DataFrameSetOperationsSuite extends QueryTest
         (1, 1)
       )).toDF("a", "b").withColumn("c", newCol)
 
-      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id()).filter(filter)
       checkAnswer(df2, result)
     }
 

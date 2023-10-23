@@ -217,7 +217,7 @@ private[spark] class StandaloneSchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
   /**
