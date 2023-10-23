@@ -702,20 +702,19 @@ def read_spark_io(
 
     See Also
     --------
-    DataFrame.to_spark_io
     DataFrame.read_table
     DataFrame.read_delta
     DataFrame.read_parquet
 
     Examples
     --------
-    >>> ps.range(1).to_spark_io('%s/read_spark_io/data.parquet' % path)
+    >>> ps.range(1).spark.to_spark_io('%s/read_spark_io/data.parquet' % path)
     >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.parquet' % path, format='parquet', schema='id long')
        id
     0   0
 
-    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.json' % path,
+    >>> ps.range(10, 15, num_partitions=1).spark.to_spark_io('%s/read_spark_io/data.json' % path,
     ...                                                format='json', lineSep='__')
     >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.json' % path, format='json', schema='id long', lineSep='__')
@@ -728,7 +727,7 @@ def read_spark_io(
 
     You can preserve the index in the roundtrip as below.
 
-    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.orc' % path,
+    >>> ps.range(10, 15, num_partitions=1).spark.to_spark_io('%s/read_spark_io/data.orc' % path,
     ...                                                format='orc', index_col="index")
     >>> ps.read_spark_io(
     ...     path=r'%s/read_spark_io/data.orc' % path, format="orc", index_col="index")

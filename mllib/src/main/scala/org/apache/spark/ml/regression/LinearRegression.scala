@@ -612,7 +612,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
       solution(numFeatures) -= adapt
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   private def createModel(

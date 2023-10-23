@@ -2,12 +2,14 @@
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
+    ],
+    "sqlState" : "42845"
   },
   "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
     "message" : [
       "Cannot use all columns for partition columns."
-    ]
+    ],
+    "sqlState" : "KD005"
   },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
@@ -20,7 +22,8 @@
       "Name <name> is ambiguous in nested CTE.",
       "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
       "See '<docroot>/sql-migration-guide.html#query-engine'."
-    ]
+    ],
+    "sqlState" : "42KD0"
   },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
@@ -73,12 +76,15 @@
           "The input argument `tolerance` must be a constant."
         ]
       }
-    }
+    },
+    "sqlState" : "42604"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
-      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
-    ]
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer.",
+      "To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ],
+    "sqlState" : "22KD3"
   },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
@@ -95,7 +101,14 @@
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
-    ]
+    ],
+    "sqlState" : "42KDE"
+  },
+  "CANNOT_ALTER_PARTITION_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
   },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
@@ -106,22 +119,26 @@
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "CANNOT_CONVERT_PROTOBUF_MESSAGE_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "CANNOT_DECODE_URL" : {
     "message" : [
@@ -132,17 +149,20 @@
   "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
     "message" : [
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
       "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
-    ]
+    ],
+    "sqlState" : "46103"
   },
   "CANNOT_LOAD_PROTOBUF_CLASS" : {
     "message" : [
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "CANNOT_LOAD_STATE_STORE" : {
     "message" : [
@@ -235,7 +255,8 @@
   "CANNOT_PARSE_INTERVAL" : {
     "message" : [
       "Unable to parse <intervalString>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
-    ]
+    ],
+    "sqlState" : "22006"
   },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
@@ -246,7 +267,8 @@
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
       "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
-    ]
+    ],
+    "sqlState" : "22018"
   },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
@@ -256,8 +278,11 @@
   },
   "CANNOT_READ_FILE_FOOTER" : {
     "message" : [
-      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format. If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt. If it is, you can choose to either ignore it or fix the corruption."
-    ]
+      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format.",
+      "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
+      "If it is, you can choose to either ignore it or fix the corruption."
+    ],
+    "sqlState" : "KD001"
   },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
@@ -274,12 +299,14 @@
   "CANNOT_RESOLVE_STAR_EXPAND" : {
     "message" : [
       "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
-    ]
+    ],
+    "sqlState" : "42704"
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
@@ -311,13 +338,15 @@
           "Update a UserDefinedType[<udtSql>] by updating its fields."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
       "Cannot up cast <expression> from <sourceType> to <targetType>.",
       "<details>"
-    ]
+    ],
+    "sqlState" : "42846"
   },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
@@ -329,7 +358,8 @@
           "Cannot perform commit during state checkpoint."
         ]
       }
-    }
+    },
+    "sqlState" : "58030"
   },
   "CAST_INVALID_INPUT" : {
     "message" : [
@@ -349,25 +379,37 @@
     ],
     "sqlState" : "22003"
   },
+  "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
+    "message" : [
+      "Checkpoint block <rddBlockId> not found!",
+      "Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.",
+      "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
+    ],
+    "sqlState" : "56000"
+  },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [
       "`MapObjects` does not support the class <cls> as resulting collection."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
       "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
-    ]
+    ],
+    "sqlState" : "56038"
   },
   "CODEC_SHORT_NAME_NOT_FOUND" : {
     "message" : [
       "Cannot find a short name for the codec <codecName>."
-    ]
+    ],
+    "sqlState" : "42704"
   },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
     "message" : [
       "Columns aliases are not allowed in <op>."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
@@ -378,7 +420,8 @@
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
-    ]
+    ],
+    "sqlState" : "42703"
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
@@ -388,13 +431,17 @@
   },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
-      "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>. It should return a positive integer for \"greater than\", 0 for \"equal\" and a negative integer for \"less than\". To revert to deprecated behavior where NULL is treated as 0 (equal), you must set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
-    ]
+      "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
+      "It should return a positive integer for \"greater than\", 0 for \"equal\" and a negative integer for \"less than\".",
+      "To revert to deprecated behavior where NULL is treated as 0 (equal), you must set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
+    ],
+    "sqlState" : "22004"
   },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
@@ -433,7 +480,8 @@
           "Both Datasets must belong to the same SparkSession."
         ]
       }
-    }
+    },
+    "sqlState" : "56K00"
   },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
@@ -444,7 +492,8 @@
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
@@ -797,7 +846,8 @@
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
@@ -808,18 +858,22 @@
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
       "Duplicated field names in Arrow Struct are not allowed, got <fieldNames>."
-    ]
+    ],
+    "sqlState" : "42713"
   },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
-      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
+      "Duplicate map key <key> was found, please check the input data.",
+      "If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
     ],
     "sqlState" : "23505"
   },
   "DUPLICATED_METRICS_NAME" : {
     "message" : [
-      "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
-    ]
+      "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results.",
+      "However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
+    ],
+    "sqlState" : "42710"
   },
   "DUPLICATE_ASSIGNMENTS" : {
     "message" : [
@@ -830,7 +884,8 @@
   "DUPLICATE_CLAUSES" : {
     "message" : [
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
-    ]
+    ],
+    "sqlState" : "42614"
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -864,28 +919,35 @@
   },
   "ENCODER_NOT_FOUND" : {
     "message" : [
-      "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
-    ]
+      "Not found an encoder of the type <typeName> to Spark SQL internal representation.",
+      "Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
+    ],
+    "sqlState" : "42704"
   },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
-      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context."
-    ]
+      "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use.",
+      "This could happen if you registered additional schemas after starting your spark context."
+    ],
+    "sqlState" : "KD00B"
   },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
-    ]
+    ],
+    "sqlState" : "42K09"
   },
   "EXCEED_LIMIT_LENGTH" : {
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
-    ]
+    ],
+    "sqlState" : "54006"
   },
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "EXPECT_TABLE_NOT_VIEW" : {
     "message" : [
@@ -902,7 +964,8 @@
           "Please use ALTER VIEW instead."
         ]
       }
-    }
+    },
+    "sqlState" : "42809"
   },
   "EXPECT_VIEW_NOT_TABLE" : {
     "message" : [
@@ -919,17 +982,26 @@
           "Please use ALTER TABLE instead."
         ]
       }
-    }
+    },
+    "sqlState" : "42809"
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
-    ]
+    ],
+    "sqlState" : "42846"
+  },
+  "EXPRESSION_ENCODING_FAILED" : {
+    "message" : [
+      "Failed to encode a value of the expressions: <expressions> to a row."
+    ],
+    "sqlState" : "42846"
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
-    ]
+    ],
+    "sqlState" : "42822"
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
@@ -952,7 +1024,8 @@
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
     "message" : [
       "Failed to register classes with Kryo."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -963,12 +1036,14 @@
   "FAILED_RENAME_TEMP_FILE" : {
     "message" : [
       "Failed to rename temp file <srcPath> to <dstPath> as FileSystem.rename returned false."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
-    ]
+    ],
+    "sqlState" : "42710"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -985,22 +1060,26 @@
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
-    ]
+    ],
+    "sqlState" : "42623"
   },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
       "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
-    ]
+    ],
+    "sqlState" : "56038"
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
       "Invalid Graphite protocol: <protocol>."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "GRAPHITE_SINK_PROPERTY_MISSING" : {
     "message" : [
       "Graphite sink requires '<property>' property."
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [
@@ -1041,22 +1120,26 @@
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
-    ]
+    ],
+    "sqlState" : "42822"
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
-    ]
+    ],
+    "sqlState" : "22546"
   },
   "HLL_INVALID_LG_K" : {
     "message" : [
       "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
-    ]
+    ],
+    "sqlState" : "22546"
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
       "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
-    ]
+    ],
+    "sqlState" : "22000"
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -1079,7 +1162,8 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
-    ]
+    ],
+    "sqlState" : "56038"
   },
   "INCOMPATIBLE_DATA_FOR_TABLE" : {
     "message" : [
@@ -1149,7 +1233,8 @@
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
       "Please try to re-create the view by running: <suggestion>."
-    ]
+    ],
+    "sqlState" : "51024"
   },
   "INCOMPLETE_TYPE_DEFINITION" : {
     "message" : [
@@ -1182,40 +1267,34 @@
       "DATETIME_PATTERN_RECOGNITION" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
+          "Fail to recognize <pattern> pattern in the DateTimeFormatter.",
+          "1) You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0.",
+          "2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
-          "Fail to parse <datetime> in the new parser. You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
+          "Fail to parse <datetime> in the new parser.",
+          "You can set <config> to \"LEGACY\" to restore the behavior before Spark 3.0, or set to \"CORRECTED\" and treat it as an invalid datetime string."
         ]
       },
       "READ_ANCIENT_DATETIME" : {
         "message" : [
-          "Spark >= 3.0:",
-          "reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
-          "from <format> files can be ambiguous, as the files may be written by",
-          "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar",
-          "that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
-          "See more details in SPARK-31404. You can set the SQL config <config> or",
-          "the datasource option <option> to \"LEGACY\" to rebase the datetime values",
-          "w.r.t. the calendar difference during reading. To read the datetime values",
-          "as it is, set the SQL config or the datasource option to \"CORRECTED\"."
+          "Spark >= 3.0: reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from <format> files can be ambiguous, as the files may be written by",
+          "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set the SQL config <config> or the datasource option <option> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during reading.",
+          "To read the datetime values as it is, set the SQL config or the datasource option to \"CORRECTED\"."
         ]
       },
       "WRITE_ANCIENT_DATETIME" : {
         "message" : [
           "Spark >= 3.0:",
-          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z",
-          "into <format> files can be dangerous, as the files may be read by Spark 2.x",
-          "or legacy versions of Hive later, which uses a legacy hybrid calendar that",
-          "is different from Spark 3.0+'s Proleptic Gregorian calendar. See more",
-          "details in SPARK-31404. You can set <config> to \"LEGACY\" to rebase the",
-          "datetime values w.r.t. the calendar difference during writing, to get maximum",
-          "interoperability. Or set the config to \"CORRECTED\" to write the datetime",
-          "values as it is, if you are sure that the written files will only be read by",
-          "Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
+          "writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into <format> files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic Gregorian calendar.",
+          "See more details in SPARK-31404.",
+          "You can set <config> to \"LEGACY\" to rebase the datetime values w.r.t. the calendar difference during writing, to get maximum interoperability.",
+          "Or set the config to \"CORRECTED\" to write the datetime values as it is, if you are sure that the written files will only be read by Spark 3.0+ or other systems that use Proleptic Gregorian calendar."
         ]
       }
     },
@@ -1291,7 +1370,8 @@
           "<key>, <totalAmountOfParts> parts are expected."
         ]
       }
-    }
+    },
+    "sqlState" : "XXKUC"
   },
   "INTERNAL_ERROR" : {
     "message" : [
@@ -1418,17 +1498,20 @@
           "Expected the value is '0', '<longMinValue>', '[<intMinValue>, <intMaxValue>]'."
         ]
       }
-    }
+    },
+    "sqlState" : "22003"
   },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "INVALID_BYTE_STRING" : {
     "message" : [
       "The expected format is ByteString, but was <unsupported> (<class>)."
-    ]
+    ],
+    "sqlState" : "22P03"
   },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
@@ -1490,11 +1573,13 @@
           "which fails to resolve as a valid expression."
         ]
       }
-    }
+    },
+    "sqlState" : "42623"
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
-      "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+      "System memory <systemMemory> must be at least <minSystemMemory>.",
+      "Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
   },
@@ -1507,16 +1592,19 @@
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
-    ]
+    ],
+    "sqlState" : "42604"
   },
   "INVALID_ESCAPE_CHAR" : {
     "message" : [
       "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
-    ]
+    ],
+    "sqlState" : "42604"
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
-      "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+      "Executor memory <executorMemory> must be at least <minSystemMemory>.",
+      "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
   },
@@ -1654,7 +1742,8 @@
   "INVALID_HIVE_COLUMN_NAME" : {
     "message" : [
       "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ]
+    ],
+    "sqlState" : "42K05"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -1693,7 +1782,8 @@
           "Inline table expected <expectedNumCols> columns but found <actualNumCols> columns in row <rowIndex>."
         ]
       }
-    }
+    },
+    "sqlState" : "42000"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -1733,7 +1823,8 @@
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0D"
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
@@ -1766,17 +1857,20 @@
           "The <name> expression must evaluate to a constant value."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_NUMERIC_LITERAL_RANGE" : {
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_OBSERVED_METRICS" : {
     "message" : [
@@ -1785,12 +1879,12 @@
     "subClass" : {
       "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
         "message" : [
-          "Aggregate expression with distinct are not allowed in observed metrics, but found: <expr>."
+          "Aggregate expressions with DISTINCT are not allowed in observed metrics, but found: <expr>."
         ]
       },
       "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED" : {
         "message" : [
-          "Aggregate expression with filter predicate are not allowed in observed metrics, but found: <expr>."
+          "Aggregate expression with FILTER predicate are not allowed in observed metrics, but found: <expr>."
         ]
       },
       "MISSING_NAME" : {
@@ -1818,7 +1912,8 @@
           "Window expressions are not allowed in observed metrics, but found: <expr>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_OPTIONS" : {
     "message" : [
@@ -1917,7 +2012,8 @@
           "Table <name> is not partitioned."
         ]
       }
-    }
+    },
+    "sqlState" : "42601"
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
@@ -1955,6 +2051,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SCHEMA_OR_RELATION_NAME" : {
+    "message" : [
+      "<name> is not a valid name for tables/schemas. Valid names only contain alphabet characters, numbers and _."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_SET_SYNTAX" : {
     "message" : [
       "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
@@ -1964,7 +2066,8 @@
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
-    ]
+    ],
+    "sqlState" : "42K08"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -2086,7 +2189,8 @@
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
-    ]
+    ],
+    "sqlState" : "42K0F"
   },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
@@ -2108,7 +2212,8 @@
           "Must be evaluable."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
@@ -2118,13 +2223,15 @@
   },
   "INVALID_UDF_IMPLEMENTATION" : {
     "message" : [
-      "Function <funcName> does not implement ScalarFunction or AggregateFunction."
-    ]
+      "Function <funcName> does not implement a ScalarFunction or AggregateFunction."
+    ],
+    "sqlState" : "38000"
   },
   "INVALID_URL" : {
     "message" : [
       "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
-    ]
+    ],
+    "sqlState" : "22P02"
   },
   "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
@@ -2135,7 +2242,8 @@
   "INVALID_VIEW_TEXT" : {
     "message" : [
       "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
-    ]
+    ],
+    "sqlState" : "XX000"
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -2147,7 +2255,8 @@
   "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
     "message" : [
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
@@ -2169,27 +2278,32 @@
           "The advisory partition size can't be specified with unspecified distribution."
         ]
       }
-    }
+    },
+    "sqlState" : "42000"
   },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
-    ]
+    ],
+    "sqlState" : "54006"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
       "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -2200,12 +2314,14 @@
   "MALFORMED_CSV_RECORD" : {
     "message" : [
       "Malformed CSV record: <badRecord>"
-    ]
+    ],
+    "sqlState" : "KD000"
   },
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
-    ]
+    ],
+    "sqlState" : "XX000"
   },
   "MALFORMED_RECORD_IN_PARSING" : {
     "message" : [
@@ -2261,7 +2377,8 @@
           ""
         ]
       }
-    }
+    },
+    "sqlState" : "XX000"
   },
   "MISSING_GROUP_BY" : {
     "message" : [
@@ -2272,12 +2389,14 @@
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NAMED_PARAMETERS_NOT_SUPPORTED" : {
     "message" : [
@@ -2287,8 +2406,11 @@
   },
   "NAMED_PARAMETER_SUPPORT_DISABLED" : {
     "message" : [
-      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
-    ]
+      "Cannot call function <functionName> because named argument references are not enabled here.",
+      "In this case, the named argument reference was <argument>.",
+      "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ],
+    "sqlState" : "0A000"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -2300,7 +2422,7 @@
     "message" : [
       "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
     ],
-    "sqlState" : "22024"
+    "sqlState" : "42K08"
   },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
@@ -2334,8 +2456,10 @@
   },
   "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
     "message" : [
-      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
-    ]
+      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets.",
+      "Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
+    ],
+    "sqlState" : "42KDE"
   },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
@@ -2357,7 +2481,8 @@
           "UNPIVOT together with PIVOT."
         ]
       }
-    }
+    },
+    "sqlState" : "42601"
   },
   "NOT_A_CONSTANT_STRING" : {
     "message" : [
@@ -2385,7 +2510,8 @@
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -2408,18 +2534,20 @@
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."
     ],
-    "sqlState" : "46110"
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
     "message" : [
       "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
     "message" : [
@@ -2437,7 +2565,7 @@
         ]
       }
     },
-    "sqlState" : "46110"
+    "sqlState" : "0A000"
   },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
@@ -2448,17 +2576,20 @@
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
-    ]
+    ],
+    "sqlState" : "42000"
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
       "Cannot find <catalystFieldPath> in Protobuf schema."
-    ]
+    ],
+    "sqlState" : "42S22"
   },
   "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface."
-    ]
+    ],
+    "sqlState" : "38000"
   },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
@@ -2498,8 +2629,10 @@
   },
   "NUM_TABLE_VALUE_ALIASES_MISMATCH" : {
     "message" : [
-      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
-    ]
+      "Number of given aliases does not match number of output columns.",
+      "Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ],
+    "sqlState" : "42826"
   },
   "OPERATION_CANCELED" : {
     "message" : [
@@ -2561,62 +2694,74 @@
   "PLAN_VALIDATION_FAILED_RULE_EXECUTOR" : {
     "message" : [
       "The input plan of <ruleExecutor> is invalid: <reason>"
-    ]
+    ],
+    "sqlState" : "XXKD0"
   },
   "PLAN_VALIDATION_FAILED_RULE_IN_BATCH" : {
     "message" : [
       "Rule <rule> in batch <batch> generated an invalid plan: <reason>"
-    ]
+    ],
+    "sqlState" : "XXKD0"
   },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" : {
     "message" : [
       "Error reading Protobuf descriptor file at path: <filePath>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_FIELD_MISSING" : {
     "message" : [
       "Searching for <field> in Protobuf schema at <protobufSchema> gave <matchSize> matches. Candidates: <matches>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_FIELD_MISSING_IN_SQL_SCHEMA" : {
     "message" : [
       "Found <field> in Protobuf schema but there is no match in the SQL schema."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_FIELD_TYPE_MISMATCH" : {
     "message" : [
       "Type mismatch encountered for field: <field>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_MESSAGE_NOT_FOUND" : {
     "message" : [
       "Unable to locate Message <messageName> in Descriptor."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "PROTOBUF_TYPE_NOT_SUPPORT" : {
     "message" : [
       "Protobuf type not yet supported: <protobufType>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "RECURSIVE_VIEW" : {
     "message" : [
       "Recursive view <viewIdent> detected (cycle: <newPath>)."
-    ]
+    ],
+    "sqlState" : "42K0H"
   },
   "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION" : {
     "message" : [
       "References to DEFAULT column values are not allowed within the PARTITION clause."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
@@ -2671,8 +2816,10 @@
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
-      "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
-    ]
+      "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function.",
+      "Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
+    ],
+    "sqlState" : "0A000"
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
@@ -2711,27 +2858,36 @@
   "SEED_EXPRESSION_IS_UNFOLDABLE" : {
     "message" : [
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
-    ]
+    ],
+    "sqlState" : "42K08"
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
     "message" : [
-      "Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime."
-    ]
+      "A CREATE TABLE without explicit column list cannot specify bucketing information.",
+      "Please use the form with explicit column list and specify bucketing information.",
+      "Alternatively, allow bucketing information to be inferred by omitting the clause."
+    ],
+    "sqlState" : "42601"
   },
   "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
     "message" : [
-      "It is not allowed to specify partition columns when the table schema is not defined. When the table schema is not provided, schema and partition columns will be inferred."
-    ]
+      "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
+      "Please use the form with explicit column list and specify PARTITIONED BY.",
+      "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
-    ]
+    ],
+    "sqlState" : "42K0I"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
@@ -2742,17 +2898,20 @@
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
       "Static partition column <staticName> is also specified in the column list."
-    ]
+    ],
+    "sqlState" : "42713"
   },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
-    ]
+    ],
+    "sqlState" : "XXKST"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
+    ],
+    "sqlState" : "22003"
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -2772,7 +2931,8 @@
   "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON" : {
     "message" : [
       "Failed to analyze the Python user defined table function: <msg>"
-    ]
+    ],
+    "sqlState" : "38000"
   },
   "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL" : {
     "message" : [
@@ -2788,13 +2948,17 @@
   },
   "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
     "message" : [
-      "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
-    ]
+      "There are too many table arguments for table-valued function.",
+      "It allows one table argument, but got: <num>.",
+      "If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
+    ],
+    "sqlState" : "54023"
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
-    ]
+    ],
+    "sqlState" : "58030"
   },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -2817,8 +2981,11 @@
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
-      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected <aliasesSize> aliases, but got <aliasesNames>. Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
-    ]
+      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
+      "Expected <aliasesSize> aliases, but got <aliasesNames>.",
+      "Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ],
+    "sqlState" : "42802"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
@@ -2829,7 +2996,14 @@
   "UNABLE_TO_CONVERT_TO_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
-    ]
+    ],
+    "sqlState" : "42K0G"
+  },
+  "UNABLE_TO_FETCH_HIVE_TABLES" : {
+    "message" : [
+      "Unable to fetch tables of Hive database: <dbName>."
+    ],
+    "sqlState" : "58030"
   },
   "UNABLE_TO_INFER_SCHEMA" : {
     "message" : [
@@ -2861,10 +3035,17 @@
     ],
     "sqlState" : "4274K"
   },
+  "UNEXPECTED_SERIALIZER_FOR_CLASS" : {
+    "message" : [
+      "The class <className> has an unexpected expression serializer. Expects \"STRUCT\" or \"IF\" which returns \"STRUCT\" but found <expr>."
+    ],
+    "sqlState" : "42846"
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
-    ]
+    ],
+    "sqlState" : "42K0G"
   },
   "UNPIVOT_REQUIRES_ATTRIBUTES" : {
     "message" : [
@@ -2904,8 +3085,12 @@
   },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
-      "Could not resolve <name> to a table-valued function. Please make sure that <name> is defined as a table-valued function and that all required parameters are provided correctly. If <name> is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation."
-    ]
+      "Could not resolve <name> to a table-valued function.",
+      "Please make sure that <name> is defined as a table-valued function and that all required parameters are provided correctly.",
+      "If <name> is not defined, please create the table-valued function before using it.",
+      "For more information about defining table-valued functions, please refer to the Apache Spark documentation."
+    ],
+    "sqlState" : "42883"
   },
   "UNRESOLVED_ALL_IN_GROUP_BY" : {
     "message" : [
@@ -2988,7 +3173,8 @@
   "UNSET_NONEXISTENT_PROPERTIES" : {
     "message" : [
       "Attempted to unset non-existent properties [<properties>] in table <table>."
-    ]
+    ],
+    "sqlState" : "42K0J"
   },
   "UNSUPPORTED_ADD_FILE" : {
     "message" : [
@@ -3005,7 +3191,8 @@
           "The local directory <path> is not supported in a non-local master mode."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
@@ -3015,13 +3202,16 @@
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
     "message" : [
-      "The char/varchar type can't be used in the table schema. If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
-    ]
+      "The char/varchar type can't be used in the table schema.",
+      "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
       "Unsupported data source type for direct query on files: <dataSourceType>"
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
@@ -3032,7 +3222,8 @@
   "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource doesn't support the column <columnName> of the type <columnType>."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
@@ -3049,7 +3240,8 @@
           "Enable it by setting \"spark.sql.defaultColumn.enabled\" to \"true\"."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DESERIALIZER" : {
     "message" : [
@@ -3072,13 +3264,16 @@
   "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
     "message" : [
       "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
-    ]
+    ],
+    "sqlState" : "42621"
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
-      "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "A query operator contains one or more unsupported expressions.",
+      "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
       "Invalid expressions: [<invalidExprSqls>]"
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "UNSUPPORTED_EXPR_FOR_WINDOW" : {
     "message" : [
@@ -3340,12 +3535,13 @@
         ]
       }
     },
-    "sqlState" : "0A000"
+    "sqlState" : "42K0E"
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "UNSUPPORTED_INSERT" : {
     "message" : [
@@ -3372,7 +3568,8 @@
           "The target relation <relationId> is also being read from."
         ]
       }
-    }
+    },
+    "sqlState" : "42809"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
@@ -3394,7 +3591,8 @@
           "Subqueries are not allowed: <cond>."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0E"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
@@ -3411,7 +3609,8 @@
           "The target table is <table>."
         ]
       }
-    }
+    },
+    "sqlState" : "42902"
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
@@ -3428,7 +3627,8 @@
           "a non-existent path."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
@@ -3515,7 +3715,8 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
@@ -3561,8 +3762,10 @@
   },
   "VIEW_EXCEED_MAX_NESTED_DEPTH" : {
     "message" : [
-      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>). Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
-    ]
+      "The depth of view <viewName> exceeds the maximum view resolution depth (<maxNestedDepth>).",
+      "Analysis is aborted to avoid errors. If you want to work around this, please try to increase the value of \"spark.sql.view.maxNestedViewDepth\"."
+    ],
+    "sqlState" : "54K00"
   },
   "VIEW_NOT_FOUND" : {
     "message" : [
@@ -3575,22 +3778,26 @@
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
       "<funcName> function can only be evaluated in an ordered row-based window frame with a single offset: <windowExpr>."
-    ]
+    ],
+    "sqlState" : "42K0E"
   },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."
-    ]
+    ],
+    "sqlState" : "42601"
   },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
-    ]
+    ],
+    "sqlState" : "42809"
   },
   "WRONG_NUM_ARGS" : {
     "message" : [
@@ -3776,11 +3983,6 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_0060" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0061" : {
     "message" : [
       "<msg>."
     ]
@@ -4005,11 +4207,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1065" : {
-    "message" : [
-      "`<name>` is not a valid name for tables/databases. Valid names only contain alphabet characters, numbers and _."
     ]
   },
   "_LEGACY_ERROR_TEMP_1066" : {
@@ -5529,17 +5726,6 @@
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2152" : {
-    "message" : [
-      "Error while encoding: <e>",
-      "<expressions>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2153" : {
-    "message" : [
-      "class <clsName> has unexpected serializer: <objSerializer>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -5724,11 +5910,6 @@
   "_LEGACY_ERROR_TEMP_2195" : {
     "message" : [
       "<cnf> when creating Hive client using classpath: <execJars> Please make sure that jars for your version of hive and hadoop are included in the paths passed to <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2196" : {
-    "message" : [
-      "Unable to fetch tables of db <dbName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2197" : {
@@ -6151,14 +6332,6 @@
   "_LEGACY_ERROR_TEMP_3006" : {
     "message" : [
       "empty RDD"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3007" : {
-    "message" : [
-      "Checkpoint block <rddBlockId> not found! Either the executor",
-      "that originally checkpointed this partition is no longer alive, or the original RDD is",
-      "unpersisted. If this problem persists, you may consider using `rdd.checkpoint()`",
-      "instead, which is slower than local checkpointing but more fault-tolerant."
     ]
   },
   "_LEGACY_ERROR_TEMP_3008" : {

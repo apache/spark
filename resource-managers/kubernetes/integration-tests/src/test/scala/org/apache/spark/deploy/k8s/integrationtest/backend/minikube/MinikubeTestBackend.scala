@@ -26,7 +26,7 @@ private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
 
   override def initialize(): Unit = {
     Minikube.logVersion()
-    val minikubeStatus = Minikube.getMinikubeStatus
+    val minikubeStatus = Minikube.getMinikubeStatus()
     require(minikubeStatus == MinikubeStatus.RUNNING,
         s"Minikube must be running to use the Minikube backend for integration tests." +
           s" Current status is: $minikubeStatus.")

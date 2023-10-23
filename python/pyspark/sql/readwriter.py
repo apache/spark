@@ -220,7 +220,12 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.read.option("key", "value")
+        >>> spark.read.options(key="value")
+        <...readwriter.DataFrameReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.read.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
@@ -816,6 +821,129 @@ class DataFrameReader(OptionUtils):
                 },
             )
 
+    def xml(
+        self,
+        path: Union[str, List[str], RDD[str]],
+        rowTag: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+        excludeAttribute: Optional[Union[bool, str]] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        ignoreSurroundingSpaces: Optional[Union[bool, str]] = None,
+        rowValidationXSDPath: Optional[str] = None,
+        ignoreNamespace: Optional[Union[bool, str]] = None,
+        wildcardColName: Optional[str] = None,
+        encoding: Optional[str] = None,
+        inferSchema: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        locale: Optional[str] = None,
+    ) -> "DataFrame":
+        r"""Loads a XML file and returns the result as a  :class:`DataFrame`.
+
+        If the ``schema`` parameter is not specified, this function goes
+        through the input once to determine the input schema.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, list or :class:`RDD`
+            string, or list of strings, for input path(s),
+            or RDD of Strings storing XML rows.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a XML file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a XML file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").option("rowTag", "person").format("xml").save(d)
+        ...
+        ...     # Read the XML file as a DataFrame.
+        ...     spark.read.option("rowTag", "person").xml(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        self._set_opts(
+            rowTag=rowTag,
+            schema=schema,
+            excludeAttribute=excludeAttribute,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            ignoreSurroundingSpaces=ignoreSurroundingSpaces,
+            rowValidationXSDPath=rowValidationXSDPath,
+            ignoreNamespace=ignoreNamespace,
+            wildcardColName=wildcardColName,
+            encoding=encoding,
+            inferSchema=inferSchema,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            samplingRatio=samplingRatio,
+            locale=locale,
+        )
+        if isinstance(path, str):
+            path = [path]
+        if type(path) == list:
+            assert self._spark._sc._jvm is not None
+            return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        elif isinstance(path, RDD):
+
+            def func(iterator: Iterable) -> Iterable:
+                for x in iterator:
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
+                        x = x.encode("utf-8")
+                    yield x
+
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
+            # There isn't any jvm api for creating a dataframe from rdd storing XML.
+            # We can do it through creating a jvm dataset first and using the jvm api
+            # for creating a dataframe from dataset storing XML.
+            jdataset = self._spark._jsparkSession.createDataset(
+                jrdd.rdd(), self._spark._jvm.Encoders.STRING()
+            )
+            return self._df(self._jreader.xml(jdataset))
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
+
     def orc(
         self,
         path: PathOrPaths,
@@ -1172,7 +1300,12 @@ class DataFrameWriter(OptionUtils):
 
         Examples
         --------
-        >>> spark.range(1).write.option("key", "value")
+        >>> spark.range(1).write.options(key="value")
+        <...readwriter.DataFrameWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.range(1).write.options(**{"k1": "v1", "k2": "v2"})
         <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
@@ -1910,6 +2043,83 @@ class DataFrameWriter(OptionUtils):
             lineSep=lineSep,
         )
         self._jwrite.csv(path)
+
+    def xml(
+        self,
+        path: str,
+        rowTag: Optional[str] = None,
+        mode: Optional[str] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        rootTag: Optional[str] = None,
+        declaration: Optional[bool] = None,
+        arrayElementName: Optional[str] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        compression: Optional[str] = None,
+        encoding: Optional[str] = None,
+    ) -> None:
+        r"""Saves the content of the :class:`DataFrame` in XML format at the specified path.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a XML file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a XML file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").option("rowTag", "person").xml(d)
+        ...
+        ...     # Read the XML file as a DataFrame.
+        ...     spark.read.option("rowTag", "person").format("xml").load(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        self.mode(mode)
+        self._set_opts(
+            rowTag=rowTag,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            rootTag=rootTag,
+            declaration=declaration,
+            arrayElementName=arrayElementName,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            compression=compression,
+            encoding=encoding,
+        )
+        self._jwrite.xml(path)
 
     def orc(
         self,

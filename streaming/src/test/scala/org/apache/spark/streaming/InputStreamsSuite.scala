@@ -322,7 +322,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // set up the network stream using the test receiver
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val networkStream = ssc.receiverStream[Int](testReceiver)
-      val countStream = networkStream.count
+      val countStream = networkStream.count()
 
       val outputStream = new TestOutputStream(countStream, outputQueue)
       outputStream.register()
@@ -457,7 +457,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       }
 
       class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-        def getReceiver: Receiver[String] = null
+        def getReceiver(): Receiver[String] = null
       }
 
       // Register input streams

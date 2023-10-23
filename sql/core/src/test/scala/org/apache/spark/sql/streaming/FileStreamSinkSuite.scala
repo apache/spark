@@ -212,7 +212,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     // with aggregations using event time windows and watermark, which allows
     // aggregation + append mode.
     val inputData = MemoryStream[Long]
-    val inputDF = inputData.toDF.toDF("time")
+    val inputDF = inputData.toDF().toDF("time")
     val outputDf = inputDF
       .selectExpr("timestamp_seconds(time) AS timestamp")
       .withWatermark("timestamp", "10 seconds")
@@ -588,7 +588,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path)
       }
     }
@@ -600,7 +600,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
-        Seq("foo").toDF.write.format("text").save(path)
+        Seq("foo").toDF().write.format("text").save(path)
         spark.read.format("text").load(path + "/*")
       }
     }

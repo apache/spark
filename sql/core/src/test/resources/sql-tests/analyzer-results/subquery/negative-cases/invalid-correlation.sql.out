@@ -77,6 +77,7 @@ WHERE  t1a IN (SELECT   min(t2a)
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+  "sqlState" : "XX000",
   "messageParameters" : {
     "input" : "\"min(t2a)\", \"t2c\"",
     "missingAttributes" : "\"t2b\"",

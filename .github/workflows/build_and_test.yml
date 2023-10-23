@@ -196,6 +196,8 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
     - name: Checkout Spark repository
@@ -656,6 +658,8 @@ jobs:
       run: ./dev/check-license
     - name: Dependencies test
       run: ./dev/test-dependencies.sh
+    - name: MIMA test
+      run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter

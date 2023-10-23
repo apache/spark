@@ -156,7 +156,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.length} Completed
                 ({state.completedDrivers.count(_.state == DriverState.KILLED)} Killed,
                 {state.completedDrivers.count(_.state == DriverState.FAILED)} Failed,
-                {state.completedDrivers.count(_.state == DriverState.ERROR)} Error)
+                {state.completedDrivers.count(_.state == DriverState.ERROR)} Error,
+                {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>

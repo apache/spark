@@ -423,7 +423,7 @@ Data source options of Parquet can be set via:
   <tr>
     <td><code>compression</code></td>
     <td><code>snappy</code></td>
-    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>.</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, uncompressed, snappy, gzip, lzo, brotli, lz4, lz4_raw, and zstd). This will override <code>spark.sql.parquet.compression.codec</code>.</td>
     <td>write</td>
   </tr>
 </table>
@@ -484,7 +484,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     Sets the compression codec used when writing Parquet files. If either <code>compression</code> or
     <code>parquet.compression</code> is specified in the table-specific options/properties, the precedence would be
     <code>compression</code>, <code>parquet.compression</code>, <code>spark.sql.parquet.compression.codec</code>. Acceptable values include:
-    none, uncompressed, snappy, gzip, lzo, brotli, lz4, zstd.
+    none, uncompressed, snappy, gzip, lzo, brotli, lz4, lz4_raw, zstd.
     Note that <code>brotli</code> requires <code>BrotliCodec</code> to be installed.
   </td>
   <td>1.1.1</td>

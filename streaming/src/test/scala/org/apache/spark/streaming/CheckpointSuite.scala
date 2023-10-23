@@ -168,7 +168,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
       eventually(timeout(10.seconds)) {
         val checkpointFilesOfLatestTime = Checkpoint.getCheckpointFiles(checkpointDir).filter {
-          _.getName.contains(clock.getTimeMillis.toString)
+          _.getName.contains(clock.getTimeMillis().toString)
         }
         // Checkpoint files are written twice for every batch interval. So assert that both
         // are written to make sure that both of them have been written.

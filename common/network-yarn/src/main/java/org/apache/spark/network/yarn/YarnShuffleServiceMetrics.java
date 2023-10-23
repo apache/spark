@@ -90,18 +90,11 @@ class YarnShuffleServiceMetrics implements MetricsSource {
         .addGauge(
           getShuffleServiceMetricsInfoForGenericValue(name, "stdDev"), snapshot.getStdDev());
       for (int percentileThousands : new int[] { 10, 50, 250, 500, 750, 950, 980, 990, 999 }) {
-        String percentileStr;
-        switch (percentileThousands) {
-          case 10:
-            percentileStr = "1stPercentile";
-            break;
-          case 999:
-            percentileStr = "999thPercentile";
-            break;
-          default:
-            percentileStr = String.format("%dthPercentile", percentileThousands / 10);
-            break;
-        }
+        String percentileStr = switch (percentileThousands) {
+          case 10 -> "1stPercentile";
+          case 999 -> "999thPercentile";
+          default -> String.format("%dthPercentile", percentileThousands / 10);
+        };
         metricsRecordBuilder.addGauge(
           getShuffleServiceMetricsInfoForGenericValue(name, percentileStr),
           snapshot.getValue(percentileThousands / 1000.0));

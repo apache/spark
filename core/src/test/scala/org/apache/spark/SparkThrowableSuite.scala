@@ -66,12 +66,12 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   def checkIfUnique(ss: Seq[Any]): Unit = {
     val dups = ss.groupBy(identity).mapValues(_.size).filter(_._2 > 1).keys.toSeq
-    assert(dups.isEmpty)
+    assert(dups.isEmpty, s"Duplicate error classes: ${dups.mkString(", ")}")
   }
 
   def checkCondition(ss: Seq[String], fx: String => Boolean): Unit = {
     ss.foreach { s =>
-      assert(fx(s))
+      assert(fx(s), s)
     }
   }
 
@@ -113,6 +113,15 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("SQLSTATE is mandatory") {
+    val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
+      case (error: String, info: ErrorInfo) =>
+        !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
+    }.keys.toSeq
+    assert(errorClassesNoSqlState.isEmpty,
+      s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
+  }
+
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
     val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
@@ -143,6 +152,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
+      .view
       .filterKeys(!_.startsWith("_LEGACY_ERROR_"))
       .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
@@ -404,7 +414,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
-        "to bypass this error.")
+        "to bypass this error. SQLSTATE: 22012")
   }
 
   test("Error message is formatted") {
@@ -414,7 +424,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+      " SQLSTATE: 42703"
     )
 
     assert(
@@ -426,7 +437,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]." +
+        " SQLSTATE: 42703"
     )
   }
 
@@ -437,7 +449,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
       ) ==
         "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with " +
-          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]." +
+          " SQLSTATE: 42703"
     )
   }
 
@@ -504,8 +517,9 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     assert(SparkThrowableHelper.getMessage(e, PRETTY) ===
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
-      "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
-      "\nQuery summary")
+        "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
+        " SQLSTATE: 22012" +
+        "\nQuery summary")
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{
@@ -545,6 +559,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
         |  "messageTemplate" : "The save mode <saveMode> is not supported for: an existent path.",
+        |  "sqlState" : "0A000",
         |  "messageParameters" : {
         |    "saveMode" : "UNSUPPORTED_MODE"
         |  }

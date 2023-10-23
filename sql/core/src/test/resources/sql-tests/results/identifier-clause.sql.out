@@ -421,6 +421,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_A_PARTITIONED_TABLE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "MSCK REPAIR TABLE",
     "tableIdentWithDB" : "`spark_catalog`.`default`.`tab`"

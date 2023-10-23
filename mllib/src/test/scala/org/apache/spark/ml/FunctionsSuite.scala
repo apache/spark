@@ -52,7 +52,7 @@ class FunctionsSuite extends MLTest {
     for ((colName, valType) <- Seq(
         ("vec", "null"), ("oldVec", "null"), ("label", "java.lang.Integer"))) {
       val thrown1 = intercept[SparkException] {
-        df2.select(vector_to_array(col(colName))).count
+        df2.select(vector_to_array(col(colName))).count()
       }
       assert(thrown1.getCause.getMessage.contains(
         "function vector_to_array requires a non-null input argument and input type must be " +
