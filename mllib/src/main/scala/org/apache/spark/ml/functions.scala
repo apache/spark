@@ -19,7 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.linalg.{Vector => OldVector}
+import org.apache.spark.mllib.linalg.{SparseVector => OldSparseVector, Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
 
@@ -42,9 +42,13 @@ object functions {
     vec match {
       case v: SparseVector =>
         val data = new Array[Float](v.size)
-        v.foreachActive { (index, value) => data(index) = value.toFloat }
+        v.foreachNonZero { (index, value) => data(index) = value.toFloat }
         data
       case v: Vector => v.toArray.map(_.toFloat)
+      case v: OldSparseVector =>
+        val data = new Array[Float](v.size)
+        v.foreachNonZero { (index, value) => data(index) = value.toFloat }
+        data
       case v: OldVector => v.toArray.map(_.toFloat)
       case v => throw new IllegalArgumentException(
         "function vector_to_array requires a non-null input argument and input type must be " +

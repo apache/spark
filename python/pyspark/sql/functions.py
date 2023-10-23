@@ -17184,9 +17184,9 @@ def udtf(
 
     - The number and order of arguments are the same as the UDTF inputs
     - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
-      - dataType: DataType
+      - data_type: DataType
       - value: Any: the calculated value if the argument is foldable; otherwise None
-      - isTable: bool: True if the argument is a table argument
+      - is_table: bool: True if the argument is a table argument
 
     and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
 
@@ -17198,7 +17198,7 @@ def udtf(
     ... class TestUDTFWithAnalyze:
     ...     @staticmethod
     ...     def analyze(a: AnalyzeArgument, b: AnalyzeArgument) -> AnalyzeResult:
-    ...         return AnalyzeResult(StructType().add("a", a.dataType).add("b", b.dataType))
+    ...         return AnalyzeResult(StructType().add("a", a.data_type).add("b", b.data_type))
     ...
     ...     def eval(self, a, b):
     ...         yield a, b
@@ -17219,9 +17219,9 @@ def udtf(
     ...         a: AnalyzeArgument, b: AnalyzeArgument, **kwargs: AnalyzeArgument
     ...     ) -> AnalyzeResult:
     ...         return AnalyzeResult(
-    ...             StructType().add("a", a.dataType)
-    ...                 .add("b", b.dataType)
-    ...                 .add("x", kwargs["x"].dataType)
+    ...             StructType().add("a", a.data_type)
+    ...                 .add("b", b.data_type)
+    ...                 .add("x", kwargs["x"].data_type)
     ...         )
     ...
     ...     def eval(self, a, b, **kwargs):
