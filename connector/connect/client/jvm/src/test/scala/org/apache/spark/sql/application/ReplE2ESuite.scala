@@ -368,10 +368,24 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """
         |class NonSerializable(val id: Int = -1) { }
         |
-        |val x = 100; val y = new NonSerializable
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
         |val t = 200
-        |def foo(): Int = { x }; def bar(): Int = { y.id }; val z = new NonSerializable
-        |val myLambda = (a: Int) => a + t + foo(); val myUdf = udf(myLambda)
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |{
+        |  val myLambda = (a: Int) => a + t + foo()
+        |  val myUdf = udf(myLambda)
+        |}
+        |
         |spark.range(0, 10).
         |  withColumn("result", myUdf(col("id"))).
         |  agg(sum("result")).
@@ -386,15 +400,26 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """
         |class NonSerializable(val id: Int = -1) { }
         |
-        |val x = 100; val y = new NonSerializable
-        |def foo(): Int = { x }; def bar(): Int = { y.id }; val z = new NonSerializable
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
         |def example() = {
-        |  val myLambda = (a: Int) => a + foo(); val myUdf = udf(myLambda)
+        |  val myLambda = (a: Int) => a + foo()
+        |  val myUdf = udf(myLambda)
         |  spark.range(0, 10).
         |    withColumn("result", myUdf(col("id"))).
         |    agg(sum("result")).
         |    collect()(0)(0).asInstanceOf[Long]
         |}
+        |
         |example()
         |""".stripMargin
     val output = runCommandsInShell(input)
@@ -406,11 +431,21 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """
         |class NonSerializable(val id: Int = -1) { }
         |
-        |val x = 100; val y = new NonSerializable
-        |def foo(): Int = { x }; def bar(): Int = { y.id }; val z = new NonSerializable
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
         |val example = () => {
         |  val nested = () => {
-        |    val myLambda = (a: Int) => a + foo(); val myUdf = udf(myLambda)
+        |    val myLambda = (a: Int) => a + foo()
+        |    val myUdf = udf(myLambda)
         |    spark.range(0, 10).
         |      withColumn("result", myUdf(col("id"))).
         |      agg(sum("result")).
@@ -429,8 +464,13 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """
         |class NonSerializable(val id: Int = -1) { }
         |
-        |val x = 100; val y = new NonSerializable
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
         |val z = new NonSerializable
+        |
         |spark.range(0, 10).
         |// for this call UdfUtils will create a new lambda and this lambda becomes enclosing
         |  map(i => i + x).
@@ -446,7 +486,11 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
       """
         |class NonSerializable(val id: Int = -1) { }
         |
-        |val x = 100; val y = new NonSerializable
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
         |class Test extends Serializable {
         |  // capturing class is cmd$Helper$Test
         |  val myUdf = udf((i: Int) => i + x)
