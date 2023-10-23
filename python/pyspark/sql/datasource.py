@@ -59,7 +59,15 @@ class DataSource(ABC):
     @property
     def name(self) -> str:
         """
-        Returns a string represents the short name of this data source.
+        Returns a string represents the format name of this data source.
+
+        By default, it is the class name of the data source. It can be overridden to
+        provide a customized short name for the data source.
+
+        Examples
+        --------
+        >>> def name(self):
+        ...     return "my_data_source"
         """
         return self.__class__.__name__
 
@@ -90,14 +98,13 @@ class DataSource(ABC):
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
         """
-        ...
+        raise NotImplementedError
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         """
-        Returns a DataSourceReader instance for reading data.
+        Returns a ``DataSourceReader`` instance for reading data.
 
-        This method is required for readable data sources. It will be called once during
-        the physical planning stage in the Spark planner.
+        The implementation is required for readable data sources.
 
         Parameters
         ----------
@@ -120,21 +127,25 @@ class DataSourceReader(ABC):
 
     def partitions(self) -> Iterator[Any]:
         """
-        Returns a list of partitions for this data source.
+        Returns an iterator of partitions for this data source.
 
-        This method is called once during the physical planning stage to generate a list
-        of partitions. If the method returns N partitions, then the planner will create
-        N tasks. Each task will then execute ``read(partition)`` in parallel, using each
-        partition value to read the data from this data source.
+        Partitions are used to split data reading operations into parallel tasks.
+        If this method returns N partitions, the query planner will create N tasks.
+        Each task will execute ``read(partition)`` in parallel, using the respective
+        partition value to read the data.
 
-        If this method is not implemented, or returns an empty list, Spark will create one
-        partition for the result DataFrame and use one single task to read the data.
+        This method is called once during query planning. By default, it returns a
+        single partition with the value ``None``. Subclasses can override this method
+        to return multiple partitions.
+
+        It's recommended to override this method for better performance when reading
+        large datasets.
 
         Returns
         -------
-        partitions : list
-            A list of partitions for this data source. The partition can be any arbitrary
-            serializable objects.
+        Iterator[Any]
+            An iterator of partitions for this data source. The partition value can be
+            any serializable objects.
 
         Notes
         -----
@@ -156,30 +167,48 @@ class DataSourceReader(ABC):
 
         >>> def partitions(self):
         ...     return [("a", 1), ("b", 2), ("c", 3)]
+
+        Returns a list of dictionaries:
+
+        >>> def partitions(self):
+        ...     return [{"a": 1}, {"b": 2}, {"c": 3}]
         """
-        ...
+        yield None
 
     @abstractmethod
     def read(self, partition: Any) -> Iterator[Union[Tuple, Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
-        This method is invoked once per partition by Spark tasks to read the data.
-        You can initialize any non-serializable resources required for reading data from
-        the data source within this method.
-
-        Implementing this method is required for readable data sources.
+        This method is invoked once per partition to read the data. Implementing
+        this method is required for readable data sources. You can initialize any
+        non-serializable resources required for reading data from the data source
+        within this method.
 
         Parameters
         ----------
         partition : object
             The partition to read. It must be one of the partition values returned by
-            ``partitions()`` or None if ``partitions()`` method is not implemented.
+            ``partitions()``.
 
         Returns
         -------
-        iterator : Iterator[Tuple] or Iterator[Row]
+        Iterator[Tuple] or Iterator[Row]
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
+
+        Examples
+        --------
+        Yields a list of tuples:
+
+        >>> def read(self, partition):
+        ...     yield (partition, 0)
+        ...     yield (partition, 1)
+
+        Yields a list of rows:
+
+        >>> def read(self, partition):
+        ...     yield Row(partition=partition, value=0)
+        ...     yield Row(partition=partition, value=1)
         """
         ...

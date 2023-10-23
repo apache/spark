@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -31,8 +31,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class PythonDataSourcePartitionsExec(
     output: Seq[Attribute],
-    partitions: Seq[Array[Byte]])
-  extends LeafExecNode with InputRDDCodegen with PythonSQLMetrics {
+    partitions: Seq[Array[Byte]]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -57,8 +56,7 @@ case class PythonDataSourcePartitionsExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
-  // Input is InternalRow, has to be turned into UnsafeRows.
-  override protected val createUnsafeProjection: Boolean = true
+  override protected val createUnsafeProjection: Boolean = false
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -66,31 +64,6 @@ case class PythonDataSourcePartitionsExec(
       numOutputRows += 1
       r
     }
-  }
-
-  override def executeCollect(): Array[InternalRow] = {
-    longMetric("numOutputRows").add(unsafeRows.length)
-    sendDriverMetrics()
-    unsafeRows
-  }
-
-  override def executeTake(limit: Int): Array[InternalRow] = {
-    val taken = unsafeRows.take(limit)
-    longMetric("numOutputRows").add(taken.length)
-    sendDriverMetrics()
-    taken
-  }
-
-  override def executeTail(limit: Int): Array[InternalRow] = {
-    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
-    longMetric("numOutputRows").add(taken.size)
-    sendDriverMetrics()
-    taken.toArray
-  }
-
-  private def sendDriverMetrics(): Unit = {
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
   }
 
   override protected def stringArgs: Iterator[Any] = {

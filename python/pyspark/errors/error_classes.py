@@ -642,11 +642,6 @@ ERROR_CLASSES_JSON = """
       "Pipe function `<func_name>` exited with error code <error_code>."
     ]
   },
-  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
-    "message" : [
-      "Expected <expected>, but got <actual>."
-    ]
-  },
   "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
     "message" : [
         "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
@@ -655,6 +650,11 @@ ERROR_CLASSES_JSON = """
   "PYTHON_DATA_SOURCE_CREATE_ERROR" : {
     "message" : [
         "Unable to create the Python data source <type>: <error>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
+    "message" : [
+      "Expected <expected>, but got <actual>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET" : {
