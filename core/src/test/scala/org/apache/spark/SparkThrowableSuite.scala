@@ -602,7 +602,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(SparkThrowableHelper.getMessage(e4, PRETTY) ===
         "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
             "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
-            "\nQuery summary")
+            " SQLSTATE: 22012\nQuery summary")
     // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e4, MINIMAL) ===
         """{
