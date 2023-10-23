@@ -66,7 +66,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
    * can be casted into `this` safely without losing any precision or range.
    */
-  private[sql] def isWiderThan(other: DataType): Boolean = isWiderThanInternal(other)
+  def isWiderThan(other: DataType): Boolean = isWiderThanInternal(other)
 
   @tailrec
   private def isWiderThanInternal(other: DataType): Boolean = other match {
