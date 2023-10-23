@@ -280,7 +280,7 @@ class MicroBatchExecution(
       if (isActive) {
 
         // check if there are any previous errors and bubble up any existing async operations
-        errorNotifier.throwErrorIfExists
+        errorNotifier.throwErrorIfExists()
 
         var currentBatchHasNewData = false // Whether the current batch had new data
 

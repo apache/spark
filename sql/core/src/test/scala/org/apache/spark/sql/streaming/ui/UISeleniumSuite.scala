@@ -136,7 +136,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
             // Check the query statistics page
             val activeQueryLink =
-              findAll(cssSelector("""#active-table td a""")).flatMap(_.attribute("href")).next
+              findAll(cssSelector("""#active-table td a""")).flatMap(_.attribute("href")).next()
             go to activeQueryLink
 
             findAll(cssSelector("h3"))

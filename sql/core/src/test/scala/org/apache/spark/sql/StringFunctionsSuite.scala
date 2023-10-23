@@ -812,7 +812,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkError(
       exception = intercept[SparkRuntimeException] {
-        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect()
       },
       errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(

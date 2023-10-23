@@ -234,11 +234,11 @@ class VectorsSuite extends SparkMLFunSuite {
       val nnz = random.nextInt(m)
 
       val indices1 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values1 = Array.fill(nnz)(random.nextDouble)
+      val values1 = Array.fill(nnz)(random.nextDouble())
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
       val indices2 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values2 = Array.fill(nnz)(random.nextDouble)
+      val values2 = Array.fill(nnz)(random.nextDouble())
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
@@ -454,8 +454,8 @@ class VectorsSuite extends SparkMLFunSuite {
         valuesBuilder += v
       }
       val (indices, values) = vec.activeIterator.toArray.unzip
-      assert(indicesBuilder.result === indices)
-      assert(valuesBuilder.result === values)
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
     }
   }
 
@@ -475,8 +475,8 @@ class VectorsSuite extends SparkMLFunSuite {
         }
       }
       val (indices, values) = vec.nonZeroIterator.toArray.unzip
-      assert(indicesBuilder.result === indices)
-      assert(valuesBuilder.result === values)
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
     }
   }
 }

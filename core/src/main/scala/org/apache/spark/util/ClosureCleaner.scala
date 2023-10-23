@@ -685,7 +685,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
     }
 
     while (!stack.isEmpty) {
-      val currentId = stack.pop
+      val currentId = stack.pop()
       visited += currentId
 
       val currentClass = currentId.cls

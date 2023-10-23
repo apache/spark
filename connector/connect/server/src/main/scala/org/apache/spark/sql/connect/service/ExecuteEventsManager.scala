@@ -245,7 +245,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         postAnalyzed(Some(analyzedPlan))
       }
 
-      def readyForExecution(tracker: QueryPlanningTracker): Unit = postReadyForExecution
+      def readyForExecution(tracker: QueryPlanningTracker): Unit = postReadyForExecution()
     }))
   }
 

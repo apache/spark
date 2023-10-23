@@ -37,7 +37,7 @@ object AggregateMessagesExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession.
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
     val sc = spark.sparkContext
@@ -63,7 +63,7 @@ object AggregateMessagesExample {
       olderFollowers.mapValues( (id, value) =>
         value match { case (count, totalAge) => totalAge / count } )
     // Display the results
-    avgAgeOfOlderFollowers.collect.foreach(println(_))
+    avgAgeOfOlderFollowers.collect().foreach(println(_))
     // $example off$
 
     spark.stop()
