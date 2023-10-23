@@ -648,7 +648,7 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 
 ### FUNCTION_AND_ORDER_EXPRESSION_MISMATCH
 
-SQLSTATE: none assigned
+[SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The function `<functionName>` arguments `<functionExpr>` should match the order by expression `<orderExpr>` when use DISTINCT.
 
@@ -2316,5 +2316,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

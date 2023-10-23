@@ -266,7 +266,7 @@ case class CollectTopK(
       > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
        a|b
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-       NULL
+       ""
   """,
   group = "agg_funcs",
   since = "4.0.0")
@@ -285,6 +285,7 @@ case class ListAgg(
     this(child, delimiter, child, false, 0, 0)
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+  override def defaultResult: Option[Literal] = Option(Literal.create("", StringType))
 
   override protected lazy val bufferElementType: DataType = {
     StructType(Seq(
