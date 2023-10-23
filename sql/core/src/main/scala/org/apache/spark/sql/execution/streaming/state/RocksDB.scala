@@ -29,8 +29,8 @@ import org.apache.hadoop.conf.Configuration
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
-import org.rocksdb.TickerType._
 import org.rocksdb.CompressionType._
+import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
