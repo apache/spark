@@ -543,7 +543,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |    def analyze(initial_count, input_table):
         |        buffer = ""
         |        if initial_count.value is not None:
-        |            assert(not initial_count.is_table)
+        |            assert(not initial_count.isTable)
         |            assert(initial_count.data_type == IntegerType())
         |            count = initial_count.value
         |            buffer = json.dumps({"initial_count": count})
