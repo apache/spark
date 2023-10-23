@@ -2902,21 +2902,14 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t2 VALUES (3)")
       sql(s"INSERT INTO $t2 VALUES (4)")
 
-<<<<<<< HEAD
-      val res1_sql = sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect
+      val res1_sql = sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect()
       assert(res1_sql === Array(Row(1), Row(2)))
-      val res1_df = spark.read.option("versionAsOf", "Snapshot123456789").table("t").collect
+      val res1_df = spark.read.option("versionAsOf", "Snapshot123456789").table("t").collect()
       assert(res1_df === Array(Row(1), Row(2)))
-      val res2_sql = sql("SELECT * FROM t VERSION AS OF 2345678910").collect
+      val res2_sql = sql("SELECT * FROM t VERSION AS OF 2345678910").collect()
       assert(res2_sql === Array(Row(3), Row(4)))
-      val res2_df = spark.read.option("versionAsOf", "2345678910").table("t").collect
+      val res2_df = spark.read.option("versionAsOf", "2345678910").table("t").collect()
       assert(res2_df === Array(Row(3), Row(4)))
-=======
-      assert(sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect()
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect()
-        === Array(Row(3), Row(4)))
->>>>>>> origin/master
     }
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
@@ -2939,60 +2932,34 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t4 VALUES (7)")
       sql(s"INSERT INTO $t4 VALUES (8)")
 
-<<<<<<< HEAD
-      val res1_sql = sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
+      val res1_sql = sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect()
       assert(res1_sql === Array(Row(5), Row(6)))
-      val res1_df = spark.read.option("timestampAsOf", "2019-01-29 00:37:58").table("t").collect
+      val res1_df = spark.read.option("timestampAsOf", "2019-01-29 00:37:58").table("t").collect()
       assert(res1_df === Array(Row(5), Row(6)))
-      val res2_sql = sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect
+      val res2_sql = sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
       assert(res2_sql === Array(Row(7), Row(8)))
-      val res2_df = spark.read.option("timestampAsOf", "2021-01-29 00:00:00").table("t").collect
+      val res2_df = spark.read.option("timestampAsOf", "2021-01-29 00:00:00").table("t").collect()
       assert(res2_df === Array(Row(7), Row(8)))
 
-      val res3 = sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect
+      val res3 = sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect()
       assert(res3 === Array(Row(5), Row(6)))
-      val res4 = sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect
+      val res4 = sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect()
       assert(res4 === Array(Row(7), Row(8)))
-      val res5 = sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect
+      val res5 = sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect()
       assert(res5 === Array(Row(5), Row(6)))
-      val res6 = sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect
+      val res6 = sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect()
       assert(res6 === Array(Row(7), Row(8)))
-      val res7 = sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
+      val res7 = sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect()
       assert(res7 === Array(Row(7), Row(8)))
-      val res8 = sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
+      val res8 = sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect()
       assert(res8 === Array(Row(7), Row(8)))
       // Scalar subquery is also supported.
       val res9 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))")
-      assert(res9.collect === Array(Row(7), Row(8)))
+      assert(res9.collect() === Array(Row(7), Row(8)))
       // Nested subquery also works
       val res10 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))")
-        .collect
+        .collect()
       assert(res10 === Array(Row(7), Row(8)))
-=======
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect()
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
-        === Array(Row(7), Row(8)))
-      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect()
-        === Array(Row(5), Row(6)))
-      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect()
-        === Array(Row(7), Row(8)))
-      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect()
-        === Array(Row(5), Row(6)))
-      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect()
-        === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect()
-        === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect()
-        === Array(Row(7), Row(8)))
-      // Scalar subquery is also supported.
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect()
-        === Array(Row(7), Row(8)))
-      // Nested subquery also works
-      assert(
-        sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))").collect()
-        === Array(Row(7), Row(8)))
->>>>>>> origin/master
 
       checkError(
         exception = intercept[AnalysisException] {
