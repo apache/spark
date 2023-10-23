@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
     <slf4j.version>2.0.9</slf4j.version>
-    <log4j.version>2.20.0</log4j.version>
+    <log4j.version>2.21.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -2972,7 +2972,16 @@
               -->
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
-              <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+              <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
+              <!--
+                TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
+                  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.rdd.RDDSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.scheduler.TaskSetManagerSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`
@@ -3001,6 +3010,10 @@
                 Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
               -->
               <arg>-Wconf:msg=legacy-binding:s</arg>
+              <!--
+                SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>

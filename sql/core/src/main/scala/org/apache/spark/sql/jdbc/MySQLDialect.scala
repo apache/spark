@@ -125,7 +125,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       case _: Exception =>
         logWarning("Cannot show schemas.")
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   override def getTableExistsQuery(table: String): String = {

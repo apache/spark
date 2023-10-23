@@ -88,7 +88,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
@@ -117,7 +117,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
@@ -148,7 +148,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
@@ -272,7 +272,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         val middle = width / 2
         val selectExpr = (1 to width).map(i => s"value as c$i")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
@@ -304,7 +304,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         val selectExprCore = (1 to width).map(i => s"'f$i', value").mkString(",")
         val selectExpr = Seq(s"named_struct($selectExprCore) as c1")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
@@ -343,7 +343,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           .map(_ => s"$structExpr").mkString(",")
         val selectExpr = Seq(s"array($arrayExprElements) as c1")
         print(s"select expression is $selectExpr\n")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))

@@ -209,7 +209,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with TimeLimits {
   }
 
   private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {
-    val executionContextInvoked = Promise[Unit]
+    val executionContextInvoked = Promise[Unit]()
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
         executionContextInvoked.success(())

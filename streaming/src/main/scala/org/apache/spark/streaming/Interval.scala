@@ -32,7 +32,7 @@ class Interval(val beginTime: Time, val endTime: Time) {
   }
 
   def < (that: Interval): Boolean = {
-    if (this.duration != that.duration) {
+    if (this.duration() != that.duration()) {
       throw new Exception("Comparing two intervals with different durations [" + this + ", "
         + that + "]")
     }

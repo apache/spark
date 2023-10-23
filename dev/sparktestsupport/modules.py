@@ -198,6 +198,7 @@ sql = Module(
     dependencies=[catalyst],
     source_file_regexes=[
         "sql/core/",
+        "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
     ],
     sbt_test_goals=[
         "sql/test",

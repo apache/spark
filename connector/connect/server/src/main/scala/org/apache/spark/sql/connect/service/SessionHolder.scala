@@ -77,7 +77,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
-      // the existance of this should alrady be checked by SparkConnectExecutionManager
+      // the existence of this should alrady be checked by SparkConnectExecutionManager
       throw new IllegalStateException(
         s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
     }

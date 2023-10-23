@@ -1450,7 +1450,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val seed = if (ctx.seed != null) {
       ctx.seed.getText.toLong
     } else {
-      (math.random * 1000).toLong
+      (math.random() * 1000).toLong
     }
 
     ctx.sampleMethod() match {
@@ -2126,6 +2126,17 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
     }
+  }
+
+  /**
+   * Create a [[Cast]] expression for '::' syntax.
+   */
+  override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
+    val rawDataType = typedVisit[DataType](ctx.dataType())
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
+    val cast = Cast(expression(ctx.primaryExpression), dataType)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast
   }
 
   /**

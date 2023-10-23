@@ -1252,7 +1252,7 @@ abstract class JsonSuite
 
       val df1 = spark.createDataFrame(rowRDD1, schema1)
       df1.createOrReplaceTempView("applySchema1")
-      val df2 = df1.toDF
+      val df2 = df1.toDF()
       val result = df2.toJSON.collect()
       // scalastyle:off
       assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
@@ -1275,7 +1275,7 @@ abstract class JsonSuite
 
       val df3 = spark.createDataFrame(rowRDD2, schema2)
       df3.createOrReplaceTempView("applySchema2")
-      val df4 = df3.toDF
+      val df4 = df3.toDF()
       val result2 = df4.toJSON.collect()
 
       assert(result2(1) === "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
@@ -1584,7 +1584,7 @@ abstract class JsonSuite
         // inferring partitions because the original path in the "path" option will list the
         // partition directory that has been removed.
         assert(
-          spark.read.options(extraOptions).format("json").option("path", path).load.count() === 2)
+          spark.read.options(extraOptions).format("json").option("path", path).load().count() === 2)
       }
     }
   }
@@ -1663,7 +1663,7 @@ abstract class JsonSuite
         .format("json")
         .load(jsonDir)
 
-      assert(jsonCopy.count == jsonDF.count)
+      assert(jsonCopy.count() == jsonDF.count())
       val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
       val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
       checkAnswer(jsonCopySome, jsonDFSome)
@@ -1701,7 +1701,7 @@ abstract class JsonSuite
         .options(extraOptions)
         .load(jsonDir)
 
-      assert(jsonCopy.count == jsonDF.count)
+      assert(jsonCopy.count() == jsonDF.count())
       val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
       val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
       checkAnswer(jsonCopySome, jsonDFSome)
@@ -2075,7 +2075,7 @@ abstract class JsonSuite
           .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
           .schema(schema)
           .json(path)
-          .collect
+          .collect()
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
     }
@@ -2235,7 +2235,7 @@ abstract class JsonSuite
         // inferred when sampling ratio is involved.
         val readback2 = spark.read
           .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
-          .format("json").load
+          .format("json").load()
         assert(readback2.schema == new StructType().add("f1", LongType))
       }
     })
@@ -2662,7 +2662,7 @@ abstract class JsonSuite
 
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     val e = intercept[SparkException] {df.collect()}
     checkError(
       exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
@@ -2673,7 +2673,7 @@ abstract class JsonSuite
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
-      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     checkAnswer(df, Row(expected) :: Nil)
   }
 
@@ -2699,7 +2699,7 @@ abstract class JsonSuite
   test("SPARK-25040: allowing empty strings when legacy config is enabled") {
     def emptyStringAsNull(dataType: DataType): Unit = {
       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
       checkAnswer(df, Row(null) :: Nil)
     }
 
@@ -2741,7 +2741,7 @@ abstract class JsonSuite
 
   test("inferring timestamp type") {
     def schemaOf(jsons: String*): StructType = {
-      spark.read.option("inferTimestamp", true).json(jsons.toDS).schema
+      spark.read.option("inferTimestamp", true).json(jsons.toDS()).schema
     }
 
     assert(schemaOf(
@@ -3127,7 +3127,7 @@ abstract class JsonSuite
       spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
       val readback = spark.read
         .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
-      assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
+      assert(readback.collect() sameElements Array(Row(0), Row(1), Row(2)))
     }
   }
 
@@ -3136,7 +3136,7 @@ abstract class JsonSuite
     withTempPaths(2) { paths =>
       paths.foreach(_.delete())
       val seq = Seq("a", "\n", "\u3042")
-      val df = seq.toDF
+      val df = seq.toDF()
 
       val basePath1 = paths(0).getCanonicalPath
       df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
@@ -3190,7 +3190,7 @@ abstract class JsonSuite
     withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
       withTempPath { path =>
         val basePath = path.getCanonicalPath
-        val df = Seq("a", "b", "c").toDF
+        val df = Seq("a", "b", "c").toDF()
         df.write.option("pretty", "true").json(basePath)
 
         val expectedText =
@@ -3241,7 +3241,7 @@ abstract class JsonSuite
           StructType(
             StructField("f1", LongType, nullable = false) ::
             StructField("f2", LongType, nullable = false) :: Nil)
-        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS),
+        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS()),
         // It is for testing legacy configuration. This is technically a bug as
         // `0` has to be `null` but the schema is non-nullable.
         Row(1, 0))
@@ -3251,7 +3251,7 @@ abstract class JsonSuite
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
     val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
-        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
+        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS()).collect()
     }
     assert(exception.getMessage.contains("Malformed records are detected"))
 
@@ -3265,7 +3265,7 @@ abstract class JsonSuite
     // Here, since an array fails to parse in the middle, we will return one row.
     checkAnswer(
       spark.read.option("mode", "permissive")
-        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
+        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS()),
       Row(null) :: Nil)
   }
 

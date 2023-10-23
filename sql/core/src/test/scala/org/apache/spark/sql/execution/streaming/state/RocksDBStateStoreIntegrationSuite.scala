@@ -40,7 +40,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       val conf = Map(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName)
 
-      testStream(input.toDF.groupBy().count(), outputMode = OutputMode.Update)(
+      testStream(input.toDF().groupBy().count(), outputMode = OutputMode.Update)(
         StartStream(checkpointLocation = dir.getAbsolutePath, additionalConfs = conf),
         AddData(input, 1, 2, 3),
         CheckAnswer(3),
