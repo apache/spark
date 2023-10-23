@@ -111,7 +111,8 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+        tableName, actualExpectedCols.map(_.name).map(toSQLId).mkString(", "))
     }
 
     if (resolved == query.output) {

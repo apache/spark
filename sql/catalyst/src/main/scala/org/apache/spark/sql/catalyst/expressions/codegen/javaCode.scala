@@ -255,19 +255,19 @@ object Block {
     val inputs = args.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
 
-    buf.append(StringContext.treatEscapes(strings.next))
+    buf.append(StringContext.treatEscapes(strings.next()))
     while (strings.hasNext) {
-      val input = inputs.next
+      val input = inputs.next()
       input match {
         case _: ExprValue | _: CodeBlock =>
           codeParts += buf.toString
-          buf.clear
+          buf.clear()
           blockInputs += input.asInstanceOf[JavaCode]
         case EmptyBlock =>
         case _ =>
           buf.append(input)
       }
-      buf.append(StringContext.treatEscapes(strings.next))
+      buf.append(StringContext.treatEscapes(strings.next()))
     }
     codeParts += buf.toString
 
@@ -291,10 +291,10 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
-    buf.append(strings.next)
+    buf.append(strings.next())
     while (strings.hasNext) {
-      buf.append(inputs.next)
-      buf.append(strings.next)
+      buf.append(inputs.next())
+      buf.append(strings.next())
     }
     buf.toString
   }

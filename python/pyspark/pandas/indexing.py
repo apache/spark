@@ -25,11 +25,11 @@ from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+import numpy as np
+
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.errors import AnalysisException
-import numpy as np
-
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.internal import (
@@ -50,8 +50,6 @@ from pyspark.pandas.utils import (
     spark_column_equals,
     verify_temp_column_name,
 )
-
-# For Supporting Spark Connect
 from pyspark.sql.utils import get_column_class
 
 if TYPE_CHECKING:
@@ -1108,7 +1106,9 @@ class LocIndexer(LocIndexerLike):
                 return None, None, None
             elif (
                 depth > self._internal.index_level
-                or not index.droplevel(list(range(self._internal.index_level)[depth:])).is_monotonic
+                or not index.droplevel(
+                    list(range(self._internal.index_level)[depth:])
+                ).is_monotonic_increasing
             ):
                 raise KeyError(
                     "Key length ({}) was greater than MultiIndex sort depth".format(depth)

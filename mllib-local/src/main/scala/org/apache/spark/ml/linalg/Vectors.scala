@@ -184,8 +184,9 @@ sealed trait Vector extends Serializable {
    * Returns a vector in either dense or sparse format, whichever uses less storage.
    */
   @Since("2.0.0")
-  def compressed: Vector = {
-    val nnz = numNonzeros
+  def compressed: Vector = compressed(numNonzeros)
+
+  private[ml] def compressed(nnz: Int): Vector = {
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
       toSparseWithSize(nnz)
@@ -805,7 +806,7 @@ class SparseVector @Since("2.0.0") (
         s += 1
       }
     }
-    new SparseVector(ns, indexBuff.result, valueBuff.result)
+    new SparseVector(ns, indexBuff.result(), valueBuff.result())
   }
 
   private[spark] override def iterator: Iterator[(Int, Double)] = {

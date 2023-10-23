@@ -606,7 +606,7 @@ class SparkConnectServiceSuite
           }
 
           override def onError(throwable: Throwable): Unit = {
-            verifyEvents.onCanceled
+            verifyEvents.onCanceled()
           }
 
           override def onCompleted(): Unit = {

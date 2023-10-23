@@ -153,7 +153,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     }
     val numFeaturesSelected = $(indices).length + $(names).length
     val outputAttr = new AttributeGroup($(outputCol), numFeaturesSelected)
-    SchemaUtils.appendColumn(schema, outputAttr.toStructField)
+    SchemaUtils.appendColumn(schema, outputAttr.toStructField())
   }
 
   @Since("1.5.0")

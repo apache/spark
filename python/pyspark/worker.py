@@ -20,11 +20,11 @@ Worker that receives input from Piped RDD.
 """
 import os
 import sys
+import dataclasses
 import time
 from inspect import getfullargspec
 import json
 from typing import Any, Callable, Iterable, Iterator
-
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -52,9 +52,13 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
+    ArrayType,
     BinaryType,
+    DataType,
+    MapType,
     Row,
     StringType,
+    StructField,
     StructType,
     _create_row,
     _parse_datatype_json_string,
@@ -667,7 +671,7 @@ def read_udtf(pickleSer, infile, eval_type):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
+    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     args_offsets = []
     kwargs_offsets = {}
@@ -680,6 +684,14 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    has_pickled_analyze_result = read_bool(infile)
+    if has_pickled_analyze_result:
+        pickled_analyze_result = pickleSer._read_with_length(infile)
+    else:
+        pickled_analyze_result = None
+    # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
+    # although we may set this to false later if we find otherwise.
+    udtf_init_method_accepts_analyze_result = True
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -692,6 +704,29 @@ def read_udtf(pickleSer, infile, eval_type):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
+
+    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
+    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
+    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
+    # AnalyzeResult.
+    if has_pickled_analyze_result:
+        prev_handler = handler
+
+        def construct_udtf():
+            nonlocal udtf_init_method_accepts_analyze_result
+            if not udtf_init_method_accepts_analyze_result:
+                return prev_handler()
+            else:
+                try:
+                    # Here we pass the AnalyzeResult to the UDTF's __init__ method.
+                    return prev_handler(dataclasses.replace(pickled_analyze_result))
+                except TypeError:
+                    # This means that the UDTF handler does not accept an AnalyzeResult object in
+                    # its __init__ method.
+                    udtf_init_method_accepts_analyze_result = False
+                    return prev_handler()
+
+        handler = construct_udtf
 
     class UDTFWithPartitions:
         """
@@ -810,6 +845,71 @@ def read_udtf(pickleSer, infile, eval_type):
             "the query again."
         )
 
+    # This determines which result columns have nullable types.
+    def check_nullable_column(i: int, data_type: DataType, nullable: bool) -> None:
+        if not nullable:
+            nullable_columns.add(i)
+        elif isinstance(data_type, ArrayType):
+            check_nullable_column(i, data_type.elementType, data_type.containsNull)
+        elif isinstance(data_type, StructType):
+            for subfield in data_type.fields:
+                check_nullable_column(i, subfield.dataType, subfield.nullable)
+        elif isinstance(data_type, MapType):
+            check_nullable_column(i, data_type.valueType, data_type.valueContainsNull)
+
+    nullable_columns: set[int] = set()
+    for i, field in enumerate(return_type.fields):
+        check_nullable_column(i, field.dataType, field.nullable)
+
+    # Compares each UDTF output row against the output schema for this particular UDTF call,
+    # raising an error if the two are incompatible.
+    def check_output_row_against_schema(row: Any, expected_schema: StructType) -> None:
+        for result_column_index in nullable_columns:
+
+            def check_for_none_in_non_nullable_column(
+                value: Any, data_type: DataType, nullable: bool
+            ) -> None:
+                if value is None and not nullable:
+                    raise PySparkRuntimeError(
+                        error_class="UDTF_EXEC_ERROR",
+                        message_parameters={
+                            "method_name": "eval' or 'terminate",
+                            "error": f"Column {result_column_index} within a returned row had a "
+                            + "value of None, either directly or within array/struct/map "
+                            + "subfields, but the corresponding column type was declared as "
+                            + "non-nullable; please update the UDTF to return a non-None value at "
+                            + "this location or otherwise declare the column type as nullable.",
+                        },
+                    )
+                elif (
+                    isinstance(data_type, ArrayType)
+                    and isinstance(value, list)
+                    and not data_type.containsNull
+                ):
+                    for sub_value in value:
+                        check_for_none_in_non_nullable_column(
+                            sub_value, data_type.elementType, data_type.containsNull
+                        )
+                elif isinstance(data_type, StructType) and isinstance(value, Row):
+                    for i in range(len(value)):
+                        check_for_none_in_non_nullable_column(
+                            value[i], data_type[i].dataType, data_type[i].nullable
+                        )
+                elif isinstance(data_type, MapType) and isinstance(value, dict):
+                    for map_key, map_value in value.items():
+                        check_for_none_in_non_nullable_column(
+                            map_key, data_type.keyType, nullable=False
+                        )
+                        check_for_none_in_non_nullable_column(
+                            map_value, data_type.valueType, data_type.valueContainsNull
+                        )
+
+            field: StructField = expected_schema[result_column_index]
+            if row is not None:
+                check_for_none_in_non_nullable_column(
+                    list(row)[result_column_index], field.dataType, field.nullable
+                )
+
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
         def wrap_arrow_udtf(f, return_type):
@@ -848,6 +948,8 @@ def read_udtf(pickleSer, infile, eval_type):
                 verify_pandas_result(
                     result, return_type, assign_cols_by_name=False, truncate_return_schema=False
                 )
+                for result_tuple in result.itertuples():
+                    check_output_row_against_schema(list(result_tuple), return_type)
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -942,6 +1044,7 @@ def read_udtf(pickleSer, infile, eval_type):
                             },
                         )
 
+                check_output_row_against_schema(result, return_type)
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.

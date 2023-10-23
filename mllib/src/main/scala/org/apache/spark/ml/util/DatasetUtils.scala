@@ -215,7 +215,7 @@ private[spark] object DatasetUtils extends Logging {
    */
   private[ml] def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
     MetadataUtils.getNumFeatures(dataset.schema(vectorCol)).getOrElse {
-      dataset.select(columnToVector(dataset, vectorCol)).head.getAs[Vector](0).size
+      dataset.select(columnToVector(dataset, vectorCol)).head().getAs[Vector](0).size
     }
   }
 }

@@ -199,10 +199,12 @@ class ClientStreamingQuerySuite extends QueryTest with SQLHelper with Logging {
         .format("console")
         .start()
 
-      val exception = intercept[SparkException] {
+      val exception = intercept[StreamingQueryException] {
         query.awaitTermination()
       }
 
+      assert(exception.getErrorClass != null)
+      assert(!exception.getMessageParameters.isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.getCause.isInstanceOf[SparkException])

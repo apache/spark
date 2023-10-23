@@ -83,14 +83,14 @@ object SparkHadoopWriter extends Logging {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
         // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
         // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
-        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+        val attemptId = (context.stageAttemptNumber() << 16) | context.attemptNumber()
 
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
-          sparkPartitionId = context.partitionId,
+          sparkPartitionId = context.partitionId(),
           sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)

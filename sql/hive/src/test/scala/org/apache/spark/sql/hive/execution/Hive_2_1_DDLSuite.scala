@@ -62,7 +62,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
     new HiveExternalCatalog(sparkConf, hadoopConf)
   }
 
-  override def afterEach: Unit = {
+  override def afterEach(): Unit = {
     catalog.listTables("default").foreach { t =>
       catalog.dropTable("default", t, true, false)
     }

@@ -164,6 +164,10 @@ private[connect] class ExecuteHolder(
   private def addGrpcResponseSender(
       sender: ExecuteGrpcResponseSender[proto.ExecutePlanResponse]) = synchronized {
     if (closedTime.isEmpty) {
+      // Interrupt all other senders - there can be only one active sender.
+      // Interrupted senders will remove themselves with removeGrpcResponseSender when they exit.
+      grpcResponseSenders.foreach(_.interrupt())
+      // And add this one.
       grpcResponseSenders += sender
       lastAttachedRpcTime = None
     } else {

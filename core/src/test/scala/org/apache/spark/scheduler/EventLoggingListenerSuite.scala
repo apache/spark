@@ -173,7 +173,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .mapPartitions(_.map(elem => (elem, elem)))
       .filter(elem => elem._1 % 2 == 0)
       .reduceByKey(_ + _)
-      .collect
+      .collect()
     sc.stop()
 
     val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)
@@ -385,7 +385,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L, 110L)
 
     def max(a: Array[Long], b: Array[Long]): Array[Long] =
-      (a, b).zipped.map(Math.max).toArray
+      a.lazyZip(b).map(Math.max).toArray
 
     // calculated metric peaks per stage per executor
     // metrics sent during stage 0 for each executor

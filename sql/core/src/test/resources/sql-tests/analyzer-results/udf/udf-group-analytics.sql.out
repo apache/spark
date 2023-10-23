@@ -206,6 +206,7 @@ SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -222,6 +223,7 @@ SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY ud
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -270,7 +272,8 @@ SELECT course, udf(year) FROM courseSales GROUP BY udf(course), year HAVING GROU
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -279,7 +282,8 @@ SELECT course, udf(udf(year)) FROM courseSales GROUP BY course, year HAVING GROU
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -338,7 +342,8 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 
@@ -347,7 +352,8 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
 }
 
 

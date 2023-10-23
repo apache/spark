@@ -69,7 +69,7 @@ class ProductAggSuite extends QueryTest
 
     val prodFactorials = data16.withColumn("f", product(col("x")).over(win)).orderBy(col("x"))
 
-    assert(prodFactorials.count === 16)
+    assert(prodFactorials.count() === 16)
 
     checkAnswer(
       prodFactorials.limit(5),

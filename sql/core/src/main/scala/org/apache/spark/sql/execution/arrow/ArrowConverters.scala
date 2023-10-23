@@ -219,7 +219,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
       rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
-      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get)
+      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
@@ -228,7 +228,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
     new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
-        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get) {
+        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
     }.next()
   }
@@ -400,7 +400,7 @@ private[sql] object ArrowConverters extends Logging {
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
-        batchesInDriver.toIterator,
+        batchesInDriver.iterator,
         schema,
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,
