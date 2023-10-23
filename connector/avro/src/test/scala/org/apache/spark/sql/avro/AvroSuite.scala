@@ -815,7 +815,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Avro should read decimal values with the file schema, same scale") {
+  test("SPARK-45638: Avro should read decimal values with the file schema, same scale") {
     // write schema has precision and scale as 3
     // read schema has precision as 4 and scale as 3
     withTempPath { path =>
