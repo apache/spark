@@ -2954,8 +2954,8 @@ class DataSourceV2SQLSuiteV1Filter
       val res8 = sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect()
       assert(res8 === Array(Row(7), Row(8)))
       // Scalar subquery is also supported.
-      val res9 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))")
-      assert(res9.collect() === Array(Row(7), Row(8)))
+      val res9 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect()
+      assert(res9 === Array(Row(7), Row(8)))
       // Nested subquery also works
       val res10 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))")
         .collect()
