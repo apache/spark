@@ -35,7 +35,7 @@ Must be deterministic.
 
 ## OPTION
 
-Timestamp string in the options should be in the format of 'yyyy-MM-dd HH:mm:ss[.us][zone_id]'.
+Timestamp string in the options should use ISO standard format such as 'yyyy-MM-dd HH:mm:ss'.
 
 ## UNEVALUABLE
 
