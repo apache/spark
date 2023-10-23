@@ -66,7 +66,7 @@ class StateStoreConf(
   val skipNullsForStreamStreamJoins: Boolean = sqlConf.stateStoreSkipNullsForStreamStreamJoins
 
   /** The compression codec used to compress delta and snapshot files. */
-  val changelogCompressionCodec: String = sqlConf.stateStoreCompressionCodec
+  val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
