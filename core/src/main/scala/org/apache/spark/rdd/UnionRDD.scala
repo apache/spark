@@ -76,8 +76,10 @@ class UnionRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val parRDDs = if (isPartitionListingParallel) {
+      // scalastyle:off parvector
       val parArray = new ParVector(rdds.toVector)
       parArray.tasksupport = UnionRDD.partitionEvalTaskSupport
+      // scalastyle:on parvector
       parArray
     } else {
       rdds

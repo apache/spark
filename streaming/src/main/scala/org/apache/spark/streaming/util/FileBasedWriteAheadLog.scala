@@ -314,8 +314,10 @@ private[streaming] object FileBasedWriteAheadLog {
     val groupSize = taskSupport.parallelismLevel.max(8)
 
     source.grouped(groupSize).flatMap { group =>
+      // scalastyle:off parvector
       val parallelCollection = new ParVector(group.toVector)
       parallelCollection.tasksupport = taskSupport
+      // scalastyle:on parvector
       parallelCollection.map(handler)
     }.flatten
   }
