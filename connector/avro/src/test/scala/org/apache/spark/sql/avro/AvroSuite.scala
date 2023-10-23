@@ -168,7 +168,7 @@ abstract class AvroSuite
 
   test("reading from multiple paths") {
     val df = spark.read.format("avro").load(episodesAvro, episodesAvro)
-    assert(df.count == 16)
+    assert(df.count() == 16)
   }
 
   test("reading and writing partitioned data") {
@@ -197,7 +197,7 @@ abstract class AvroSuite
     withTempPath { dir =>
       val df = spark.read.format("avro").load(episodesAvro)
       df.write.parquet(dir.getCanonicalPath)
-      assert(spark.read.parquet(dir.getCanonicalPath).count() === df.count)
+      assert(spark.read.parquet(dir.getCanonicalPath).count() === df.count())
     }
   }
 
@@ -549,7 +549,7 @@ abstract class AvroSuite
         Row(null, null, null, null, null)))
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -568,7 +568,7 @@ abstract class AvroSuite
       ))
       val df = spark.createDataFrame(rdd, schema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -628,7 +628,7 @@ abstract class AvroSuite
         ))
         val df = spark.createDataFrame(rdd, schema)
         df.write.format("avro").save(dir.toString)
-        assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+        assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
         checkAnswer(
           spark.read.format("avro").load(dir.toString).select("date"),
           Seq(Row(null), Row(new Date(1451865600000L)), Row(new Date(1459987200000L))))
@@ -666,7 +666,7 @@ abstract class AvroSuite
           Array[Row](Row("Bobby G. can't swim")))))
       val df = spark.createDataFrame(rdd, testSchema)
       df.write.format("avro").save(dir.toString)
-      assert(spark.read.format("avro").load(dir.toString).count == rdd.count)
+      assert(spark.read.format("avro").load(dir.toString).count() == rdd.count())
     }
   }
 
@@ -1021,7 +1021,7 @@ abstract class AvroSuite
       val currentDate = new Date(System.currentTimeMillis())
       val schema = StructType(Seq(
         StructField("_1", DateType, false), StructField("_2", TimestampType, false)))
-      val writeDs = Seq((currentDate, currentTime)).toDS
+      val writeDs = Seq((currentDate, currentTime)).toDS()
 
       val avroDir = tempDir + "/avro"
       writeDs.write.format("avro").save(avroDir)
@@ -1050,12 +1050,12 @@ abstract class AvroSuite
         StructField("_1", DateType, nullable = true),
         StructField("_2", TimestampType, nullable = true))
       )
-      val writeDs = Seq((nullDate, nullTime)).toDS
+      val writeDs = Seq((nullDate, nullTime)).toDS()
 
       val avroDir = tempDir + "/avro"
       writeDs.write.format("avro").save(avroDir)
       val readValues =
-        spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect
+        spark.read.schema(schema).format("avro").load(avroDir).as[(Date, Timestamp)].collect()
 
       assert(readValues.size == 1)
       assert(readValues.head == ((nullDate, nullTime)))
@@ -1147,7 +1147,7 @@ abstract class AvroSuite
     val result = spark
       .read
       .option("avroSchema", avroSchema)
-      .format("avro").load(testAvro).select("missingField").first
+      .format("avro").load(testAvro).select("missingField").first()
     assert(result === Row("foo"))
   }
 
@@ -1743,13 +1743,13 @@ abstract class AvroSuite
     // Test if load works as expected
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
 
       df.write.format("avro").save(tempSaveDir)
       val newDf = spark.read.format("avro").load(tempSaveDir)
-      assert(newDf.count == 8)
+      assert(newDf.count() == 8)
     }
   }
 
@@ -1757,7 +1757,7 @@ abstract class AvroSuite
     // Test if load works as expected
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
       df.write.format("avro").save(tempSaveDir)
@@ -1928,11 +1928,11 @@ abstract class AvroSuite
 
   test("read avro file partitioned") {
     withTempPath { dir =>
-      val df = (0 to 1024 * 3).toDS.map(i => s"record${i}").toDF("records")
+      val df = (0 to 1024 * 3).toDS().map(i => s"record${i}").toDF("records")
       val outputDir = s"$dir/${UUID.randomUUID}"
       df.write.format("avro").save(outputDir)
       val input = spark.read.format("avro").load(outputDir)
-      assert(input.collect.toSet.size === 1024 * 3 + 1)
+      assert(input.collect().toSet.size === 1024 * 3 + 1)
       assert(input.rdd.partitions.size > 2)
     }
   }
@@ -2057,21 +2057,21 @@ abstract class AvroSuite
 
       val fileWithoutExtension = s"${dir.getCanonicalPath}/episodes"
       val df1 = spark.read.format("avro").load(fileWithoutExtension)
-      assert(df1.count == 8)
+      assert(df1.count() == 8)
 
       val schema = new StructType()
         .add("title", StringType)
         .add("air_date", StringType)
         .add("doctor", IntegerType)
       val df2 = spark.read.schema(schema).format("avro").load(fileWithoutExtension)
-      assert(df2.count == 8)
+      assert(df2.count() == 8)
     }
   }
 
   test("SPARK-24836: checking the ignoreExtension option") {
     withTempPath { tempDir =>
       val df = spark.read.format("avro").load(episodesAvro)
-      assert(df.count == 8)
+      assert(df.count() == 8)
 
       val tempSaveDir = s"$tempDir/save/"
       df.write.format("avro").save(tempSaveDir)
@@ -2084,7 +2084,7 @@ abstract class AvroSuite
         .format("avro")
         .load(tempSaveDir)
 
-      assert(newDf.count == 8)
+      assert(newDf.count() == 8)
     }
   }
 

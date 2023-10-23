@@ -836,12 +836,12 @@ class MultiStatefulOperatorsSuite
     }
 
     val input1 = MemoryStream[(String, Timestamp)]
-    val df1 = input1.toDF
+    val df1 = input1.toDF()
       .selectExpr("_1 as leftId", "_2 as leftEventTime")
       .withWatermark("leftEventTime", "5 minutes")
 
     val input2 = MemoryStream[(String, Timestamp)]
-    val df2 = input2.toDF
+    val df2 = input2.toDF()
       .selectExpr("_1 as rightId", "_2 as rightEventTime")
       .withWatermark("rightEventTime", "10 minutes")
 

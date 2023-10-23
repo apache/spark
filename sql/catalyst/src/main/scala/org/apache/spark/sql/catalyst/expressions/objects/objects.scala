@@ -811,7 +811,7 @@ case class UnresolvedMapObjects(
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
-    throw QueryExecutionErrors.customCollectionClsNotResolvedError
+    throw QueryExecutionErrors.customCollectionClsNotResolvedError()
   }
 
   override protected def withNewChildInternal(newChild: Expression): UnresolvedMapObjects =
@@ -1461,7 +1461,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1483,7 +1483,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1898,7 +1898,7 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
-      throw QueryExecutionErrors.inputExternalRowCannotBeNullError
+      throw QueryExecutionErrors.inputExternalRowCannotBeNullError()
     }
     if (inputRow.isNullAt(index)) {
       throw QueryExecutionErrors.fieldCannotBeNullError(index, fieldName)

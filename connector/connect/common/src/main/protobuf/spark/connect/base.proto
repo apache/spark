@@ -852,6 +852,10 @@ message FetchErrorDetailsResponse {
 
     // The query context of a SparkThrowable.
     repeated QueryContext query_contexts = 3;
+
+    // Portable error identifier across SQL engines
+    // If null, error class or SQLSTATE is not set.
+    optional string sql_state = 4;
   }
 
   // Error defines the schema for the representing exception.

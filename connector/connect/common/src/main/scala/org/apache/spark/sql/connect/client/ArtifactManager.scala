@@ -87,7 +87,7 @@ class ArtifactManager(
           case cf if cf.endsWith(".class") =>
             newClassArtifact(path.getFileName, new LocalFile(path))
           case other =>
-            throw new UnsupportedOperationException(s"Unsuppoted file format: $other")
+            throw new UnsupportedOperationException(s"Unsupported file format: $other")
         }
         Seq[Artifact](artifact)
 
@@ -171,7 +171,7 @@ class ArtifactManager(
       return
     }
 
-    val promise = Promise[Seq[ArtifactSummary]]
+    val promise = Promise[Seq[ArtifactSummary]]()
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {

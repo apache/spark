@@ -50,7 +50,7 @@ case class ShowCreateTableExec(
     showTableDataColumns(table, builder)
     showTableUsing(table, builder)
 
-    val tableOptions = table.properties.asScala
+    val tableOptions = table.properties.asScala.view
       .filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
       case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
     }.toMap
@@ -132,7 +132,7 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
 
-    val showProps = table.properties.asScala
+    val showProps = table.properties.asScala.view
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
         && !tableOptions.contains(key))

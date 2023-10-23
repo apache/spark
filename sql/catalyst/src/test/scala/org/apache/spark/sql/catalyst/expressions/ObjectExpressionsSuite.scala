@@ -107,7 +107,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
-    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]
+    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]()
     val structInputRow = InternalRow.fromSeq(Seq(Array((1, 2), (3, 4))))
     val structExpected = new GenericArrayData(
       Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
@@ -115,7 +115,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       structEncoder.serializer.head, structExpected, structInputRow)
 
     // test UnsafeArray-backed data
-    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]
+    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]()
     val arrayInputRow = InternalRow.fromSeq(Seq(Array(Array(1, 2), Array(3, 4))))
     val arrayExpected = new GenericArrayData(
       Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
@@ -123,7 +123,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
 
     // test UnsafeMap-backed data
-    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]
+    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]()
     val mapInputRow = InternalRow.fromSeq(Seq(Array(
       Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
     val mapExpected = new GenericArrayData(Seq(
@@ -299,7 +299,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)

@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Python - PyPy3.8 (master)"
+name: "Build / Python-only (master, PyPy 3.8)"
 
 on:
   schedule:

@@ -340,7 +340,7 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
       assert(kvgds == null)
       i + 1
     }
-    val result = df.select(f($"id")).as[Long].head
+    val result = df.select(f($"id")).as[Long].head()
     assert(result == 1L)
   }
 }

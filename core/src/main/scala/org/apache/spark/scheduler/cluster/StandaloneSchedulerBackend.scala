@@ -217,7 +217,7 @@ private[spark] class StandaloneSchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
   /**
@@ -253,7 +253,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
     val prefix = "SPARK_DRIVER_LOG_URL_"
-    val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
+    val driverLogUrls = sys.env.view.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
     if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }

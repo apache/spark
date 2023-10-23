@@ -399,7 +399,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 
   test("SPARK-37259: prepareQuery and dbtable JDBC options") {
@@ -417,7 +417,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("dbtable", dbtable)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 
   test("SPARK-37259: temp table prepareQuery and query JDBC options") {
@@ -435,6 +435,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("prepareQuery", prepareQuery)
       .option("query", query)
       .load()
-    assert(df.collect.toSet === expectedResult)
+    assert(df.collect().toSet === expectedResult)
   }
 }

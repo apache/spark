@@ -250,7 +250,7 @@ private[spark] class AppStatusListener(
       }
       // Remove all RDD partitions that reference the removed executor
       liveRDDs.values.foreach { rdd =>
-        rdd.getPartitions.values
+        rdd.getPartitions().values
           .filter(_.executors.contains(event.executorId))
           .foreach { partition =>
             if (partition.executors.length == 1) {
@@ -812,7 +812,7 @@ private[spark] class AppStatusListener(
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     val maybeStage =
-      Option(liveStages.get((event.stageInfo.stageId, event.stageInfo.attemptNumber)))
+      Option(liveStages.get((event.stageInfo.stageId, event.stageInfo.attemptNumber())))
     maybeStage.foreach { stage =>
       val now = System.nanoTime()
       stage.info = event.stageInfo
@@ -860,7 +860,7 @@ private[spark] class AppStatusListener(
       val removeStage = stage.activeTasks == 0
       update(stage, now, last = removeStage)
       if (removeStage) {
-        liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber))
+        liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber()))
       }
       if (stage.status == v1.StageStatus.COMPLETE) {
         appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
@@ -1209,7 +1209,7 @@ private[spark] class AppStatusListener(
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
-    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
+    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber()),
       (_: (Int, Int)) => new LiveStage(info))
     stage.info = info
     stage
@@ -1377,7 +1377,7 @@ private[spark] class AppStatusListener(
   private def cleanupTasks(stage: LiveStage): Unit = {
     val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
     if (countToDelete > 0) {
-      val stageKey = Array(stage.info.stageId, stage.info.attemptNumber)
+      val stageKey = Array(stage.info.stageId, stage.info.attemptNumber())
       val view = kvstore.view(classOf[TaskDataWrapper])
         .index(TaskIndexNames.COMPLETION_TIME)
         .parent(stageKey)

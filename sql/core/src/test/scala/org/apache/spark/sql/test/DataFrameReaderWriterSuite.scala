@@ -252,7 +252,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-32364: later option should override earlier options for save()") {
-    Seq(1).toDF.write
+    Seq(1).toDF().write
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
       .option("PATH", "2")
@@ -264,7 +264,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     withClue("SPARK-32516: legacy path option behavior") {
       withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
-        Seq(1).toDF.write
+        Seq(1).toDF().write
           .format("org.apache.spark.sql.test")
           .option("paTh", "1")
           .option("PATH", "2")
@@ -277,7 +277,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("pass partitionBy as options") {
-    Seq(1).toDF.write
+    Seq(1).toDF().write
       .format("org.apache.spark.sql.test")
       .partitionBy("col1", "col2")
       .save()
@@ -1212,7 +1212,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
       withTempDir { dir =>
         val path = dir.getCanonicalPath
-        Seq(1).toDF.write.mode("overwrite").parquet(path)
+        Seq(1).toDF().write.mode("overwrite").parquet(path)
 
         // When there is one path parameter to load(), "path" option is overwritten.
         checkAnswer(spark.read.format("parquet").option("path", path).load(path), Row(1))
@@ -1239,7 +1239,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         "Either remove the path option, or call save() without the parameter"))
     }
 
-    val df = Seq(1).toDF
+    val df = Seq(1).toDF()
     val path = "tmp"
     verifyLoadFails(df.write.option("path", path).parquet(path))
     verifyLoadFails(df.write.option("path", path).parquet(""))
