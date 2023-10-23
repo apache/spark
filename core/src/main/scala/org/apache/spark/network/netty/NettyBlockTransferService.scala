@@ -74,7 +74,7 @@ private[spark] class NettyBlockTransferService(
       conf,
       "shuffle",
       numCores,
-      sslOptions = Some(securityManager.getSSLOptions("rpc")))
+      sslOptions = Some(securityManager.rpcSSLOptions))
     if (authEnabled) {
       serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
       clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))

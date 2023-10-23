@@ -34,8 +34,8 @@ import org.apache.spark.network.ssl.SslSampleConfigs
 class SslExternalShuffleServiceSuite extends ExternalShuffleServiceSuite {
 
   override def initializeHandlers(): Unit = {
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf);
     // Show that we can successfully inherit options defined in the `spark.ssl` namespace
     val defaultSslOptions = SSLOptions.parse(conf, hadoopConf, "spark.ssl")

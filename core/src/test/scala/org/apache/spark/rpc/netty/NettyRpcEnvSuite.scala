@@ -185,8 +185,8 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 class SslNettyRpcEnvSuite extends NettyRpcEnvSuite with MockitoSugar with TimeLimits {
   override def createSparkConf(): SparkConf = {
     val conf = super.createSparkConf()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     conf
   }
 }

@@ -378,7 +378,7 @@ object SparkEnv extends Logging {
         conf,
         "shuffle",
         numUsableCores,
-        sslOptions = Some(securityManager.getSSLOptions("rpc"))
+        sslOptions = Some(securityManager.rpcSSLOptions)
       )
       Some(new ExternalBlockStoreClient(transConf, securityManager,
         securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))

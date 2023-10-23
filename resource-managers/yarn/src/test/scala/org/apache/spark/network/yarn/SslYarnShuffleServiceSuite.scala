@@ -27,7 +27,7 @@ class SslYarnShuffleServiceWithRocksDBBackendSuite
    */
   override def beforeEach(): Unit = {
     super.beforeEach()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMapForRpcNamespace()
-    updatedConfigs.entrySet().forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
   }
 }

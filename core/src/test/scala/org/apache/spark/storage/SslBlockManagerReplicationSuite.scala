@@ -23,8 +23,8 @@ import org.apache.spark.network.ssl.SslSampleConfigs
 class SslBlockManagerReplicationSuite extends BlockManagerReplicationSuite {
   override def createConf(): SparkConf = {
     val conf = super.createConf()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     conf
   }
 }
@@ -32,8 +32,8 @@ class SslBlockManagerReplicationSuite extends BlockManagerReplicationSuite {
 class SslBlockManagerProactiveReplicationSuite extends BlockManagerProactiveReplicationSuite {
   override def createConf(): SparkConf = {
     val conf = super.createConf()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     conf
   }
 }
@@ -42,8 +42,8 @@ class SslBlockManagerBasicStrategyReplicationSuite
   extends BlockManagerBasicStrategyReplicationSuite {
   override def createConf(): SparkConf = {
     val conf = super.createConf()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     conf
   }
 }

@@ -1253,7 +1253,7 @@ private[spark] class BlockManager(
 
         case _ =>
           val transportConf = SparkTransportConf.fromSparkConf(
-            conf, "shuffle", sslOptions = Some(securityManager.getSSLOptions("rpc")))
+            conf, "shuffle", sslOptions = Some(securityManager.rpcSSLOptions))
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
       Some(managedBuffer)

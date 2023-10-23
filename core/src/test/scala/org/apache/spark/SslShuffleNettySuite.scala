@@ -22,7 +22,7 @@ class SslShuffleNettySuite extends ShuffleNettySuite {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
   }
 }

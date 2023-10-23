@@ -284,8 +284,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
 class SslIndexShuffleBlockResolverSuite extends IndexShuffleBlockResolverSuite {
   override def createSparkConf(): SparkConf = {
     val conf = super.createSparkConf()
-    val updatedConfigs = SslSampleConfigs.createDefaultConfigMap()
-    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
     conf
   }
 }

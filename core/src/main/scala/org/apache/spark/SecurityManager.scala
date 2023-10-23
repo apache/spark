@@ -106,7 +106,7 @@ private[spark] class SecurityManager(
   private val defaultSSLOptions =
     SSLOptions.parse(sparkConf, hadoopConf, "spark.ssl", defaults = None)
   // the SSL configuration for RPCs
-  private val rpcSSLOptions = getSSLOptions("rpc")
+  val rpcSSLOptions = getSSLOptions("rpc")
 
   def getSSLOptions(module: String): SSLOptions = {
     val opts =
