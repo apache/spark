@@ -27,14 +27,17 @@ import org.apache.spark.sql.execution.command.v1
 class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
 
-  test("INVALID_DATABASE_NAME") {
+  test("REQUIRES_SINGLE_PART_NAMESPACE") {
     val namespace = "ns1.ns2"
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"CREATE NAMESPACE $catalog.$namespace")
       },
-      errorClass = "INVALID_DATABASE_NAME",
-      parameters = Map("database" -> "`ns1`.`ns2`")
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> catalog,
+        "namespace" -> "`ns1`.`ns2`"
+      )
     )
   }
 }

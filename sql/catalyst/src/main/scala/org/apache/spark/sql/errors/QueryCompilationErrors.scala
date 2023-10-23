@@ -920,12 +920,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "fieldNames" -> v1Table.schema.fieldNames.mkString(", ")))
   }
 
-  def invalidDatabaseNameError(database: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_DATABASE_NAME",
-      messageParameters = Map("database" -> toSQLId(database)))
-  }
-
   def wrongCommandForObjectTypeError(
       operation: String,
       requiredType: String,

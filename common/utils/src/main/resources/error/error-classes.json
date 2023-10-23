@@ -1553,11 +1553,6 @@
     },
     "sqlState" : "HY109"
   },
-  "INVALID_DATABASE_NAME" : {
-    "message" : [
-      "The database name is not valid: <database>."
-    ]
-  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
