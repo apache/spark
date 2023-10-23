@@ -798,7 +798,7 @@ class SparkConnectClient(object):
         logger.info("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties) = self.execute_command(cmd, observations={})
+        (_, properties) = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
 
@@ -956,7 +956,7 @@ class SparkConnectClient(object):
         return result
 
     def execute_command(
-        self, command: pb2.Command, observations: Dict[str, Observation]
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
         """
         Execute given command.
@@ -966,7 +966,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, _, properties = self._execute_and_fetch(req, observations)
+        data, _, _, _, properties = self._execute_and_fetch(req, observations or {})
         if data is not None:
             return (data.to_pandas(), properties)
         else:

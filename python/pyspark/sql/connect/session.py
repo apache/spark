@@ -553,7 +553,7 @@ class SparkSession:
 
     def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
-        data, properties = self.client.execute_command(cmd.command(self._client), observations={})
+        data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
         else:

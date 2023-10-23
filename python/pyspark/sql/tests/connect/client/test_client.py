@@ -44,7 +44,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client._stub = mock
 
         command = proto.Command()
-        client.execute_command(command, observations={})
+        client.execute_command(command)
 
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
         self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
@@ -55,7 +55,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client._stub = mock
 
         command = proto.Command()
-        client.execute_command(command, observations={})
+        client.execute_command(command)
 
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
         self.assertRegex(
