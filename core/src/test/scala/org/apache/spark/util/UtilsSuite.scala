@@ -255,7 +255,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
     val field: Field = obj.getClass().getDeclaredField(fieldName)
-    if (field.isAccessible()) {
+    if (field.canAccess(obj)) {
       field.get(obj)
     } else {
       field.setAccessible(true)
