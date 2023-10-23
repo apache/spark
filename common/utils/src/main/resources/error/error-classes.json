@@ -1061,7 +1061,7 @@
     "message" : [
       "The function <functionName> arguments <functionExpr> should match the order by expression <orderExpr> when use DISTINCT."
     ],
-    "sqlState": "42822"
+    "sqlState" : "42822"
   },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
