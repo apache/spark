@@ -79,6 +79,7 @@ class DatasetSuite extends QueryTest
     val minNbrs1 = ee
       .groupBy("_1").agg(min(col("_2")).as("min_number"))
       .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+
     val join = ee.join(minNbrs1, "_1")
     assert(join.count() == 1000000)
   }

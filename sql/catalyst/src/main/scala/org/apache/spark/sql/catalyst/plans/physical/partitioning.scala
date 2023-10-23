@@ -258,8 +258,19 @@ case object SinglePartition extends Partitioning {
     SinglePartitionShuffleSpec
 }
 
-trait HashPartitioningBase extends Expression with Partitioning with Unevaluable {
-  def expressions: Seq[Expression]
+/**
+ * Represents a partitioning where rows are split up across partitions based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition.
+ *
+ * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
+ * stateful operators to retain the same physical partitioning during the lifetime of the query
+ * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
+ * across Spark versions. Violation of this requirement may bring silent correctness issue.
+ */
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends Expression with Partitioning with Unevaluable {
+
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
@@ -284,31 +295,18 @@ trait HashPartitioningBase extends Expression with Partitioning with Unevaluable
     }
   }
 
+  override def createShuffleSpec(distribution: ClusteredDistribution): HashShuffleSpec =
+    HashShuffleSpec(this, distribution)
+
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
-}
-
-/**
- * Represents a partitioning where rows are split up across partitions based on the hash
- * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
- * in the same partition.
- *
- * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
- * stateful operators to retain the same physical partitioning during the lifetime of the query
- * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
- * across Spark versions. Violation of this requirement may bring silent correctness issue.
- */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends HashPartitioningBase {
-
-  override def createShuffleSpec(distribution: ClusteredDistribution): HashShuffleSpec =
-    HashShuffleSpec(this, distribution)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
+
 }
 
 case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
@@ -318,8 +316,13 @@ case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
  * fewer number of partitions.
  */
 case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[CoalescedBoundary])
-  extends HashPartitioningBase {
-  def expressions: Seq[Expression] = from.expressions
+  extends Expression with Partitioning with Unevaluable {
+
+  override def children: Seq[Expression] = from.expressions
+  override def nullable: Boolean = from.nullable
+  override def dataType: DataType = from.dataType
+
+  override def satisfies0(required: Distribution): Boolean = from.satisfies0(required)
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
@@ -329,6 +332,8 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
       copy(from = from.copy(expressions = newChildren))
 
   override val numPartitions: Int = partitions.length
+
+  override def stringArgs: Iterator[Any] = Iterator(from)
 }
 
 /**
@@ -723,7 +728,7 @@ case class HashShuffleSpec(
     }
   }
 
-  override def createPartitioning(clustering: Seq[Expression]): HashPartitioning = {
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val exprs = hashKeyPositions.map(v => clustering(v.head))
     HashPartitioning(exprs, partitioning.numPartitions)
   }
@@ -739,18 +744,14 @@ case class CoalescedHashShuffleSpec(
     case SinglePartitionShuffleSpec =>
       numPartitions == 1
     case CoalescedHashShuffleSpec(otherParent, otherPartitions) =>
-      partitions == otherPartitions &&
-      from.isCompatibleWith(otherParent)
+      partitions == otherPartitions && from.isCompatibleWith(otherParent)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
       false
   }
 
-  override def canCreatePartitioning: Boolean = from.canCreatePartitioning
-
-  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
-    CoalescedHashPartitioning(from.createPartitioning(clustering), partitions)
+  override def canCreatePartitioning: Boolean = false
 
   override def numPartitions: Int = partitions.length
 }
