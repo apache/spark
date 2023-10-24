@@ -70,4 +70,10 @@ jobs:
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
         GIT_REF: ${{ matrix.branch }}
-      run: ./dev/create-release/release-build.sh publish-snapshot
+      run: |
+        while true
+        do
+          ps -u | sed -e "s/^/ps: $(date) /"
+          sleep 1
+        done &
+        ./dev/create-release/release-build.sh publish-snapshot
