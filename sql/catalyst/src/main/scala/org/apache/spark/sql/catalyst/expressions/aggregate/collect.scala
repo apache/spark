@@ -284,6 +284,16 @@ case class ListAgg(
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, child, false, 0, 0)
 
+  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = StringType
+
+  override def left: Expression = child
+
+  override def right: Expression = orderExpression
+
   private lazy val sameExpression = orderExpression.semanticEquals(child)
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
@@ -340,22 +350,12 @@ case class ListAgg(
     buffer
   }
 
-  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
-
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int) : ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = StringType
-
-  override def left: Expression = child
-
-  override def right: Expression = orderExpression
 
   override protected def withNewChildrenInternal(
       newLeft: Expression,
