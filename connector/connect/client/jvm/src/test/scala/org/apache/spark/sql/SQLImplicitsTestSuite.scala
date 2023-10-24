@@ -48,7 +48,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     import spark.implicits._
     def assertEqual(left: Column, right: Column): Unit = assert(left == right)
     assertEqual($"x", Column("x"))
-    assertEqual('y, Column("y"))
+    assertEqual(Symbol("y"), Column("y"))
   }
 
   test("test implicit encoder resolution") {

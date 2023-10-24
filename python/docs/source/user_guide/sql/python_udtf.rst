@@ -77,29 +77,29 @@ To implement a Python UDTF, you first need to define a class implementing the me
             the particular UDTF call under consideration. Each parameter is an instance of the
             `AnalyzeArgument` class, which contains fields including the provided argument's data
             type and value (in the case of literal scalar arguments only). For table arguments, the
-            `is_table` field is set to true and the `data_type` field is a StructType representing
+            `isTable` field is set to true and the `dataType` field is a StructType representing
             the table's column types:
 
-                data_type: DataType
+                dataType: DataType
                 value: Optional[Any]
-                is_table: bool
+                isTable: bool
 
             This method returns an instance of the `AnalyzeResult` class which includes the result
             table's schema as a StructType. If the UDTF accepts an input table argument, then the
             `AnalyzeResult` can also include a requested way to partition the rows of the input
-            table across several UDTF calls. If `with_single_partition` is set to True, the query
+            table across several UDTF calls. If `withSinglePartition` is set to True, the query
             planner will arrange a repartitioning operation from the previous execution stage such
             that all rows of the input table are consumed by the `eval` method from exactly one
-            instance of the UDTF class. On the other hand, if the `partition_by` list is non-empty,
+            instance of the UDTF class. On the other hand, if the `partitionBy` list is non-empty,
             the query planner will arrange a repartitioning such that all rows with each unique
             combination of values of the partitioning columns are consumed by a separate unique
-            instance of the UDTF class. If `order_by` is non-empty, this specifies the requested
+            instance of the UDTF class. If `orderBy` is non-empty, this specifies the requested
             ordering of rows within each partition.
 
                 schema: StructType
-                with_single_partition: bool = False
-                partition_by: Sequence[PartitioningColumn] = field(default_factory=tuple)
-                order_by: Sequence[OrderingColumn] = field(default_factory=tuple)
+                withSinglePartition: bool = False
+                partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+                orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
 
             Examples
             --------
@@ -116,7 +116,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             >>> def analyze(self, *args) -> AnalyzeResult:
             ...     assert len(args) == 1, "This function accepts one argument only"
-            ...     assert args[0].data_type == StringType(), "Only string arguments are supported"
+            ...     assert args[0].dataType == StringType(), "Only string arguments are supported"
             ...     text = args[0]
             ...     schema = StructType()
             ...     for index, word in enumerate(text.split(" ")):
@@ -128,7 +128,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
             >>> def analyze(self, **kwargs) -> AnalyzeResult:
             ...     assert len(kwargs) == 1, "This function accepts one argument only"
             ...     assert "text" in kwargs, "An argument named 'text' is required"
-            ...     assert kwargs["text"].data_type == StringType(), "Only strings are supported"
+            ...     assert kwargs["text"].dataType == StringType(), "Only strings are supported"
             ...     text = args["text"]
             ...     schema = StructType()
             ...     for index, word in enumerate(text.split(" ")):

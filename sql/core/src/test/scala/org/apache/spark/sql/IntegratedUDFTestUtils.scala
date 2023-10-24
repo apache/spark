@@ -543,8 +543,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |    def analyze(initial_count, input_table):
         |        buffer = ""
         |        if initial_count.value is not None:
-        |            assert(not initial_count.is_table)
-        |            assert(initial_count.data_type == IntegerType())
+        |            assert(not initial_count.isTable)
+        |            assert(initial_count.dataType == IntegerType())
         |            count = initial_count.value
         |            buffer = json.dumps({"initial_count": count})
         |        return AnalyzeResultWithBuffer(
@@ -552,8 +552,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
-        |            with_single_partition=True,
-        |            order_by=[
+        |            withSinglePartition=True,
+        |            orderBy=[
         |                OrderingColumn("input"),
         |                OrderingColumn("partition_col")],
         |            buffer=buffer)
@@ -599,10 +599,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
-        |            partition_by=[
+        |            partitionBy=[
         |                PartitioningColumn("partition_col")
         |            ],
-        |            order_by=[
+        |            orderBy=[
         |                OrderingColumn("input")
         |            ])
         |
@@ -643,8 +643,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
-         |            with_single_partition=True,
-         |            partition_by=[
+         |            withSinglePartition=True,
+         |            partitionBy=[
          |                PartitioningColumn("partition_col")
          |            ])
          |
@@ -665,7 +665,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
     val prettyName: String =
       "Python UDTF exporting invalid input table partitioning requirement from 'analyze' " +
-        "because the 'with_single_partition' property is also exported to true"
+        "because the 'withSinglePartition' property is also exported to true"
   }
 
   object InvalidOrderByWithoutPartitionBy extends TestUDTF {
@@ -683,7 +683,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
-         |            order_by=[
+         |            orderBy=[
          |                OrderingColumn("input")
          |            ])
          |
@@ -725,7 +725,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |
          |    @staticmethod
          |    def analyze(argument):
-         |        assert(argument.data_type == StringType())
+         |        assert(argument.dataType == StringType())
          |        return AnalyzeResultWithBuffer(
          |            schema=StructType()
          |                .add("result", StringType()),

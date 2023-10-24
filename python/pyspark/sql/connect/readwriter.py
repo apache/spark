@@ -648,7 +648,9 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.path = path
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     save.__doc__ = PySparkDataFrameWriter.save.__doc__
 
@@ -657,7 +659,9 @@ class DataFrameWriter(OptionUtils):
             self.mode("overwrite" if overwrite else "append")
         self._write.table_name = tableName
         self._write.table_save_method = "insert_into"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -676,7 +680,9 @@ class DataFrameWriter(OptionUtils):
             self.format(format)
         self._write.table_name = name
         self._write.table_save_method = "save_as_table"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
 
@@ -876,38 +882,50 @@ class DataFrameWriterV2(OptionUtils):
 
     def create(self) -> None:
         self._write.mode = "create"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     create.__doc__ = PySparkDataFrameWriterV2.create.__doc__
 
     def replace(self) -> None:
         self._write.mode = "replace"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     replace.__doc__ = PySparkDataFrameWriterV2.replace.__doc__
 
     def createOrReplace(self) -> None:
         self._write.mode = "create_or_replace"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     createOrReplace.__doc__ = PySparkDataFrameWriterV2.createOrReplace.__doc__
 
     def append(self) -> None:
         self._write.mode = "append"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     append.__doc__ = PySparkDataFrameWriterV2.append.__doc__
 
     def overwrite(self, condition: "ColumnOrName") -> None:
         self._write.mode = "overwrite"
         self._write.overwrite_condition = condition
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     overwrite.__doc__ = PySparkDataFrameWriterV2.overwrite.__doc__
 
     def overwritePartitions(self) -> None:
         self._write.mode = "overwrite_partitions"
-        self._spark.client.execute_command(self._write.command(self._spark.client))
+        self._spark.client.execute_command(
+            self._write.command(self._spark.client), self._write.observations
+        )
 
     overwritePartitions.__doc__ = PySparkDataFrameWriterV2.overwritePartitions.__doc__
 

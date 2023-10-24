@@ -4184,11 +4184,6 @@
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1055" : {
-    "message" : [
-      "The database name is not valid: <quoted>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1057" : {
     "message" : [
       "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
