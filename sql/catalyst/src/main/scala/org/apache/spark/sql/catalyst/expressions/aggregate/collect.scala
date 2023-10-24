@@ -319,23 +319,21 @@ case class ListAgg(
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
       val ordering = PhysicalDataType.ordering(orderExpression.dataType)
-      val sorted = if (sameExpression) {
-        if (reverse) {
-          buffer.toSeq.sorted(ordering.reverse)
-        } else {
-          buffer.toSeq.sorted(ordering)
-        }
-      } else {
-        if (reverse) {
-          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+      lazy val sortFunc = (sameExpression, reverse) match {
+        case (true, true) => (buffer: mutable.ArrayBuffer[Any]) =>
+          buffer.sorted(ordering.reverse)
+        case (true, false) => (buffer: mutable.ArrayBuffer[Any]) =>
+          buffer.sorted(ordering)
+        case (false, true) => (buffer: mutable.ArrayBuffer[Any]) =>
+          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
             orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
             child.dataType))
-        } else {
-          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+        case (false, false) => (buffer: mutable.ArrayBuffer[Any]) =>
+          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
             orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
             child.dataType))
-        }
       }
+      val sorted = sortFunc(buffer)
       UTF8String.fromString(sorted.map(_.toString)
         .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
     } else {
