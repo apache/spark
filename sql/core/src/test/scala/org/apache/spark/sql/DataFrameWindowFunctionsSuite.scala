@@ -1452,7 +1452,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleRowNumbers = df
               .withColumn("rn", row_number().over(window))
               .withColumn("rn2", row_number().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleRowNumbers,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1465,7 +1465,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleRanks = df
               .withColumn("rn", rank().over(window))
               .withColumn("rn2", rank().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleRanks,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1480,7 +1480,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleDenseRanks = df
               .withColumn("rn", dense_rank().over(window))
               .withColumn("rn2", dense_rank().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleDenseRanks,
               Seq(
                 Row("a", 4, "", 2.0, 1, 1),
@@ -1495,7 +1495,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             val multipleWindows = df
               .withColumn("rn2", row_number().over(window2))
               .withColumn("rn", row_number().over(window))
-              .where('rn < 2 && 'rn2 < 3)
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
             checkAnswer(multipleWindows,
               Seq(
                 Row("b", 1, "h", Double.NaN, 2, 1),

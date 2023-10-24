@@ -815,6 +815,16 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-45638: Avro should read decimal values with the file schema, same scale") {
+    // write schema has precision and scale as 3
+    // read schema has precision as 4 and scale as 3
+    withTempPath { path =>
+      sql("SELECT 0.314 a").write.format("avro").save(path.toString)
+      val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      assert(data.map(_(0)).contains(new java.math.BigDecimal("0.314")))
+    }
+  }
+
   test("SPARK-43380: Fix Avro data type conversion" +
     " of decimal type to avoid producing incorrect results") {
     withTempPath { path =>
