@@ -329,14 +329,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
             {parent.getSparkUser}
           </li>
           <li>
+            <strong>Started At:</strong>
+            {UIUtils.formatDate(startDate)}
+          </li>
+          <li>
             <strong>Total Uptime:</strong>
             {
-              val duration = if (endTime < 0 && parent.sc.isDefined) {
+              if (endTime < 0 && parent.sc.isDefined) {
                 UIUtils.formatDuration(System.currentTimeMillis() - startTime)
               } else if (endTime > 0) {
                 UIUtils.formatDuration(endTime - startTime)
               }
-              duration + ", since started at " + UIUtils.formatDate(startDate)
             }
           </li>
           <li>
