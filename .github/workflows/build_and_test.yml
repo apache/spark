@@ -147,8 +147,9 @@ jobs:
           - >-
             catalyst, hive-thriftserver
           - >-
+            mllib-local,mllib
+          - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, mllib,
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
