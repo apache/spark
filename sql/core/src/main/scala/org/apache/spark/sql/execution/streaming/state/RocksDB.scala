@@ -92,7 +92,7 @@ class RocksDB(
     tableFormatConfig.setPinL0FilterAndIndexBlocksInCache(true)
   }
 
-  private val columnFamilyOptions = new ColumnFamilyOptions()
+  private[state] val columnFamilyOptions = new ColumnFamilyOptions()
 
   // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
   // use its internal default values for these settings.
