@@ -843,7 +843,8 @@ class XmlSuite extends QueryTest with SharedSparkSession {
         field("a", IntegerType)))
 
     val result =
-      readDataFromFile(filePath = "simple-nested-objects.xml", Some(schema), options = Map("rowTag" -> "ROW"))
+      readDataFromFile(
+        filePath = "simple-nested-objects.xml", Some(schema), options = Map("rowTag" -> "ROW"))
       .select("c.a", "c.b")
       .collect()
 
@@ -1093,10 +1094,14 @@ class XmlSuite extends QueryTest with SharedSparkSession {
       field("_malformed_records", StringType))
     val results =
       readDataFromFile(
-        filePath = "datatypes-valid-and-invalid.xml",
-        schemaOpt = Some(schema),
-        options = Map(
-          "mode" -> "PERMISSIVE", "columnNameOfCorruptRecord" -> "_malformed_records", "rowTag" -> "ROW"))
+      filePath = "datatypes-valid-and-invalid.xml",
+      schemaOpt = Some(schema),
+      options = Map(
+        "mode" -> "PERMISSIVE",
+        "columnNameOfCorruptRecord" -> "_malformed_records",
+        "rowTag" -> "ROW"
+      )
+    )
 
     assert(results.schema === schema)
 
