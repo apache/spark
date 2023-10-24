@@ -37,7 +37,6 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
-import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -488,9 +487,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
 
 class SslShuffleBlockPusherSuite extends ShuffleBlockPusherSuite {
   override def createSparkConf(): SparkConf = {
-    val conf = super.createSparkConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

@@ -110,7 +110,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     val numPartitions = dep.partitioner.numPartitions
     val securityManager = new SecurityManager(conf)
     val transportConf = SparkTransportConf.fromSparkConf(
-      conf, "shuffle", sslOptions = Some(securityManager.rpcSSLOptions))
+      conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
     this.shuffleId = dep.shuffleId
     this.shuffleMergeId = dep.shuffleMergeId
     this.mapIndex = mapIndex

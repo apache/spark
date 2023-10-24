@@ -26,7 +26,6 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient
-import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
 
@@ -184,9 +183,6 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
 class SslNettyRpcEnvSuite extends NettyRpcEnvSuite with MockitoSugar with TimeLimits {
   override def createSparkConf(): SparkConf = {
-    val conf = super.createSparkConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

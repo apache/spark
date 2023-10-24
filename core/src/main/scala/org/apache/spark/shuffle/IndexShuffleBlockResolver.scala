@@ -61,7 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
   private val transportConf = {
     val securityManager = new SecurityManager(conf)
     SparkTransportConf.fromSparkConf(
-      conf, "shuffle", sslOptions = Some(securityManager.rpcSSLOptions))
+      conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
   }
 
   private val remoteShuffleMaxDisk: Option[Long] =

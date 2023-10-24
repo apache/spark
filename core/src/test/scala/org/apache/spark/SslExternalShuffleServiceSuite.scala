@@ -22,8 +22,6 @@ import org.apache.spark.internal.config
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalBlockHandler
-import org.apache.spark.network.ssl.SslSampleConfigs
-
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
@@ -34,8 +32,7 @@ import org.apache.spark.network.ssl.SslSampleConfigs
 class SslExternalShuffleServiceSuite extends ExternalShuffleServiceSuite {
 
   override def initializeHandlers(): Unit = {
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslTestUtils.updateWithSSLConfig(conf)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf);
     // Show that we can successfully inherit options defined in the `spark.ssl` namespace
     val defaultSslOptions = SSLOptions.parse(conf, hadoopConf, "spark.ssl")

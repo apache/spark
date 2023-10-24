@@ -17,12 +17,10 @@
 
 package org.apache.spark
 
-import org.apache.spark.network.ssl.SslSampleConfigs
 class SslShuffleNettySuite extends ShuffleNettySuite {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
+    SslTestUtils.updateWithSSLConfig(conf)
   }
 }

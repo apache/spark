@@ -32,13 +32,12 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite, SslTestUtils}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.util.ThreadUtils
@@ -48,6 +47,8 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   def createSparkConf(): SparkConf = {
     new SparkConf()
   }
+
+  def isRunningWithSSL(): Boolean = false
 
   test("security default off") {
     val conf = createSparkConf()
@@ -106,15 +107,17 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
   }
 
   test("security with aes encryption") {
-    val conf = new SparkConf()
-      .set(NETWORK_AUTH_ENABLED, true)
-      .set(AUTH_SECRET, "good")
-      .set("spark.app.id", "app-id")
-      .set(Network.NETWORK_CRYPTO_ENABLED, true)
-      .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
-    testConnection(conf, conf) match {
-      case Success(_) => // expected
-      case Failure(t) => fail(t)
+    if (!isRunningWithSSL()) {
+      val conf = new SparkConf()
+        .set(NETWORK_AUTH_ENABLED, true)
+        .set(AUTH_SECRET, "good")
+        .set("spark.app.id", "app-id")
+        .set(Network.NETWORK_CRYPTO_ENABLED, true)
+        .set(Network.NETWORK_CRYPTO_SASL_FALLBACK, false)
+      testConnection(conf, conf) match {
+        case Success(_) => // expected
+        case Failure(t) => fail(t)
+      }
     }
   }
 
@@ -187,10 +190,9 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
 class SslNettyBlockTransferSecuritySuite extends NettyBlockTransferSecuritySuite {
 
+  override def isRunningWithSSL(): Boolean = true
+
   override def createSparkConf(): SparkConf = {
-    val conf = super.createSparkConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

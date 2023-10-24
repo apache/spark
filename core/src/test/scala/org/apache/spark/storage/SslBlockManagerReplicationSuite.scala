@@ -17,33 +17,23 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.SparkConf
-import org.apache.spark.network.ssl.SslSampleConfigs
+import org.apache.spark.{SparkConf, SslTestUtils}
 
 class SslBlockManagerReplicationSuite extends BlockManagerReplicationSuite {
   override def createConf(): SparkConf = {
-    val conf = super.createConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createConf())
   }
 }
 
 class SslBlockManagerProactiveReplicationSuite extends BlockManagerProactiveReplicationSuite {
   override def createConf(): SparkConf = {
-    val conf = super.createConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createConf())
   }
 }
 
 class SslBlockManagerBasicStrategyReplicationSuite
   extends BlockManagerBasicStrategyReplicationSuite {
   override def createConf(): SparkConf = {
-    val conf = super.createConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createConf())
   }
 }

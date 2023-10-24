@@ -38,7 +38,6 @@ import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.config.PLUGINS
-import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -638,9 +637,6 @@ class SslCoarseGrainedExecutorBackendSuite extends CoarseGrainedExecutorBackendS
   with LocalSparkContext with MockitoSugar {
 
   override def createSparkConf(): SparkConf = {
-    val conf = super.createSparkConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

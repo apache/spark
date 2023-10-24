@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.yarn
+package org.apache.spark
 
 import org.apache.spark.network.ssl.SslSampleConfigs
 
-class SslYarnShuffleServiceWithRocksDBBackendSuite
-  extends YarnShuffleServiceWithRocksDBBackendSuite {
+object SslTestUtils {
 
   /**
-   * Override to add "spark.ssl.rpc.*" configuration parameters...
+   * Updates a SparkConf to contain SSL configurations
+   *
+   * @param conf The config to update
+   * @return The passed in SparkConf with SSL configurations added
    */
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Same as SSLTestUtils.updateWithSSLConfig(), which is not available to import here.
+  def updateWithSSLConfig(conf: SparkConf): SparkConf = {
     SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => yarnConfig.set(entry.getKey, entry.getValue))
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
+    conf
   }
 }

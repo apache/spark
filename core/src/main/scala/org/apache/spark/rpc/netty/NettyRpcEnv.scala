@@ -57,7 +57,7 @@ private[netty] class NettyRpcEnv(
     "rpc",
     conf.get(RPC_IO_THREADS).getOrElse(numUsableCores),
     role,
-    sslOptions = Some(securityManager.rpcSSLOptions)
+    sslOptions = Some(securityManager.getRpcSSLOptions())
   )
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
@@ -397,7 +397,7 @@ private[netty] class NettyRpcEnv(
           clone,
           module,
           ioThreads,
-          sslOptions = Some(securityManager.rpcSSLOptions))
+          sslOptions = Some(securityManager.getRpcSSLOptions()))
         val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }

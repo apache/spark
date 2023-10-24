@@ -106,7 +106,7 @@ private[spark] class SecurityManager(
   private val defaultSSLOptions =
     SSLOptions.parse(sparkConf, hadoopConf, "spark.ssl", defaults = None)
   // the SSL configuration for RPCs
-  val rpcSSLOptions = getSSLOptions("rpc")
+  private val rpcSSLOptions = getSSLOptions("rpc")
 
   def getSSLOptions(module: String): SSLOptions = {
     val opts =
@@ -291,6 +291,12 @@ private[spark] class SecurityManager(
    * @return Whether RPC SSL is enabled or not
    */
   def isSslRpcEnabled(): Boolean = sslRpcEnabled
+
+  /**
+   * Returns the SSLOptions object for the RPC namespace
+   * @return the SSLOptions object for the RP namespace
+   */
+  def getRpcSSLOptions(): SSLOptions = rpcSSLOptions
 
   /**
    * Gets the user used for authenticating SASL connections.

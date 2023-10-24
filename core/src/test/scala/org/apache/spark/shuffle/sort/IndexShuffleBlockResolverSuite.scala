@@ -26,9 +26,8 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SslTestUtils}
 import org.apache.spark.internal.config
-import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -283,9 +282,6 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
 
 class SslIndexShuffleBlockResolverSuite extends IndexShuffleBlockResolverSuite {
   override def createSparkConf(): SparkConf = {
-    val conf = super.createSparkConf()
-    SslSampleConfigs.createDefaultConfigMap().entrySet().
-      forEach(entry => conf.set(entry.getKey, entry.getValue))
-    conf
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }
