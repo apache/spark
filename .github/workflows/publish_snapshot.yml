@@ -73,7 +73,9 @@ jobs:
       run: |
         while true
         do
-          ps -u | sed -e "s/^/ps: $(date) /"
+          date
+          top -b -n 1 -i
           sleep 1
-        done &
+          echo
+        done | sed "s/^/mem: /" &
         ./dev/create-release/release-build.sh publish-snapshot
