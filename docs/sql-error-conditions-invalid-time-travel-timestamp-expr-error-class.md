@@ -35,7 +35,7 @@ Must be deterministic.
 
 ## OPTION
 
-Timestamp string in the options should use ISO standard format such as 'yyyy-MM-dd HH:mm:ss'.
+Timestamp string in the options should use Java standard format 'yyyy-MM-dd HH:mm:ss'.
 
 ## UNEVALUABLE
 
