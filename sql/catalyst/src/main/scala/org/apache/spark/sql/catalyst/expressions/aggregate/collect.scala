@@ -284,26 +284,40 @@ case class ListAgg(
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, child, false, 0, 0)
 
+  private lazy val sameExpression = orderExpression.semanticEquals(child)
+
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
   override def defaultResult: Option[Literal] = Option(Literal.create("", StringType))
 
   override protected lazy val bufferElementType: DataType = {
-    StructType(Seq(
-      StructField("value", child.dataType),
-      StructField("sortOrder", orderExpression.dataType)))
+    if (sameExpression) {
+      child.dataType
+    } else {
+      StructType(Seq(
+        StructField("value", child.dataType),
+        StructField("sortOrder", orderExpression.dataType)))
+    }
   }
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
       val ordering = PhysicalDataType.ordering(orderExpression.dataType)
-      val sorted = if (reverse) {
-        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
-          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
-          child.dataType))
+      val sorted = if (sameExpression) {
+        if (reverse) {
+          buffer.toSeq.sorted(ordering.reverse)
+        } else {
+          buffer.toSeq.sorted(ordering)
+        }
       } else {
-        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
-          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
-          child.dataType))
+        if (reverse) {
+          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+            orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
+            child.dataType))
+        } else {
+          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].toSeq.sortBy(_.get(1,
+            orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
+            child.dataType))
+        }
       }
       UTF8String.fromString(sorted.map(_.toString)
         .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
@@ -315,8 +329,13 @@ case class ListAgg(
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
     if (value != null) {
-      buffer += InternalRow.apply(convertToBufferElement(value),
-        convertToBufferElement(orderExpression.eval(input)))
+      val v = if (sameExpression) {
+        convertToBufferElement(value)
+      } else {
+        InternalRow.apply(convertToBufferElement(value),
+          convertToBufferElement(orderExpression.eval(input)))
+      }
+      buffer += v
     }
     buffer
   }
