@@ -199,6 +199,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df"),
         Row("a,a,b,b") :: Nil)
 
+      checkAnswer(
+        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b DESC) FROM df"),
+        Row("b,a,b,a") :: Nil)
+
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
