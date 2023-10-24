@@ -277,7 +277,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
-    val startTime = appInfo.attempts.head.startTime.getTime()
+    val startDate = appInfo.attempts.head.startTime
+    val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()
 
     val activeJobs = new ListBuffer[v1.JobData]()
@@ -330,11 +331,12 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
           <li>
             <strong>Total Uptime:</strong>
             {
-              if (endTime < 0 && parent.sc.isDefined) {
+              val duration = if (endTime < 0 && parent.sc.isDefined) {
                 UIUtils.formatDuration(System.currentTimeMillis() - startTime)
               } else if (endTime > 0) {
                 UIUtils.formatDuration(endTime - startTime)
               }
+              duration + ", since started at " + UIUtils.formatDate(startDate)
             }
           </li>
           <li>
