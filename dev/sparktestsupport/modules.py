@@ -450,6 +450,7 @@ pyspark_sql = Module(
         "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
+        "pyspark.sql.datasource",
         "pyspark.sql.group",
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
