@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.*;
@@ -46,6 +47,8 @@ public class RocksDB implements KVStore {
   static {
     org.rocksdb.RocksDB.loadLibrary();
   }
+
+  private static final Cleaner CLEANER = Cleaner.create();
 
   @VisibleForTesting
   static final long STORE_VERSION = 1L;
@@ -285,6 +288,7 @@ public class RocksDB implements KVStore {
         try {
           RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
           iteratorTracker.add(new WeakReference<>(it));
+          CLEANER.register(it, new RocksDBIterator.ResourceCleaner(it.getRocksIterator(), _db, iteratorTracker));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);
@@ -351,20 +355,6 @@ public class RocksDB implements KVStore {
         throw ioe;
       } catch (Exception e) {
         throw new IOException(e.getMessage(), e);
-      }
-    }
-  }
-
-  /**
-   * Closes the given iterator if the DB is still open. Trying to close a JNI RocksDB handle
-   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
-   */
-  void closeIterator(RocksDBIterator<?> it) throws IOException {
-    notifyIteratorClosed(it);
-    synchronized (this._db) {
-      org.rocksdb.RocksDB _db = this._db.get();
-      if (_db != null) {
-        it.close();
       }
     }
   }

@@ -18,7 +18,10 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Reference;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -184,14 +187,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
-  /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
-   */
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
+  public RocksIterator getRocksIterator() {
+    return it;
   }
 
   private byte[] loadNext() {
@@ -272,4 +269,32 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
+  static class ResourceCleaner implements Runnable {
+
+    private final RocksIterator rocksIterator;
+
+    private final AtomicReference<org.rocksdb.RocksDB> _db;
+
+    private final ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker;
+
+    public ResourceCleaner(RocksIterator rocksIterator,
+        AtomicReference<org.rocksdb.RocksDB> _db,
+        ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker) {
+      this.rocksIterator = rocksIterator;
+      this._db = _db;
+      this.iteratorTracker = iteratorTracker;
+    }
+
+    @Override
+    public void run() {
+      synchronized (this._db) {
+        org.rocksdb.RocksDB _db = this._db.get();
+        if (_db == null) {
+          return;
+        }
+        iteratorTracker.removeIf(ref -> ref.get() != null && rocksIterator.equals(ref.get().it));
+        rocksIterator.close();
+      }
+    }
+  }
 }
