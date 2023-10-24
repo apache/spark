@@ -485,7 +485,7 @@ class PlanGenerationTestSuite
   }
 
   test("as symbol") {
-    simple.as('bar)
+    simple.as(Symbol("bar"))
   }
   test("alias string") {
     simple.alias("fooz")
@@ -3027,7 +3027,7 @@ class PlanGenerationTestSuite
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
-      fn.lit('id),
+      fn.lit(Symbol("id")),
       fn.lit(true),
       fn.lit(68.toByte),
       fn.lit(9872.toShort),
@@ -3094,7 +3094,7 @@ class PlanGenerationTestSuite
   test("function typedLit") {
     simple.select(
       fn.typedLit(fn.col("id")),
-      fn.typedLit('id),
+      fn.typedLit(Symbol("id")),
       fn.typedLit(1),
       fn.typedLit[String](null),
       fn.typedLit(true),
