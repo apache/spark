@@ -48,9 +48,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private boolean closed;
   private long count;
 
-  RocksDBIterator(Class<T> type, RocksDB db, KVStoreView<T> params,
-      ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker,
-      AtomicReference<org.rocksdb.RocksDB> _db) throws Exception {
+  RocksDBIterator(Class<T> type, RocksDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
     this.it = db.db().newIterator();
@@ -58,7 +56,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
-    this.cleanable = CLEANER.register(this, new RocksDBIterator.ResourceCleaner(it, _db, iteratorTracker));
+    this.cleanable = CLEANER.register(this,
+        new RocksDBIterator.ResourceCleaner(it, db.getRocksDB(), db.getIteratorTracker()));
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -293,9 +292,16 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
         if (_db == null) {
           return;
         }
-        iteratorTracker.removeIf(ref -> ref.get() != null && rocksIterator.equals(ref.get().it));
         rocksIterator.close();
       }
+      iteratorTracker.removeIf(ref -> {
+          RocksDBIterator<?> rocksDBIterator = ref.get();
+          if (rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it)) {
+            return true;
+          } else {
+            return false;
+          }
+        });
     }
   }
 }

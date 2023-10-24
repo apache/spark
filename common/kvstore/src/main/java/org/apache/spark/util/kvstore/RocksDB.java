@@ -283,7 +283,7 @@ public class RocksDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this, iteratorTracker, _db);
+          RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
           iteratorTracker.add(new WeakReference<>(it));
           return it;
         } catch (Exception e) {
@@ -355,12 +355,12 @@ public class RocksDB implements KVStore {
     }
   }
 
-  /**
-   * Remove iterator from iterator tracker. `RocksDBIterator` calls it to notify
-   * iterator is closed.
-   */
-  void notifyIteratorClosed(RocksDBIterator<?> it) {
-    iteratorTracker.removeIf(ref -> it.equals(ref.get()));
+  public AtomicReference<org.rocksdb.RocksDB> getRocksDB() {
+    return _db;
+  }
+
+  public ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> getIteratorTracker() {
+    return iteratorTracker;
   }
 
   /** Returns metadata about indices for the given type. */
