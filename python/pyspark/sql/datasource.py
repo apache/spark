@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
 
 
-__all__ = ["DataSource", "DataSourceReader", "DataSourceRegistration"]
+__all__ = ["DataSource", "DataSourceReader", "DataSourceWriter", "DataSourceRegistration"]
 
 
 class DataSource(ABC):
@@ -133,6 +133,27 @@ class DataSource(ABC):
         """
         raise NotImplementedError
 
+    def writer(self, schema: StructType, saveMode: str) -> "DataSourceWriter":
+        """
+        Returns a ``DataSourceWriter`` instance for writing data.
+
+        The implementation is required for writable data sources.
+
+        Parameters
+        ----------
+        schema : StructType
+            The schema of the data to be written.
+        saveMode : str
+            A string identifies the save mode. It can be one of the following:
+            `append`, `overwrite`, `error`, `ignore`.
+
+        Returns
+        -------
+        writer : DataSourceWriter
+            A writer instance for this data source.
+        """
+        raise NotImplementedError
+
 
 class DataSourceReader(ABC):
     """
@@ -225,6 +246,69 @@ class DataSourceReader(ABC):
         >>> def read(self, partition):
         ...     yield Row(partition=partition, value=0)
         ...     yield Row(partition=partition, value=1)
+        """
+        ...
+
+
+class DataSourceWriter(ABC):
+    """
+    A base class for data source writers. Data source writers are responsible for saving
+    the data to the data source.
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator[Row]) -> Any:
+        """
+        Writes data into the data source.
+
+        This method is called once on each executor to write data to the data source.
+        It accepts an iterator of input data and returns a single row representing a
+        commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the ``commit`` method if all tasks run successfully. If any task fails, the
+        ``abort`` method will be called with the collected commit messages.
+
+        Parameters
+        ----------
+        iterator : Iterator[Row]
+            An iterator of input data.
+
+        Returns
+        -------
+        commit message : any serializable object or None
+        """
+        ...
+
+    def commit(self, messages: List[Any]) -> None:
+        """
+        Commits this writing job with a list of commit messages.
+
+        This method is invoked on the driver when all tasks run successfully. The
+        commit messages are collected from the ``write`` method call from each task,
+        and are passed to this method. The implementation should use the commit messages
+        to commit the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[Any]
+            A list of commit messages.
+        """
+        ...
+
+    def abort(self, messages: List[Any]) -> None:
+        """
+        Aborts this writing job due to task failures.
+
+        This method is invoked on the driver when one or more tasks failed. The commit
+        messages are collected from the ``write`` method call from each task, and are
+        passed to this method. The implementation should use the commit messages to
+        abort the writing job to the data source.
+
+        Parameters
+        ----------
+        messages : List[Any]
+            A list of commit messages.
         """
         ...
 
