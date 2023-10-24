@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
@@ -221,7 +222,7 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.get(FileIndexOptions.BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
-        if (!fs.getFileStatus(userDefinedBasePath).isDirectory) {
+        if (!SparkHadoopUtil.isDirectory(fs, userDefinedBasePath)) {
           throw new IllegalArgumentException(s"Option '${FileIndexOptions.BASE_PATH_PARAM}' " +
             s"must be a directory")
         }
