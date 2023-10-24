@@ -882,8 +882,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkSameResult(
       Seq(Row(1)),
       // df1("i") is not ambiguous, and it's still valid in the filtered df.
-      df1_filter.select(df1("i"))
-    )
+      df1_filter.select(df1("i")))
 
     val e1 = intercept[AnalysisException] {
       // df1("i") is not ambiguous, but it's not valid in the projected df.
@@ -894,8 +893,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkSameResult(
       Seq(Row(1, "a")),
       // All these column references are not ambiguous and are still valid after join.
-      df1.join(df2, df1("i") + 1 === df2("i")).sort(df1("i").desc).select(df1("i"), df1("j"))
-    )
+      df1.join(df2, df1("i") + 1 === df2("i")).sort(df1("i").desc).select(df1("i"), df1("j")))
 
     val e2 = intercept[AnalysisException] {
       // df1("i") is ambiguous as df1 appears in both join sides.
@@ -918,8 +916,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkSameResult(
       Seq(Row("a")),
       // df1_filter("i") is not ambiguous as df1_filter does not exist in the join left side.
-      df1.join(df1_filter, df1_filter("i") === 1).select(df1_filter("j"))
-    )
+      df1.join(df1_filter, df1_filter("i") === 1).select(df1_filter("j")))
 
     val e5 = intercept[AnalysisException] {
       // df1("i") is ambiguous as df1 appears in both sides of the first join.
@@ -930,8 +927,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkSameResult(
       Seq(Row("a")),
       // df1_filter("i") is not ambiguous as df1_filter only appears once.
-      df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j"))
-    )
+      df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j")))
   }
 
   test("broadcast join") {
