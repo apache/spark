@@ -24,6 +24,7 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -370,6 +371,21 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+    }
+  }
+
+  test("RocksDB: compression conf") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy(compression = "zstd")
+    withDB(remoteDir, conf = conf) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
+    }
+
+    // Test the default is LZ4
+    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
+      assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 
