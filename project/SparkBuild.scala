@@ -265,7 +265,10 @@ object SparkBuild extends PomBuild {
         // Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
         "-Wconf:msg=legacy-binding:s",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
-        "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e"
+        "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
+        // SPARK-45645 FileSystem.isFile and FileSystem.isDirectory is deprecated
+        "-Wconf:cat=deprecation&msg=method isFile in class FileSystem is deprecated:e",
+        "-Wconf:cat=deprecation&msg=method isDirectory in class FileSystem is deprecated:e"
       )
     }
   )

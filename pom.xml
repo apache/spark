@@ -3014,6 +3014,10 @@
                 SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
               -->
               <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
+              <!--
+                SPARK-45645 FileSystem.isFile and FileSystem.isDirectory is deprecated
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
