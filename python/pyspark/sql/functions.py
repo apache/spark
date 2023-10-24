@@ -13708,7 +13708,10 @@ def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
-    [Row(xml='<person><age>2</age><name>Alice</name></person>')]
+    [Row(xml='<person>
+        <age>2</age>
+        <name>Alice</name>
+    </person>')]
     """
 
     return _invoke_function("to_xml", _to_java_column(col), _options_to_str(options))

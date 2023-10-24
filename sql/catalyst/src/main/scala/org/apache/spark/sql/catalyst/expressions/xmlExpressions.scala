@@ -239,9 +239,14 @@ case class SchemaOfXml(
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
-       <ROW><a>1</a><b>2</b></ROW>
+       <ROW>
+           <a>1</a>
+           <b>2</b>
+       </ROW>
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
-       <ROW><time>26/08/2015</time></ROW>
+       <ROW>
+           <time>26/08/2015</time>
+       </ROW>
   """,
   since = "4.0.0",
   group = "xml_funcs")
