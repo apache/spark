@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -510,6 +511,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         .add("deptno", VarcharType(30), true, defaultMetadata)
       val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expected)
       assert(t.schema === replaced)
+    }
+  }
+
+  test("SPARK-45449: Cache Invalidation Issue with JDBC Table") {
+    withTable("h2.test.cache_t") {
+      withConnection { conn =>
+        conn.prepareStatement(
+          """CREATE TABLE "test"."cache_t" (id decimal(25) PRIMARY KEY NOT NULL,
+            |name TEXT(32) NOT NULL)""".stripMargin).executeUpdate()
+      }
+      sql("INSERT OVERWRITE h2.test.cache_t SELECT 1 AS id, 'a' AS name")
+      sql("CACHE TABLE t1 SELECT id, name FROM h2.test.cache_t")
+      val plan = sql("select * from t1").queryExecution.sparkPlan
+      assert(plan.isInstanceOf[InMemoryTableScanExec])
     }
   }
 }

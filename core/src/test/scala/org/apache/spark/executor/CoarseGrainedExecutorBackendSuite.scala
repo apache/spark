@@ -99,7 +99,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 2)
     ereqs.resource(FPGA, 3)
-    val rp = rpBuilder.require(ereqs).build
+    val rp = rpBuilder.require(ereqs).build()
     testParsingMultipleResources(new SparkConf, rp)
   }
 
@@ -177,7 +177,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 4)
     val treqs = new TaskResourceRequests().resource(GPU, 1)
-    val rp = rpBuilder.require(ereqs).require(treqs).build
+    val rp = rpBuilder.require(ereqs).require(treqs).build()
     testExecutorResourceFoundLessThanRequired(new SparkConf, rp)
   }
 
@@ -245,7 +245,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpBuilder = new ResourceProfileBuilder
       val ereqs = new ExecutorResourceRequests().resource(FPGA, 3, scriptPath)
       ereqs.resource(GPU, 2)
-      val rp = rpBuilder.require(ereqs).build
+      val rp = rpBuilder.require(ereqs).build()
       allocatedFileAndConfigsResourceDiscoveryTestFpga(dir, new SparkConf, rp)
     }
   }
@@ -302,7 +302,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
           resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
       assert(backend.taskResources.isEmpty)
 
-      val taskId = 1000000
+      val taskId = 1000000L
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
@@ -339,14 +339,14 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
         assert(backend.taskResources.size == 1)
-        val resources = backend.taskResources(taskId)
+        val resources = backend.taskResources.get(taskId)
         assert(resources(GPU).addresses sameElements Array("0", "1"))
       }
 
       // Update the status of a running task shall not affect `taskResources` map.
       backend.statusUpdate(taskId, TaskState.RUNNING, data)
       assert(backend.taskResources.size == 1)
-      val resources = backend.taskResources(taskId)
+      val resources = backend.taskResources.get(taskId)
       assert(resources(GPU).addresses sameElements Array("0", "1"))
 
       // Update the status of a finished task shall remove the entry from `taskResources` map.

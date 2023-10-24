@@ -818,10 +818,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("hintName" -> hintName))
   }
 
-  def attributeNameSyntaxError(name: String): Throwable = {
-    DataTypeErrors.attributeNameSyntaxError(name)
-  }
-
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1050",
@@ -868,6 +864,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "operation" -> operation))
   }
 
+  private def unsupportedTableOperationError(
+      tableName: String,
+      operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "operation" -> operation))
+  }
+
+  def unsupportedBatchReadError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "batch scan")
+  }
+
+  def unsupportedStreamingScanError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
+  }
+
+  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "append in batch mode")
+  }
+
+  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "dynamic overwrite in batch mode")
+  }
+
+  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "truncate in batch mode")
+  }
+
+  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "overwrite by filter in batch mode")
+  }
+
   def catalogOperationNotSupported(catalog: CatalogPlugin, operation: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
@@ -888,12 +918,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "colName" -> colName,
         "fieldNames" -> v1Table.schema.fieldNames.mkString(", ")))
-  }
-
-  def invalidDatabaseNameError(quoted: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1055",
-      messageParameters = Map("database" -> quoted))
   }
 
   def wrongCommandForObjectTypeError(
@@ -962,8 +986,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1065",
-      messageParameters = Map("name" -> name))
+      errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
@@ -1290,38 +1314,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotReplaceMissingTableError(
       tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
     new CannotReplaceMissingTableException(tableIdentifier, cause)
-  }
-
-  private def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1113",
-      messageParameters = Map(
-        "table" -> table.name,
-        "cmd" -> cmd))
-  }
-
-  def unsupportedBatchReadError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "batch scan")
-  }
-
-  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "either micro-batch or continuous scan")
-  }
-
-  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "append in batch mode")
-  }
-
-  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "dynamic overwrite in batch mode")
-  }
-
-  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "truncate in batch mode")
-  }
-
-  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
-    unsupportedTableOperationError(table, "overwrite by filter in batch mode")
   }
 
   def streamingSourcesDoNotSupportCommonExecutionModeError(
@@ -2101,6 +2093,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expr" -> expr.sql, "dataType" -> dataType.typeName))
   }
 
+  def unsupportedCorrelatedSubqueryInJoinConditionError(
+      unsupportedSubqueryExpressions: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "UNSUPPORTED_CORRELATED_EXPRESSION_IN_JOIN_CONDITION",
+      messageParameters = Map("subqueryExpression" ->
+        unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
@@ -2395,10 +2396,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("windowExpressions" -> windowExpressions.toString()))
   }
 
-  def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
-    DataTypeErrors.charOrVarcharTypeAsStringUnsupportedError()
-  }
-
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FORMAT.ESC_IN_THE_MIDDLE",
@@ -2583,6 +2580,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "newType"-> toSQLType(newColumn.dataType)))
   }
 
+  def cannotAlterPartitionColumn(
+      tableName: String,
+      columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+      messageParameters =
+        Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
+    )
+  }
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1246",
@@ -3164,21 +3170,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expr" -> expr.sql))
   }
 
-  def unresolvedColumnWithSuggestionError(
-      objectName: String, suggestion: String): AnalysisException = {
+  def unresolvedColumnError(colName: String, fields: Array[String]): AnalysisException = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       messageParameters = Map(
-        "objectName" -> toSQLId(objectName),
-        "proposal" -> suggestion
+        "objectName" -> toSQLId(colName),
+        "proposal" -> fields.map(toSQLId).mkString(", ")
       )
-    )
-  }
-
-  def resolveException(colName: String, fields: Array[String]): AnalysisException = {
-    QueryCompilationErrors.unresolvedColumnWithSuggestionError(
-      colName,
-      fields.map(toSQLId).mkString(", ")
     )
   }
 
@@ -3738,6 +3736,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
+  }
+
+  def avroIncompatibleReadError(
+      avroPath: String,
+      sqlPath: String,
+      avroType: String,
+      sqlType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType)
+      )
     )
   }
 

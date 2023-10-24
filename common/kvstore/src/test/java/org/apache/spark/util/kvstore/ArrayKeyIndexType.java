@@ -29,8 +29,7 @@ public class ArrayKeyIndexType {
 
   @Override
   public boolean equals(Object o) {
-    if (o instanceof ArrayKeyIndexType) {
-      ArrayKeyIndexType other = (ArrayKeyIndexType) o;
+    if (o instanceof ArrayKeyIndexType other) {
       return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
     }
     return false;

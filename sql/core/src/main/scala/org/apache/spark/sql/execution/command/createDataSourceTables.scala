@@ -170,7 +170,7 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession, table, table.storage.locationUri, SaveMode.Append, tableExists = true)
     } else {
       table.storage.locationUri.foreach { p =>
-        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
       }
       assert(table.schema.isEmpty)
       sparkSession.sessionState.catalog.validateTableLocation(table)

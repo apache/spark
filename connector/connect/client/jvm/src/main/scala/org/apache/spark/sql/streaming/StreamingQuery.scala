@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
@@ -242,17 +242,15 @@ class RemoteStreamingQuery(
   }
 
   override def exception: Option[StreamingQueryException] = {
-    val exception = executeQueryCmd(_.setException(true)).getException
-    if (exception.hasExceptionMessage) {
-      Some(
-        new StreamingQueryException(
-          // message maps to the return value of original StreamingQueryException's toString method
-          message = exception.getExceptionMessage,
-          errorClass = exception.getErrorClass,
-          stackTrace = exception.getStackTrace))
-    } else {
-      None
+    try {
+      // When exception field is set to false, the server throws a StreamingQueryException
+      // to the client.
+      executeQueryCmd(_.setException(false))
+    } catch {
+      case e: StreamingQueryException => return Some(e)
     }
+
+    None
   }
 
   private def executeQueryCmd(

@@ -23,8 +23,8 @@ import java.util.zip.ZipInputStream
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -541,7 +541,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!isApplicationCompleted(provider.getListing().next))
+    assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
 
@@ -549,7 +549,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(isApplicationCompleted(provider.getListing().next),
+      assert(isApplicationCompleted(provider.getListing().next()),
         s"application never completed, server=$server\n")
     }
 
@@ -715,8 +715,8 @@ object HistoryServerSuite {
     // generate the "expected" results for the characterization tests.  Just blindly assume the
     // current behavior is correct, and write out the returned json to the test/resource files
 
-    // SPARK-38851: Use LevelDB backend because it is the default.
-    val suite = new LevelDBBackendHistoryServerSuite
+    // Use RocksDB backend because it is the default.
+    val suite = new RocksDBBackendHistoryServerSuite
     FileUtils.deleteDirectory(suite.getExpRoot)
     suite.getExpRoot.mkdirs()
     try {

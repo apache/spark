@@ -23,8 +23,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
@@ -200,7 +200,7 @@ abstract class SparkFunSuite
 
   protected def logForFailedTest(): Unit = {
     LocalSparkCluster.get.foreach { localCluster =>
-      val workerLogfiles = localCluster.workerLogfiles
+      val workerLogfiles = localCluster.workerLogfiles()
       if (workerLogfiles.nonEmpty) {
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>

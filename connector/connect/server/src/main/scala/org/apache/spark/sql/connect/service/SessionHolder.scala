@@ -21,8 +21,8 @@ import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
@@ -77,7 +77,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
     val oldExecute = executions.putIfAbsent(executeHolder.operationId, executeHolder)
     if (oldExecute != null) {
-      // the existance of this should alrady be checked by SparkConnectExecutionManager
+      // the existence of this should alrady be checked by SparkConnectExecutionManager
       throw new IllegalStateException(
         s"ExecuteHolder with opId=${executeHolder.operationId} already exists!")
     }

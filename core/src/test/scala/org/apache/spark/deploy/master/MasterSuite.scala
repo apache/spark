@@ -21,11 +21,11 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.json4s._
@@ -452,7 +452,7 @@ class MasterSuite extends SparkFunSuite
         workerHtml should include ("Spark Worker at")
         workerHtml should include ("Running Executors (0)")
         verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-      case _ => fail  // make sure we don't accidentially skip the tests
+      case _ => fail()  // make sure we don't accidentially skip the tests
     }
   }
 

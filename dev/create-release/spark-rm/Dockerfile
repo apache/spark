@@ -61,9 +61,9 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   apt-get update && \
   $APT_INSTALL software-properties-common && \
   apt-get update && \
-  # Install openjdk 8.
-  $APT_INSTALL openjdk-8-jdk && \
-  update-alternatives --set java $(ls /usr/lib/jvm/java-8-openjdk-*/jre/bin/java) && \
+  # Install openjdk 17.
+  $APT_INSTALL openjdk-17-jdk && \
+  update-alternatives --set java $(ls /usr/lib/jvm/java-17-openjdk-*/bin/java) && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \

@@ -951,7 +951,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     val cachedData = checkIfNoJobTriggered {
       spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
-    assert(cachedData.collect === Seq(1001))
+    assert(cachedData.collect() === Seq(1001))
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
@@ -1102,7 +1102,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
     }
     // First, checks if there is no column statistic in cached query
-    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    val queryStats1 = query().cache().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
@@ -1596,8 +1596,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     withTempDir { dir =>
       val path1 = new File(dir, "t1").getCanonicalPath
       val path2 = new File(dir, "t2").getCanonicalPath
-      Seq(1).toDF.write.parquet(path1)
-      Seq(1).toDF.write.parquet(path2)
+      Seq(1).toDF().write.parquet(path1)
+      Seq(1).toDF().write.parquet(path2)
 
       val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
         ("GLOBAL TEMPORARY VIEW", s"${ident.database.get}.${ident.table}")
@@ -1692,6 +1692,43 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-45451: Make the default storage level of dataset cache configurable") {
+    def validateStorageLevel(expected: StorageLevel): Unit = {
+      withTempView("t") {
+        spark.range(10).createOrReplaceTempView("t")
+
+        Seq(() => spark.table("t").cache(),
+          () => spark.catalog.cacheTable("t"),
+          () => spark.sql("CACHE TABLE t")).foreach { f =>
+          withCache("t") {
+            f()
+            val cached = spark.table("t")
+            val tableCache = collect(cached.queryExecution.executedPlan) {
+              case i: InMemoryTableScanExec => i
+            }
+            if (expected == StorageLevel.NONE) {
+              assert(tableCache.isEmpty)
+            } else {
+              assert(tableCache.size == 1)
+              assert(tableCache.head.relation.cacheBuilder.storageLevel == expected)
+            }
+          }
+        }
+      }
+    }
+
+    validateStorageLevel(StorageLevel.MEMORY_AND_DISK)
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "NONE") {
+      validateStorageLevel(StorageLevel.NONE)
+    }
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "MEMORY_AND_DISK_2") {
+      validateStorageLevel(StorageLevel.MEMORY_AND_DISK_2)
+    }
+    intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
     }
   }
 }

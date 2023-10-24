@@ -28,9 +28,9 @@ import typing
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
-from pyspark.errors import PySparkRuntimeError
-
 from py4j.clientserver import ClientServer
+
+from pyspark.errors import PySparkRuntimeError
 
 __all__: List[str] = []
 

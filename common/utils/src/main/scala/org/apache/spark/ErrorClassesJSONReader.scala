@@ -19,8 +19,8 @@ package org.apache.spark
 
 import java.net.URL
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -57,6 +57,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
   }
 
+  def getMessageParameters(errorClass: String): Seq[String] = {
+    val messageTemplate = getMessageTemplate(errorClass)
+    val pattern = "<([a-zA-Z0-9_-]+)>".r
+    val matches = pattern.findAllIn(messageTemplate).toSeq
+    matches.map(m => m.stripSuffix(">").stripPrefix("<"))
+  }
+
   def getMessageTemplate(errorClass: String): String = {
     val errorClasses = errorClass.split("\\.")
     assert(errorClasses.length == 1 || errorClasses.length == 2)
@@ -85,6 +92,17 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .flatMap(_.sqlState)
       .orNull
   }
+
+  def isValidErrorClass(errorClass: String): Boolean = {
+    val errorClasses = errorClass.split("\\.")
+    errorClasses match {
+      case Array(mainClass) => errorInfoMap.contains(mainClass)
+      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
+        info.subClass.get.contains(subClass)
+      }
+      case _ => false
+    }
+  }
 }
 
 private object ErrorClassesJsonReader {
@@ -112,7 +130,7 @@ private object ErrorClassesJsonReader {
  *
  * @param sqlState SQLSTATE associated with this class.
  * @param subClass SubClass associated with this class.
- * @param message C-style message format compatible with printf.
+ * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
@@ -127,7 +145,7 @@ private case class ErrorInfo(
 /**
  * Information associated with an error subclass.
  *
- * @param message C-style message format compatible with printf.
+ * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorSubInfo(message: Seq[String]) {

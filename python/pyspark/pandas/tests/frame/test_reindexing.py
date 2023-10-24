@@ -856,9 +856,6 @@ class FrameReindexingMixin:
 
 
 class FrameReidexingTests(FrameReindexingMixin, ComparisonTestBase, SQLTestUtils):
-    def test_filter(self):
-        super().test_filter()
-
     pass
 
 

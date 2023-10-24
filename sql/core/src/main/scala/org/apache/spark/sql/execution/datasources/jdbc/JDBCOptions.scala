@@ -62,7 +62,7 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)))
+    parameters.originalMap.view.filterKeys(key => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -239,6 +239,14 @@ class JDBCOptions(
       .get(JDBC_PREFER_TIMESTAMP_NTZ)
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
+
+  override def hashCode: Int = this.parameters.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case otherOption: JDBCOptions =>
+      otherOption.parameters.equals(this.parameters)
+    case _ => false
+  }
 }
 
 class JdbcOptionsInWrite(

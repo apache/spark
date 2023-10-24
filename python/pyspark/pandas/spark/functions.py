@@ -19,8 +19,6 @@ Additional Spark functions used in pandas-on-Spark.
 """
 from pyspark import SparkContext
 from pyspark.sql.column import Column
-
-# For supporting Spark Connect
 from pyspark.sql.utils import is_remote
 
 

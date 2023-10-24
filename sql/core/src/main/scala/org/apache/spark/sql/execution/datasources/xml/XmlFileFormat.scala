@@ -44,7 +44,8 @@ class XmlFileFormat extends TextBasedFileFormat with DataSourceRegister {
       parameters: Map[String, String]): XmlOptions = {
     new XmlOptions(parameters,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
+      true)
   }
 
   override def isSplitable(

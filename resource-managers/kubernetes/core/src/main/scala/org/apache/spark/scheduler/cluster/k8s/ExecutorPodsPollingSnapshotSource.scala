@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.primitives.UnsignedLong
 import io.fabric8.kubernetes.api.model.ListOptionsBuilder

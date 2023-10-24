@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.arrow
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
@@ -219,7 +219,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): ArrowBatchWithSchemaIterator = {
     new ArrowBatchWithSchemaIterator(
       rowIter, schema, maxRecordsPerBatch, maxEstimatedBatchSize,
-      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get)
+      timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get())
   }
 
   private[sql] def createEmptyArrowBatch(
@@ -228,7 +228,7 @@ private[sql] object ArrowConverters extends Logging {
       errorOnDuplicatedFieldNames: Boolean): Array[Byte] = {
     new ArrowBatchWithSchemaIterator(
         Iterator.empty, schema, 0L, 0L,
-        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get) {
+        timeZoneId, errorOnDuplicatedFieldNames, TaskContext.get()) {
       override def hasNext: Boolean = true
     }.next()
   }
@@ -400,7 +400,7 @@ private[sql] object ArrowConverters extends Logging {
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
-        batchesInDriver.toIterator,
+        batchesInDriver.iterator,
         schema,
         session.sessionState.conf.sessionLocalTimeZone,
         errorOnDuplicatedFieldNames = false,

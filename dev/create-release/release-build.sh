@@ -177,7 +177,7 @@ fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
-BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
+BASE_PROFILES="-Pyarn -Pkubernetes"
 
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"
@@ -186,6 +186,9 @@ if [[ $SPARK_VERSION < "3.2" ]]; then
 fi
 
 PUBLISH_SCALA_2_12=1
+if [[ $SPARK_VERSION > "3.5.99" ]]; then
+  PUBLISH_SCALA_2_12=0
+fi
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
 # Hive-specific profiles for some builds
@@ -196,8 +199,12 @@ PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-a
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
-if [[ $JAVA_VERSION < "1.8." ]]; then
+if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
+elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
+  echo "Java version $JAVA_VERSION is less than required 17 for 4.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
 fi
@@ -424,10 +431,14 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+    $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+  fi
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.13
+    if [[ $SPARK_VERSION < "4.0" ]]; then
+      ./dev/change-scala-version.sh 2.13
+    fi
     $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
@@ -459,7 +470,9 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.13
+    if [[ $SPARK_VERSION < "4.0" ]]; then
+      ./dev/change-scala-version.sh 2.13
+    fi
     $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi

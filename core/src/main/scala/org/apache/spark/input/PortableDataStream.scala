@@ -19,7 +19,7 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
@@ -100,7 +100,7 @@ private[spark] abstract class StreamBasedRecordReader[T](
     if (!processed) {
       val fileIn = new PortableDataStream(split, context, index)
       value = parseStream(fileIn)
-      key = fileIn.getPath
+      key = fileIn.getPath()
       processed = true
       true
     } else {

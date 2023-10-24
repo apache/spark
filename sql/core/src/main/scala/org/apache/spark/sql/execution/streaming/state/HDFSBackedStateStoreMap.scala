@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -54,7 +54,7 @@ object HDFSBackedStateStoreMap {
 class NoPrefixHDFSBackedStateStoreMap extends HDFSBackedStateStoreMap {
   private val map = new HDFSBackedStateStoreMap.MapType()
 
-  override def size: Int = map.size()
+  override def size(): Int = map.size()
 
   override def get(key: UnsafeRow): UnsafeRow = map.get(key)
 
@@ -103,7 +103,7 @@ class PrefixScannableHDFSBackedStateStoreMap(
     UnsafeProjection.create(refs)
   }
 
-  override def size: Int = map.size()
+  override def size(): Int = map.size()
 
   override def get(key: UnsafeRow): UnsafeRow = map.get(key)
 

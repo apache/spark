@@ -21,8 +21,8 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Properties
 
-import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
@@ -280,7 +280,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
     .save()
 
-    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count())
     assert(
       2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).collect()(0).length)
   }

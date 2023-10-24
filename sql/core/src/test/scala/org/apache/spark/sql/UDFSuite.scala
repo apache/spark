@@ -22,7 +22,8 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
-import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.api.java._
@@ -376,7 +377,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("f", (a: Int) => a)
       val outputStream = new java.io.ByteArrayOutputStream()
       Console.withOut(outputStream) {
-        spark.sql("SELECT f(a._1) FROM x").show
+        spark.sql("SELECT f(a._1) FROM x").show()
       }
       assert(outputStream.toString.contains("f(a._1)"))
     }
@@ -820,9 +821,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32459: UDF should not fail on WrappedArray") {
-    val myUdf = udf((a: WrappedArray[Int]) =>
-      WrappedArray.make[Int](Array(a.head + 99)))
+  test("SPARK-32459: UDF should not fail on mutable.ArraySeq") {
+    val myUdf = udf((a: mutable.ArraySeq[Int]) =>
+      mutable.ArraySeq.make[Int](Array(a.head + 99)))
     checkAnswer(Seq(Array(1))
       .toDF("col")
       .select(myUdf(Column("col"))),

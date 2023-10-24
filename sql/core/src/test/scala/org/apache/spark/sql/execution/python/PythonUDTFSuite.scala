@@ -48,15 +48,15 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTFCountSumLast: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "UDTFCountSumLast", TestPythonUDTFCountSumLast.pythonScript, None)
+      TestPythonUDTFCountSumLast.name, TestPythonUDTFCountSumLast.pythonScript, None)
 
   private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "UDTFWithSinglePartition", TestPythonUDTFWithSinglePartition.pythonScript, None)
+      TestPythonUDTFWithSinglePartition.name, TestPythonUDTFWithSinglePartition.pythonScript, None)
 
   private val pythonUDTFPartitionByOrderBy: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      "UDTFPartitionByOrderBy", TestPythonUDTFPartitionBy.pythonScript, None)
+      TestPythonUDTFPartitionBy.name, TestPythonUDTFPartitionBy.pythonScript, None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -64,6 +64,11 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       pythonScript,
       Some(returnType),
       evalType = PythonEvalType.SQL_ARROW_TABLE_UDF)
+
+  private val pythonUDTFForwardStateFromAnalyze: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      TestPythonUDTFForwardStateFromAnalyze.name,
+      TestPythonUDTFForwardStateFromAnalyze.pythonScript, None)
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
@@ -128,6 +133,8 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     def failure(plan: LogicalPlan): Unit = {
       fail(s"Unexpected plan: $plan")
     }
+
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
     sql(
       """
         |SELECT * FROM testUDTF(
@@ -187,29 +194,25 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
       val query = "select * from explode(table(t))"
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException](sql(query)),
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        parameters = Map(
-          "sqlExpr" -> "\"explode(outer(__auto_generated_subquery_name_0.c))\"",
-          "paramIndex" -> "1",
-          "inputSql" -> "\"outer(__auto_generated_subquery_name_0.c)\"",
-          "inputType" -> "\"STRUCT<col: ARRAY<INT>>\"",
-          "requiredType" -> "(\"ARRAY\" or \"MAP\")"),
+        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
+        sqlState = None,
+        parameters = Map("treeNode" -> "(?s).*"),
         context = ExpectedContext(
-          fragment = "explode(table(t))",
-          start = 14,
-          stop = 30))
+          fragment = "table(t)",
+          start = 22,
+          stop = 29))
     }
 
-    spark.udtf.registerPython("UDTFCountSumLast", pythonUDTFCountSumLast)
+    spark.udtf.registerPython(TestPythonUDTFCountSumLast.name, pythonUDTFCountSumLast)
     var plan = sql(
-      """
+      s"""
         |WITH t AS (
         |  VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input)
         |)
         |SELECT count, total, last
-        |FROM UDTFCountSumLast(TABLE(t) WITH SINGLE PARTITION)
+        |FROM ${TestPythonUDTFCountSumLast.name}(TABLE(t) WITH SINGLE PARTITION)
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
@@ -218,16 +221,16 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         failure(plan)
     }
 
-    spark.udtf.registerPython("UDTFWithSinglePartition", pythonUDTFWithSinglePartition)
+    spark.udtf.registerPython(TestPythonUDTFWithSinglePartition.name, pythonUDTFWithSinglePartition)
     plan = sql(
-      """
+      s"""
         |WITH t AS (
         |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
         |    UNION ALL
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT count, total, last
-        |FROM UDTFWithSinglePartition(TABLE(t))
+        |FROM ${TestPythonUDTFWithSinglePartition.name}(0, TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
@@ -236,16 +239,16 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         failure(plan)
     }
 
-    spark.udtf.registerPython("UDTFPartitionByOrderBy", pythonUDTFPartitionByOrderBy)
+    spark.udtf.registerPython(TestPythonUDTFPartitionBy.name, pythonUDTFPartitionByOrderBy)
     plan = sql(
-      """
+      s"""
         |WITH t AS (
         |    SELECT id AS partition_col, 1 AS input FROM range(1, 21)
         |    UNION ALL
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT partition_col, count, total, last
-        |FROM UDTFPartitionByOrderBy(TABLE(t))
+        |FROM ${TestPythonUDTFPartitionBy.name}(TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: RepartitionByExpression => r } match {
@@ -346,5 +349,18 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         partitionByExpressions = Seq(Literal(42), Add(projectList.head.toAttribute, Literal(1)))),
       Literal("abc"))) ==
       Seq(2, 3))
+  }
+
+  test("SPARK-45402: Add UDTF API for 'analyze' to return a buffer to consume on class creation") {
+    spark.udtf.registerPython(
+      TestPythonUDTFForwardStateFromAnalyze.name,
+      pythonUDTFForwardStateFromAnalyze)
+    withTable("t") {
+      sql("create table t(col array<int>) using parquet")
+      val query = s"select * from ${TestPythonUDTFForwardStateFromAnalyze.name}('abc')"
+      checkAnswer(
+        sql(query),
+        Row("abc"))
+    }
   }
 }

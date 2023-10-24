@@ -20,8 +20,8 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
@@ -485,7 +485,7 @@ class PlanGenerationTestSuite
   }
 
   test("as symbol") {
-    simple.as('bar)
+    simple.as(Symbol("bar"))
   }
   test("alias string") {
     simple.alias("fooz")
@@ -3027,7 +3027,7 @@ class PlanGenerationTestSuite
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
-      fn.lit('id),
+      fn.lit(Symbol("id")),
       fn.lit(true),
       fn.lit(68.toByte),
       fn.lit(9872.toShort),
@@ -3041,7 +3041,7 @@ class PlanGenerationTestSuite
       fn.lit('T'),
       fn.lit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.lit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.lit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.lit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
       fn.lit(null),
       fn.lit(java.time.LocalDate.of(2020, 10, 10)),
       fn.lit(Decimal.apply(BigDecimal(8997620, 6))),
@@ -3094,7 +3094,7 @@ class PlanGenerationTestSuite
   test("function typedLit") {
     simple.select(
       fn.typedLit(fn.col("id")),
-      fn.typedLit('id),
+      fn.typedLit(Symbol("id")),
       fn.typedLit(1),
       fn.typedLit[String](null),
       fn.typedLit(true),
@@ -3110,7 +3110,7 @@ class PlanGenerationTestSuite
       fn.typedLit('T'),
       fn.typedLit(Array.tabulate(10)(i => ('A' + i).toChar)),
       fn.typedLit(Array.tabulate(23)(i => (i + 120).toByte)),
-      fn.typedLit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.typedLit(mutable.ArraySeq.make(Array[Byte](8.toByte, 6.toByte))),
       fn.typedLit(null),
       fn.typedLit(java.time.LocalDate.of(2020, 10, 10)),
       fn.typedLit(Decimal.apply(BigDecimal(8997620, 6))),

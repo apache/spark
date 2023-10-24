@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Unpickler
 
@@ -84,7 +84,7 @@ case class BatchEvalPythonUDTFExec(
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
       fromJava(results).asInstanceOf[GenericArrayData]
-        .array.map(_.asInstanceOf[InternalRow]).toIterator
+        .array.map(_.asInstanceOf[InternalRow]).iterator
     }
   }
 
@@ -112,6 +112,7 @@ object PythonUDTFRunner {
       dataOut: DataOutputStream,
       udtf: PythonUDTF,
       argMetas: Array[ArgumentMetadata]): Unit = {
+    // Write the argument types of the UDTF.
     dataOut.writeInt(argMetas.length)
     argMetas.foreach {
       case ArgumentMetadata(offset, name) =>
@@ -124,6 +125,8 @@ object PythonUDTFRunner {
             dataOut.writeBoolean(false)
         }
     }
+    // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
+    // the TABLE argument of the Python UDTF call, if applicable.
     udtf.pythonUDTFPartitionColumnIndexes match {
       case Some(partitionColumnIndexes) =>
         dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
@@ -132,8 +135,12 @@ object PythonUDTFRunner {
       case None =>
         dataOut.writeInt(0)
     }
-    dataOut.writeInt(udtf.func.command.length)
-    dataOut.write(udtf.func.command.toArray)
+    // Write the pickled AnalyzeResult buffer from the UDTF "analyze" method, if any.
+    dataOut.writeBoolean(udtf.pickledAnalyzeResult.nonEmpty)
+    udtf.pickledAnalyzeResult.foreach(PythonWorkerUtils.writeBytes(_, dataOut))
+    // Write the contents of the Python script itself.
+    PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
+    // Write the result schema of the UDTF call.
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
   }
 }

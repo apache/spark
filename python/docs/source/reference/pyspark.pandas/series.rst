@@ -170,7 +170,6 @@ Computations / Descriptive Stats
    Series.value_counts
    Series.round
    Series.diff
-   Series.is_monotonic
    Series.is_monotonic_increasing
    Series.is_monotonic_decreasing
 
@@ -313,8 +312,7 @@ Datetime Properties
    Series.dt.minute
    Series.dt.second
    Series.dt.microsecond
-   Series.dt.week
-   Series.dt.weekofyear
+   Series.dt.isocalendar
    Series.dt.dayofweek
    Series.dt.weekday
    Series.dt.dayofyear

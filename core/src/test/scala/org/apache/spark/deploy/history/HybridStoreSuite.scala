@@ -79,7 +79,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     store.setMetadata(t1)
     assert(store.getMetadata(classOf[CustomType1]) === t1)
 
-    // Switch to LevelDB and set a new metadata
+    // Switch to RocksDB/LevelDB and set a new metadata
     switchHybridStore(store)
 
     val t2 = createCustomType1(2)
