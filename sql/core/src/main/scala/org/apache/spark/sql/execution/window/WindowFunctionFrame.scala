@@ -201,7 +201,11 @@ class FrameLessOffsetWindowFunctionFrame(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     resetStates(rows)
     if (ignoreNulls) {
-      findNextRowWithNonNullInput()
+      if (Math.abs(offset) > rows.length) {
+        fillDefaultValue(EmptyRow)
+      } else {
+        findNextRowWithNonNullInput()
+      }
     } else {
       // drain the first few rows if offset is larger than zero
       while (inputIndex < offset) {
