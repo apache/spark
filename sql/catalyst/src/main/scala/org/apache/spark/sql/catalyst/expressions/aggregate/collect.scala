@@ -272,7 +272,7 @@ case class CollectTopK(
   since = "4.0.0")
 case class ListAgg(
     child: Expression,
-    delimiter: Expression = Literal.create(",", StringType),
+    delimiter: Expression,
     orderExpression: Expression,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
@@ -284,8 +284,6 @@ case class ListAgg(
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, child, false, 0, 0)
 
-  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
-
   override def nullable: Boolean = false
 
   override def dataType: DataType = StringType
@@ -293,6 +291,15 @@ case class ListAgg(
   override def left: Expression = child
 
   override def right: Expression = orderExpression
+
+  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+
+  override def withNewMutableAggBufferOffset(
+      newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   private lazy val sameExpression = orderExpression.semanticEquals(child)
 
@@ -349,13 +356,6 @@ case class ListAgg(
     }
     buffer
   }
-
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int) : ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
       newLeft: Expression,

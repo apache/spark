@@ -927,7 +927,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
       messageParameters = Map(
-        "functionName" -> toSQLStmt(functionName),
+        "functionName" -> toSQLId(functionName),
         "functionExpr" -> toSQLExpr(functionExpr),
         "orderExpr" -> toSQLExpr(orderExpr)))
   }

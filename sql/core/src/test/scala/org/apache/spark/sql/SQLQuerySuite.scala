@@ -205,7 +205,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
         parameters = Map(
-          "functionName" -> "LISTAGG",
+          "functionName" -> "`LISTAGG`",
           "functionExpr" -> "\"a\"",
           "orderExpr" -> "\"b\""))
 
