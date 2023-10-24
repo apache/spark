@@ -294,7 +294,7 @@ private[spark] class SecurityManager(
 
   /**
    * Returns the SSLOptions object for the RPC namespace
-   * @return the SSLOptions object for the RP namespace
+   * @return the SSLOptions object for the RPC namespace
    */
   def getRpcSSLOptions(): SSLOptions = rpcSSLOptions
 
