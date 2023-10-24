@@ -1669,6 +1669,12 @@ Unable to locate Message `<messageName>` in Descriptor.
 
 Protobuf type not yet supported: `<protobufType>`.
 
+### PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed to plan Python data source `<type>` in Python: `<msg>`
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2310,5 +2316,3 @@ The operation `<operation>` requires a `<requiredType>`. But `<objectName>` is a
 The `<functionName>` requires `<expectedNum>` parameters but the actual number is `<actualNum>`.
 
 For more details see [WRONG_NUM_ARGS](sql-error-conditions-wrong-num-args-error-class.html)
-
-

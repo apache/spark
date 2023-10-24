@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode}
+import org.apache.spark.sql.execution.{InputRDDCodegen, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -59,11 +59,9 @@ case class PythonDataSourcePartitionsExec(
   override protected val createUnsafeProjection: Boolean = false
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    rdd.map { r =>
-      numOutputRows += 1
-      r
-    }
+    longMetric("numOutputRows").add(partitions.size)
+    sendDriverMetrics()
+    rdd
   }
 
   override protected def stringArgs: Iterator[Any] = {
@@ -72,5 +70,10 @@ case class PythonDataSourcePartitionsExec(
     } else {
       Iterator(output)
     }
+  }
+
+  private def sendDriverMetrics(): Unit = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
   }
 }

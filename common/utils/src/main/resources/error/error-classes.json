@@ -2747,8 +2747,9 @@
   },
   "PYTHON_DATA_SOURCE_FAILED_TO_PLAN_IN_PYTHON" : {
     "message" : [
-      "Failed to plan Python data source <type> in Python:\n<msg>"
-    ]
+      "Failed to plan Python data source <type> in Python: <msg>"
+    ],
+    "sqlState" : "38000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
