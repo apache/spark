@@ -19,7 +19,6 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.*;
@@ -47,8 +46,6 @@ public class RocksDB implements KVStore {
   static {
     org.rocksdb.RocksDB.loadLibrary();
   }
-
-  private static final Cleaner CLEANER = Cleaner.create();
 
   @VisibleForTesting
   static final long STORE_VERSION = 1L;
@@ -286,9 +283,8 @@ public class RocksDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
+          RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this, iteratorTracker, _db);
           iteratorTracker.add(new WeakReference<>(it));
-          CLEANER.register(it, new RocksDBIterator.ResourceCleaner(it.getRocksIterator(), _db, iteratorTracker));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);

@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -30,6 +31,7 @@ import org.rocksdb.RocksIterator;
 
 class RocksDBIterator<T> implements KVStoreIterator<T> {
 
+  private static final Cleaner CLEANER = Cleaner.create();
   private final RocksDB db;
   private final boolean ascending;
   private final RocksIterator it;
@@ -39,13 +41,18 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+  private final ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker;
+  private final AtomicReference<org.rocksdb.RocksDB> _db;
+  private Cleaner.Cleanable cleanable;
 
   private boolean checkedNext;
   private byte[] next;
   private boolean closed;
   private long count;
 
-  RocksDBIterator(Class<T> type, RocksDB db, KVStoreView<T> params) throws Exception {
+  RocksDBIterator(Class<T> type, RocksDB db, KVStoreView<T> params,
+      ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker,
+      AtomicReference<org.rocksdb.RocksDB> _db) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
     this.it = db.db().newIterator();
@@ -53,6 +60,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
+    this.iteratorTracker = iteratorTracker;
+    this._db = _db;
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -97,6 +106,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     if (params.skip > 0) {
       skip(params.skip);
     }
+
+    this.cleanable = CLEANER.register(this, new RocksDBIterator.ResourceCleaner(it, _db, iteratorTracker));
   }
 
   @Override
@@ -179,16 +190,11 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
-    db.notifyIteratorClosed(this);
     if (!closed) {
-      it.close();
+      cleanable.clean();
       closed = true;
       next = null;
     }
-  }
-
-  public RocksIterator getRocksIterator() {
-    return it;
   }
 
   private byte[] loadNext() {
