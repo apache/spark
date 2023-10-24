@@ -41,9 +41,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
-  private final ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker;
-  private final AtomicReference<org.rocksdb.RocksDB> _db;
-  private Cleaner.Cleanable cleanable;
+  private final Cleaner.Cleanable cleanable;
 
   private boolean checkedNext;
   private byte[] next;
@@ -60,8 +58,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
-    this.iteratorTracker = iteratorTracker;
-    this._db = _db;
+    this.cleanable = CLEANER.register(this, new RocksDBIterator.ResourceCleaner(it, _db, iteratorTracker));
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -106,8 +103,6 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     if (params.skip > 0) {
       skip(params.skip);
     }
-
-    this.cleanable = CLEANER.register(this, new RocksDBIterator.ResourceCleaner(it, _db, iteratorTracker));
   }
 
   @Override
