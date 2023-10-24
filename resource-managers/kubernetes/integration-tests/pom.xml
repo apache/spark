@@ -210,9 +210,9 @@
       </activation>
       <dependencies>
         <dependency>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk-bundle</artifactId>
-          <version>1.11.375</version>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>bundle</artifactId>
+          <version>${aws.java.sdk.v2.version}</version>
           <scope>test</scope>
         </dependency>
       </dependencies>
