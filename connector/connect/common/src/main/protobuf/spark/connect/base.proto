@@ -849,14 +849,11 @@ message FetchErrorDetailsResponse {
     // The corresponding fragment of the query which throws the exception.
     string fragment = 5;
 
-    // The Spark code (API) that caused throwing the exception.
-    optional string code = 6;
-
     // The user code (call site of the API) that caused throwing the exception.
-    optional string callSite = 7;
+    optional string callSite = 6;
 
     // Summary of the exception cause.
-    optional string summary = 8;
+    optional string summary = 7;
   }
 
   // SparkThrowable defines the schema for SparkThrowable exceptions.
