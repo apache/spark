@@ -272,17 +272,17 @@ case class CollectTopK(
   since = "4.0.0")
 case class ListAgg(
     child: Expression,
-    delimiter: Expression,
     orderExpression: Expression,
+    delimiter: Expression = Literal.create(",", StringType),
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
   with BinaryLike[Expression] {
 
   def this(child: Expression) =
-    this(child, Literal.create(",", StringType), child, false, 0, 0)
+    this(child, child, Literal.create(",", StringType), false, 0, 0)
   def this(child: Expression, delimiter: Expression) =
-    this(child, delimiter, child, false, 0, 0)
+    this(child, child, delimiter, false, 0, 0)
 
   override def nullable: Boolean = false
 
@@ -316,23 +316,26 @@ case class ListAgg(
     }
   }
 
+  private lazy val sortFunc = {
+    val ordering = PhysicalDataType.ordering(orderExpression.dataType)
+    (sameExpression, reverse) match {
+      case (true, true) => (buffer: mutable.ArrayBuffer[Any]) =>
+        buffer.sorted(ordering.reverse)
+      case (true, false) => (buffer: mutable.ArrayBuffer[Any]) =>
+        buffer.sorted(ordering)
+      case (false, true) => (buffer: mutable.ArrayBuffer[Any]) =>
+        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
+          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
+          child.dataType))
+      case (false, false) => (buffer: mutable.ArrayBuffer[Any]) =>
+        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
+          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
+          child.dataType))
+    }
+  }
+
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
-      val ordering = PhysicalDataType.ordering(orderExpression.dataType)
-      lazy val sortFunc = (sameExpression, reverse) match {
-        case (true, true) => (buffer: mutable.ArrayBuffer[Any]) =>
-          buffer.sorted(ordering.reverse)
-        case (true, false) => (buffer: mutable.ArrayBuffer[Any]) =>
-          buffer.sorted(ordering)
-        case (false, true) => (buffer: mutable.ArrayBuffer[Any]) =>
-          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
-            orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
-            child.dataType))
-        case (false, false) => (buffer: mutable.ArrayBuffer[Any]) =>
-          buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
-            orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
-            child.dataType))
-      }
       val sorted = sortFunc(buffer)
       UTF8String.fromString(sorted.map(_.toString)
         .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))

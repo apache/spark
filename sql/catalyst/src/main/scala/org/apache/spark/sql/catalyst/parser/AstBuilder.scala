@@ -2227,7 +2227,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
     val delimiter = if (ctx.delimiter != null) Literal(ctx.delimiter.getText) else Literal(",")
     val reverse = sortOrder.direction == Descending
-    val listAgg = ListAgg(column, delimiter, sortOrder.child, reverse)
+    val listAgg = ListAgg(column, sortOrder.child, delimiter, reverse)
     val aggregateExpression = listAgg.toAggregateExpression(isDistinct)
     ctx.windowSpec match {
       case spec: WindowRefContext =>
