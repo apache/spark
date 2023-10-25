@@ -369,16 +369,22 @@ private[spark] class ExternalSorter[K, V, C](
       (x: Iter, y: Iter) => comparator.compare(y.head._1, x.head._1))
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = heap.nonEmpty
+      private var firstBuf = if (heap.nonEmpty) heap.dequeue() else null
+
+      override def hasNext: Boolean = firstBuf != null
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
           throw new NoSuchElementException
         }
-        val firstBuf = heap.dequeue()
         val firstPair = firstBuf.next()
         if (firstBuf.hasNext) {
-          heap.enqueue(firstBuf)
+          if (heap.nonEmpty && comparator.compare(heap.head.head._1, firstBuf.head._1) < 0) {
+            heap.enqueue(firstBuf)
+            firstBuf = heap.dequeue()
+          }
+        } else {
+          firstBuf = if (heap.nonEmpty) heap.dequeue() else null
         }
         firstPair
       }
