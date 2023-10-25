@@ -157,6 +157,14 @@ unsafe = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+)
+
 launcher = Module(
     name="launcher",
     dependencies=[tags],
@@ -179,9 +187,17 @@ core = Module(
     ],
 )
 
+api = Module(
+    name="api",
+    dependencies=[utils, unsafe],
+    source_file_regexes=[
+        "sql/api/",
+    ],
+)
+
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, core],
+    dependencies=[tags, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
