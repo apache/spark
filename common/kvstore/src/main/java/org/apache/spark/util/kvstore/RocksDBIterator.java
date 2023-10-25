@@ -291,6 +291,14 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
     @Override
     public void run() {
+      iteratorTracker.removeIf(ref -> {
+        RocksDBIterator<?> rocksDBIterator = ref.get();
+        if (rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it)) {
+          return true;
+        } else {
+          return false;
+        }
+      });
       synchronized (this._db) {
         org.rocksdb.RocksDB _db = this._db.get();
         if (_db == null) {
@@ -298,14 +306,6 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
         }
         rocksIterator.close();
       }
-      iteratorTracker.removeIf(ref -> {
-          RocksDBIterator<?> rocksDBIterator = ref.get();
-          if (rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it)) {
-            return true;
-          } else {
-            return false;
-          }
-        });
     }
   }
 }
