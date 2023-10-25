@@ -121,7 +121,7 @@ private[sql] class AvroDeserializer(
     val incompatibleMsg = errorPrefix +
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
-    val realDataType = SchemaConverters.toSqlType(avroType, options).dataType
+    val realDataType = SchemaConverters.toSqlType(avroType, useStableIdForUnionType).dataType
     val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA
     val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
 
