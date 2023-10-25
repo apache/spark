@@ -114,9 +114,9 @@ private[sql] class AvroDeserializer(
       avroPath: Seq[String],
       catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
     val errorPrefix = s"Cannot convert Avro ${toFieldStr(avroPath)} to " +
-      s"SQL ${toFieldStr(catalystPath)} because "
+        s"SQL ${toFieldStr(catalystPath)} because "
     val incompatibleMsg = errorPrefix +
-      s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
+        s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
     val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA
     val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
