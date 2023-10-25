@@ -378,8 +378,8 @@ abstract class SparkFunSuite
         assert(actual.fragment() === expected.fragment,
           "Invalid fragment of a query context. Actual:" + actual.toString)
       } else if (actual.contextType() == QueryContextType.Dataset) {
-        assert(actual.code() === expected.code,
-          "Invalid code of a query context. Actual:" + actual.toString)
+        assert(actual.fragment() === expected.fragment,
+          "Invalid code fragment of a query context. Actual:" + actual.toString)
         assert(actual.callSite().matches(expected.callSitePattern),
           "Invalid callSite of a query context. Actual:" + actual.toString)
       }

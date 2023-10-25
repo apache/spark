@@ -124,7 +124,7 @@ private[spark] object SparkThrowableHelper {
                   if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
                   g.writeStringField("fragment", c.fragment())
                 case QueryContextType.Dataset =>
-                  g.writeStringField("code", c.code())
+                  g.writeStringField("fragment", c.fragment())
                   g.writeStringField("callSite", c.callSite())
               }
               g.writeEndObject()

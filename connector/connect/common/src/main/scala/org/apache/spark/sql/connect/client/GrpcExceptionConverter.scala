@@ -334,7 +334,6 @@ private[client] object GrpcExceptionConverter {
         override def stopIndex(): Int = queryCtx.getStopIndex
         override def fragment(): String = queryCtx.getFragment
         override def callSite(): String = queryCtx.getCallSite
-        override def code(): String = queryCtx.getCode
         override def summary(): String = queryCtx.getSummary
       }
     }.toArray

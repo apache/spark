@@ -131,12 +131,11 @@ case class SQLQueryContext(
       originStartIndex.get <= originStopIndex.get
   }
 
-  override def code: String = throw new UnsupportedOperationException
   override def callSite: String = throw new UnsupportedOperationException
 }
 
 case class DatasetQueryContext(
-    override val code: String,
+    override val fragment: String,
     override val callSite: String) extends QueryContext {
   override val contextType = QueryContextType.Dataset
 
@@ -144,14 +143,13 @@ case class DatasetQueryContext(
   override def objectName: String = throw new UnsupportedOperationException
   override def startIndex: Int = throw new UnsupportedOperationException
   override def stopIndex: Int = throw new UnsupportedOperationException
-  override def fragment: String = throw new UnsupportedOperationException
 
   override lazy val summary: String = {
     val builder = new StringBuilder
     builder ++= "== Dataset ==\n"
     builder ++= "\""
 
-    builder ++= code
+    builder ++= fragment
     builder ++= "\""
     builder ++= " was called from "
     builder ++= callSite

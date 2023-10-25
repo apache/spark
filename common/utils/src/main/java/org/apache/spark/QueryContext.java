@@ -49,9 +49,6 @@ public interface QueryContext {
     // The corresponding fragment of the query which throws the exception.
     String fragment();
 
-    // The Spark code (API) that caused throwing the exception.
-    String code();
-
     // The user code (call site of the API) that caused throwing the exception.
     String callSite();
 

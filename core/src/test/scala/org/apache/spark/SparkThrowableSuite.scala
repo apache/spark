@@ -509,7 +509,6 @@ class SparkThrowableSuite extends SparkFunSuite {
       override val startIndex = 2
       override val stopIndex = -1
       override val fragment = "1 / 0"
-      override def code: String = throw new UnsupportedOperationException
       override def callSite: String = throw new UnsupportedOperationException
       override val summary = ""
     }
@@ -588,8 +587,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       override def objectType: String = throw new UnsupportedOperationException
       override def startIndex: Int = throw new UnsupportedOperationException
       override def stopIndex: Int = throw new UnsupportedOperationException
-      override def fragment: String = throw new UnsupportedOperationException
-      override val code: String = "div"
+      override val fragment: String = "div"
       override val callSite: String = "SimpleApp$.main(SimpleApp.scala:9)"
       override val summary = ""
     }
