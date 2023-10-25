@@ -2857,12 +2857,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <excludes>
-                      <!--
-                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
-                      -->
-                      <exclude>org.threeten:threeten-extra</exclude>
-                    </excludes>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>

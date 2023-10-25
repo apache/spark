@@ -22,6 +22,13 @@ name: Publish Snapshot
 on:
   schedule:
   - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'list of branches to publish (JSON)'
+        required: true
+        # keep in sync with default value of strategy matrix 'branch'
+        default: '["master", "branch-3.5", "branch-3.4", "branch-3.3"]'
 
 jobs:
   publish-snapshot:
@@ -30,11 +37,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch:
-          - master
-          - branch-3.5
-          - branch-3.4
-          - branch-3.3
+        # keep in sync with default value of workflow_dispatch input 'branch'
+        branch: ${{ fromJSON( inputs.branch || '["master", "branch-3.5", "branch-3.4", "branch-3.3"]' ) }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
