@@ -506,4 +506,5 @@ public abstract class DBIteratorSuite {
     Collections.sort(copy, comp);
     return copy;
   }
+
 }

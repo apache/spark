@@ -44,4 +44,5 @@ public class RocksDBIteratorSuite extends DBIteratorSuite {
     db = new RocksDB(dbpath);
     return db;
   }
+
 }
