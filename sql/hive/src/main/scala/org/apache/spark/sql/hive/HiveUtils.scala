@@ -269,7 +269,7 @@ private[spark] object HiveUtils extends Logging {
     //
     // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
     // to their output time units.
-    val commonTimeVars = Seq(
+    Seq(
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
@@ -309,18 +309,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
       confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
-    }
-
-    // The following configurations were removed by HIVE-12164(Hive 2.0)
-    val hardcodingTimeVars = Seq(
-      ("hive.stats.jdbc.timeout", "30s") -> TimeUnit.SECONDS,
-      ("hive.stats.retries.wait", "3000ms") -> TimeUnit.MILLISECONDS
-    ).map { case ((key, defaultValue), unit) =>
-      val value = hadoopConf.get(key, defaultValue)
-      key -> HiveConf.toTime(value, unit, unit).toString
-    }
-
-    (commonTimeVars ++ hardcodingTimeVars).toMap
+    }.toMap
   }
 
   /**

@@ -90,7 +90,9 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
-      val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(env.conf, "shuffle")
+      val securityManager = new SecurityManager(env.conf)
+      val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(
+        env.conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
       if (NettyUtils.preferDirectBufs(shuffleClientTransportConf) &&
           PlatformDependent.maxDirectMemory() < env.conf.get(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)) {
         throw new SparkException(s"Netty direct memory should at least be bigger than " +
