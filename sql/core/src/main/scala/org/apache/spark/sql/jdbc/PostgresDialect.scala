@@ -166,19 +166,18 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
 
   override def getUpsertStatement(
       tableName: String,
-      columns: Array[String],
-      types: Array[DataType],
+      columns: Array[StructField],
       isCaseSensitive: Boolean,
       options: JDBCOptions): String = {
-    val insertColumns = columns.mkString(", ")
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
     val placeholders = columns.map(_ => "?").mkString(",")
     val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
-    val updateColumns = columns.filterNot(upsertKeyColumns.contains)
+    val updateColumns = insertColumns.filterNot(upsertKeyColumns.contains)
     val updateClause =
       updateColumns.map(x => s"$x = EXCLUDED.$x").mkString(", ")
 
     s"""
-       |INSERT INTO $tableName ($insertColumns)
+       |INSERT INTO $tableName (${insertColumns.mkString(", ")})
        |VALUES ( $placeholders )
        |ON CONFLICT (${upsertKeyColumns.mkString(", ")})
        |DO UPDATE SET $updateClause

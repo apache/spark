@@ -68,7 +68,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             }
 
           case SaveMode.Append =>
-            if (options.isUpsert && !dialect.supportsUpsert) {
+            if (options.isUpsert && !dialect.supportsUpsert()) {
               throw QueryCompilationErrors.tableDoesNotSupportUpsertsError(options.table)
             }
             val tableSchema = JdbcUtils.getSchemaOption(conn, options)

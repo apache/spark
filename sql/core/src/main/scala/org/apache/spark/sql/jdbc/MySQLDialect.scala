@@ -181,15 +181,15 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       columns: Array[StructField],
       isCaseSensitive: Boolean,
       options: JDBCOptions): String = {
-    val insertColumns = columns.mkString(", ")
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
     val placeholders = columns.map(_ => "?").mkString(",")
     val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
-    val updateColumns = columns.filterNot(c => upsertKeyColumns.contains(c.name))
+    val updateColumns = insertColumns.filterNot(upsertKeyColumns.contains)
     val updateClause =
       updateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
 
     s"""
-       |INSERT INTO $tableName ($insertColumns)
+       |INSERT INTO $tableName (${insertColumns.mkString(", ")})
        |VALUES ( $placeholders )
        |ON DUPLICATE KEY UPDATE $updateClause
        |""".stripMargin

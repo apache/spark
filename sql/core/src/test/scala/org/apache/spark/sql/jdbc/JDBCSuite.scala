@@ -1206,11 +1206,14 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       }
 
       val table = "table"
-      val columns = Array("id", "time", "value", "comment")
-      val quotedColumns = columns.map(dialect.quoteIdentifier)
-      val types: Array[DataType] = Array(LongType, TimestampType, DoubleType, StringType)
+      val columns = Array(
+        StructField("id", LongType),
+        StructField("time", TimestampType),
+        StructField("value", DoubleType),
+        StructField("comment", StringType)
+      )
       val isCaseSensitive = false
-      val stmt = dialect.getUpsertStatement(table, quotedColumns, types, isCaseSensitive, options)
+      val stmt = dialect.getUpsertStatement(table, columns, isCaseSensitive, options)
 
       assert(stmt === expected)
     }

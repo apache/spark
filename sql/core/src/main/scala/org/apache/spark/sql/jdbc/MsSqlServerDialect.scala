@@ -143,35 +143,34 @@ private case class MsSqlServerDialect() extends JdbcDialect {
 
   override def getUpsertStatement(
       tableName: String,
-      columns: Array[String],
-      types: Array[DataType],
+      columns: Array[StructField],
       isCaseSensitive: Boolean,
       options: JDBCOptions): String = {
-    val insertColumns = columns.mkString(", ")
-    val inputs = types
+    val insertColumns = columns.map(_.name).map(quoteIdentifier)
+    val inputs = columns
+      .map(_.dataType)
       .map(t => JdbcUtils.getJdbcType(t, this).databaseTypeDefinition)
       .zipWithIndex.map {
         case (t, idx) => s"DECLARE @param$idx $t; SET @param$idx = ?;"
       }.mkString("\n")
     val values = columns.indices.map(i => s"@param$i").mkString(", ")
-    val quotedUpsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
     val keyColumns = columns.zipWithIndex.filter {
-      case (col, _) => quotedUpsertKeyColumns.contains(col)
+      case (col, _) => options.upsertKeyColumns.contains(col.name)
     }
     val updateColumns = columns.zipWithIndex.filterNot {
-      case (col, _) => quotedUpsertKeyColumns.contains(col)
+      case (col, _) => options.upsertKeyColumns.contains(col.name)
     }
     val whereClause = keyColumns.map {
-      case (key, idx) => s"$key = @param$idx"
+      case (key, idx) => s"${quoteIdentifier(key.name)} = @param$idx"
     }.mkString(" AND ")
     val updateClause = updateColumns.map {
-      case (col, idx) => s"$col = @param$idx"
+      case (col, idx) => s"${quoteIdentifier(col.name)} = @param$idx"
     }.mkString(", ")
 
     s"""
        |$inputs
        |
-       |INSERT $tableName ($insertColumns)
+       |INSERT $tableName (${insertColumns.mkString(", ")})
        |SELECT $values
        |WHERE NOT EXISTS (
        |    SELECT 1
