@@ -389,31 +389,42 @@ public class RocksDBSuite {
     dbPathForCleanerTest.delete();
 
     RocksDB dbForCleanerTest = new RocksDB(dbPathForCleanerTest);
-    for (int i = 0; i < 8192; i++) {
+    try {
+      for (int i = 0; i < 8192; i++) {
       dbForCleanerTest.write(createCustomType1(i));
     }
-
-    RocksDBIterator<CustomType1> rocksDBIterator = (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
-    Reference<RocksDBIterator<?>> reference = dbForCleanerTest.getRocksDBIteratorRef(rocksDBIterator);
-    assertNotNull(reference);
-    RocksIterator it = rocksDBIterator.internalIterator();
-    // it has not been closed yet, isOwningHandle should be true.
-    assertTrue(it.isOwningHandle());
-    // Manually set rocksDBIterator to null, to be GC.
-    rocksDBIterator = null;
-    // 100 times gc, the rocksDBIterator should be GCed.
-    int count = 0;
-    while (count < 100 && !reference.refersTo(null)) {
-      System.gc();
-      count++;
-      Thread.sleep(100);
+      RocksDBIterator<CustomType1> rocksDBIterator = (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<RocksDBIterator<?>> reference = getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
+      assertNotNull(reference);
+      RocksIterator it = rocksDBIterator.internalIterator();
+      // it has not been closed yet, isOwningHandle should be true.
+      assertTrue(it.isOwningHandle());
+      // Manually set rocksDBIterator to null, to be GC.
+      rocksDBIterator = null;
+      // 100 times gc, the rocksDBIterator should be GCed.
+      int count = 0;
+      while (count < 100 && !reference.refersTo(null)) {
+        System.gc();
+        count++;
+        Thread.sleep(100);
+      }
+      // check rocksDBIterator should be GCed
+      assertTrue(reference.refersTo(null));
+      // Verify that the Cleaner will be executed after a period of time, and it.isOwningHandle() will become false.
+      assertTimeout(java.time.Duration.ofSeconds(5), () -> assertFalse(it.isOwningHandle()));
+    } finally {
+      dbForCleanerTest.close();
+      FileUtils.deleteQuietly(dbPathForCleanerTest);
     }
-    // check rocksDBIterator should be GCed
-    assertTrue(reference.refersTo(null));
-    // Verify that the Cleaner will be executed after a period of time, and it.isOwningHandle() will become false.
-    assertTimeout(java.time.Duration.ofSeconds(5), () -> assertFalse(it.isOwningHandle()));
+  }
 
-    dbForCleanerTest.close();
+  private Reference<RocksDBIterator<?>> getRocksDBIteratorRef(RocksDBIterator<?> rocksDBIterator, RocksDB rocksDB) {
+    for (Reference<RocksDBIterator<?>> rocksDBIteratorReference : rocksDB.getIteratorTracker()) {
+      if (rocksDBIterator == rocksDBIteratorReference.get()) {
+        return rocksDBIteratorReference;
+      }
+    }
+    return null;
   }
 
   private CustomType1 createCustomType1(int i) {

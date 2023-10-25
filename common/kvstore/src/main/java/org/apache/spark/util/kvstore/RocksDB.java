@@ -363,16 +363,6 @@ public class RocksDB implements KVStore {
     return iteratorTracker;
   }
 
-  @VisibleForTesting
-  Reference<RocksDBIterator<?>> getRocksDBIteratorRef(RocksDBIterator<?> rocksDBIterator) {
-    for (Reference<RocksDBIterator<?>> rocksDBIteratorReference : iteratorTracker) {
-      if (rocksDBIterator == rocksDBIteratorReference.get()) {
-        return rocksDBIteratorReference;
-      }
-    }
-    return null;
-  }
-
   /** Returns metadata about indices for the given type. */
   RocksDBTypeInfo getTypeInfo(Class<?> type) throws Exception {
     RocksDBTypeInfo ti = types.get(type);
