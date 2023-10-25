@@ -355,21 +355,22 @@ public class RocksDB implements KVStore {
     }
   }
 
-  public AtomicReference<org.rocksdb.RocksDB> getRocksDB() {
+  AtomicReference<org.rocksdb.RocksDB> getRocksDB() {
     return _db;
   }
 
-  public ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> getIteratorTracker() {
+  ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> getIteratorTracker() {
     return iteratorTracker;
   }
 
-  public Optional<Reference<RocksDBIterator<?>>> iteratorReference(RocksDBIterator<?> rocksDBIterator) {
+  @VisibleForTesting
+  Reference<RocksDBIterator<?>> getRocksDBIteratorRef(RocksDBIterator<?> rocksDBIterator) {
     for (Reference<RocksDBIterator<?>> rocksDBIteratorReference : iteratorTracker) {
       if (rocksDBIterator == rocksDBIteratorReference.get()) {
-        return Optional.of(rocksDBIteratorReference);
+        return rocksDBIteratorReference;
       }
     }
-    return Optional.empty();
+    return null;
   }
 
   /** Returns metadata about indices for the given type. */

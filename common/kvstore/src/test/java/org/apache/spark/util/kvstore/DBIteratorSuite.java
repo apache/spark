@@ -506,15 +506,4 @@ public abstract class DBIteratorSuite {
     Collections.sort(copy, comp);
     return copy;
   }
-
-  protected CustomType1 createCustomType1(int i) {
-    CustomType1 t = new CustomType1();
-    t.key = "key" + i;
-    t.id = "id" + i;
-    t.name = "name" + i;
-    t.num = i;
-    t.child = "child" + i;
-    return t;
-  }
-
 }
