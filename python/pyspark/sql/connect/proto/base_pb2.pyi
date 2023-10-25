@@ -1349,6 +1349,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         NAME_FIELD_NUMBER: builtins.int
         VALUES_FIELD_NUMBER: builtins.int
+        KEYS_FIELD_NUMBER: builtins.int
         name: builtins.str
         @property
         def values(
@@ -1356,6 +1357,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]: ...
+        @property
+        def keys(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         def __init__(
             self,
             *,
@@ -1364,9 +1369,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
             ]
             | None = ...,
+            keys: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
+            self,
+            field_name: typing_extensions.Literal[
+                "keys", b"keys", "name", b"name", "values", b"values"
+            ],
         ) -> None: ...
 
     class ResultComplete(google.protobuf.message.Message):
@@ -2902,7 +2911,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         START_INDEX_FIELD_NUMBER: builtins.int
         STOP_INDEX_FIELD_NUMBER: builtins.int
         FRAGMENT_FIELD_NUMBER: builtins.int
-        CODE_FIELD_NUMBER: builtins.int
         CALLSITE_FIELD_NUMBER: builtins.int
         SUMMARY_FIELD_NUMBER: builtins.int
         context_type: global___FetchErrorDetailsResponse.QueryContext.ContextType.ValueType
@@ -2922,8 +2930,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         """The stopping index in the query which throws the exception. The index starts from 0."""
         fragment: builtins.str
         """The corresponding fragment of the query which throws the exception."""
-        code: builtins.str
-        """The Spark code (API) that caused throwing the exception."""
         callSite: builtins.str
         """The user code (call site of the API) that caused throwing the exception."""
         summary: builtins.str
@@ -2937,7 +2943,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             start_index: builtins.int = ...,
             stop_index: builtins.int = ...,
             fragment: builtins.str = ...,
-            code: builtins.str | None = ...,
             callSite: builtins.str | None = ...,
             summary: builtins.str | None = ...,
         ) -> None: ...
@@ -2946,14 +2951,10 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_callSite",
                 b"_callSite",
-                "_code",
-                b"_code",
                 "_summary",
                 b"_summary",
                 "callSite",
                 b"callSite",
-                "code",
-                b"code",
                 "summary",
                 b"summary",
             ],
@@ -2963,14 +2964,10 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_callSite",
                 b"_callSite",
-                "_code",
-                b"_code",
                 "_summary",
                 b"_summary",
                 "callSite",
                 b"callSite",
-                "code",
-                b"code",
                 "context_type",
                 b"context_type",
                 "fragment",
@@ -2991,10 +2988,6 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_callSite", b"_callSite"]
         ) -> typing_extensions.Literal["callSite"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_code", b"_code"]
-        ) -> typing_extensions.Literal["code"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_summary", b"_summary"]
