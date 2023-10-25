@@ -288,7 +288,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       false,
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
       filters,
-      AvroOptions(Map()))
+      AvroOptions(Map()).useStableIdForUnionType)
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)

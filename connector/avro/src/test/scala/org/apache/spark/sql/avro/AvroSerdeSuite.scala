@@ -227,7 +227,7 @@ object AvroSerdeSuite {
         isPositional(matchType),
         RebaseSpec(CORRECTED),
         new NoopFilters,
-        AvroOptions(Map()))
+        AvroOptions(Map()).useStableIdForUnionType)
   }
 
   /**

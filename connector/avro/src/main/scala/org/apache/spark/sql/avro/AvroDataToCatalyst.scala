@@ -62,7 +62,7 @@ private[sql] case class AvroDataToCatalyst(
 
   @transient private lazy val deserializer =
     new AvroDeserializer(expectedSchema, dataType,
-      avroOptions.datetimeRebaseModeInRead, avroOptions)
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType)
 
   @transient private var decoder: BinaryDecoder = _
 
