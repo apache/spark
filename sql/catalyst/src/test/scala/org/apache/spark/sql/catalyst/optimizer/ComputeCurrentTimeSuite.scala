@@ -135,7 +135,7 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(offsetsFromQuarterHour.size == 1)
   }
 
-  test(s"No duplicate literals") {
+  test("No duplicate literals") {
     def checkLiterals(f: (String) => Expression, expected: Int): Unit = {
       val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
         // Request each timestamp multiple times.
