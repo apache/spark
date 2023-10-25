@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -52,7 +51,9 @@ object FileStreamSink extends Logging {
         val hdfsPath = new Path(singlePath)
         try {
           val fs = hdfsPath.getFileSystem(hadoopConf)
-          if (SparkHadoopUtil.isDirectory(fs, hdfsPath)) {
+          if (!fs.exists(hdfsPath)) {
+            false
+          } else if (fs.getFileStatus(hdfsPath).isDirectory) {
             val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
             fs.exists(metadataPath)
           } else {

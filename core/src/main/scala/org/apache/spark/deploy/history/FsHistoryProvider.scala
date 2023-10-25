@@ -858,7 +858,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
-            if (!SparkHadoopUtil.isFile(fs, new Path(inProgressLog))) {
+            if (!fs.exists(new Path(inProgressLog)) ||
+              !fs.getFileStatus(new Path(inProgressLog)).isFile) {
               listing.synchronized {
                 listing.delete(classOf[LogInfo], inProgressLog)
               }

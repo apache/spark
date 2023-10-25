@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, FileNotFoundException, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
@@ -589,22 +589,6 @@ private[spark] object SparkHadoopUtil extends Logging {
         case hb: HdfsDataOutputStreamBuilder => hb.replicate().build()
         case _ => fs.create(path)
       }
-    }
-  }
-
-  def isFile(fs: FileSystem, path: Path): Boolean = {
-    try {
-      fs.getFileStatus(path).isFile
-    } catch {
-      case e: FileNotFoundException => false
-    }
-  }
-
-  def isDirectory(fs: FileSystem, path: Path): Boolean = {
-    try {
-      fs.getFileStatus(path).isDirectory
-    } catch {
-      case e: FileNotFoundException => false
     }
   }
 }
