@@ -184,7 +184,8 @@ class FakeTaskScheduler(
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, 1, JobArtifactSet()) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](
+    stageId, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet) {
 
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024)
   val random = new Random(0)
@@ -900,7 +901,8 @@ class TaskSetManagerSuite
 
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
-      }, 1, Seq(TaskLocation("host1", "execA")), JobArtifactSet(sc), new Properties, null)
+      }, 1, Seq(TaskLocation("host1", "execA")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
       null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0))
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
@@ -1519,7 +1521,7 @@ class TaskSetManagerSuite
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
     sc = new SparkContext("local", "test")
-    val addedJarsPreTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)
 
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -1535,7 +1537,7 @@ class TaskSetManagerSuite
     // even with a jar added mid-TaskSet
     val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     sc.addJar(jarPath.toString)
-    val addedJarsMidTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    val addedJarsMidTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
     val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
     // which should have the old version of the jars list

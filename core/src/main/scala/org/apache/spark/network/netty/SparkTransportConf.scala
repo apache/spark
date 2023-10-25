@@ -17,9 +17,9 @@
 
 package org.apache.spark.network.netty
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SSLOptions}
 import org.apache.spark.network.util.{ConfigProvider, NettyUtils, TransportConf}
 
 /**
@@ -38,12 +38,14 @@ object SparkTransportConf {
    *                       This restriction will only occur if these properties are not already set.
    * @param role           optional role, could be driver, executor, worker and master. Default is
    *                      [[None]], means no role specific configurations.
+   * @param sslOptions SSL config options
    */
   def fromSparkConf(
       _conf: SparkConf,
       module: String,
       numUsableCores: Int = 0,
-      role: Option[String] = None): TransportConf = {
+      role: Option[String] = None,
+      sslOptions: Option[SSLOptions] = None): TransportConf = {
     val conf = _conf.clone
     // specify default thread configuration based on our JVM's allocation of cores (rather than
     // necessarily assuming we have all the machine's cores).
@@ -57,12 +59,14 @@ object SparkTransportConf {
       conf.set(s"spark.$module.io.$suffix", value)
     }
 
-    new TransportConf(module, new ConfigProvider {
-      override def get(name: String): String = conf.get(name)
-      override def get(name: String, defaultValue: String): String = conf.get(name, defaultValue)
-      override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
-        conf.getAll.toMap.asJava.entrySet()
-      }
-    })
+    val configProvider = sslOptions.map(_.createConfigProvider(conf)).getOrElse(
+      new ConfigProvider {
+        override def get(name: String): String = conf.get(name)
+        override def get(name: String, defaultValue: String): String = conf.get(name, defaultValue)
+        override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
+          conf.getAll.toMap.asJava.entrySet()
+        }
+      })
+    new TransportConf(module, configProvider)
   }
 }

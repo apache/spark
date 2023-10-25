@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -31,11 +31,11 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
   val sqlSyntaxDefs = {
     val sqlBaseParserPath =
-      getWorkspaceFilePath("sql", "catalyst", "src", "main", "antlr4", "org",
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBaseParser.g4").toFile
 
     val sqlBaseLexerPath =
-      getWorkspaceFilePath("sql", "catalyst", "src", "main", "antlr4", "org",
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBaseLexer.g4").toFile
 
     (fileToString(sqlBaseParserPath) + fileToString(sqlBaseLexerPath)).split("\n")
@@ -160,7 +160,9 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     val documentedKeywords = keywordsInDoc.map(_.head).toSet
     if (allCandidateKeywords != documentedKeywords) {
       val undocumented = (allCandidateKeywords -- documentedKeywords).toSeq.sorted
-      fail("Some keywords are not documented: " + undocumented.mkString(", "))
+      val overdocumented = (documentedKeywords -- allCandidateKeywords).toSeq.sorted
+      fail("Some keywords are not documented: " + undocumented.mkString(", ") +
+        " Extras: " + overdocumented.mkString(", "))
     }
   }
 

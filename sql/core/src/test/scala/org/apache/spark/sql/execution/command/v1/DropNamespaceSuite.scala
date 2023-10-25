@@ -32,13 +32,16 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
   with command.TestsV1AndV2Commands {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
-  override protected def namespaceAlias(): String = "database"
+  override protected def namespaceAlias: String = "database"
 
   test("drop default namespace") {
-    val message = intercept[AnalysisException] {
-      sql(s"DROP NAMESPACE default")
-    }.getMessage
-    assert(message.contains("Can not drop default database"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"DROP NAMESPACE default")
+      },
+      errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
+      parameters = Map("database" -> "`default`")
+    )
   }
 }
 

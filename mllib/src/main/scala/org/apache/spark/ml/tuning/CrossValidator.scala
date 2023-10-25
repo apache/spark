@@ -19,9 +19,9 @@ package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -158,10 +158,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     // Compute metrics for each model over each split
     val (splits, schemaWithoutFold) = if ($(foldCol) == "") {
-      (MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed)), schema)
+      (MLUtils.kFold(dataset.toDF().rdd, $(numFolds), $(seed)), schema)
     } else {
       val filteredSchema = StructType(schema.filter(_.name != $(foldCol)).toArray)
-      (MLUtils.kFold(dataset.toDF, $(numFolds), $(foldCol)), filteredSchema)
+      (MLUtils.kFold(dataset.toDF(), $(numFolds), $(foldCol)), filteredSchema)
     }
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schemaWithoutFold).cache()

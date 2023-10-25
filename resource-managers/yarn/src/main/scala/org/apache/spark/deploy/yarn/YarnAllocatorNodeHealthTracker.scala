@@ -16,8 +16,8 @@
  */
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -141,8 +141,8 @@ private[spark] class YarnAllocatorNodeHealthTracker(
 
   private def removeExpiredYarnExcludedNodes(): Unit = {
     val now = failureTracker.clock.getTimeMillis()
-    allocatorExcludedNodeList.retain { (_, expiryTime) => expiryTime > now }
+    allocatorExcludedNodeList.filterInPlace { (_, expiryTime) => expiryTime > now }
   }
 
-  refreshExcludedNodes
+  refreshExcludedNodes()
 }

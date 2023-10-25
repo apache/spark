@@ -94,9 +94,10 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
 
-    val collectFn: PartialFunction[SparkPlan, Seq[Expression]] = collectPartitionFiltersFn orElse {
-      case BatchScanExec(_, scan: FileScan, _, _, _, _, _, _, _) => scan.partitionFilters
-    }
+    val collectFn: PartialFunction[SparkPlan, Seq[Expression]] =
+      collectPartitionFiltersFn() orElse {
+        case BatchScanExec(_, scan: FileScan, _, _, _, _) => scan.partitionFilters
+      }
     val pushedDownPartitionFilters = plan.collectFirst(collectFn)
       .map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
     val pushedFilters = pushedDownPartitionFilters.map(filters => {

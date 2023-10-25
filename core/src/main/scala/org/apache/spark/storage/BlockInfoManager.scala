@@ -22,14 +22,14 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.{Condition, Lock}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 import com.google.common.util.concurrent.Striped
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
@@ -259,7 +259,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   }
 
   /**
-   * Apply function `f` on the [[BlockInfo]] object and the aquisition [[Condition]] for `blockId`.
+   * Apply function `f` on the [[BlockInfo]] object and the acquisition [[Condition]] for `blockId`.
    * Function `f` will be executed while holding the lock for the [[BlockInfo]] object. If `blockId`
    * was not registered, an error will be thrown.
    */
@@ -415,13 +415,14 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
    * then just go ahead and acquire the write lock. Otherwise, if another thread is already
    * writing the block, then we wait for the write to finish before acquiring the read lock.
    *
-   * @return true if the block did not already exist, false otherwise. If this returns false, then
-   *         a read lock on the existing block will be held. If this returns true, a write lock on
-   *         the new block will be held.
+   * @return true if the block did not already exist, false otherwise.
+   *         If this returns true, a write lock on the new block will be held.
+   *         If this returns false then a read lock will be held iff keepReadLock == true.
    */
   def lockNewBlockForWriting(
       blockId: BlockId,
-      newBlockInfo: BlockInfo): Boolean = {
+      newBlockInfo: BlockInfo,
+      keepReadLock: Boolean = true): Boolean = {
     logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
     // Get the lock that will be associated with the to-be written block and lock it for the entire
     // duration of this operation. This way we prevent race conditions when two threads try to write
@@ -449,6 +450,8 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
           val result = lockForWriting(blockId, blocking = false)
           assert(result.isDefined)
           return true
+        } else if (!keepReadLock) {
+          return false
         } else {
           // Block already exists. This could happen if another thread races with us to compute
           // the same block. In this case we try to acquire a read lock, if the locking succeeds
@@ -543,8 +546,9 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     logTrace(s"Task $taskAttemptId trying to remove block $blockId")
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != taskAttemptId) {
-        throw new IllegalStateException(
-          s"Task $taskAttemptId called remove() on block $blockId without a write lock")
+        throw SparkException.internalError(
+          s"Task $taskAttemptId called remove() on block $blockId without a write lock",
+          category = "STORAGE")
       } else {
         invisibleRDDBlocks.synchronized {
           blockInfoWrappers.remove(blockId)

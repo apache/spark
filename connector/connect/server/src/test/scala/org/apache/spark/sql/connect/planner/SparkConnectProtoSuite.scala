@@ -18,10 +18,9 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
@@ -31,7 +30,8 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Observation, 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -694,8 +694,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -710,7 +708,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -723,8 +721,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with create and using") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val defaultOwnership = Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -740,7 +736,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       val cmd = localRelationV2.writeV2(
         tableName = Some("testcat.table_name"),
@@ -762,8 +758,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with append") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -778,7 +772,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -795,8 +789,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwrite") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -817,8 +809,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelation1V2 = createLocalRelationProto(schema.toAttributes, inputRows1)
-      val localRelation2V2 = createLocalRelationProto(schema.toAttributes, inputRows2)
+      val localRelation1V2 = createLocalRelationProto(schema, inputRows1)
+      val localRelation2V2 = createLocalRelationProto(schema, inputRows2)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -850,8 +842,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("WriteTo with overwritePartitions") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.table_name") {
       spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
@@ -865,7 +855,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         proj(row).copy()
       }
 
-      val localRelationV2 = createLocalRelationProto(schema.toAttributes, inputRows)
+      val localRelationV2 = createLocalRelationProto(schema, inputRows)
 
       spark.sql(
         "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -991,8 +981,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         analyzePlan(
           transform(connectTestRelation.observe("my_metric", "id".protoAttr.cast("string"))))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2322",
-      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
+      errorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      parameters = Map("expr" -> "\"id AS id\""))
 
     val connectPlan2 =
       connectTestRelation.observe(
@@ -1022,8 +1012,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
           transform(
             connectTestRelation.observe(Observation("my_metric"), "id".protoAttr.cast("string"))))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2322",
-      parameters = Map("sqlExpr" -> "CAST(id AS STRING) AS id"))
+      errorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
+      parameters = Map("expr" -> "\"id AS id\""))
   }
 
   test("Test RandomSplit") {
@@ -1050,7 +1040,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val buffer = ArrowConverters
       .toBatchWithSchemaIterator(
         Iterator.empty,
-        StructType.fromAttributes(attributes),
+        DataTypeUtils.fromAttributes(attributes),
         Long.MaxValue,
         Long.MaxValue,
         null,
@@ -1077,7 +1067,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
+    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan transform {
+      case cm: CollectMetrics => cm.copy(dataframeId = 0)
+    }
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(connectAnalyzed, sparkPlan, false)
+    comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
   }
 }

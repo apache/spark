@@ -609,7 +609,7 @@ class MemoryStoreSuite
     assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
     assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
 
-    memoryStore.clear
+    memoryStore.clear()
     // Check if allocator was cleared.
     while (allocator.getAllocatedMemory > 0) {
       Thread.sleep(500)

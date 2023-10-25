@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
@@ -109,10 +111,19 @@ case class TestRelation(output: Seq[AttributeReference]) extends LeafNode with N
   override def name: String = "table-name"
 }
 
+object TestRelation {
+  def apply(schema: StructType): TestRelation = apply(DataTypeUtils.toAttributes(schema))
+}
+
 case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
   extends LeafNode with NamedRelation {
   override def name: String = "test-name"
   override def skipSchemaResolution: Boolean = true
+}
+
+object TestRelationAcceptAnySchema {
+  def apply(schema: StructType): TestRelationAcceptAnySchema =
+    apply(DataTypeUtils.toAttributes(schema))
 }
 
 abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
@@ -143,6 +154,23 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive)
     }
   }
+
+  override def assertAnalysisErrorClass(
+      inputPlan: LogicalPlan,
+      expectedErrorClass: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
+      super.assertAnalysisErrorClass(
+        inputPlan,
+        expectedErrorClass,
+        expectedMessageParameters,
+        queryContext,
+        caseSensitive
+      )
+    }
+  }
 }
 
 abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
@@ -164,62 +192,101 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     }
   }
 
+  override def assertAnalysisErrorClass(
+      inputPlan: LogicalPlan,
+      expectedErrorClass: String,
+      expectedMessageParameters: Map[String, String],
+      queryContext: Array[QueryContext] = Array.empty,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
+      super.assertAnalysisErrorClass(
+        inputPlan,
+        expectedErrorClass,
+        expectedMessageParameters,
+        queryContext,
+        caseSensitive
+      )
+    }
+  }
+
   test("byName: fail canWrite check") {
     val parsedPlan = byName(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 
   test("byName: multiple field errors are reported") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", FloatType, nullable = false),
-      StructField("y", DoubleType))).toAttributes)
+      StructField("y", DoubleType))))
 
     val query = TestRelation(StructType(Seq(
       StructField("x", DoubleType),
-      StructField("b", FloatType))).toAttributes)
+      StructField("b", FloatType))))
 
     val parsedPlan = byName(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "double to float",
-      "Cannot find data for output column", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 
   test("byPosition: fail canWrite check") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     val parsedPlan = byPosition(table, widerTable)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 
   test("byPosition: multiple field errors are reported") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", FloatType, nullable = false),
-      StructField("y", FloatType))).toAttributes)
+      StructField("y", FloatType))))
 
     val query = TestRelation(StructType(Seq(
       StructField("x", DoubleType),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     val parsedPlan = byPosition(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "double to float",
-      "Cannot safely cast", "'y'", "double to float"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 }
 
@@ -239,8 +306,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-33136: output resolved on complex types for V2 write commands") {
     def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
-      val table = TestRelation(StructType(Seq(StructField("a", toType))).toAttributes)
-      val query = TestRelation(StructType(Seq(StructField("a", fromType))).toAttributes)
+      val table = TestRelation(StructType(Seq(StructField("a", toType))))
+      val query = TestRelation(StructType(Seq(StructField("a", fromType))))
       val parsedPlan = byName(table, query)
       assertResolved(parsedPlan)
       checkAnalysis(parsedPlan, parsedPlan)
@@ -302,14 +369,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("skipSchemaResolution should still require query to be resolved") {
     val table = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("a", FloatType),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
     val query = UnresolvedRelation(Seq("t"))
     val parsedPlan = byName(table, query)
     assertNotResolved(parsedPlan)
   }
 
   test("byName: basic behavior") {
-    val query = TestRelation(table.schema.toAttributes)
+    val query = TestRelation(table.schema)
 
     val parsedPlan = byName(table, query)
 
@@ -320,34 +387,37 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byName: does not match by position") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
-      StructField("b", FloatType))).toAttributes)
+      StructField("b", FloatType))))
 
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'", "'y'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+    )
   }
 
   test("byName: case sensitive column resolution") {
     val query = TestRelation(StructType(Seq(
       StructField("X", FloatType), // doesn't match case!
-      StructField("y", FloatType))).toAttributes)
+      StructField("y", FloatType))))
 
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"),
-      caseSensitive = true)
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+    )
   }
 
   test("byName: case insensitive column resolution") {
     val query = TestRelation(StructType(Seq(
       StructField("X", FloatType), // doesn't match case!
-      StructField("y", FloatType))).toAttributes)
+      StructField("y", FloatType))))
 
     val X = query.output.head
     val y = query.output.last
@@ -364,7 +434,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     // out of order
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType),
-      StructField("x", FloatType))).toAttributes)
+      StructField("x", FloatType))))
 
     val y = query.output.head
     val x = query.output.last
@@ -395,27 +465,31 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byName: missing required columns cause failure and are identified by name") {
     // missing required field x
     val query = TestRelation(StructType(Seq(
-      StructField("y", FloatType, nullable = false))).toAttributes)
+      StructField("y", FloatType, nullable = false))))
 
     val parsedPlan = byName(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+    )
   }
 
   test("byName: missing optional columns cause failure and are identified by name") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
-      StructField("y", FloatType))).toAttributes)
+      StructField("y", FloatType))))
 
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot find data for output column", "'x'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`x`")
+    )
   }
 
   test("byName: insert safe cast") {
@@ -438,7 +512,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val query = TestRelation(StructType(Seq(
       StructField("x", FloatType),
       StructField("y", FloatType),
-      StructField("z", FloatType))).toAttributes)
+      StructField("z", FloatType))))
 
     val parsedPlan = byName(table, query)
 
@@ -458,15 +532,21 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val query = TestRelation(Seq($"b".struct($"y".int, $"x".int, $"z".int), $"a".int))
 
     val writePlan = byName(table, query)
-    assertAnalysisError(writePlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'b': 'z'"))
+    assertAnalysisErrorClass(
+      writePlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`b`",
+        "extraFields" -> "`z`"
+      )
+    )
   }
 
   test("byPosition: basic behavior") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
-      StructField("b", FloatType))).toAttributes)
+      StructField("b", FloatType))))
 
     val a = query.output.head
     val b = query.output.last
@@ -487,7 +567,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     // out of order
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType),
-      StructField("x", FloatType))).toAttributes)
+      StructField("x", FloatType))))
 
     val y = query.output.head
     val x = query.output.last
@@ -522,7 +602,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byPosition: missing required columns cause failure") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
-      StructField("y", FloatType, nullable = false))).toAttributes)
+      StructField("y", FloatType, nullable = false))))
 
     val parsedPlan = byPosition(requiredTable, query)
 
@@ -540,7 +620,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byPosition: missing optional columns cause failure") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
-      StructField("y", FloatType))).toAttributes)
+      StructField("y", FloatType))))
 
     val parsedPlan = byPosition(table, query)
 
@@ -558,7 +638,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byPosition: insert safe cast") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     val x = table.output.head
     val y = table.output.last
@@ -579,7 +659,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
       StructField("b", FloatType),
-      StructField("c", FloatType))).toAttributes)
+      StructField("c", FloatType))))
 
     val parsedPlan = byName(table, query)
 
@@ -597,10 +677,10 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("bypass output column resolution") {
     val table = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("a", FloatType, nullable = false),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     val query = TestRelation(StructType(Seq(
-      StructField("s", StringType))).toAttributes)
+      StructField("s", StringType))))
 
     withClue("byName") {
       val parsedPlan = byName(table, query)
@@ -619,22 +699,23 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val tableWithStructCol = TestRelation(
       new StructType().add(
         "col", new StructType().add("a", IntegerType).add("b", IntegerType)
-      ).toAttributes
+      )
     )
 
     val query = TestRelation(
       new StructType().add(
         "col", new StructType().add("x", IntegerType).add("y", IntegerType)
-      ).toAttributes
+      )
     )
 
     withClue("byName") {
       val parsedPlan = byName(tableWithStructCol, query)
       assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot find data for output column 'col.a'",
-        "Cannot find data for output column 'col.b'"))
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map("tableName" -> "`table-name`", "colName" -> "`col`.`a`")
+      )
     }
 
     withClue("byPosition") {
@@ -682,9 +763,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'b.n2': 'dn3'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`b`.`n2`",
+        "extraFields" -> "`dn3`")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside array (byName)") {
@@ -706,9 +792,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'arr.element': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`arr`.`element`",
+        "extraFields" -> "`z`")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside map key (byName)") {
@@ -734,9 +825,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'm.key': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`m`.`key`",
+        "extraFields" -> "`z`")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside map value (byName)") {
@@ -762,9 +858,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'm.value': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colName" -> "`m`.`value`",
+        "extraFields" -> "`z`")
+    )
   }
 
   test("SPARK-42997: missing fields in nested struct (byName)") {
@@ -790,9 +891,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`b`.`n2`.`dn3`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`b`.`n2`",
+          "missingFields" -> "`dn3`")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside array (byName)") {
@@ -818,9 +934,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`arr`.`element`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`arr`.`element`",
+          "missingFields" -> "`y`")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside map key (byName)") {
@@ -850,9 +981,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`m`.`key`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`m`.`key`",
+          "missingFields" -> "`y`")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside map value (byName)") {
@@ -882,9 +1028,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`m`.`value`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`m`.`value`",
+          "missingFields" -> "`y`")
+      )
+    }
   }
 
   test("SPARK-42855: NOT NULL checks for nested structs, arrays, maps (byName)") {
@@ -1134,11 +1295,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   protected def testResolvedOverwriteByExpression(): Unit = {
     val table = TestRelation(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
-      StructField("y", DoubleType))).toAttributes)
+      StructField("y", DoubleType))))
 
     val query = TestRelation(StructType(Seq(
       StructField("a", DoubleType, nullable = false),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     val a = query.output.head
     val b = query.output.last
@@ -1162,11 +1323,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   protected def testNotResolvedOverwriteByExpression(): Unit = {
     val table = TestRelation(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
-      StructField("y", DoubleType))).toAttributes)
+      StructField("y", DoubleType))))
 
     val query = TestRelation(StructType(Seq(
       StructField("a", DoubleType, nullable = false),
-      StructField("b", DoubleType))).toAttributes)
+      StructField("b", DoubleType))))
 
     // the write is resolved (checked above). this test plan is not because of the expression.
     val parsedPlan = OverwriteByExpression.byPosition(table, query,
@@ -1181,7 +1342,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
-      StructField("y", DoubleType))).toAttributes)
+      StructField("y", DoubleType))))
 
     val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))

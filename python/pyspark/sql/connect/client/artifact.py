@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.sql.connect.client.logging import logger
 
 check_dependencies(__name__)
 
@@ -25,7 +26,7 @@ import sys
 import os
 import zlib
 from itertools import chain
-from typing import List, Iterable, BinaryIO, Iterator, Optional
+from typing import List, Iterable, BinaryIO, Iterator, Optional, Tuple
 import abc
 from pathlib import Path
 from urllib.parse import urlparse
@@ -51,7 +52,6 @@ class LocalData(metaclass=abc.ABCMeta):
     Payload stored on this machine.
     """
 
-    @cached_property
     @abc.abstractmethod
     def stream(self) -> BinaryIO:
         pass
@@ -69,14 +69,18 @@ class LocalFile(LocalData):
 
     def __init__(self, path: str):
         self.path = path
-        self._size: int
-        self._stream: int
+
+        # Check that the file can be read
+        # so that incorrect references can be discovered during Artifact creation,
+        # and not at the point of consumption.
+
+        with self.stream():
+            pass
 
     @cached_property
     def size(self) -> int:
         return os.path.getsize(self.path)
 
-    @cached_property
     def stream(self) -> BinaryIO:
         return open(self.path, "rb")
 
@@ -88,14 +92,11 @@ class InMemory(LocalData):
 
     def __init__(self, blob: bytes):
         self.blob = blob
-        self._size: int
-        self._stream: int
 
     @cached_property
     def size(self) -> int:
         return len(self.blob)
 
-    @cached_property
     def stream(self) -> BinaryIO:
         return io.BytesIO(self.blob)
 
@@ -162,12 +163,19 @@ class ArtifactManager:
     # https://github.com/grpc/grpc.github.io/issues/371.
     CHUNK_SIZE: int = 32 * 1024
 
-    def __init__(self, user_id: Optional[str], session_id: str, channel: grpc.Channel):
+    def __init__(
+        self,
+        user_id: Optional[str],
+        session_id: str,
+        channel: grpc.Channel,
+        metadata: Iterable[Tuple[str, str]],
+    ):
         self._user_context = proto.UserContext()
         if user_id is not None:
             self._user_context.user_id = user_id
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
+        self._metadata = metadata
 
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
@@ -236,17 +244,29 @@ class ArtifactManager:
         self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        return self._add_artifacts(
-            chain(
-                *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
-            )
+
+        # It's crucial that this function is not generator, but only returns generator.
+        # This way we are doing artifact parsing within the original caller thread
+        # And not during grpc consuming iterator, allowing for much better error reporting.
+
+        artifacts: Iterator[Artifact] = chain(
+            *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
         )
+
+        def generator() -> Iterator[proto.AddArtifactsRequest]:
+            try:
+                yield from self._add_artifacts(artifacts)
+            except Exception as e:
+                logger.error(f"Failed to submit addArtifacts request: {e}")
+                raise
+
+        return generator()
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
     ) -> proto.AddArtifactsResponse:
         """Separated for the testing purpose."""
-        return self._stub.AddArtifacts(requests)
+        return self._stub.AddArtifacts(requests, metadata=self._metadata)
 
     def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
@@ -264,6 +284,7 @@ class ArtifactManager:
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
             *path, pyfile=pyfile, archive=archive, file=file
         )
+
         self._request_add_artifacts(requests)
 
     def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:
@@ -322,7 +343,8 @@ class ArtifactManager:
         artifact_chunks = []
 
         for artifact in artifacts:
-            binary = artifact.storage.stream.read()
+            with artifact.storage.stream() as stream:
+                binary = stream.read()
             crc32 = zlib.crc32(binary)
             data = proto.AddArtifactsRequest.ArtifactChunk(data=binary, crc=crc32)
             artifact_chunks.append(
@@ -348,31 +370,32 @@ class ArtifactManager:
         )
 
         # Consume stream in chunks until there is no data left to read.
-        for chunk in iter(lambda: artifact.storage.stream.read(ArtifactManager.CHUNK_SIZE), b""):
-            if initial_batch:
-                # First RPC contains the `BeginChunkedArtifact` payload (`begin_chunk`).
-                yield proto.AddArtifactsRequest(
-                    session_id=self._session_id,
-                    user_context=self._user_context,
-                    begin_chunk=proto.AddArtifactsRequest.BeginChunkedArtifact(
-                        name=artifact.path,
-                        total_bytes=artifact.size,
-                        num_chunks=get_num_chunks,
-                        initial_chunk=proto.AddArtifactsRequest.ArtifactChunk(
+        with artifact.storage.stream() as stream:
+            for chunk in iter(lambda: stream.read(ArtifactManager.CHUNK_SIZE), b""):
+                if initial_batch:
+                    # First RPC contains the `BeginChunkedArtifact` payload (`begin_chunk`).
+                    yield proto.AddArtifactsRequest(
+                        session_id=self._session_id,
+                        user_context=self._user_context,
+                        begin_chunk=proto.AddArtifactsRequest.BeginChunkedArtifact(
+                            name=artifact.path,
+                            total_bytes=artifact.size,
+                            num_chunks=get_num_chunks,
+                            initial_chunk=proto.AddArtifactsRequest.ArtifactChunk(
+                                data=chunk, crc=zlib.crc32(chunk)
+                            ),
+                        ),
+                    )
+                    initial_batch = False
+                else:
+                    # Subsequent RPCs contains the `ArtifactChunk` payload (`chunk`).
+                    yield proto.AddArtifactsRequest(
+                        session_id=self._session_id,
+                        user_context=self._user_context,
+                        chunk=proto.AddArtifactsRequest.ArtifactChunk(
                             data=chunk, crc=zlib.crc32(chunk)
                         ),
-                    ),
-                )
-                initial_batch = False
-            else:
-                # Subsequent RPCs contains the `ArtifactChunk` payload (`chunk`).
-                yield proto.AddArtifactsRequest(
-                    session_id=self._session_id,
-                    user_context=self._user_context,
-                    chunk=proto.AddArtifactsRequest.ArtifactChunk(
-                        data=chunk, crc=zlib.crc32(chunk)
-                    ),
-                )
+                    )
 
     def is_cached_artifact(self, hash: str) -> bool:
         """
@@ -382,7 +405,9 @@ class ArtifactManager:
         request = proto.ArtifactStatusesRequest(
             user_context=self._user_context, session_id=self._session_id, names=[artifactName]
         )
-        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
+        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
+            request, metadata=self._metadata
+        )
         status = resp.statuses.get(artifactName)
         return status.exists if status is not None else False
 

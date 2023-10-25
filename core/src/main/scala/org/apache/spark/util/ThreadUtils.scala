@@ -307,20 +307,7 @@ private[spark] object ThreadUtils {
    */
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
-    try {
-      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
-      // See SPARK-13747.
-      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(atMost)(awaitPermission)
-    } catch {
-      case e: SparkFatalException =>
-        throw e.throwable
-      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
-      // the exception.
-      case NonFatal(t)
-          if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
-    }
+    SparkThreadUtils.awaitResult(awaitable, atMost)
   }
   // scalastyle:on awaitresult
 
@@ -375,6 +362,10 @@ private[spark] object ThreadUtils {
    * Transforms input collection by applying the given function to each element in parallel fashion.
    * Comparing to the map() method of Scala parallel collections, this method can be interrupted
    * at any time. This is useful on canceling of task execution, for example.
+   *
+   * Functions are guaranteed to be executed in freshly-created threads that inherit the calling
+   * thread's Spark thread-local variables. These threads also inherit the calling thread's active
+   * SparkSession.
    *
    * @param in - the input collection which should be transformed in parallel.
    * @param prefix - the prefix assigned to the underlying thread pool.

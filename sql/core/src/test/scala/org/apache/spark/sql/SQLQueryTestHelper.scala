@@ -140,8 +140,7 @@ trait SQLQueryTestHelper extends Logging {
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
+        (emptySchema, Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
       case s: SparkException if s.getCause != null =>
         // For a runtime exception, it is hard to match because its message contains
         // information of stage, task ID, etc.

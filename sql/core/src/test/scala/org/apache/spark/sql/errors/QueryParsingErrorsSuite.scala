@@ -20,14 +20,26 @@ package org.apache.spark.sql.errors
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
+class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQLHelper {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())
+  }
+
+  test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
+    withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
+      checkError(
+        exception = parseException("SELECT explode(arr => array(10, 20))"),
+        errorClass = "NAMED_PARAMETER_SUPPORT_DISABLED",
+        parameters = Map("functionName"-> toSQLId("explode"), "argument" -> toSQLId("arr"))
+      )
+    }
   }
 
   test("UNSUPPORTED_FEATURE: LATERAL join with NATURAL join not supported") {
@@ -368,6 +380,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
+  def checkParseSyntaxError(sqlCommand: String, errorString: String, hint: String = ""): Unit = {
+    checkError(
+      exception = parseException(sqlCommand),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> errorString, "hint" -> hint)
+    )
+  }
+
+  test("PARSE_SYNTAX_ERROR: named arguments invalid syntax") {
+    checkParseSyntaxError("select * from my_tvf(arg1 ==> 'value1')", "'>'")
+    checkParseSyntaxError("select * from my_tvf(arg1 = => 'value1')", "'=>'")
+    checkParseSyntaxError("select * from my_tvf((arg1 => 'value1'))", "'=>'")
+    checkParseSyntaxError("select * from my_tvf(arg1 => )", "')'")
+    checkParseSyntaxError("select * from my_tvf(arg1 => , 42)", "','")
+    checkParseSyntaxError("select * from my_tvf(my_tvf.arg1 => 'value1')", "'=>'")
+  }
+
   test("PARSE_SYNTAX_ERROR: extraneous input") {
     checkError(
       exception = parseException("select 1 1"),
@@ -600,7 +630,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
   }
 
   test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
@@ -621,7 +651,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'>'", "hint" -> ""))
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
   }
 
   test("INVALID_ESC: Escape string must contain only one character") {

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -319,7 +320,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
-    assert(df.count == 3)
+    assert(df.count() == 3)
     checkAnswer(
       df.na.drop("any", Seq("c1.c1-1")),
       Seq(Row(Row("b1", "b2"))))
@@ -546,9 +547,12 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34649: replace value of a nested column") {
     val df = createDFWithNestedColumns
-    val exception = intercept[UnsupportedOperationException] {
-      df.na.replace("c1.c1-1", Map("b1" ->"a1"))
-    }
-    assert(exception.getMessage.equals("Nested field c1.c1-1 is not supported."))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        df.na.replace("c1.c1-1", Map("b1" ->"a1"))
+      },
+      errorClass = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      parameters = Map("colName" -> "`c1`.`c1-1`")
+    )
   }
 }

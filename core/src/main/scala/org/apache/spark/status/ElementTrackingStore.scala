@@ -21,8 +21,8 @@ import java.util.Collection
 import java.util.concurrent.{ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Status._
@@ -73,7 +73,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   private val executor: ExecutorService = if (conf.get(ASYNC_TRACKING_ENABLED)) {
     ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
   } else {
-    ThreadUtils.sameThreadExecutorService
+    ThreadUtils.sameThreadExecutorService()
   }
 
   @volatile private var stopped = false

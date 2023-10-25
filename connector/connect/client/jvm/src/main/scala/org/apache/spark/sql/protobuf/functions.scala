@@ -16,19 +16,16 @@
  */
 package org.apache.spark.sql.protobuf
 
-import java.io.File
 import java.io.FileNotFoundException
-import java.nio.file.NoSuchFileException
+import java.nio.file.{Files, NoSuchFileException, Paths}
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.functions.{fnWithOptions, lit}
 
 // scalastyle:off: object.name
@@ -309,13 +306,13 @@ object functions {
   // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
   private def readDescriptorFileContent(filePath: String): Array[Byte] = {
     try {
-      FileUtils.readFileToByteArray(new File(filePath))
+      Files.readAllBytes(Paths.get(filePath))
     } catch {
       case ex: FileNotFoundException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+        throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
       case ex: NoSuchFileException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
+        throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case NonFatal(ex) => throw CompilationErrors.descriptorParseError(ex)
     }
   }
 }

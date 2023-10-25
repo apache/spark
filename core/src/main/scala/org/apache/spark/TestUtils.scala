@@ -31,10 +31,10 @@ import java.util.regex.Pattern
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -398,7 +398,7 @@ private[spark] object TestUtils {
 
   def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
     // 0 as port means choosing randomly from the available ports
-    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName(), 0))
     val resHandler = new ResourceHandler()
     resHandler.setResourceBase(resBaseDir)
     val handlers = new HandlerList()

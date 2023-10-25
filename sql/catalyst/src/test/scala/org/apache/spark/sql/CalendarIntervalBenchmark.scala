@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.types.{CalendarIntervalType, DataType, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -44,7 +44,7 @@ object CalendarIntervalBenchmark extends BenchmarkBase {
     assert(schema.head.dataType.isInstanceOf[CalendarIntervalType])
     runBenchmark(name) {
       val generator = RandomDataGenerator.forType(schema, nullable = false).get
-      val toRow = RowEncoder(schema).createSerializer()
+      val toRow = ExpressionEncoder(schema).createSerializer()
       val intervals =
         (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy().getInterval(0))
 

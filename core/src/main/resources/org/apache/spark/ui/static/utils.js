@@ -175,7 +175,7 @@ function setDataTableDefaults() {
 }
 
 function formatDate(date) {
-  if (date <= 0) return "-";
+  if (!date || date <= 0) return "-";
   else {
     var dt = new Date(date.replace("GMT", "Z"));
     return formatDateString(dt);

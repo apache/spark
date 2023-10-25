@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FSError, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.util.NextIterator
@@ -130,10 +131,7 @@ class StateStoreChangelogReader(
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
-      throw new IllegalStateException(
-        s"Error reading streaming state file of $fileToRead does not exist. " +
-          "If the stream job is restarted with a new or updated state operation, please" +
-          " create a new checkpoint location or clear the existing checkpoint location.", f)
+      throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
   }
   private val input: DataInputStream = decompressStream(sourceStream)
 

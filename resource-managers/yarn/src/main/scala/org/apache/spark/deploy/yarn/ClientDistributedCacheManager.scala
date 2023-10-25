@@ -68,7 +68,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
       link: String,
       statCache: Map[URI, FileStatus],
       appMasterOnly: Boolean = false): Unit = {
-    val destStatus = statCache.getOrElse(destPath.toUri(), fs.getFileStatus(destPath))
+    val destStatus = getFileStatus(fs, destPath.toUri, statCache)
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)
     val visibility = getVisibility(conf, destPath.toUri(), statCache)
@@ -119,46 +119,61 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    */
   private def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
     val fs = FileSystem.get(uri, conf)
-    val current = new Path(uri.getPath())
     // the leaf level file should be readable by others
-    if (!checkPermissionOfOther(fs, current, FsAction.READ, statCache)) {
+    if (!checkPermissionOfOther(fs, uri, FsAction.READ, statCache)) {
       return false
     }
-    ancestorsHaveExecutePermissions(fs, current.getParent(), statCache)
+    ancestorsHaveExecutePermissions(fs, getParentURI(uri), statCache)
   }
 
   /**
-   * Returns true if all ancestors of the specified path have the 'execute'
+   * Get the Parent URI of the given URI. Notes that the query & fragment of original URI will not
+   * be inherited when obtaining parent URI.
+   *
+   * @return the parent URI, null if the given uri is the root
+   */
+  private[yarn] def getParentURI(uri: URI): URI = {
+    val path = new Path(uri.toString)
+    val parent = path.getParent()
+    if (parent == null) {
+      null
+    } else {
+      parent.toUri()
+    }
+  }
+
+  /**
+   * Returns true if all ancestors of the specified uri have the 'execute'
    * permission set for all users (i.e. that other users can traverse
-   * the directory hierarchy to the given path)
+   * the directory hierarchy to the given uri)
    * @return true if all ancestors have the 'execute' permission set for all users
    */
   private def ancestorsHaveExecutePermissions(
       fs: FileSystem,
-      path: Path,
+      uri: URI,
       statCache: Map[URI, FileStatus]): Boolean = {
-    var current = path
+    var current = uri
     while (current != null) {
-      // the subdirs in the path should have execute permissions for others
+      // the subdirs in the corresponding uri path should have execute permissions for others
       if (!checkPermissionOfOther(fs, current, FsAction.EXECUTE, statCache)) {
         return false
       }
-      current = current.getParent()
+      current = getParentURI(current)
     }
     true
   }
 
   /**
-   * Checks for a given path whether the Other permissions on it
+   * Checks for a given URI whether the Other permissions on it
    * imply the permission in the passed FsAction
    * @return true if the path in the uri is visible to all, false otherwise
    */
   private def checkPermissionOfOther(
       fs: FileSystem,
-      path: Path,
+      uri: URI,
       action: FsAction,
       statCache: Map[URI, FileStatus]): Boolean = {
-    val status = getFileStatus(fs, path.toUri(), statCache)
+    val status = getFileStatus(fs, uri, statCache)
     val perms = status.getPermission()
     val otherAction = perms.getOtherAction()
     otherAction.implies(action)

@@ -94,6 +94,9 @@ if TYPE_CHECKING:
     import socket
     import io
 
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
+
     from pyspark._typing import NonUDFType
     from pyspark._typing import S, NumberOrArray
     from pyspark.context import SparkContext
@@ -114,12 +117,10 @@ if TYPE_CHECKING:
         AtomicValue,
         RowLike,
         SQLArrowBatchedUDFType,
+        SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
     )
-
-    from py4j.java_gateway import JavaObject
-    from py4j.java_collections import JavaArray
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -159,6 +160,7 @@ class PythonEvalType:
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
+    SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
 
 def portable_hash(x: Hashable) -> int:
@@ -288,7 +290,6 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: Serializer) 
                 # If response is 1 then there is a partition to read, if 0 then fully consumed
                 self._read_status = read_int(self._sockfile)
                 if self._read_status == 1:
-
                     # Load the partition data as a stream and read each item
                     self._read_iter = self._serializer.load_stream(self._sockfile)
                     for item in self._read_iter:
@@ -3857,7 +3858,6 @@ class RDD(Generic[T_co]):
         limit = self._memory_limit() / 2
 
         def add_shuffle_key(split: int, iterator: Iterable[Tuple[K, V]]) -> Iterable[bytes]:
-
             buckets = defaultdict(list)
             c, batch = 0, min(10 * numPartitions, 1000)  # type: ignore[operator]
 

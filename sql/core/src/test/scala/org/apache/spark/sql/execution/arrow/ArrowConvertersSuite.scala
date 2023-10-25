@@ -28,7 +28,7 @@ import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -550,7 +550,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val upperCase = Seq("A", "B", "C")
     val lowerCase = Seq("a", "b", "c")
     val nullStr = Seq("ab", "CDE", null)
-    val df = (upperCase, lowerCase, nullStr).zipped.toList
+    val df = upperCase.lazyZip(lowerCase).lazyZip(nullStr).toList
       .toDF("upper_case", "lower_case", "null_str")
 
     collectAndValidate(df, json, "stringData.json")
@@ -1265,15 +1265,9 @@ class ArrowConvertersSuite extends SharedSparkSession {
     spark.conf.unset(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key)
   }
 
-  testQuietly("interval is unsupported for arrow") {
-    val e = intercept[SparkException] {
-      calendarIntervalData.toDF().toArrowBatchRdd.collect()
-    }
-    checkError(
-      exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"INTERVAL\"")
-    )
+  test("interval is supported for arrow") {
+    val collected = calendarIntervalData.toDF().toArrowBatchRdd.collect()
+    assert(collected.size == 1)
   }
 
   test("test Arrow Validator") {

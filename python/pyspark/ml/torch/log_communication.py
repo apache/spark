@@ -156,6 +156,9 @@ class LogStreamingClient(LogStreamingClientBase):
         warnings.warn(f"{error_msg}: {traceback.format_exc()}\n")
 
     def _connect(self) -> None:
+        if self.port == -1:
+            self._fail("Log streaming server is not available.")
+            return
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)

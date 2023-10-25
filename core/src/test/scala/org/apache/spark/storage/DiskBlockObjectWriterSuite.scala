@@ -18,7 +18,7 @@ package org.apache.spark.storage
 
 import java.io.File
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.util.Utils
@@ -96,7 +96,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite {
 
     writer.open()
     writer.close()
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       writer.open()
     }
   }

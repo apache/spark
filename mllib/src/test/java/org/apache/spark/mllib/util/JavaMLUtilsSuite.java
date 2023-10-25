@@ -20,8 +20,8 @@ package org.apache.spark.mllib.util;
 import java.util.Arrays;
 import java.util.Collections;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.mllib.linalg.*;
@@ -44,11 +44,11 @@ public class JavaMLUtilsSuite extends SharedSparkSession {
     ).select("label", "features");
     Dataset<Row> newDataset1 = MLUtils.convertVectorColumnsToML(dataset);
     Row new1 = newDataset1.first();
-    Assert.assertEquals(RowFactory.create(1.0, x.asML()), new1);
+    Assertions.assertEquals(RowFactory.create(1.0, x.asML()), new1);
     Row new2 = MLUtils.convertVectorColumnsToML(dataset, "features").first();
-    Assert.assertEquals(new1, new2);
+    Assertions.assertEquals(new1, new2);
     Row old1 = MLUtils.convertVectorColumnsFromML(newDataset1).first();
-    Assert.assertEquals(RowFactory.create(1.0, x), old1);
+    Assertions.assertEquals(RowFactory.create(1.0, x), old1);
   }
 
   @Test
@@ -65,10 +65,10 @@ public class JavaMLUtilsSuite extends SharedSparkSession {
 
     Dataset<Row> newDataset1 = MLUtils.convertMatrixColumnsToML(dataset);
     Row new1 = newDataset1.first();
-    Assert.assertEquals(RowFactory.create(1.0, x.asML()), new1);
+    Assertions.assertEquals(RowFactory.create(1.0, x.asML()), new1);
     Row new2 = MLUtils.convertMatrixColumnsToML(dataset, "features").first();
-    Assert.assertEquals(new1, new2);
+    Assertions.assertEquals(new1, new2);
     Row old1 = MLUtils.convertMatrixColumnsFromML(newDataset1).first();
-    Assert.assertEquals(RowFactory.create(1.0, x), old1);
+    Assertions.assertEquals(RowFactory.create(1.0, x), old1);
   }
 }

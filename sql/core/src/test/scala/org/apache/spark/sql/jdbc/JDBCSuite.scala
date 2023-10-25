@@ -22,14 +22,14 @@ import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCo
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
+import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -364,12 +365,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
     val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
-    assert(df1.collect.toSet === Set(Row("mary", 2)))
+    assert(df1.collect().toSet === Set(Row("mary", 2)))
 
     // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
     val df2 = sql("SELECT * FROM foobar " +
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
-    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
+    assert(df2.collect().toSet === Set(Row("fred", 1), Row("mary", 2)))
 
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
@@ -382,7 +383,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // are applied for columns with Filter producing wrong results. On the other hand, JDBCRDD
     // correctly handles this case by assigning `requiredColumns` properly. See PR 10427 for more
     // discussions.
-    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
+    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect().toSet === Set(Row(1)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
@@ -913,6 +914,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
     assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
       Some(BooleanType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
+      Some(ByteType))
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
@@ -1840,8 +1843,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       rawPlan.execute().count()
     }
 
-    assert(getRowCount(df1) == df3.count)
-    assert(getRowCount(df2) < df3.count)
+    assert(getRowCount(df1) == df3.count())
+    assert(getRowCount(df2) < df3.count())
   }
 
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
@@ -1851,7 +1854,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         "dbtable" -> "table",
         "driver" -> "org.postgresql.Driver"
       )
-      spark.read.format("jdbc").options(opts).load
+      spark.read.format("jdbc").options(opts).load()
     }.getMessage
     assert(e.contains("The driver could not open a JDBC connection. " +
       "Check the URL: jdbc:mysql://localhost/db"))
@@ -2055,6 +2058,68 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-41990: Filter with composite name") {
     val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
-    assert(df.collect.toSet === Set(Row("smith", 1)))
+    assert(df.collect().toSet === Set(Row("smith", 1)))
+  }
+
+  test("SPARK-44866: SnowflakeDialect BOOLEAN type mapping") {
+    val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
+    assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("SPARK-45139: DatabricksDialect url handling") {
+    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") == DatabricksDialect)
+  }
+
+  test("SPARK-45139: DatabricksDialect catalyst type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.TINYINT, "", 1, null) == Some(ByteType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null) == Some(ShortType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.REAL, "", 1, null) == Some(FloatType))
+  }
+
+  test("SPARK-45139: DatabricksDialect JDBC type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+    assert(databricksDialect
+      .getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "DOUBLE")
+    assert(databricksDialect
+      .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
+    assert(databricksDialect
+      .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
+
+  test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).get == ShortType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-45475: saving a table via JDBC should work with observe API") {
+    val tableName = "test_table"
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val expected = Map("percentile_approx_val" -> 49)
+    assert(namedObservation.get === expected)
   }
 }

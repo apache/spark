@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.connect.client.util.QueryTest
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.test.{QueryTest, SQLHelper}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
@@ -278,7 +278,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
 
   test("drop with col(*)") {
     val df = createDF()
-    val ex = intercept[RuntimeException] {
+    val ex = intercept[AnalysisException] {
       df.na.drop("any", Seq("*")).collect()
     }
     assert(ex.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
@@ -293,7 +293,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
-    assert(df.count == 3)
+    assert(df.count() == 3)
     checkAnswer(df.na.drop("any", Seq("c1.c1-1")), Seq(Row(Row("b1", "b2"))))
   }
 
@@ -387,7 +387,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace float with nan") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+    withSQLConf(SqlApiConf.ANSI_ENABLED_KEY -> false.toString) {
       checkAnswer(
         createNaNDF().na.replace("*", Map(1.0f -> Float.NaN)),
         Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
@@ -396,7 +396,7 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace double with nan") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+    withSQLConf(SqlApiConf.ANSI_ENABLED_KEY -> false.toString) {
       checkAnswer(
         createNaNDF().na.replace("*", Map(1.0 -> Double.NaN)),
         Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::

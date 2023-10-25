@@ -177,7 +177,7 @@ object ListenerEventsTestHelper {
 
     s1Tasks.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(),
         "taskType", Success, task, new ExecutorMetrics, s1Metrics))
     }
 

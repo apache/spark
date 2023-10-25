@@ -17,7 +17,7 @@
 
 package org.apache.spark.internal.plugin
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Either, Left, Right}
 
 import org.apache.spark.{SparkContext, SparkEnv, TaskFailedReason}

@@ -24,9 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class GenericFunctionsParityTests(
     GenericFunctionsTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43631): Enable Series.interpolate with Spark Connect.")
-    def test_interpolate(self):
-        super().test_interpolate()
+    pass
 
 
 if __name__ == "__main__":

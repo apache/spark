@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -42,8 +43,8 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
@@ -102,7 +103,7 @@ class QueryExecutionErrorsSuite
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -116,7 +117,7 @@ class QueryExecutionErrorsSuite
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
         parameters = Map(
@@ -153,7 +154,7 @@ class QueryExecutionErrorsSuite
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       checkError(
         exception = intercept[SparkException] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
@@ -171,7 +172,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
@@ -221,7 +222,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-      "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
+      "type" -> "unknown"),
       sqlState = "0A000")
   }
 
@@ -499,6 +500,16 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-42330: rule id not found") {
+    checkError(
+      exception = intercept[SparkException] {
+          RuleIdCollection.getRuleId("incorrect")
+      },
+      errorClass = "RULE_ID_NOT_FOUND",
+      parameters = Map("ruleName" -> "incorrect")
+    )
+  }
+
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
       withTable("t") {
         withSQLConf(
@@ -712,6 +723,23 @@ class QueryExecutionErrorsSuite
           sqlState = "22003")
       }
     }
+  }
+
+  test("CANNOT_PARSE_STRING_AS_DATATYPE: parse string as float use from_json") {
+    val jsonStr = """{"a": "str"}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"""SELECT from_json('$jsonStr', 'a FLOAT', map('mode','FAILFAST'))""").collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_STRING_AS_DATATYPE",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST",
+        "fieldName" -> "`a`",
+        "fieldValue" -> "'str'",
+        "inputType" -> "StringType",
+        "targetType" -> "FloatType"),
+      sqlState = "22023")
   }
 
   test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
@@ -935,6 +963,34 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
+  }
+
+  test("INVALID_BITMAP_POSITION: position out of bounds") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "32768",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
+  }
+
+  test("INVALID_BITMAP_POSITION: negative position") {
+    val e = intercept[SparkException] {
+      sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
+    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
+    checkError(
+      exception = e,
+      errorClass = "INVALID_BITMAP_POSITION",
+      parameters = Map(
+        "bitPosition" -> "-1",
+        "bitmapNumBytes" -> "4096",
+        "bitmapNumBits" -> "32768"),
+      sqlState = "22003")
   }
 
   test("SPARK-43589: Use bytesToString instead of shift operation") {

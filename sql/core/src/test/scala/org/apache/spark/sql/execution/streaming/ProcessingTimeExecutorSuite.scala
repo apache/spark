@@ -53,7 +53,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
       override def run(): Unit = {
         executor.execute(() => {
           // Record the trigger time, increment clock if needed and
-          triggerTimes.add(clock.getTimeMillis.toInt)
+          triggerTimes.add(clock.getTimeMillis().toInt)
           clock.advance(clockIncrementInTrigger)
           clockIncrementInTrigger = 0 // reset this so that there are no runaway triggers
           continueExecuting

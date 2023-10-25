@@ -21,11 +21,11 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.json4s._
@@ -452,7 +452,7 @@ class MasterSuite extends SparkFunSuite
         workerHtml should include ("Spark Worker at")
         workerHtml should include ("Running Executors (0)")
         verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-      case _ => fail  // make sure we don't accidentially skip the tests
+      case _ => fail()  // make sure we don't accidentially skip the tests
     }
   }
 
@@ -541,6 +541,36 @@ class MasterSuite extends SparkFunSuite
 
   test("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
+  }
+
+  test("SPARK-45174: scheduling with max drivers") {
+    val master = makeMaster(new SparkConf().set(MAX_DRIVERS, 4))
+    master.state = RecoveryState.ALIVE
+    master.workers += workerInfo
+    val drivers = getDrivers(master)
+    val waitingDrivers = master.invokePrivate(_waitingDrivers())
+
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 0 && waitingDrivers.size === 0)
+
+    val command = Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    (1 to 3).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    assert(drivers.size === 3 && waitingDrivers.size === 3)
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 3 && waitingDrivers.size === 0)
+
+    (4 to 6).foreach { i =>
+      val driver = new DriverInfo(0, "driver" + i, desc, new Date())
+      waitingDrivers += driver
+      drivers.add(driver)
+    }
+    master.invokePrivate(_schedule())
+    assert(drivers.size === 6 && waitingDrivers.size === 2)
   }
 
   private def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
@@ -763,11 +793,14 @@ class MasterSuite extends SparkFunSuite
   // | Utility methods and fields for testing |
   // ==========================================
 
+  private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
   private val _scheduleExecutorsOnWorkers =
     PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
   private val _startExecutorsOnWorkers =
     PrivateMethod[Unit](Symbol("startExecutorsOnWorkers"))
   private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
+  private val _waitingDrivers =
+    PrivateMethod[mutable.ArrayBuffer[DriverInfo]](Symbol("waitingDrivers"))
   private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
