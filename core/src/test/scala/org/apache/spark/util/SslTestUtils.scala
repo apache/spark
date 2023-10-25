@@ -15,29 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.network.ssl.SslSampleConfigs
 
-/**
- * The class contains tests for the `CREATE NAMESPACE` command to check V1 Hive external
- * table catalog.
- */
-class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
+object SslTestUtils {
 
-  test("REQUIRES_SINGLE_PART_NAMESPACE") {
-    val namespace = "ns1.ns2"
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"CREATE NAMESPACE $catalog.$namespace")
-      },
-      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> catalog,
-        "namespace" -> "`ns1`.`ns2`"
-      )
-    )
+  /**
+   * Updates a SparkConf to contain SSL configurations
+   *
+   * @param conf The config to update
+   * @return The passed in SparkConf with SSL configurations added
+   */
+  def updateWithSSLConfig(conf: SparkConf): SparkConf = {
+    SslSampleConfigs.createDefaultConfigMap().entrySet().
+      forEach(entry => conf.set(entry.getKey, entry.getValue))
+    conf
   }
 }

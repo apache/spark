@@ -15,29 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.storage
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.{SparkConf, SslTestUtils}
 
-/**
- * The class contains tests for the `CREATE NAMESPACE` command to check V1 Hive external
- * table catalog.
- */
-class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
+class SslBlockManagerReplicationSuite extends BlockManagerReplicationSuite {
+  override def createConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createConf())
+  }
+}
 
-  test("REQUIRES_SINGLE_PART_NAMESPACE") {
-    val namespace = "ns1.ns2"
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"CREATE NAMESPACE $catalog.$namespace")
-      },
-      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
-      parameters = Map(
-        "sessionCatalog" -> catalog,
-        "namespace" -> "`ns1`.`ns2`"
-      )
-    )
+class SslBlockManagerProactiveReplicationSuite extends BlockManagerProactiveReplicationSuite {
+  override def createConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createConf())
+  }
+}
+
+class SslBlockManagerBasicStrategyReplicationSuite
+  extends BlockManagerBasicStrategyReplicationSuite {
+  override def createConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createConf())
   }
 }

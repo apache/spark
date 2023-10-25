@@ -630,7 +630,7 @@ private[spark] class ExecutorAllocationManager(
   private def onSchedulerQueueEmpty(): Unit = synchronized {
     logDebug("Clearing timer to add executors because there are no more pending tasks")
     addTime = NOT_SET
-    numExecutorsToAddPerResourceProfileId.transform { case (_, _) => 1 }
+    numExecutorsToAddPerResourceProfileId.mapValuesInPlace { case (_, _) => 1 }
   }
 
   private case class StageAttempt(stageId: Int, stageAttemptId: Int) {
