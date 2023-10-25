@@ -191,6 +191,10 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
+  public RocksIterator internalIterator() {
+    return it;
+  }
+
   private byte[] loadNext() {
     if (count >= max) {
       return null;

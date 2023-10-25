@@ -18,9 +18,15 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.lang.ref.Reference;
+import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
+import org.rocksdb.RocksIterator;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class RocksDBIteratorSuite extends DBIteratorSuite {
 
@@ -45,4 +51,37 @@ public class RocksDBIteratorSuite extends DBIteratorSuite {
     return db;
   }
 
+  @Test
+  public void testResourceCleaner() throws Exception {
+    File dbPathForCleanerTest = File.createTempFile(
+      "test_db_cleaner.", ".rdb");
+    dbPathForCleanerTest.delete();
+
+    RocksDB dbForCleanerTest = new RocksDB(dbPathForCleanerTest);
+    for (int i = 0; i < 8192; i++) {
+      dbForCleanerTest.write(createCustomType1(i));
+    }
+
+    RocksDBIterator<CustomType1> rocksDBIterator = (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+    Optional<Reference<RocksDBIterator<?>>> referenceOpt = dbForCleanerTest.iteratorReference(rocksDBIterator);
+    assertTrue(referenceOpt.isPresent());
+    RocksIterator it = rocksDBIterator.internalIterator();
+    // it has not been closed yet, isOwningHandle should be true.
+    assertTrue(it.isOwningHandle());
+    // Manually set rocksDBIterator to null, to be GC.
+    rocksDBIterator = null;
+    Reference<RocksDBIterator<?>> ref = referenceOpt.get();
+    // 100 times gc, the rocksDBIterator should be GCed.
+    int count = 0;
+    while (count < 100 && !ref.refersTo(null)) {
+      System.gc();
+      count++;
+      Thread.sleep(100);
+    }
+    assertTrue(ref.refersTo(null)); // check rocksDBIterator should be GCed
+    // Verify that the Cleaner will be executed after a period of time, and it.isOwningHandle() will become false.
+    assertTimeout(java.time.Duration.ofSeconds(5), () -> assertFalse(it.isOwningHandle()));
+
+    dbForCleanerTest.close();
+  }
 }
