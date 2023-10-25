@@ -237,7 +237,7 @@ private case object OracleDialect extends JdbcDialect with MergeByTempTable {
   override def getMergeQuery(
       sourceTableName: String,
       destinationTableName: String,
-      columns: Array[String],
+      columns: Array[StructField],
       keyColumns: Array[String]): String = {
     // Oracle dialect does not like a few bits of the standard SQL MERGE command
     super.getMergeQuery(sourceTableName, destinationTableName, columns, keyColumns)
