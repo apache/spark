@@ -273,18 +273,18 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private record ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) implements Runnable {
 
     @Override
-      public void run() {
-        rocksDB.getIteratorTracker().removeIf(ref -> {
-          RocksDBIterator<?> rocksDBIterator = ref.get();
-          return rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it);
-        });
-        synchronized (rocksDB.getRocksDB()) {
-          org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
-          if (_db == null) {
-            return;
-          }
-          rocksIterator.close();
+    public void run() {
+      rocksDB.getIteratorTracker().removeIf(ref -> {
+        RocksDBIterator<?> rocksDBIterator = ref.get();
+        return rocksDBIterator != null && rocksIterator.equals(rocksDBIterator.it);
+      });
+      synchronized (rocksDB.getRocksDB()) {
+        org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
+        if (_db == null) {
+          return;
         }
+        rocksIterator.close();
       }
     }
+  }
 }
