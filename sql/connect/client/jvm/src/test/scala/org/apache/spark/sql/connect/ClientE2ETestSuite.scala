@@ -28,6 +28,7 @@ import scala.jdk.CollectionConverters._
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, ForwardingClientCall, ForwardingClientCallListener, MethodDescriptor}
 import org.apache.commons.io.output.TeeOutputStream
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
