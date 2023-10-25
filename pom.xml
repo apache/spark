@@ -2857,12 +2857,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <excludes>
-                      <!--
-                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
-                      -->
-                      <exclude>org.threeten:threeten-extra</exclude>
-                    </excludes>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>
@@ -3010,6 +3004,10 @@
                 Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
               -->
               <arg>-Wconf:msg=legacy-binding:s</arg>
+              <!--
+                SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
               <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
             </args>
             <jvmArgs>
