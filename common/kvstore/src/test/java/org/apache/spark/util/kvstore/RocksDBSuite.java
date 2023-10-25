@@ -391,8 +391,8 @@ public class RocksDBSuite {
     RocksDB dbForCleanerTest = new RocksDB(dbPathForCleanerTest);
     try {
       for (int i = 0; i < 8192; i++) {
-      dbForCleanerTest.write(createCustomType1(i));
-    }
+        dbForCleanerTest.write(createCustomType1(i));
+      }
       RocksDBIterator<CustomType1> rocksDBIterator = (RocksDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
       Reference<RocksDBIterator<?>> reference = getRocksDBIteratorRef(rocksDBIterator, dbForCleanerTest);
       assertNotNull(reference);
