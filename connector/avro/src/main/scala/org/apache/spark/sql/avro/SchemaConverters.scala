@@ -51,6 +51,9 @@ object SchemaConverters {
    *
    * @since 2.4.0
    */
+  def toSqlType(avroSchema: Schema, options: AvroOptions): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, options)
+  }
   def toSqlType(avroSchema: Schema): SchemaType = {
     toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(Map()))
   }
