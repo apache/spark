@@ -23,7 +23,7 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Expression, InSubquery, ListQuery, Literal, LocalTimestamp, Now}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -133,6 +133,39 @@ class ComputeCurrentTimeSuite extends PlanTest {
     // there are timezones with a 30 or 45 minute offset
     val offsetsFromQuarterHour = lits.map( _ % Duration(15, MINUTES).toMicros).toSet
     assert(offsetsFromQuarterHour.size == 1)
+  }
+
+  val timeReferenceFactories: Seq[(String) => Expression] = Seq(
+    { _: String => CurrentTimestamp() },
+    { zoneId: String => LocalTimestamp(Some(zoneId)) },
+    { _: String => Now() },
+    { zoneId: String => CurrentDate(Some(zoneId)) }
+  )
+  for ((timeReferenceFactory, index) <- timeReferenceFactories.zipWithIndex) {
+    test(s"No duplicate literals index=$index") {
+      val numTimezones = ZoneId.SHORT_IDS.size
+      val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
+        // Request each timestamp multiple times.
+        (1 to 5).map { _ => Alias(timeReferenceFactory(zoneId), zoneId)() }
+      }.toSeq
+
+      val input = Project(timestamps, LocalRelation())
+      val plan = Optimize.execute(input).asInstanceOf[Project]
+
+      val uniqueLiteralObjectIds = new scala.collection.mutable.HashSet[Int]
+      plan.transformWithSubqueries { case subQuery =>
+        subQuery.transformAllExpressions { case literal: Literal =>
+          uniqueLiteralObjectIds += System.identityHashCode(literal)
+          literal
+        }
+      }
+      index match {
+        // CurrentTimestamp and Now are not parameterized by the timezone.
+        case 0 | 2 => assert(1 === uniqueLiteralObjectIds.size)
+        // LocalTimestamp and CurrentDate are parameterized by the timezone.
+        case 1 | 3 => assert(numTimezones === uniqueLiteralObjectIds.size)
+      }
+    }
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {
