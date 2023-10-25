@@ -135,18 +135,11 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(offsetsFromQuarterHour.size == 1)
   }
 
-  val timeReferenceFactories: Seq[(String) => Expression] = Seq(
-    { _: String => CurrentTimestamp() },
-    { zoneId: String => LocalTimestamp(Some(zoneId)) },
-    { _: String => Now() },
-    { zoneId: String => CurrentDate(Some(zoneId)) }
-  )
-  for ((timeReferenceFactory, index) <- timeReferenceFactories.zipWithIndex) {
-    test(s"No duplicate literals index=$index") {
-      val numTimezones = ZoneId.SHORT_IDS.size
+  test(s"No duplicate literals") {
+    def checkLiterals(f: (String) => Expression, expected: Int): Unit = {
       val timestamps = ZoneId.SHORT_IDS.asScala.flatMap { case (zoneId, _) =>
         // Request each timestamp multiple times.
-        (1 to 5).map { _ => Alias(timeReferenceFactory(zoneId), zoneId)() }
+        (1 to 5).map { _ => Alias(f(zoneId), zoneId)() }
       }.toSeq
 
       val input = Project(timestamps, LocalRelation())
@@ -159,13 +152,15 @@ class ComputeCurrentTimeSuite extends PlanTest {
           literal
         }
       }
-      index match {
-        // CurrentTimestamp and Now are not parameterized by the timezone.
-        case 0 | 2 => assert(1 === uniqueLiteralObjectIds.size)
-        // LocalTimestamp and CurrentDate are parameterized by the timezone.
-        case 1 | 3 => assert(numTimezones === uniqueLiteralObjectIds.size)
-      }
+
+      assert(expected === uniqueLiteralObjectIds.size)
     }
+
+    val numTimezones = ZoneId.SHORT_IDS.size
+    checkLiterals({ _: String => CurrentTimestamp() }, 1)
+    checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numTimezones)
+    checkLiterals({ _: String => Now() }, 1)
+    checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numTimezones)
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {
