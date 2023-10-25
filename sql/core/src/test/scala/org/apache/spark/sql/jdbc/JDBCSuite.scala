@@ -1368,8 +1368,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("MergeByTempTable: MERGE table into table") {
-    val columns = Array("id", "ts", "v1", "v2")
-      .map(testMergeByTempTableDialect.quoteIdentifier)
+    val columns = Array(
+      StructField("id", LongType),
+      StructField("ts", TimestampType),
+      StructField("v1", StringType),
+      StructField("v2", IntegerType)
+    )
     val keyColumns = Array("id", "ts")
     val sql = testMergeByTempTableDialect.getMergeQuery(
       "source", "destination", columns, keyColumns)
