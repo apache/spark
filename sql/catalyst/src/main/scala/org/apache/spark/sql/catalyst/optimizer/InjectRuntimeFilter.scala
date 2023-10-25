@@ -170,14 +170,29 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
+  // Whether it is a shuffle join or not should be based on the actual left and
+  // right table. For some join like left outer join, it will be a shuffle join
+  // even if left side table size is smaller than broadcast threshold.
   private def isProbablyShuffleJoin(
       left: LogicalPlan,
       right: LogicalPlan,
       hint: JoinHint,
       joinType: JoinType): Boolean = {
+
+    def canLeftSideBeBroadcast: Boolean = {
+      // Left side can not be broadcast for left outer join and left semi join.
+      canBuildBroadcastLeft(joinType) &&
+        (canBroadcastBySize(left, conf) || hintToBroadcastLeft(hint))
+    }
+
+    def canRightSideBeBroadcast: Boolean = {
+      // Right side can not be broadcast for right outer join.
+      canBuildBroadcastRight(joinType) &&
+        (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))
+    }
+
     // If any of the child can be broadcast, then it is not a shuffle join.
-    !(canLeftSideBeBroadcast(left, conf, hint, joinType) ||
-      canRightSideBeBroadcast(right, conf, hint, joinType))
+    !(canLeftSideBeBroadcast || canRightSideBeBroadcast)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
@@ -272,10 +287,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
-        // Whether it is a shuffle join or not should be based on the actual left and
-        // right table. For some join like left outer join, it will be a shuffle join
-        // even if left side table size is smaller than broadcast threshold.
-        val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
+        lazy val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
