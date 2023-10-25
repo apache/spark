@@ -139,7 +139,7 @@ class DataType:
         """
         return obj
 
-    def _as_nullable(self):
+    def _as_nullable(self) -> "DataType":
         return self
 
     @classmethod
@@ -709,7 +709,7 @@ class MapType(DataType):
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
 
-    def _as_nullable(self):
+    def _as_nullable(self) -> "MapType":
         return MapType(
             self.keyType._as_nullable(), self.valueType._as_nullable(), valueContainsNull=True
         )
