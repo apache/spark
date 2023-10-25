@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.sql.types.StructField
-
 import java.sql.Statement
 import java.util.UUID
+
+import org.apache.spark.sql.types.StructField
 
 
 trait MergeByTempTable {
