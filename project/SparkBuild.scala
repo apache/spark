@@ -266,6 +266,9 @@ object SparkBuild extends PomBuild {
         "-Wconf:msg=legacy-binding:s",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
+        // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
+        // so they are prohibited from being used as variable names in Scala 2.13 to
+        // reduce the cost of migration in subsequent versions.
         "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
       )
     }
