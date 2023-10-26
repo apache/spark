@@ -280,10 +280,9 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       });
       synchronized (rocksDB.getRocksDB()) {
         org.rocksdb.RocksDB _db = rocksDB.getRocksDB().get();
-        if (_db == null) {
-          return;
+        if (_db != null) {
+          rocksIterator.close();
         }
-        rocksIterator.close();
       }
     }
   }

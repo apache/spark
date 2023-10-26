@@ -294,13 +294,12 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       });
       synchronized (levelDB.getLevelDB()) {
         DB _db = levelDB.getLevelDB().get();
-        if (_db == null) {
-          return;
-        }
-        try {
-          dbIterator.close();
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
+        if (_db != null) {
+          try {
+            dbIterator.close();
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
         }
       }
     }
