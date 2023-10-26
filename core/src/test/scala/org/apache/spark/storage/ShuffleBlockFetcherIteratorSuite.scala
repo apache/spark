@@ -182,6 +182,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blocksByAddress: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
       taskContext: Option[TaskContext] = None,
       streamWrapperLimitSize: Option[Long] = None,
+      corruptAtAvailable: Boolean = false,
       blockManager: Option[BlockManager] = None,
       maxBytesInFlight: Long = Long.MaxValue,
       maxReqsInFlight: Int = Int.MaxValue,
@@ -201,7 +202,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockManager.getOrElse(createMockBlockManager()),
       mapOutputTracker,
       blocksByAddress.iterator,
-      (_, in) => streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in),
+      (_, in) => {
+        val limited = streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in)
+        if (corruptAtAvailable) {
+          new CorruptAvailableStream(limited)
+        } else {
+          limited
+        }
+      },
       maxBytesInFlight,
       maxReqsInFlight,
       maxBlocksInFlightPerAddress,
@@ -710,6 +718,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(corruptBuffer.size()).thenReturn(size)
     when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
     corruptBuffer
+  }
+
+  private class CorruptAvailableStream(in: InputStream) extends InputStream {
+    override def read(): Int = in.read()
+
+    override def read(dest: Array[Byte], off: Int, len: Int): Int = in.read(dest, off, len)
+
+    override def available(): Int = throw new IOException("corrupt at available")
   }
 
   private class CorruptStream(corruptAt: Long = 0L) extends InputStream {
@@ -1878,5 +1894,43 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
       blockManager = Some(blockManager), streamWrapperLimitSize = Some(100))
     verifyLocalBlocksFromFallback(iterator)
+  }
+
+  test("SPARK-45678: retry corrupt blocks on available()") {
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+
+    // Semaphore to coordinate event sequence in two different threads.
+    val sem = new Semaphore(0)
+
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      Future {
+        listener.onBlockFetchSuccess(
+          ShuffleBlockId(0, 0, 0).toString, createMockManagedBuffer())
+        sem.release()
+      }
+    }
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+      streamWrapperLimitSize = Some(100),
+      detectCorruptUseExtraMemory = false, // Don't use `ChunkedByteBufferInputStream`.
+      corruptAtAvailable = true,
+      checksumEnabled = false
+    )
+
+    sem.acquire()
+
+    val (id1, stream) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 0))
+
+    val err = intercept[FetchFailedException] {
+      stream.available()
+    }
+
+    assert(err.getMessage.contains("corrupt at available"))
   }
 }
