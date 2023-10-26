@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner;
 import java.util.ArrayList;
 import java.util.List;
@@ -189,9 +190,14 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   @Override
   public synchronized void close() throws IOException {
     if (!closed) {
-      cleanable.clean();;
-      closed = true;
-      next = null;
+      try {
+        cleanable.clean();
+      } catch (UncheckedIOException uncheckedIOException) {
+        throw uncheckedIOException.getCause();
+      } finally {
+        closed = true;
+        next = null;
+      }
     }
   }
 

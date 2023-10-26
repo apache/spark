@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.lang.ref.Reference;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -30,6 +31,8 @@ import java.util.stream.StreamSupport;
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
+import org.fusesource.leveldbjni.internal.JniDBIterator;
+import org.fusesource.leveldbjni.internal.NativeIterator;
 import org.iq80.leveldb.DBIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -399,9 +402,12 @@ public class LevelDBSuite {
       LevelDBIterator<CustomType1> levelDBIterator = (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
       Reference<LevelDBIterator<?>> reference = getRocksDBIteratorRef(levelDBIterator, dbForCleanerTest);
       assertNotNull(reference);
-      DBIterator it = levelDBIterator.internalIterator();
-      // it has not been closed yet, hasNext execute normally.
-      assertTrue(it.hasNext());
+      JniDBIterator it = (JniDBIterator) levelDBIterator.internalIterator();
+      Field iteratorField = it.getClass().getDeclaredField("iterator");
+      iteratorField.setAccessible(true);
+      NativeIterator nativeIterator = (NativeIterator) iteratorField.get(it);
+      // it has not been closed yet, isAllocated is true.
+      assertTrue(nativeIterator.isAllocated());
       // Manually set rocksDBIterator to null, to be GC.
       levelDBIterator = null;
       // 100 times gc, the rocksDBIterator should be GCed.
@@ -413,8 +419,8 @@ public class LevelDBSuite {
       }
       // check rocksDBIterator should be GCed
       assertTrue(reference.refersTo(null));
-      // Verify that the Cleaner will be executed after a period of time, there is an exception message. java.lang.AssertionError: This object has been deleted
-      assertThrows(AssertionError.class, it::hasNext, "This object has been deleted");
+      // Verify that the Cleaner will be executed after a period of time, isAllocated is true.
+      assertFalse(nativeIterator.isAllocated());
     } finally {
       dbForCleanerTest.close();
       FileUtils.deleteQuietly(dbPathForCleanerTest);
