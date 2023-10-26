@@ -2709,32 +2709,33 @@ class HiveDDLSuite
     assert(compression === actualCompression)
   }
 
-  Seq(("orc", "ZLIB"), ("parquet", ParquetCompressionCodec.GZIP.name)).foreach {
-    case (fileFormat, compression) =>
-      test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
-        withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
-          withTable("t") {
-            withTempPath { path =>
-              sql(
-                s"""
-                   |CREATE TABLE t(id int) USING hive
-                   |OPTIONS(fileFormat '$fileFormat', compression '$compression')
-                   |LOCATION '${path.toURI}'
+  Seq(
+    ("orc", "ZLIB"),
+    ("parquet", ParquetCompressionCodec.GZIP.name)).foreach { case (fileFormat, compression) =>
+    test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
+      withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
+        withTable("t") {
+          withTempPath { path =>
+            sql(
+              s"""
+                |CREATE TABLE t(id int) USING hive
+                |OPTIONS(fileFormat '$fileFormat', compression '$compression')
+                |LOCATION '${path.toURI}'
               """.stripMargin)
-              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(DDLUtils.isHiveTable(table))
-              assert(table.storage.serde.get.contains(fileFormat))
-              assert(table.storage.properties.get("compression") == Some(compression))
-              assert(spark.table("t").collect().isEmpty)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(DDLUtils.isHiveTable(table))
+            assert(table.storage.serde.get.contains(fileFormat))
+            assert(table.storage.properties.get("compression") == Some(compression))
+            assert(spark.table("t").collect().isEmpty)
 
-              sql("INSERT INTO t SELECT 1")
-              checkAnswer(spark.table("t"), Row(1))
-              val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
-              assertCompression(maybeFile, fileFormat, compression)
-            }
+            sql("INSERT INTO t SELECT 1")
+            checkAnswer(spark.table("t"), Row(1))
+            val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
+            assertCompression(maybeFile, fileFormat, compression)
           }
         }
       }
+    }
   }
 
   private def getReader(path: String): org.apache.orc.Reader = {

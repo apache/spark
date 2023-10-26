@@ -857,10 +857,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     checkCompressionCodec(
       ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION)))
 
-    checkCompressionCodec(ParquetCompressionCodec.UNCOMPRESSED)
-    checkCompressionCodec(ParquetCompressionCodec.GZIP)
-    checkCompressionCodec(ParquetCompressionCodec.SNAPPY)
-    checkCompressionCodec(ParquetCompressionCodec.ZSTD)
+    ParquetCompressionCodec.availableCodecs.asScala.foreach(checkCompressionCodec(_))
   }
 
   private def createParquetWriter(

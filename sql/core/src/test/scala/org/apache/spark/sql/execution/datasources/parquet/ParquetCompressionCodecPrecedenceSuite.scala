@@ -112,14 +112,8 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
   }
 
   test("Create parquet table with compression") {
+    val codecs = ParquetCompressionCodec.availableCodecs.asScala.map(_.name())
     Seq(true, false).foreach { isPartitioned =>
-      val codecs = Seq(
-        ParquetCompressionCodec.UNCOMPRESSED.name,
-        ParquetCompressionCodec.SNAPPY.name,
-        ParquetCompressionCodec.GZIP.name,
-        ParquetCompressionCodec.ZSTD.name,
-        ParquetCompressionCodec.LZ4.name,
-        ParquetCompressionCodec.LZ4_RAW.name)
       codecs.foreach { compressionCodec =>
         checkCompressionCodec(compressionCodec, isPartitioned)
       }
