@@ -72,9 +72,7 @@ class Command(google.protobuf.message.Message):
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
-    def register_function(
-        self,
-    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
+    def register_function(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
     @property
     def write_operation(self) -> global___WriteOperation: ...
     @property
@@ -92,9 +90,7 @@ class Command(google.protobuf.message.Message):
     @property
     def streaming_query_manager_command(self) -> global___StreamingQueryManagerCommand: ...
     @property
-    def register_table_function(
-        self,
-    ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
+    def register_table_function(self) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
@@ -103,8 +99,7 @@ class Command(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        register_function: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
+        register_function: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction | None = ...,
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
@@ -113,86 +108,12 @@ class Command(google.protobuf.message.Message):
         streaming_query_command: global___StreamingQueryCommand | None = ...,
         get_resources_command: global___GetResourcesCommand | None = ...,
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
-        register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
-        | None = ...,
+        register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "command_type",
-            b"command_type",
-            "create_dataframe_view",
-            b"create_dataframe_view",
-            "extension",
-            b"extension",
-            "get_resources_command",
-            b"get_resources_command",
-            "register_function",
-            b"register_function",
-            "register_table_function",
-            b"register_table_function",
-            "sql_command",
-            b"sql_command",
-            "streaming_query_command",
-            b"streaming_query_command",
-            "streaming_query_manager_command",
-            b"streaming_query_manager_command",
-            "write_operation",
-            b"write_operation",
-            "write_operation_v2",
-            b"write_operation_v2",
-            "write_stream_operation_start",
-            b"write_stream_operation_start",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "command_type",
-            b"command_type",
-            "create_dataframe_view",
-            b"create_dataframe_view",
-            "extension",
-            b"extension",
-            "get_resources_command",
-            b"get_resources_command",
-            "register_function",
-            b"register_function",
-            "register_table_function",
-            b"register_table_function",
-            "sql_command",
-            b"sql_command",
-            "streaming_query_command",
-            b"streaming_query_command",
-            "streaming_query_manager_command",
-            b"streaming_query_manager_command",
-            "write_operation",
-            b"write_operation",
-            "write_operation_v2",
-            b"write_operation_v2",
-            "write_stream_operation_start",
-            b"write_stream_operation_start",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "register_function",
-            "write_operation",
-            "create_dataframe_view",
-            "write_operation_v2",
-            "sql_command",
-            "write_stream_operation_start",
-            "streaming_query_command",
-            "get_resources_command",
-            "streaming_query_manager_command",
-            "register_table_function",
-            "extension",
-        ]
-        | None
-    ): ...
+    def HasField(self, field_name: typing_extensions.Literal["command_type", b"command_type", "create_dataframe_view", b"create_dataframe_view", "extension", b"extension", "get_resources_command", b"get_resources_command", "register_function", b"register_function", "register_table_function", b"register_table_function", "sql_command", b"sql_command", "streaming_query_command", b"streaming_query_command", "streaming_query_manager_command", b"streaming_query_manager_command", "write_operation", b"write_operation", "write_operation_v2", b"write_operation_v2", "write_stream_operation_start", b"write_stream_operation_start"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["command_type", b"command_type", "create_dataframe_view", b"create_dataframe_view", "extension", b"extension", "get_resources_command", b"get_resources_command", "register_function", b"register_function", "register_table_function", b"register_table_function", "sql_command", b"sql_command", "streaming_query_command", b"streaming_query_command", "streaming_query_manager_command", b"streaming_query_manager_command", "write_operation", b"write_operation", "write_operation_v2", b"write_operation_v2", "write_stream_operation_start", b"write_stream_operation_start"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]) -> typing_extensions.Literal["register_function", "write_operation", "create_dataframe_view", "write_operation_v2", "sql_command", "write_stream_operation_start", "streaming_query_command", "get_resources_command", "streaming_query_manager_command", "register_table_function", "extension"] | None: ...
 
 global___Command = Command
 
@@ -221,12 +142,8 @@ class SqlCommand(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["value", b"value"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     class NamedArgumentsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -242,12 +159,8 @@ class SqlCommand(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["value", b"value"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     SQL_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
@@ -257,34 +170,18 @@ class SqlCommand(google.protobuf.message.Message):
     sql: builtins.str
     """(Required) SQL Query."""
     @property
-    def args(
-        self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]:
+    def args(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal]:
         """(Optional) A map of parameter names to literal expressions."""
     @property
-    def pos_args(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]:
+    def pos_args(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[pyspark.sql.connect.proto.expressions_pb2.Expression.Literal]:
         """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
     @property
-    def named_arguments(
-        self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]:
+    def named_arguments(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression]:
         """(Optional) A map of parameter names to expressions.
         It cannot coexist with `pos_arguments`.
         """
     @property
-    def pos_arguments(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]:
+    def pos_arguments(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[pyspark.sql.connect.proto.expressions_pb2.Expression]:
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
@@ -292,38 +189,12 @@ class SqlCommand(google.protobuf.message.Message):
         self,
         *,
         sql: builtins.str = ...,
-        args: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        pos_args: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        named_arguments: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
-        pos_arguments: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        args: collections.abc.Mapping[builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal] | None = ...,
+        pos_args: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression.Literal] | None = ...,
+        named_arguments: collections.abc.Mapping[builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression] | None = ...,
+        pos_arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None = ...,
     ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "args",
-            b"args",
-            "named_arguments",
-            b"named_arguments",
-            "pos_args",
-            b"pos_args",
-            "pos_arguments",
-            b"pos_arguments",
-            "sql",
-            b"sql",
-        ],
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["args", b"args", "named_arguments", b"named_arguments", "pos_args", b"pos_args", "pos_arguments", b"pos_arguments", "sql", b"sql"]) -> None: ...
 
 global___SqlCommand = SqlCommand
 
@@ -357,15 +228,8 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
         is_global: builtins.bool = ...,
         replace: builtins.bool = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "input", b"input", "is_global", b"is_global", "name", b"name", "replace", b"replace"
-        ],
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["input", b"input"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["input", b"input", "is_global", b"is_global", "name", b"name", "replace", b"replace"]) -> None: ...
 
 global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
@@ -378,12 +242,7 @@ class WriteOperation(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _SaveModeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-            WriteOperation._SaveMode.ValueType
-        ],
-        builtins.type,
-    ):  # noqa: F821
+    class _SaveModeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[WriteOperation._SaveMode.ValueType], builtins.type):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         SAVE_MODE_UNSPECIFIED: WriteOperation._SaveMode.ValueType  # 0
         SAVE_MODE_APPEND: WriteOperation._SaveMode.ValueType  # 1
@@ -411,9 +270,7 @@ class WriteOperation(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     class SaveTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -422,12 +279,7 @@ class WriteOperation(google.protobuf.message.Message):
             ValueType = typing.NewType("ValueType", builtins.int)
             V: typing_extensions.TypeAlias = ValueType
 
-        class _TableSaveMethodEnumTypeWrapper(
-            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-                WriteOperation.SaveTable._TableSaveMethod.ValueType
-            ],
-            builtins.type,
-        ):  # noqa: F821
+        class _TableSaveMethodEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[WriteOperation.SaveTable._TableSaveMethod.ValueType], builtins.type):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
             TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
@@ -450,12 +302,7 @@ class WriteOperation(google.protobuf.message.Message):
             table_name: builtins.str = ...,
             save_method: global___WriteOperation.SaveTable.TableSaveMethod.ValueType = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "save_method", b"save_method", "table_name", b"table_name"
-            ],
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["save_method", b"save_method", "table_name", b"table_name"]) -> None: ...
 
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -463,9 +310,7 @@ class WriteOperation(google.protobuf.message.Message):
         BUCKET_COLUMN_NAMES_FIELD_NUMBER: builtins.int
         NUM_BUCKETS_FIELD_NUMBER: builtins.int
         @property
-        def bucket_column_names(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        def bucket_column_names(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
         num_buckets: builtins.int
         def __init__(
             self,
@@ -473,12 +318,7 @@ class WriteOperation(google.protobuf.message.Message):
             bucket_column_names: collections.abc.Iterable[builtins.str] | None = ...,
             num_buckets: builtins.int = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "bucket_column_names", b"bucket_column_names", "num_buckets", b"num_buckets"
-            ],
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["bucket_column_names", b"bucket_column_names", "num_buckets", b"num_buckets"]) -> None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
@@ -489,6 +329,7 @@ class WriteOperation(google.protobuf.message.Message):
     PARTITIONING_COLUMNS_FIELD_NUMBER: builtins.int
     BUCKET_BY_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -500,14 +341,10 @@ class WriteOperation(google.protobuf.message.Message):
     mode: global___WriteOperation.SaveMode.ValueType
     """(Required) the save mode."""
     @property
-    def sort_column_names(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def sort_column_names(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) List of columns to sort the output by."""
     @property
-    def partitioning_columns(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def partitioning_columns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) List of columns for partitioning."""
     @property
     def bucket_by(self) -> global___WriteOperation.BucketBy:
@@ -517,6 +354,9 @@ class WriteOperation(google.protobuf.message.Message):
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of configuration options."""
+    @property
+    def clustering_columns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
@@ -529,61 +369,14 @@ class WriteOperation(google.protobuf.message.Message):
         partitioning_columns: collections.abc.Iterable[builtins.str] | None = ...,
         bucket_by: global___WriteOperation.BucketBy | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_source",
-            b"_source",
-            "bucket_by",
-            b"bucket_by",
-            "input",
-            b"input",
-            "path",
-            b"path",
-            "save_type",
-            b"save_type",
-            "source",
-            b"source",
-            "table",
-            b"table",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_source",
-            b"_source",
-            "bucket_by",
-            b"bucket_by",
-            "input",
-            b"input",
-            "mode",
-            b"mode",
-            "options",
-            b"options",
-            "partitioning_columns",
-            b"partitioning_columns",
-            "path",
-            b"path",
-            "save_type",
-            b"save_type",
-            "sort_column_names",
-            b"sort_column_names",
-            "source",
-            b"source",
-            "table",
-            b"table",
-        ],
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["_source", b"_source", "bucket_by", b"bucket_by", "input", b"input", "path", b"path", "save_type", b"save_type", "source", b"source", "table", b"table"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["_source", b"_source", "bucket_by", b"bucket_by", "clustering_columns", b"clustering_columns", "input", b"input", "mode", b"mode", "options", b"options", "partitioning_columns", b"partitioning_columns", "path", b"path", "save_type", b"save_type", "sort_column_names", b"sort_column_names", "source", b"source", "table", b"table"]) -> None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_source", b"_source"]
-    ) -> typing_extensions.Literal["source"] | None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_source", b"_source"]) -> typing_extensions.Literal["source"] | None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["save_type", b"save_type"]
-    ) -> typing_extensions.Literal["path", "table"] | None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["save_type", b"save_type"]) -> typing_extensions.Literal["path", "table"] | None: ...
 
 global___WriteOperation = WriteOperation
 
@@ -596,12 +389,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _ModeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
-            WriteOperationV2._Mode.ValueType
-        ],
-        builtins.type,
-    ):  # noqa: F821
+    class _ModeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[WriteOperationV2._Mode.ValueType], builtins.type):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         MODE_UNSPECIFIED: WriteOperationV2._Mode.ValueType  # 0
         MODE_CREATE: WriteOperationV2._Mode.ValueType  # 1
@@ -633,9 +421,7 @@ class WriteOperationV2(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     class TablePropertiesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -650,9 +436,7 @@ class WriteOperationV2(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
@@ -662,6 +446,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
     MODE_FIELD_NUMBER: builtins.int
     OVERWRITE_CONDITION_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -672,11 +457,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     "parquet", "json", etc.
     """
     @property
-    def partitioning_columns(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]:
+    def partitioning_columns(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[pyspark.sql.connect.proto.expressions_pb2.Expression]:
         """(Optional) List of columns for partitioning for output table created by `create`,
         `createOrReplace`, or `replace`
         """
@@ -684,69 +465,32 @@ class WriteOperationV2(google.protobuf.message.Message):
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of configuration options."""
     @property
-    def table_properties(
-        self,
-    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+    def table_properties(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """(Optional) A list of table properties."""
     mode: global___WriteOperationV2.Mode.ValueType
     """(Required) Write mode."""
     @property
     def overwrite_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
         """(Optional) A condition for overwrite saving mode"""
+    @property
+    def clustering_columns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
         input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         table_name: builtins.str = ...,
         provider: builtins.str | None = ...,
-        partitioning_columns: collections.abc.Iterable[
-            pyspark.sql.connect.proto.expressions_pb2.Expression
-        ]
-        | None = ...,
+        partitioning_columns: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression] | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         table_properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         mode: global___WriteOperationV2.Mode.ValueType = ...,
         overwrite_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_provider",
-            b"_provider",
-            "input",
-            b"input",
-            "overwrite_condition",
-            b"overwrite_condition",
-            "provider",
-            b"provider",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_provider",
-            b"_provider",
-            "input",
-            b"input",
-            "mode",
-            b"mode",
-            "options",
-            b"options",
-            "overwrite_condition",
-            b"overwrite_condition",
-            "partitioning_columns",
-            b"partitioning_columns",
-            "provider",
-            b"provider",
-            "table_name",
-            b"table_name",
-            "table_properties",
-            b"table_properties",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_provider", b"_provider"]
-    ) -> typing_extensions.Literal["provider"] | None: ...
+    def HasField(self, field_name: typing_extensions.Literal["_provider", b"_provider", "input", b"input", "overwrite_condition", b"overwrite_condition", "provider", b"provider"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["_provider", b"_provider", "clustering_columns", b"clustering_columns", "input", b"input", "mode", b"mode", "options", b"options", "overwrite_condition", b"overwrite_condition", "partitioning_columns", b"partitioning_columns", "provider", b"provider", "table_name", b"table_name", "table_properties", b"table_properties"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_provider", b"_provider"]) -> typing_extensions.Literal["provider"] | None: ...
 
 global___WriteOperationV2 = WriteOperationV2
 
@@ -770,9 +514,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
@@ -796,13 +538,9 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     Consult API documentation unless explicitly documented here.
     """
     @property
-    def options(
-        self,
-    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+    def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
     @property
-    def partitioning_column_names(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def partitioning_column_names(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
     processing_time_interval: builtins.str
     available_now: builtins.bool
     once: builtins.bool
@@ -833,83 +571,12 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         foreach_writer: global___StreamingForeachFunction | None = ...,
         foreach_batch: global___StreamingForeachFunction | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "available_now",
-            b"available_now",
-            "continuous_checkpoint_interval",
-            b"continuous_checkpoint_interval",
-            "foreach_batch",
-            b"foreach_batch",
-            "foreach_writer",
-            b"foreach_writer",
-            "input",
-            b"input",
-            "once",
-            b"once",
-            "path",
-            b"path",
-            "processing_time_interval",
-            b"processing_time_interval",
-            "sink_destination",
-            b"sink_destination",
-            "table_name",
-            b"table_name",
-            "trigger",
-            b"trigger",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "available_now",
-            b"available_now",
-            "continuous_checkpoint_interval",
-            b"continuous_checkpoint_interval",
-            "foreach_batch",
-            b"foreach_batch",
-            "foreach_writer",
-            b"foreach_writer",
-            "format",
-            b"format",
-            "input",
-            b"input",
-            "once",
-            b"once",
-            "options",
-            b"options",
-            "output_mode",
-            b"output_mode",
-            "partitioning_column_names",
-            b"partitioning_column_names",
-            "path",
-            b"path",
-            "processing_time_interval",
-            b"processing_time_interval",
-            "query_name",
-            b"query_name",
-            "sink_destination",
-            b"sink_destination",
-            "table_name",
-            b"table_name",
-            "trigger",
-            b"trigger",
-        ],
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["available_now", b"available_now", "continuous_checkpoint_interval", b"continuous_checkpoint_interval", "foreach_batch", b"foreach_batch", "foreach_writer", b"foreach_writer", "input", b"input", "once", b"once", "path", b"path", "processing_time_interval", b"processing_time_interval", "sink_destination", b"sink_destination", "table_name", b"table_name", "trigger", b"trigger"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["available_now", b"available_now", "continuous_checkpoint_interval", b"continuous_checkpoint_interval", "foreach_batch", b"foreach_batch", "foreach_writer", b"foreach_writer", "format", b"format", "input", b"input", "once", b"once", "options", b"options", "output_mode", b"output_mode", "partitioning_column_names", b"partitioning_column_names", "path", b"path", "processing_time_interval", b"processing_time_interval", "query_name", b"query_name", "sink_destination", b"sink_destination", "table_name", b"table_name", "trigger", b"trigger"]) -> None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]
-    ) -> typing_extensions.Literal["path", "table_name"] | None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]) -> typing_extensions.Literal["path", "table_name"] | None: ...
     @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
-    ) -> (
-        typing_extensions.Literal[
-            "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
-        ]
-        | None
-    ): ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]) -> typing_extensions.Literal["processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"] | None: ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
@@ -928,31 +595,9 @@ class StreamingForeachFunction(google.protobuf.message.Message):
         python_function: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
         scala_function: pyspark.sql.connect.proto.expressions_pb2.ScalarScalaUDF | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function",
-            b"function",
-            "python_function",
-            b"python_function",
-            "scala_function",
-            b"scala_function",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function",
-            b"function",
-            "python_function",
-            b"python_function",
-            "scala_function",
-            b"scala_function",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_function", "scala_function"] | None: ...
+    def HasField(self, field_name: typing_extensions.Literal["function", b"function", "python_function", b"python_function", "scala_function", b"scala_function"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["function", b"function", "python_function", b"python_function", "scala_function", b"scala_function"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["function", b"function"]) -> typing_extensions.Literal["python_function", "scala_function"] | None: ...
 
 global___StreamingForeachFunction = StreamingForeachFunction
 
@@ -972,12 +617,8 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
         query_id: global___StreamingQueryInstanceId | None = ...,
         name: builtins.str = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["query_id", b"query_id"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["name", b"name", "query_id", b"query_id"]
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["query_id", b"query_id"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["name", b"name", "query_id", b"query_id"]) -> None: ...
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
@@ -1007,9 +648,7 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
         id: builtins.str = ...,
         run_id: builtins.str = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["id", b"id", "run_id", b"run_id"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["id", b"id", "run_id", b"run_id"]) -> None: ...
 
 global___StreamingQueryInstanceId = StreamingQueryInstanceId
 
@@ -1031,9 +670,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             *,
             extended: builtins.bool = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["extended", b"extended"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["extended", b"extended"]) -> None: ...
 
     class AwaitTerminationCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1045,21 +682,9 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             *,
             timeout_ms: builtins.int | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
-        ) -> typing_extensions.Literal["timeout_ms"] | None: ...
+        def HasField(self, field_name: typing_extensions.Literal["_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"]) -> None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
@@ -1104,71 +729,9 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         exception: builtins.bool = ...,
         await_termination: global___StreamingQueryCommand.AwaitTerminationCommand | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "await_termination",
-            b"await_termination",
-            "command",
-            b"command",
-            "exception",
-            b"exception",
-            "explain",
-            b"explain",
-            "last_progress",
-            b"last_progress",
-            "process_all_available",
-            b"process_all_available",
-            "query_id",
-            b"query_id",
-            "recent_progress",
-            b"recent_progress",
-            "status",
-            b"status",
-            "stop",
-            b"stop",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "await_termination",
-            b"await_termination",
-            "command",
-            b"command",
-            "exception",
-            b"exception",
-            "explain",
-            b"explain",
-            "last_progress",
-            b"last_progress",
-            "process_all_available",
-            b"process_all_available",
-            "query_id",
-            b"query_id",
-            "recent_progress",
-            b"recent_progress",
-            "status",
-            b"status",
-            "stop",
-            b"stop",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal[
-            "status",
-            "last_progress",
-            "recent_progress",
-            "stop",
-            "process_all_available",
-            "explain",
-            "exception",
-            "await_termination",
-        ]
-        | None
-    ): ...
+    def HasField(self, field_name: typing_extensions.Literal["await_termination", b"await_termination", "command", b"command", "exception", b"exception", "explain", b"explain", "last_progress", b"last_progress", "process_all_available", b"process_all_available", "query_id", b"query_id", "recent_progress", b"recent_progress", "status", b"status", "stop", b"stop"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["await_termination", b"await_termination", "command", b"command", "exception", b"exception", "explain", b"explain", "last_progress", b"last_progress", "process_all_available", b"process_all_available", "query_id", b"query_id", "recent_progress", b"recent_progress", "status", b"status", "stop", b"stop"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["command", b"command"]) -> typing_extensions.Literal["status", "last_progress", "recent_progress", "stop", "process_all_available", "explain", "exception", "await_termination"] | None: ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
 
@@ -1197,38 +760,21 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             is_trigger_active: builtins.bool = ...,
             is_active: builtins.bool = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "is_active",
-                b"is_active",
-                "is_data_available",
-                b"is_data_available",
-                "is_trigger_active",
-                b"is_trigger_active",
-                "status_message",
-                b"status_message",
-            ],
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["is_active", b"is_active", "is_data_available", b"is_data_available", "is_trigger_active", b"is_trigger_active", "status_message", b"status_message"]) -> None: ...
 
     class RecentProgressResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RECENT_PROGRESS_JSON_FIELD_NUMBER: builtins.int
         @property
-        def recent_progress_json(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        def recent_progress_json(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """Progress reports as an array of json strings."""
         def __init__(
             self,
             *,
             recent_progress_json: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal["recent_progress_json", b"recent_progress_json"],
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["recent_progress_json", b"recent_progress_json"]) -> None: ...
 
     class ExplainResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1241,9 +787,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             *,
             result: builtins.str = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["result", b"result"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["result", b"result"]) -> None: ...
 
     class ExceptionResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1266,53 +810,14 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             error_class: builtins.str | None = ...,
             stack_trace: builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_error_class",
-                b"_error_class",
-                "_exception_message",
-                b"_exception_message",
-                "_stack_trace",
-                b"_stack_trace",
-                "error_class",
-                b"error_class",
-                "exception_message",
-                b"exception_message",
-                "stack_trace",
-                b"stack_trace",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_error_class",
-                b"_error_class",
-                "_exception_message",
-                b"_exception_message",
-                "_stack_trace",
-                b"_stack_trace",
-                "error_class",
-                b"error_class",
-                "exception_message",
-                b"exception_message",
-                "stack_trace",
-                b"stack_trace",
-            ],
-        ) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["_error_class", b"_error_class", "_exception_message", b"_exception_message", "_stack_trace", b"_stack_trace", "error_class", b"error_class", "exception_message", b"exception_message", "stack_trace", b"stack_trace"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["_error_class", b"_error_class", "_exception_message", b"_exception_message", "_stack_trace", b"_stack_trace", "error_class", b"error_class", "exception_message", b"exception_message", "stack_trace", b"stack_trace"]) -> None: ...
         @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
-        ) -> typing_extensions.Literal["error_class"] | None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]) -> typing_extensions.Literal["error_class"] | None: ...
         @typing.overload
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
-        ) -> typing_extensions.Literal["exception_message"] | None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"]) -> typing_extensions.Literal["exception_message"] | None: ...
         @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_stack_trace", b"_stack_trace"]
-        ) -> typing_extensions.Literal["stack_trace"] | None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_stack_trace", b"_stack_trace"]) -> typing_extensions.Literal["stack_trace"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1324,9 +829,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             *,
             terminated: builtins.bool = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["terminated", b"terminated"]) -> None: ...
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
@@ -1357,52 +860,9 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         exception: global___StreamingQueryCommandResult.ExceptionResult | None = ...,
         await_termination: global___StreamingQueryCommandResult.AwaitTerminationResult | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "await_termination",
-            b"await_termination",
-            "exception",
-            b"exception",
-            "explain",
-            b"explain",
-            "query_id",
-            b"query_id",
-            "recent_progress",
-            b"recent_progress",
-            "result_type",
-            b"result_type",
-            "status",
-            b"status",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "await_termination",
-            b"await_termination",
-            "exception",
-            b"exception",
-            "explain",
-            b"explain",
-            "query_id",
-            b"query_id",
-            "recent_progress",
-            b"recent_progress",
-            "result_type",
-            b"result_type",
-            "status",
-            b"status",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "status", "recent_progress", "explain", "exception", "await_termination"
-        ]
-        | None
-    ): ...
+    def HasField(self, field_name: typing_extensions.Literal["await_termination", b"await_termination", "exception", b"exception", "explain", b"explain", "query_id", b"query_id", "recent_progress", b"recent_progress", "result_type", b"result_type", "status", b"status"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["await_termination", b"await_termination", "exception", b"exception", "explain", b"explain", "query_id", b"query_id", "recent_progress", b"recent_progress", "result_type", b"result_type", "status", b"status"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]) -> typing_extensions.Literal["status", "recent_progress", "explain", "exception", "await_termination"] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
 
@@ -1422,21 +882,9 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             *,
             timeout_ms: builtins.int | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
-        ) -> typing_extensions.Literal["timeout_ms"] | None: ...
+        def HasField(self, field_name: typing_extensions.Literal["_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"]) -> None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
     class StreamingQueryListenerCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1446,46 +894,18 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         ID_FIELD_NUMBER: builtins.int
         listener_payload: builtins.bytes
         @property
-        def python_listener_payload(
-            self,
-        ) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+        def python_listener_payload(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
         id: builtins.str
         def __init__(
             self,
             *,
             listener_payload: builtins.bytes = ...,
-            python_listener_payload: pyspark.sql.connect.proto.expressions_pb2.PythonUDF
-            | None = ...,
+            python_listener_payload: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
             id: builtins.str = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_python_listener_payload",
-                b"_python_listener_payload",
-                "python_listener_payload",
-                b"python_listener_payload",
-            ],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_python_listener_payload",
-                b"_python_listener_payload",
-                "id",
-                b"id",
-                "listener_payload",
-                b"listener_payload",
-                "python_listener_payload",
-                b"python_listener_payload",
-            ],
-        ) -> None: ...
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal[
-                "_python_listener_payload", b"_python_listener_payload"
-            ],
-        ) -> typing_extensions.Literal["python_listener_payload"] | None: ...
+        def HasField(self, field_name: typing_extensions.Literal["_python_listener_payload", b"_python_listener_payload", "python_listener_payload", b"python_listener_payload"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["_python_listener_payload", b"_python_listener_payload", "id", b"id", "listener_payload", b"listener_payload", "python_listener_payload", b"python_listener_payload"]) -> None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_python_listener_payload", b"_python_listener_payload"]) -> typing_extensions.Literal["python_listener_payload"] | None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int
     GET_QUERY_FIELD_NUMBER: builtins.int
@@ -1499,9 +919,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     get_query: builtins.str
     """get() API, returns the StreamingQuery identified by id."""
     @property
-    def await_any_termination(
-        self,
-    ) -> global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand:
+    def await_any_termination(self) -> global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand:
         """awaitAnyTermination() API, wait until any query terminates or timeout."""
     reset_terminated: builtins.bool
     """resetTerminated() API."""
@@ -1509,9 +927,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     def add_listener(self) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
         """addListener API."""
     @property
-    def remove_listener(
-        self,
-    ) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
+    def remove_listener(self) -> global___StreamingQueryManagerCommand.StreamingQueryListenerCommand:
         """removeListener API."""
     list_listeners: builtins.bool
     """listListeners() API, returns a list of streaming query listeners."""
@@ -1520,71 +936,15 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         *,
         active: builtins.bool = ...,
         get_query: builtins.str = ...,
-        await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
-        | None = ...,
+        await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand | None = ...,
         reset_terminated: builtins.bool = ...,
-        add_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
-        | None = ...,
-        remove_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand
-        | None = ...,
+        add_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand | None = ...,
+        remove_listener: global___StreamingQueryManagerCommand.StreamingQueryListenerCommand | None = ...,
         list_listeners: builtins.bool = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "active",
-            b"active",
-            "add_listener",
-            b"add_listener",
-            "await_any_termination",
-            b"await_any_termination",
-            "command",
-            b"command",
-            "get_query",
-            b"get_query",
-            "list_listeners",
-            b"list_listeners",
-            "remove_listener",
-            b"remove_listener",
-            "reset_terminated",
-            b"reset_terminated",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "active",
-            b"active",
-            "add_listener",
-            b"add_listener",
-            "await_any_termination",
-            b"await_any_termination",
-            "command",
-            b"command",
-            "get_query",
-            b"get_query",
-            "list_listeners",
-            b"list_listeners",
-            "remove_listener",
-            b"remove_listener",
-            "reset_terminated",
-            b"reset_terminated",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal[
-            "active",
-            "get_query",
-            "await_any_termination",
-            "reset_terminated",
-            "add_listener",
-            "remove_listener",
-            "list_listeners",
-        ]
-        | None
-    ): ...
+    def HasField(self, field_name: typing_extensions.Literal["active", b"active", "add_listener", b"add_listener", "await_any_termination", b"await_any_termination", "command", b"command", "get_query", b"get_query", "list_listeners", b"list_listeners", "remove_listener", b"remove_listener", "reset_terminated", b"reset_terminated"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["active", b"active", "add_listener", b"add_listener", "await_any_termination", b"await_any_termination", "command", b"command", "get_query", b"get_query", "list_listeners", b"list_listeners", "remove_listener", b"remove_listener", "reset_terminated", b"reset_terminated"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["command", b"command"]) -> typing_extensions.Literal["active", "get_query", "await_any_termination", "reset_terminated", "add_listener", "remove_listener", "list_listeners"] | None: ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
 
@@ -1598,22 +958,13 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
 
         ACTIVE_QUERIES_FIELD_NUMBER: builtins.int
         @property
-        def active_queries(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___StreamingQueryManagerCommandResult.StreamingQueryInstance
-        ]: ...
+        def active_queries(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___StreamingQueryManagerCommandResult.StreamingQueryInstance]: ...
         def __init__(
             self,
             *,
-            active_queries: collections.abc.Iterable[
-                global___StreamingQueryManagerCommandResult.StreamingQueryInstance
-            ]
-            | None = ...,
+            active_queries: collections.abc.Iterable[global___StreamingQueryManagerCommandResult.StreamingQueryInstance] | None = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]) -> None: ...
 
     class StreamingQueryInstance(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1631,17 +982,9 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             id: global___StreamingQueryInstanceId | None = ...,
             name: builtins.str | None = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
-        ) -> typing_extensions.Literal["name"] | None: ...
+        def HasField(self, field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"]) -> None: ...
+        def WhichOneof(self, oneof_group: typing_extensions.Literal["_name", b"_name"]) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1653,9 +996,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             *,
             terminated: builtins.bool = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["terminated", b"terminated"]) -> None: ...
 
     class StreamingQueryListenerInstance(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1667,27 +1008,21 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             *,
             listener_payload: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["listener_payload", b"listener_payload"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["listener_payload", b"listener_payload"]) -> None: ...
 
     class ListStreamingQueryListenerResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         LISTENER_IDS_FIELD_NUMBER: builtins.int
         @property
-        def listener_ids(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        def listener_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) Reference IDs of listener instances."""
         def __init__(
             self,
             *,
             listener_ids: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["listener_ids", b"listener_ids"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["listener_ids", b"listener_ids"]) -> None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int
     QUERY_FIELD_NUMBER: builtins.int
@@ -1701,85 +1036,26 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     @property
     def query(self) -> global___StreamingQueryManagerCommandResult.StreamingQueryInstance: ...
     @property
-    def await_any_termination(
-        self,
-    ) -> global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult: ...
+    def await_any_termination(self) -> global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult: ...
     reset_terminated: builtins.bool
     add_listener: builtins.bool
     remove_listener: builtins.bool
     @property
-    def list_listeners(
-        self,
-    ) -> global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult: ...
+    def list_listeners(self) -> global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult: ...
     def __init__(
         self,
         *,
         active: global___StreamingQueryManagerCommandResult.ActiveResult | None = ...,
         query: global___StreamingQueryManagerCommandResult.StreamingQueryInstance | None = ...,
-        await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult
-        | None = ...,
+        await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult | None = ...,
         reset_terminated: builtins.bool = ...,
         add_listener: builtins.bool = ...,
         remove_listener: builtins.bool = ...,
-        list_listeners: global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult
-        | None = ...,
+        list_listeners: global___StreamingQueryManagerCommandResult.ListStreamingQueryListenerResult | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "active",
-            b"active",
-            "add_listener",
-            b"add_listener",
-            "await_any_termination",
-            b"await_any_termination",
-            "list_listeners",
-            b"list_listeners",
-            "query",
-            b"query",
-            "remove_listener",
-            b"remove_listener",
-            "reset_terminated",
-            b"reset_terminated",
-            "result_type",
-            b"result_type",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "active",
-            b"active",
-            "add_listener",
-            b"add_listener",
-            "await_any_termination",
-            b"await_any_termination",
-            "list_listeners",
-            b"list_listeners",
-            "query",
-            b"query",
-            "remove_listener",
-            b"remove_listener",
-            "reset_terminated",
-            b"reset_terminated",
-            "result_type",
-            b"result_type",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "active",
-            "query",
-            "await_any_termination",
-            "reset_terminated",
-            "add_listener",
-            "remove_listener",
-            "list_listeners",
-        ]
-        | None
-    ): ...
+    def HasField(self, field_name: typing_extensions.Literal["active", b"active", "add_listener", b"add_listener", "await_any_termination", b"await_any_termination", "list_listeners", b"list_listeners", "query", b"query", "remove_listener", b"remove_listener", "reset_terminated", b"reset_terminated", "result_type", b"result_type"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["active", b"active", "add_listener", b"add_listener", "await_any_termination", b"await_any_termination", "list_listeners", b"list_listeners", "query", b"query", "remove_listener", b"remove_listener", "reset_terminated", b"reset_terminated", "result_type", b"result_type"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]) -> typing_extensions.Literal["active", "query", "await_any_termination", "reset_terminated", "add_listener", "remove_listener", "list_listeners"] | None: ...
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
 
@@ -1813,30 +1089,17 @@ class GetResourcesCommandResult(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: pyspark.sql.connect.proto.common_pb2.ResourceInformation | None = ...,
         ) -> None: ...
-        def HasField(
-            self, field_name: typing_extensions.Literal["value", b"value"]
-        ) -> builtins.bool: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-        ) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["value", b"value"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     RESOURCES_FIELD_NUMBER: builtins.int
     @property
-    def resources(
-        self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
-    ]: ...
+    def resources(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation]: ...
     def __init__(
         self,
         *,
-        resources: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
-        ]
-        | None = ...,
+        resources: collections.abc.Mapping[builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation] | None = ...,
     ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["resources", b"resources"]
-    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["resources", b"resources"]) -> None: ...
 
 global___GetResourcesCommandResult = GetResourcesCommandResult
