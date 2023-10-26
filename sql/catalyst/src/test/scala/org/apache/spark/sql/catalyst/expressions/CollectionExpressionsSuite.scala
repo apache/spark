@@ -616,9 +616,9 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a0, Literal(4), Literal(10)), Seq(4, 5, 6))
     checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
     checkExceptionInExpression[RuntimeException](Slice(a0, Literal(1), Literal(-1)),
-      "Unexpected value for length")
+      "Expects `length` greater than or equal to 0, but got -1.")
     checkExceptionInExpression[RuntimeException](Slice(a0, Literal(0), Literal(1)),
-      "Unexpected value for start")
+      "Expects `start` to start at 1 or start from the end if start is negative, but got 0.")
     checkEvaluation(Slice(a0, Literal(-20), Literal(1)), Seq.empty[Int])
     checkEvaluation(Slice(a1, Literal(-20), Literal(1)), Seq.empty[String])
     checkEvaluation(Slice(a0, Literal.create(null, IntegerType), Literal(2)), null)

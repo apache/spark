@@ -1788,7 +1788,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
+         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(
+         |    "$prettyName", $start);
          |} else if ($start < 0) {
          |  $startIdx = $start + $x.numElements();
          |} else {
@@ -1796,7 +1797,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $startIdx = $start - 1;
          |}
          |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("$prettyName");
+         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(
+         |    "$prettyName", $length);
          |} else if ($length > $x.numElements() - $startIdx) {
          |  $resLength = $x.numElements() - $startIdx;
          |} else {

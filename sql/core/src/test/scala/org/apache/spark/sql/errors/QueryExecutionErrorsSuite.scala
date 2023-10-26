@@ -1041,7 +1041,7 @@ class QueryExecutionErrorsSuite
       errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       parameters = Map(
         "parameter" -> "length",
-        "start" -> (-1).toString,
+        "length" -> (-1).toString,
         "functionName" -> toSQLId("slice")
       )
     )
