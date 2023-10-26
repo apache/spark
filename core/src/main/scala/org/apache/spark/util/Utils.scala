@@ -917,7 +917,7 @@ private[spark] object Utils
    * uses a local random number generator, avoiding inter-thread contention.
    */
   def randomize[T: ClassTag](seq: IterableOnce[T]): Seq[T] = {
-    randomizeInPlace(seq.toArray)
+    randomizeInPlace(seq.iterator.toArray)
   }
 
   /**

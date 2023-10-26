@@ -189,7 +189,7 @@ case class MemoryStream[A : Encoder](
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   def addData(data: IterableOnce[A]): Offset = {
-    val objects = data.toSeq
+    val objects = data.iterator.to(Seq)
     val rows = objects.iterator.map(d => toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
     logDebug(s"Adding: $objects")
     this.synchronized {
