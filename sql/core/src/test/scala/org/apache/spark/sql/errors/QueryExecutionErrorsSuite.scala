@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -55,7 +56,8 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with DataTypeErrorsBase {
 
   import testImplicits._
 
@@ -1015,6 +1017,34 @@ class QueryExecutionErrorsSuite
         parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
       )
     }
+  }
+
+  test("Unexpected `start` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 0, 1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> "start",
+        "start" -> 0.toString,
+        "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Unexpected `length` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 1, -1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> "length",
+        "start" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      )
+    )
   }
 }
 

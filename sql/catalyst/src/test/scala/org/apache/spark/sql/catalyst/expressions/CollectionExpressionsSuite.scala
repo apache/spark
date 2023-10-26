@@ -32,12 +32,14 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.UTF8String
 
-class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CollectionExpressionsSuite
+  extends SparkFunSuite with ExpressionEvalHelper with DataTypeErrorsBase {
 
   implicit def stringToUTF8Str(str: String): UTF8String = UTF8String.fromString(str)
 
@@ -87,14 +89,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Unsupported data type for size()") {
-    val exception = intercept[org.apache.spark.SparkUnsupportedOperationException] {
+    val exception = intercept[org.apache.spark.SparkException] {
       Size(Literal.create("str", StringType)).eval(EmptyRow)
     }
     checkError(
       exception = exception,
-      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION",
+      errorClass = "INTERNAL_ERROR",
       parameters = Map(
-        "dataType" -> StringType.getClass.getCanonicalName
+        "message" -> ("The size function doesn't support the operand type " +
+          toSQLType(StringType))
       ))
   }
 

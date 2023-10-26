@@ -1368,25 +1368,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def unsupportedOperandTypeForSizeFunctionError(
-      dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_SIZE_FUNCTION",
-      messageParameters = Map(
-        "dataType" -> dataType.getClass.getCanonicalName))
+      dataType: DataType): Throwable = {
+    SparkException.internalError(
+      s"The size function doesn't support the operand type ${toSQLType(dataType)}")
   }
 
-  def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
+  def unexpectedValueForStartInFunctionError(
+      prettyName: String, start: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "UNEXPECTED_VALUE_FOR_START_IN_SLICE_FUNCTION",
+      errorClass = "INVALID_PARAMETER_VALUE.START",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> "start",
+        "start" -> start.toString,
+        "functionName" -> toSQLId(prettyName)))
   }
 
-  def unexpectedValueForLengthInFunctionError(prettyName: String): SparkRuntimeException = {
+  def unexpectedValueForLengthInFunctionError(
+      prettyName: String, length: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "UNEXPECTED_VALUE_FOR_LENGTH_IN_SLICE_FUNCTION",
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       messageParameters = Map(
-        "prettyName" -> prettyName))
+        "parameter" -> "length",
+        "length" -> length.toString,
+        "functionName" -> toSQLId(prettyName)))
   }
 
   def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {

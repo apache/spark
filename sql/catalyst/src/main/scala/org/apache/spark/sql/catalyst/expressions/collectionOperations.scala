@@ -1761,14 +1761,14 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = if (startInt == 0) {
-      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName, startInt)
     } else if (startInt < 0) {
       startInt + arr.numElements()
     } else {
       startInt - 1
     }
     if (lengthInt < 0) {
-      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName)
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
     }
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
