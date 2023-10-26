@@ -536,13 +536,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         while (buf.length < n && i < res.length) {
           val rows = decodeUnsafeRows(res(i)._2)
           if (n - buf.length >= res(i)._1) {
-            buf.prepend(rows.toArray[InternalRow]: _*)
+            buf.prependAll(rows.toArray[InternalRow])
           } else {
             val dropUntil = res(i)._1 - (n - buf.length)
             // Same as Iterator.drop but this only takes a long.
             var j: Long = 0L
             while (j < dropUntil) { rows.next(); j += 1L}
-            buf.prepend(rows.toArray[InternalRow]: _*)
+            buf.prependAll(rows.toArray[InternalRow])
           }
           i += 1
         }
