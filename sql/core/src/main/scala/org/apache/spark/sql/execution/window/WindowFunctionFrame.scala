@@ -141,6 +141,8 @@ abstract class OffsetWindowFunctionFrameBase(
   // is not null.
   protected var skippedNonNullCount = 0
 
+  protected val absOffset = Math.abs(offset)
+
   // Reset the states by the data of the new partition.
   protected def resetStates(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -177,7 +179,7 @@ abstract class OffsetWindowFunctionFrameBase(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    if (offset > rows.length) {
+    if (absOffset > rows.length) {
       fillDefaultValue(EmptyRow)
     } else {
       resetStates(rows)
@@ -192,6 +194,14 @@ abstract class OffsetWindowFunctionFrameBase(
   protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
 
   protected def prepareForRespectNulls(): Unit
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    if (input != null) {
+      doWrite(index, current)
+    }
+  }
+
+  protected def doWrite(index: Int, current: InternalRow): Unit
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
@@ -269,7 +279,6 @@ class FrameLessOffsetWindowFunctionFrame(
     // 7. current row -> z, next selected row -> y, output: y;
     // 8. current row -> v, next selected row -> z, output: z;
     // 9. current row -> null, next selected row -> v, output: v;
-    val absOffset = Math.abs(offset)
     (current: InternalRow) =>
       if (skippedNonNullCount == absOffset) {
         nextSelectedRow = EmptyRow
@@ -293,7 +302,7 @@ class FrameLessOffsetWindowFunctionFrame(
       }
   } else {
     (current: InternalRow) =>
-      if (inputIndex >= 0 && input != null && inputIndex < input.length) {
+      if (inputIndex >= 0 && inputIndex < input.length) {
         val r = WindowFunctionFrame.getNextOrNull(inputIterator)
         projection(r)
       } else {
@@ -303,7 +312,7 @@ class FrameLessOffsetWindowFunctionFrame(
       inputIndex += 1
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  protected def doWrite(index: Int, current: InternalRow): Unit = {
     doWrite(current)
   }
 }
@@ -349,7 +358,7 @@ class UnboundedOffsetWindowFunctionFrame(
     projection(selectedRow)
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  protected def doWrite(index: Int, current: InternalRow): Unit = {
     // The results are the same for each row in the partition, and have been evaluated in prepare.
     // Don't need to recalculate here.
   }
@@ -385,7 +394,7 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
     }
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  protected def doWrite(index: Int, current: InternalRow): Unit = {
     if (index >= inputIndex - 1 && nextSelectedRow != null) {
       projection(nextSelectedRow)
     } else {
