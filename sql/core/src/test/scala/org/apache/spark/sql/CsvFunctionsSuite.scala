@@ -53,7 +53,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         "inputSchema" -> "\"ARRAY<int>\"",
         "dataType" -> "\"ARRAY<INT>\""
       ),
-      context = ExpectedContext(code = "from_csv", getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -397,7 +397,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"schema\""),
-      context = ExpectedContext(code = "from_csv", getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -406,7 +406,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"1\""),
-      context = ExpectedContext(code = "from_csv", getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "from_csv", getCurrentClassCallSitePattern)
     )
   }
 

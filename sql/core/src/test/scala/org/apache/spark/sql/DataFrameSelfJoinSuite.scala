@@ -485,7 +485,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map("objectName" -> "`df1`.`timeStr`",
           "proposal" -> "`df3`.`timeStr`, `df1`.`tsStr`"),
-        context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
+        context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
     }
   }
 }

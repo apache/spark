@@ -468,7 +468,6 @@ abstract class SparkFunSuite
       startIndex: Int,
       stopIndex: Int,
       fragment: String,
-      code: String,
       callSitePattern: String
   )
 
@@ -484,11 +483,11 @@ abstract class SparkFunSuite
         stopIndex: Int,
         fragment: String): ExpectedContext = {
       new ExpectedContext(QueryContextType.SQL, objectType, objectName, startIndex, stopIndex,
-        fragment, "", "")
+        fragment, "")
     }
 
-    def apply(code: String, callSitePattern: String): ExpectedContext = {
-      new ExpectedContext(QueryContextType.Dataset, "", "", -1, -1, "", code, callSitePattern)
+    def apply(fragment: String, callSitePattern: String): ExpectedContext = {
+      new ExpectedContext(QueryContextType.Dataset, "", "", -1, -1, fragment, callSitePattern)
     }
   }
 

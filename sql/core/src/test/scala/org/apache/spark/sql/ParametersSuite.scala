@@ -601,8 +601,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_SQL_ARG",
       parameters = Map("name" -> "m"),
-      context =
-        ExpectedContext(code = "map_from_arrays", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "map_from_arrays",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 }

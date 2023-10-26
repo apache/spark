@@ -698,7 +698,7 @@ class QueryCompilationErrorsSuite
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
       context =
-        ExpectedContext(code = "from_json", callSitePattern = getCurrentClassCallSitePattern))
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("WRONG_NUM_ARGS.WITHOUT_SUGGESTION: wrong args of CAST(parameter types contains DataType)") {
@@ -770,7 +770,7 @@ class QueryCompilationErrorsSuite
       errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`firstname`", "count" -> "2"),
-      context = ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -784,7 +784,7 @@ class QueryCompilationErrorsSuite
       errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""),
-      context = ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 

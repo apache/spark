@@ -197,7 +197,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "funcName" -> "`json_tuple`"
       ),
       context =
-        ExpectedContext(code = "json_tuple", callSitePattern = getCurrentClassCallSitePattern)
+        ExpectedContext(fragment = "json_tuple", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -652,7 +652,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
         "sqlExpr" -> "\"entries\""),
       context =
-        ExpectedContext(code = "from_json", callSitePattern = getCurrentClassCallSitePattern))
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -963,7 +963,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"schema\""),
-      context = ExpectedContext(code = "from_json", getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "from_json", getCurrentClassCallSitePattern)
     )
   }
 

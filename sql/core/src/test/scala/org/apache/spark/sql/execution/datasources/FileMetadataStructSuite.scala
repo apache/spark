@@ -246,7 +246,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
       context =
-        ExpectedContext(code = "select", callSitePattern = getCurrentClassCallSitePattern))
+        ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
@@ -525,8 +525,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             },
             errorClass = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
-            context =
-              ExpectedContext(code = "select", callSitePattern = getCurrentClassCallSitePattern))
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
 
           checkError(
             exception = intercept[AnalysisException] {
@@ -534,8 +535,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             },
             errorClass = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
-            context =
-              ExpectedContext(code = "select", callSitePattern = getCurrentClassCallSitePattern))
+            context = ExpectedContext(
+              fragment = "select",
+              callSitePattern = getCurrentClassCallSitePattern))
         }
       }
     }

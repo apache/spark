@@ -607,7 +607,7 @@ class DatasetSuite extends QueryTest
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
-      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy function, flatMapSorted") {
@@ -636,7 +636,7 @@ class DatasetSuite extends QueryTest
       },
       errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       parameters = Map("elem" -> "'*'", "prettyName" -> "MapGroups"),
-      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy, flatMapSorted desc") {
@@ -2293,7 +2293,7 @@ class DatasetSuite extends QueryTest
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
             "proposal" -> "`field.1`, `field 2`"),
-          context = ExpectedContext(code = "select", getCurrentClassCallSitePattern))
+          context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
       }
     }
   }
@@ -2308,7 +2308,7 @@ class DatasetSuite extends QueryTest
       parameters = Map(
         "objectName" -> "`the`.`id`",
         "proposal" -> "`the.id`"),
-      context = ExpectedContext(code = "select", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
   }
 
   test("SPARK-39783: backticks in error message for map candidate key with dots") {
@@ -2323,7 +2323,7 @@ class DatasetSuite extends QueryTest
       parameters = Map(
         "objectName" -> "`nonexisting`",
         "proposal" -> "`map`, `other.column`"),
-      context = ExpectedContext(code = "$", getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
   }
 
   test("groupBy.as") {
@@ -2664,7 +2664,7 @@ class DatasetSuite extends QueryTest
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
-        context = ExpectedContext(code = "col", callSitePattern = callSitePattern))
+        context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
     }
   }
 }

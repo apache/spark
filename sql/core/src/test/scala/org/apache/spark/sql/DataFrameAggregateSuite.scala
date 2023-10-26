@@ -634,8 +634,9 @@ class DataFrameAggregateSuite extends QueryTest
         "dataType" -> "\"MAP\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
-      context =
-        ExpectedContext(code = "collect_set", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "collect_set",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -709,7 +710,7 @@ class DataFrameAggregateSuite extends QueryTest
       },
       errorClass = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> "sum(key)"),
-      context = ExpectedContext(code = "sum", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "sum", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -1306,7 +1307,7 @@ class DataFrameAggregateSuite extends QueryTest
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INTEGRAL\""),
-      context = ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {

@@ -311,7 +311,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> "min(training)"),
-      context = ExpectedContext(code = "min", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "min", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 

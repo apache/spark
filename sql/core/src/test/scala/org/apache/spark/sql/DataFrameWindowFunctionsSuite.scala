@@ -413,7 +413,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       parameters = Map(
         "objectName" -> "`invalid`",
         "proposal" -> "`value`, `key`"),
-      context = ExpectedContext(code = "count", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "count",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {

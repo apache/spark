@@ -1921,8 +1921,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
         parameters = Map("targetString" -> "`b`", "columns" -> ""),
-        context =
-          ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
+        context = ExpectedContext(
+          fragment = "$",
+          callSitePattern = getCurrentClassCallSitePattern))
     }
   }
 

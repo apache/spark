@@ -186,7 +186,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ),
       matchPVals = true,
       queryContext =
-        Array(ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern))
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -202,7 +202,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ),
       matchPVals = true,
       queryContext =
-        Array(ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern))
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
     checkError(
@@ -218,7 +218,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ),
       matchPVals = true,
       queryContext =
-        Array(ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern))
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
     )
 
   }
@@ -247,7 +247,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
       ),
-      context = ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -263,7 +263,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
       ),
-      context = ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
@@ -279,7 +279,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           "TO MONTH\" or \"INTERVAL\")"),
         "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
       ),
-      context = ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -472,7 +472,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "lowerType" -> "\"INTERVAL\"",
         "upperType" -> "\"BIGINT\""
       ),
-      context = ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -492,7 +492,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
         "location" -> "lower",
         "expression" -> "\"nonfoldableliteral()\""),
-      context = ExpectedContext(code = "over", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 

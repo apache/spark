@@ -880,8 +880,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
           "funcName" -> s"`$funcName`",
           "paramName" -> "`format`",
           "paramType" -> "\"STRING\""),
-        context =
-          ExpectedContext(code = funcName, callSitePattern = getCurrentClassCallSitePattern))
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           df2.select(func(col("input"), lit("invalid_format"))).collect()
@@ -891,8 +892,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
           "parameter" -> "`format`",
           "functionName" -> s"`$funcName`",
           "invalidFormat" -> "'invalid_format'"),
-        context =
-          ExpectedContext(code = funcName, callSitePattern = getCurrentClassCallSitePattern))
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"select $funcName('a', 'b', 'c')")

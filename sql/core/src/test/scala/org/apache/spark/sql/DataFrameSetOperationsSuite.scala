@@ -374,7 +374,9 @@ class DataFrameSetOperationsSuite extends QueryTest
       parameters = Map(
         "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\""),
-      context = ExpectedContext(code = "distinct", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "distinct",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
     withTempView("v") {
       df.createOrReplaceTempView("v")

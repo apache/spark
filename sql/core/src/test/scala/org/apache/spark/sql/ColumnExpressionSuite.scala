@@ -459,7 +459,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         "functionName" -> "`in`",
         "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
         "sqlExpr" -> "\"(a IN (b))\""),
-      context = ExpectedContext(code = "isin", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(fragment = "isin", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -528,7 +528,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               "dataType" -> "[\"INT\", \"ARRAY<INT>\"]",
               "sqlExpr" -> "\"(a IN (b))\""),
             context = ExpectedContext(
-              code = "isInCollection",
+              fragment = "isInCollection",
               callSitePattern = getCurrentClassCallSitePattern)
           )
         }
@@ -1061,8 +1061,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
-      context =
-        ExpectedContext(code = "withField", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "withField",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -1108,8 +1109,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
-      context =
-        ExpectedContext(code = "withField", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "withField",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -1858,8 +1860,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
-      context =
-        ExpectedContext(code = "dropFields", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -1897,8 +1900,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
-      context =
-        ExpectedContext(code = "dropFields", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -1965,8 +1969,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
       parameters = Map("sqlExpr" -> "\"update_fields(a, dropfield(), dropfield(), dropfield())\""),
-      context =
-        ExpectedContext(code = "dropFields", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -2239,8 +2244,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.CANNOT_DROP_ALL_FIELDS",
       parameters = Map("sqlExpr" -> "\"update_fields(struct_col, dropfield(), dropfield())\""),
-      context =
-        ExpectedContext(code = "dropFields", callSitePattern = getCurrentClassCallSitePattern)
+      context = ExpectedContext(
+        fragment = "dropFields",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkAnswer(
@@ -2415,8 +2421,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`d`", "fields" -> "`a`, `b`, `c`"),
-      context =
-        ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     checkAnswer(
       structLevel1
@@ -2470,8 +2477,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"),
-      context =
-        ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("nestedDf should generate nested DataFrames") {

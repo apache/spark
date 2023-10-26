@@ -134,7 +134,7 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
           "fieldName" -> "`row_index`",
           "fields" -> ("`file_path`, `file_name`, `file_size`, " +
             "`file_block_start`, `file_block_length`, `file_modification_time`")),
-        context = ExpectedContext(code = "select", getCurrentClassCallSitePattern))
+        context = ExpectedContext(fragment = "select", getCurrentClassCallSitePattern))
     }
   }
 

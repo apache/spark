@@ -2699,7 +2699,7 @@ abstract class CSVSuite
               errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
               parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"),
               context =
-                ExpectedContext(code = "$", callSitePattern = getCurrentClassCallSitePattern))
+                ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
           }
         }
       }

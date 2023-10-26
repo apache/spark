@@ -63,7 +63,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       errorClass = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
-      context = ExpectedContext(code = "div", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(fragment = "div", callSitePattern = getCurrentClassCallSitePattern))
 
     checkError(
       exception = intercept[SparkArithmeticException] {
@@ -72,7 +72,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       errorClass = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
-      context = ExpectedContext(code = "divide", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "divide",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -124,7 +126,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "precision" -> "8",
         "scale" -> "1",
         "config" -> ansiConf),
-      context = ExpectedContext(code = "cast", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "cast",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
@@ -142,7 +146,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       },
       errorClass = "INVALID_ARRAY_INDEX",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
-      context = ExpectedContext(code = "apply", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "apply",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
@@ -164,7 +170,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
       context =
-        ExpectedContext(code = "element_at", callSitePattern = getCurrentClassCallSitePattern))
+        ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("INVALID_INDEX_OF_ZERO: element_at from array by index zero") {
@@ -187,7 +193,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       errorClass = "INVALID_INDEX_OF_ZERO",
       parameters = Map.empty,
       context =
-        ExpectedContext(code = "element_at", callSitePattern = getCurrentClassCallSitePattern))
+        ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("CAST_INVALID_INPUT: cast string to double") {
@@ -216,7 +222,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         "sourceType" -> "\"STRING\"",
         "targetType" -> "\"DOUBLE\"",
         "ansiConfig" -> ansiConf),
-      context = ExpectedContext(code = "cast", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "cast",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {
