@@ -65,7 +65,7 @@ private[mllib] object ClassificationModel {
    * @return (numFeatures, numClasses)
    */
   def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
   }
 }

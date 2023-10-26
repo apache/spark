@@ -115,7 +115,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
   private def writeResourceAllocationJson[T](
       allocations: Seq[T],
       jsonFile: File): Unit = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val allocationJson = Extraction.decompose(allocations)
     Files.write(jsonFile.toPath, compact(render(allocationJson)).getBytes())
   }

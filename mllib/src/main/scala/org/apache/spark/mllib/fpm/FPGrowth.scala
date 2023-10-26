@@ -126,7 +126,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
     }
 
     def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)

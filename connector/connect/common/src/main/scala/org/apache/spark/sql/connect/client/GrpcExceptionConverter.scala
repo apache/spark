@@ -354,7 +354,7 @@ private[client] object GrpcExceptionConverter {
    * truncated error message.
    */
   private def errorInfoToThrowable(info: ErrorInfo, message: String): Throwable = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val classes =
       JsonMethods.parse(info.getMetadataOrDefault("classes", "[]")).extract[Array[String]]
     val errorClass = info.getMetadataOrDefault("errorClass", null)

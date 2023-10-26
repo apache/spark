@@ -70,7 +70,7 @@ private[spark] object ResourceInformation {
    * Parses a JSON string into a [[ResourceInformation]] instance.
    */
   def parseJson(json: String): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     try {
       parse(json).extract[ResourceInformationJson].toResourceInformation
     } catch {
@@ -81,7 +81,7 @@ private[spark] object ResourceInformation {
   }
 
   def parseJson(json: JValue): ResourceInformation = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     try {
       json.extract[ResourceInformationJson].toResourceInformation
     } catch {

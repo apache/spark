@@ -22,7 +22,7 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
@@ -52,7 +52,7 @@ class FileStreamSourceLog(
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSourceLogDeletion
 
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   // A fixed size log entry cache to cache the file entries belong to the compaction batch. It is
   // used to avoid scanning the compacted log file to retrieve it's own batch data.

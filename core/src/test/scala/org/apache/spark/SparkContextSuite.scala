@@ -924,7 +924,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
         """{"name": "gpu","addresses":["5", "6"]}""")
 
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       val gpusAllocated =
         ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
       val ja = Extraction.decompose(Seq(gpusAllocated))

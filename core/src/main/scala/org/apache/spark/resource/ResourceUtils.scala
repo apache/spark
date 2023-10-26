@@ -253,7 +253,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     withResourcesJson[ResourceAllocation](resourcesFile) { json =>
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       parse(json).extract[Seq[ResourceAllocation]]
     }
   }

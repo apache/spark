@@ -22,7 +22,7 @@ import java.util.{HashMap => JHashMap}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -100,7 +100,8 @@ class BlockManagerMasterEndpoint(
 
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
-  private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
+  private implicit val askExecutionContext: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(askThreadPool)
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(

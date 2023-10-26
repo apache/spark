@@ -60,7 +60,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   import CoarseGrainedExecutorBackend._
 
-  private implicit val formats = DefaultFormats
+  private implicit val formats: DefaultFormats.type = DefaultFormats
 
   private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null

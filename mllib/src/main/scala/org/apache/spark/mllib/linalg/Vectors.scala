@@ -432,7 +432,7 @@ object Vectors {
    */
   @Since("1.6.0")
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse

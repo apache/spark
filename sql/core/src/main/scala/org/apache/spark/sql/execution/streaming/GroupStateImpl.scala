@@ -246,7 +246,7 @@ private[sql] object GroupStateImpl {
   }
 
   def fromJson[S](value: Option[S], json: JValue): GroupStateImpl[S] = {
-    implicit val formats = org.json4s.DefaultFormats
+    implicit val formats: DefaultFormats.type = org.json4s.DefaultFormats
 
     val hmap = json.extract[Map[String, Any]]
 

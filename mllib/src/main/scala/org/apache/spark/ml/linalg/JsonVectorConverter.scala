@@ -27,7 +27,7 @@ private[ml] object JsonVectorConverter {
    * Parses the JSON representation of a vector into a [[Vector]].
    */
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse

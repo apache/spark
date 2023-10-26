@@ -312,7 +312,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
    */
   @Since("1.3.0")
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     val algo = (metadata \ "algo").extract[String]
     val numNodes = (metadata \ "numNodes").extract[Int]

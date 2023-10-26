@@ -64,7 +64,7 @@ private[mllib] object RegressionModel {
    * @return numFeatures
    */
   def getNumFeatures(metadata: JValue): Int = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     (metadata \ "numFeatures").extract[Int]
   }
 }

@@ -29,7 +29,7 @@ private[ml] object JsonMatrixConverter {
    * Parses the JSON representation of a Matrix into a [[Matrix]].
    */
   def fromJson(json: String): Matrix = {
-    implicit val formats = DefaultFormats
+    implicit val formats: DefaultFormats.type = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse

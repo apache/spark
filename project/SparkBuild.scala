@@ -247,8 +247,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-        // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-        "-Wconf:msg=Implicit definition should have explicit type:s",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
         // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,

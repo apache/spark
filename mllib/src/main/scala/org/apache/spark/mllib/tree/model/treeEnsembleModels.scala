@@ -440,7 +440,7 @@ private[tree] object TreeEnsembleModel extends Logging {
      * Read metadata from the loaded JSON metadata.
      */
     def readMetadata(metadata: JValue): Metadata = {
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       (metadata \ "metadata").extract[Metadata]
     }
 

@@ -117,7 +117,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       val fpgaAddrs = Seq("f1", "f2", "f3")
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(
@@ -146,7 +146,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val rpId = 1
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      implicit val formats = DefaultFormats
+      implicit val formats: DefaultFormats.type = DefaultFormats
       val fpgaAddrs = Seq("f1", "f2", "f3")
       val fpgaAllocation = ResourceAllocation(EXECUTOR_FPGA_ID, fpgaAddrs)
       val resourcesFile = createTempJsonFile(

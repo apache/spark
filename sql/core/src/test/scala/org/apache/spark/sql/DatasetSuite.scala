@@ -71,7 +71,7 @@ class DatasetSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
+  private implicit val ordering: Ordering[ClassData] = Ordering.by((c: ClassData) => c.a -> c.b)
 
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
