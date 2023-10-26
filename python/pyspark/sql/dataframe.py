@@ -583,6 +583,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 )
         return self._schema
 
+    def _tree_string(self, level: Optional[int] = None) -> str:
+        if level:
+            return self._jdf.schema().treeString(level)
+        else:
+            return self._jdf.schema().treeString()
+
     def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
         Optionally allows to specify how many levels to print if schema is nested.
@@ -621,10 +627,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |    |-- _1: long (nullable = true)
          |    |-- _2: long (nullable = true)
         """
-        if level:
-            print(self._jdf.schema().treeString(level))
-        else:
-            print(self._jdf.schema().treeString())
+        print(self._tree_string(level))
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
