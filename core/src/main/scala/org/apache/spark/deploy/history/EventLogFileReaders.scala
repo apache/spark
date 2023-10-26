@@ -219,8 +219,10 @@ private[history] class RollingEventLogFilesFileReader(
 
   private lazy val files: Seq[FileStatus] = {
     val ret = fs.listStatus(rootPath).toSeq
-    require(ret.exists(isEventLogFile), "Log directory must contain at least one event log file!")
-    require(ret.exists(isAppStatusFile), "Log directory must contain an appstatus file!")
+    require(ret.exists(isEventLogFile),
+      s"Log directory $rootPath must contain at least one event log file!")
+    require(ret.exists(isAppStatusFile),
+      s"Log directory $rootPath must contain an appstatus file!")
     ret
   }
 
@@ -238,9 +240,13 @@ private[history] class RollingEventLogFilesFileReader(
     }
     val filesToRead = dropBeforeLastCompactFile(eventLogFiles)
     val indices = filesToRead.map { file => getEventLogFileIndex(file.getPath.getName) }
-    require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
-      s" indices: ${indices.head to indices.last}, actual: ${indices}")
+    val missing = findMissingIndices(indices)
+    require((indices.head to indices.last) == indices, s"Found missing event log file $missing")
     filesToRead
+  }
+
+  private def findMissingIndices(indices: Seq[Long]): Seq[Long] = {
+    (indices.head to indices.last).filter(!indices.contains(_))
   }
 
   override def lastIndex: Option[Long] = Some(
