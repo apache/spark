@@ -610,7 +610,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    "config" : "CONFIG"
           |  },
           |  "queryContext" : [ {
-          |    "code" : "div",
+          |    "fragment" : "div",
           |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
           |  } ]
           |}""".stripMargin)
@@ -623,7 +623,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    "config" : "CONFIG"
           |  },
           |  "queryContext" : [ {
-          |    "code" : "div",
+          |    "fragment" : "div",
           |    "callSite" : "SimpleApp$.main(SimpleApp.scala:9)"
           |  } ]
           |}""".stripMargin)
