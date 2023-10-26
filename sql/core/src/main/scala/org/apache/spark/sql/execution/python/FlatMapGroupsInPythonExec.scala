@@ -23,10 +23,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 
 
 /**
@@ -42,7 +42,7 @@ trait FlatMapGroupsInPythonExec extends SparkPlan with UnaryExecNode with Python
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private val pythonFunction = func.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
@@ -68,7 +68,7 @@ trait FlatMapGroupsInPythonExec extends SparkPlan with UnaryExecNode with Python
       .map { case (_, x) => x }
 
   protected def groupedSchema(attrs: Seq[Attribute]): StructType =
-    StructType.fromAttributes(attrs)
+    DataTypeUtils.fromAttributes(attrs)
 
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
