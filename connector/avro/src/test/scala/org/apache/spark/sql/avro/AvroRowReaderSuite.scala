@@ -76,7 +76,7 @@ class AvroRowReaderSuite
           false,
           RebaseSpec(CORRECTED),
           new NoopFilters,
-          AvroOptions(Map()).useStableIdForUnionType)
+          false)
         override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow
