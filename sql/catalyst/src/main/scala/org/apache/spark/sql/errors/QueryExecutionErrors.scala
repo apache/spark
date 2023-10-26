@@ -1373,13 +1373,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       s"The size function doesn't support the operand type ${toSQLType(dataType)}")
   }
 
-  def unexpectedValueForStartInFunctionError(
-      prettyName: String, start: Int): SparkRuntimeException = {
+  def unexpectedValueForStartInFunctionError(prettyName: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE.START",
       messageParameters = Map(
-        "parameter" -> "start",
-        "start" -> start.toString,
+        "parameter" -> toSQLId("start"),
         "functionName" -> toSQLId(prettyName)))
   }
 
@@ -1388,7 +1386,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       messageParameters = Map(
-        "parameter" -> "length",
+        "parameter" -> toSQLId("length"),
         "length" -> length.toString,
         "functionName" -> toSQLId(prettyName)))
   }

@@ -1026,8 +1026,7 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "INVALID_PARAMETER_VALUE.START",
       parameters = Map(
-        "parameter" -> "start",
-        "start" -> 0.toString,
+        "parameter" -> toSQLId("start"),
         "functionName" -> toSQLId("slice")
       )
     )
@@ -1040,7 +1039,7 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
       parameters = Map(
-        "parameter" -> "length",
+        "parameter" -> toSQLId("length"),
         "length" -> (-1).toString,
         "functionName" -> toSQLId("slice")
       )

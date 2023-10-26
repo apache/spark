@@ -1761,7 +1761,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = if (startInt == 0) {
-      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName, startInt)
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
     } else if (startInt < 0) {
       startInt + arr.numElements()
     } else {
@@ -1788,8 +1788,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(
-         |    "$prettyName", $start);
+         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
          |} else if ($start < 0) {
          |  $startIdx = $start + $x.numElements();
          |} else {

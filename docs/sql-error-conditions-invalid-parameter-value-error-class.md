@@ -67,7 +67,7 @@ Expects group index between 0 and `<groupCount>`, but got `<groupIndex>`.
 
 ## START
 
-Expects `start` to start at 1 or start from the end if start is negative, but got `<start>`.
+Expects a positive or a negative value for `start`, but got 0.
 
 ## ZERO_INDEX
 

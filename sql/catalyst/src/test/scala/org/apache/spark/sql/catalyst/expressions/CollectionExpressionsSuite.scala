@@ -615,10 +615,21 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a0, Literal(-3), Literal(2)), Seq(4, 5))
     checkEvaluation(Slice(a0, Literal(4), Literal(10)), Seq(4, 5, 6))
     checkEvaluation(Slice(a0, Literal(-1), Literal(2)), Seq(6))
-    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(1), Literal(-1)),
-      "Expects `length` greater than or equal to 0, but got -1.")
-    checkExceptionInExpression[RuntimeException](Slice(a0, Literal(0), Literal(1)),
-      "Expects `start` to start at 1 or start from the end if start is negative, but got 0.")
+    checkErrorInExpression[SparkRuntimeException](
+      expression = Slice(a0, Literal(1), Literal(-1)),
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("length"),
+        "length" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      ))
+    checkErrorInExpression[SparkRuntimeException](
+      expression = Slice(a0, Literal(0), Literal(1)),
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId("slice")
+      ))
     checkEvaluation(Slice(a0, Literal(-20), Literal(1)), Seq.empty[Int])
     checkEvaluation(Slice(a1, Literal(-20), Literal(1)), Seq.empty[String])
     checkEvaluation(Slice(a0, Literal.create(null, IntegerType), Literal(2)), null)
