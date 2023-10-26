@@ -141,14 +141,15 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, avro,
+            core, unsafe, kvstore, avro, utils,
             network-common, network-shuffle, repl, launcher,
             examples, sketch, graphx
           - >-
-            catalyst, hive-thriftserver
+            api, catalyst, hive-thriftserver
+          - >-
+            mllib-local,mllib
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, mllib,
             yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -981,6 +982,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Run tests
+      env: ${{ fromJSON(inputs.envs) }}
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report

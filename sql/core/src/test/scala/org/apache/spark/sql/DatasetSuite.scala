@@ -1024,6 +1024,27 @@ class DatasetSuite extends QueryTest
     assert(namedObservation.get === expected)
   }
 
+  test("SPARK-45656: named observations with the same name on different datasets") {
+    val namedObservation1 = Observation("named")
+    val df1 = spark.range(50)
+    val observed_df1 = df1.observe(
+      namedObservation1, count(lit(1)).as("count"))
+
+    val namedObservation2 = Observation("named")
+    val df2 = spark.range(100)
+    val observed_df2 = df2.observe(
+      namedObservation2, count(lit(1)).as("count"))
+
+    observed_df1.collect()
+    observed_df2.collect()
+
+    val expected1 = Map("count" -> 50)
+    val expected2 = Map("count" -> 100)
+
+    assert(namedObservation1.get === expected1)
+    assert(namedObservation2.get === expected2)
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()

@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.udf import UserDefinedFunction
+    from pyspark.sql.connect.observation import Observation
 
 
 class LogicalPlan:
@@ -128,6 +129,13 @@ class LogicalPlan:
             print(plan)
 
         return plan
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        if self._child is None:
+            return {}
+        else:
+            return self._child.observations
 
     def _parameters_to_print(self, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
         """
@@ -879,6 +887,10 @@ class Join(LogicalPlan):
         plan.join.join_type = self.how
         return plan
 
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return dict(**super().observations, **self.right.observations)
+
     def print(self, indent: int = 0) -> str:
         i = " " * indent
         o = " " * (indent + LogicalPlan.INDENT)
@@ -966,6 +978,10 @@ class AsOfJoin(LogicalPlan):
 
         return plan
 
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return dict(**super().observations, **self.right.observations)
+
     def print(self, indent: int = 0) -> str:
         assert self.left is not None
         assert self.right is not None
@@ -1034,6 +1050,13 @@ class SetOperation(LogicalPlan):
         plan.set_op.by_name = self.by_name
         plan.set_op.allow_missing_columns = self.allow_missing_columns
         return plan
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return dict(
+            **super().observations,
+            **(self.other.observations if self.other is not None else {}),
+        )
 
     def print(self, indent: int = 0) -> str:
         assert self._child is not None
@@ -1269,11 +1292,11 @@ class CollectMetrics(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        name: str,
+        observation: Union[str, "Observation"],
         exprs: List["ColumnOrName"],
     ) -> None:
         super().__init__(child)
-        self._name = name
+        self._observation = observation
         self._exprs = exprs
 
     def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
@@ -1286,9 +1309,23 @@ class CollectMetrics(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.collect_metrics.input.CopyFrom(self._child.plan(session))
-        plan.collect_metrics.name = self._name
+        plan.collect_metrics.name = (
+            self._observation
+            if isinstance(self._observation, str)
+            else str(self._observation._name)
+        )
         plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
         return plan
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        from pyspark.sql.connect.observation import Observation
+
+        if isinstance(self._observation, Observation):
+            observations = {str(self._observation._name): self._observation}
+        else:
+            observations = {}
+        return dict(**super().observations, **observations)
 
 
 class NAFill(LogicalPlan):

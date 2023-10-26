@@ -362,4 +362,147 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     val output = runCommandsInShell(input)
     assertContains("noException: Boolean = true", output)
   }
+
+  test("closure cleaner") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |val t = 200
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |{
+        |  val myLambda = (a: Int) => a + t + foo()
+        |  val myUdf = udf(myLambda)
+        |}
+        |
+        |spark.range(0, 10).
+        |  withColumn("result", myUdf(col("id"))).
+        |  agg(sum("result")).
+        |  collect()(0)(0).asInstanceOf[Long]
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 3045", output)
+  }
+
+  test("closure cleaner with function") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |def example() = {
+        |  val myLambda = (a: Int) => a + foo()
+        |  val myUdf = udf(myLambda)
+        |  spark.range(0, 10).
+        |    withColumn("result", myUdf(col("id"))).
+        |    agg(sum("result")).
+        |    collect()(0)(0).asInstanceOf[Long]
+        |}
+        |
+        |example()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner nested") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |{
+        |  def foo(): Int = { x }
+        |  def bar(): Int = { y.id }
+        |  val z = new NonSerializable
+        |}
+        |
+        |val example = () => {
+        |  val nested = () => {
+        |    val myLambda = (a: Int) => a + foo()
+        |    val myUdf = udf(myLambda)
+        |    spark.range(0, 10).
+        |      withColumn("result", myUdf(col("id"))).
+        |      agg(sum("result")).
+        |      collect()(0)(0).asInstanceOf[Long]
+        |  }
+        |  nested()
+        |}
+        |example()
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner with enclosing lambdas") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |val z = new NonSerializable
+        |
+        |spark.range(0, 10).
+        |// for this call UdfUtils will create a new lambda and this lambda becomes enclosing
+        |  map(i => i + x).
+        |  agg(sum("value")).
+        |  collect()(0)(0).asInstanceOf[Long]
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
+
+  test("closure cleaner cleans capturing class") {
+    val input =
+      """
+        |class NonSerializable(val id: Int = -1) { }
+        |
+        |{
+        |  val x = 100
+        |  val y = new NonSerializable
+        |}
+        |
+        |class Test extends Serializable {
+        |  // capturing class is cmd$Helper$Test
+        |  val myUdf = udf((i: Int) => i + x)
+        |  val z = new NonSerializable
+        |  val res = spark.range(0, 10).
+        |    withColumn("result", myUdf(col("id"))).
+        |    agg(sum("result")).
+        |    collect()(0)(0).asInstanceOf[Long]
+        |}
+        |(new Test()).res
+        |""".stripMargin
+    val output = runCommandsInShell(input)
+    assertContains(": Long = 1045", output)
+  }
 }
