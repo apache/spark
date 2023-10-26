@@ -75,8 +75,7 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalStringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
         col.setUtf8String(v);
-      } else if (pdt instanceof PhysicalDecimalType) {
-        PhysicalDecimalType dt = (PhysicalDecimalType) pdt;
+      } else if (pdt instanceof PhysicalDecimalType dt) {
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           col.setInt((int)d.toUnscaledLong());
@@ -151,8 +150,7 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.BinaryType) {
         byte[] b = (byte[]) o;
         dst.appendByteArray(b, 0, b.length);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
+      } else if (t instanceof DecimalType dt) {
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           dst.appendInt((int) d.toUnscaledLong());
@@ -182,8 +180,7 @@ public class ColumnVectorUtils {
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
-    if (t instanceof ArrayType) {
-      ArrayType at = (ArrayType)t;
+    if (t instanceof ArrayType at) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendNull();
       } else {
@@ -193,8 +190,7 @@ public class ColumnVectorUtils {
           appendValue(dst.arrayData(), at.elementType(), o);
         }
       }
-    } else if (t instanceof StructType) {
-      StructType st = (StructType)t;
+    } else if (t instanceof StructType st) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendStruct(true);
       } else {

@@ -39,6 +39,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
+  "sqlState" : "22003",
   "messageParameters" : {
     "maxValue" : "127",
     "minValue" : "-128",
@@ -79,6 +80,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
+  "sqlState" : "22003",
   "messageParameters" : {
     "maxValue" : "32767",
     "minValue" : "-32768",
@@ -119,6 +121,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
+  "sqlState" : "22003",
   "messageParameters" : {
     "maxValue" : "9223372036854775807",
     "minValue" : "-9223372036854775808",
@@ -223,6 +226,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
+  "sqlState" : "22003",
   "messageParameters" : {
     "maxValue" : "3.4028234663852886E+38",
     "minValue" : "-3.4028234663852886E+38",
@@ -279,6 +283,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
+  "sqlState" : "22003",
   "messageParameters" : {
     "maxValue" : "1.7976931348623157E+308",
     "minValue" : "-1.7976931348623157E+308",
@@ -477,9 +482,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0061",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "msg" : "[DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION] Decimal precision 40 exceeds max precision 38."
+    "maxPrecision" : "38",
+    "precision" : "40"
   },
   "queryContext" : [ {
     "objectType" : "",

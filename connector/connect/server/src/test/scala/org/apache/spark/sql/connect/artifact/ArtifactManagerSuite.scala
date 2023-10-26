@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.UUID
 
+import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -147,6 +148,28 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val remotePath = Paths.get("pyfiles/abc.zip")
       artifactManager.addArtifact(remotePath, stagingPath, None)
       assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
+    }
+  }
+
+  test("Add artifact idempotency") {
+    val remotePath = Paths.get("pyfiles/abc.zip")
+
+    withTempPath { path =>
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      artifactManager.addArtifact(remotePath, path.toPath, None)
+    }
+
+    withTempPath { path =>
+      // subsequent call succeeds
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      artifactManager.addArtifact(remotePath, path.toPath, None)
+    }
+
+    withTempPath { path =>
+      Files.write(path.toPath, "updated file".getBytes(StandardCharsets.UTF_8))
+      assertThrows[StatusRuntimeException] {
+        artifactManager.addArtifact(remotePath, path.toPath, None)
+      }
     }
   }
 

@@ -181,7 +181,7 @@ case class BroadcastNestedLoopJoinExec(
           }
         }
 
-        override def hasNext(): Boolean = {
+        override def hasNext: Boolean = {
           resultRow != null || findNextMatch()
         }
         override def next(): InternalRow = {

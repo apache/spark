@@ -63,11 +63,11 @@ class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
   test("count") {
     withSpark { sc =>
       val empty = EdgeRDD.fromEdges(sc.emptyRDD[Edge[Int]])
-      assert(empty.count === 0)
+      assert(empty.count() === 0)
 
       val edges = List(Edge(0, 1, ()), Edge(1, 2, ()), Edge(2, 0, ()))
       val nonempty = EdgeRDD.fromEdges(sc.parallelize(edges))
-      assert(nonempty.count === edges.size)
+      assert(nonempty.count() === edges.size)
     }
   }
 }

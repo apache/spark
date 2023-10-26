@@ -116,14 +116,14 @@ class DataSourceV2SQLSuiteV1Filter
       val df1 = sql(s"DESCRIBE $t id")
       assert(df1.schema.map(field => (field.name, field.dataType))
         === Seq(("info_name", StringType), ("info_value", StringType)))
-      assert(df1.collect === Seq(
+      assert(df1.collect() === Seq(
         Row("col_name", "id"),
         Row("data_type", "bigint"),
         Row("comment", "NULL")))
       val df2 = sql(s"DESCRIBE $t data")
       assert(df2.schema.map(field => (field.name, field.dataType))
         === Seq(("info_name", StringType), ("info_value", StringType)))
-      assert(df2.collect === Seq(
+      assert(df2.collect() === Seq(
         Row("col_name", "data"),
         Row("data_type", "string"),
         Row("comment", "hello")))
@@ -149,7 +149,7 @@ class DataSourceV2SQLSuiteV1Filter
         val df = sql(s"DESCRIBE $t $col")
         assert(df.schema.map(field => (field.name, field.dataType))
           === Seq(("info_name", StringType), ("info_value", StringType)))
-        assert(df.collect === Seq(
+        assert(df.collect() === Seq(
           Row("col_name", "id"),
           Row("data_type", "bigint"),
           Row("comment", "NULL")))
@@ -399,11 +399,11 @@ class DataSourceV2SQLSuiteV1Filter
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part1 === "id")
       val part2 = describe
         .filter("col_name = 'Part 1'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part2 === "bucket(4, data1, data2, data3, data4)")
     }
   }
@@ -423,11 +423,11 @@ class DataSourceV2SQLSuiteV1Filter
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part1 === "id")
       val part2 = describe
         .filter("col_name = 'Part 1'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part2 === "sorted_bucket(data1, data2, 4, data3, data4)")
     }
   }
@@ -441,7 +441,7 @@ class DataSourceV2SQLSuiteV1Filter
           "AS SELECT id FROM source")
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
-          .select("data_type").head.getString(0)
+          .select("data_type").head().getString(0)
         assert(location === "file:/tmp/foo")
       }
     }
@@ -458,7 +458,7 @@ class DataSourceV2SQLSuiteV1Filter
           "AS SELECT id FROM source")
         val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
-          .select("data_type").head.getString(0)
+          .select("data_type").head().getString(0)
         assert(location === "file:/tmp/foo")
       }
     }
@@ -1743,7 +1743,7 @@ class DataSourceV2SQLSuiteV1Filter
         .add("catalog", StringType, nullable = false)
         .add("namespace", StringType, nullable = false)
       val df = sql("SHOW CURRENT NAMESPACE")
-      val rows = df.collect
+      val rows = df.collect()
 
       assert(df.schema === schema)
       assert(rows.length == 1)
@@ -1973,15 +1973,15 @@ class DataSourceV2SQLSuiteV1Filter
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part1 === "a")
       val part2 = describe
         .filter("col_name = 'Part 1'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part2 === "b")
       val part3 = describe
         .filter("col_name = 'Part 2'")
-        .select("data_type").head.getString(0)
+        .select("data_type").head().getString(0)
       assert(part3 === "sorted_bucket(c, d, 4, e, f)")
     }
   }
@@ -2082,7 +2082,7 @@ class DataSourceV2SQLSuiteV1Filter
         parameters = Map(
           "table" -> "testcat.ns1.ns2.tbl",
           "filters" -> "[id = 2, id = id]"))
-      assert(spark.table(t).count === 3)
+      assert(spark.table(t).count() === 3)
     }
   }
 
@@ -2775,18 +2775,18 @@ class DataSourceV2SQLSuiteV1Filter
 
     val df = sql("SHOW CATALOGS")
     assert(df.schema === schema)
-    assert(df.collect === Array(Row("spark_catalog")))
+    assert(df.collect() === Array(Row("spark_catalog")))
 
     sql("use testcat")
     sql("use testpart")
     sql("use testcat2")
-    assert(sql("SHOW CATALOGS").collect === Array(
+    assert(sql("SHOW CATALOGS").collect() === Array(
       Row("spark_catalog"), Row("testcat"), Row("testcat2"), Row("testpart")))
 
-    assert(sql("SHOW CATALOGS LIKE 'test*'").collect === Array(
+    assert(sql("SHOW CATALOGS LIKE 'test*'").collect() === Array(
       Row("testcat"), Row("testcat2"), Row("testpart")))
 
-    assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect === Array(
+    assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
   }
 
@@ -2902,9 +2902,9 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t2 VALUES (3)")
       sql(s"INSERT INTO $t2 VALUES (4)")
 
-      assert(sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect
+      assert(sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect()
         === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
+      assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect()
         === Array(Row(3), Row(4)))
     }
 
@@ -2928,27 +2928,28 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t4 VALUES (7)")
       sql(s"INSERT INTO $t4 VALUES (8)")
 
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect()
         === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
         === Array(Row(7), Row(8)))
-      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect
+      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts1InSeconds").collect()
         === Array(Row(5), Row(6)))
-      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect
+      assert(sql(s"SELECT * FROM t TIMESTAMP AS OF $ts2InSeconds").collect()
         === Array(Row(7), Row(8)))
-      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect
+      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts1InSeconds").collect()
         === Array(Row(5), Row(6)))
-      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect
+      assert(sql(s"SELECT * FROM t FOR SYSTEM_TIME AS OF $ts2InSeconds").collect()
         === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect()
         === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect()
         === Array(Row(7), Row(8)))
       // Scalar subquery is also supported.
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT make_date(2021, 1, 29))").collect()
         === Array(Row(7), Row(8)))
       // Nested subquery also works
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))").collect
+      assert(
+        sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))").collect()
         === Array(Row(7), Row(8)))
 
       checkError(
@@ -3327,7 +3328,7 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"$sqlCommand $sqlParams")
       },
       errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
-      sqlState = "46110",
+      sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
 }

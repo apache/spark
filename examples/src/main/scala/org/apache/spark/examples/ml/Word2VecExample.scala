@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 object Word2VecExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("Word2Vec example")
       .getOrCreate()
 

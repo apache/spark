@@ -38,7 +38,7 @@ private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])
 
 class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelper {
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
-    val promise = Promise[ArtifactStatusesResponse]
+    val promise = Promise[ArtifactStatusesResponse]()
     val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {
       override protected def cacheExists(
           userId: String,

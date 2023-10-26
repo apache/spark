@@ -73,7 +73,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     c.setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
-    assert(c.count === 10)
+    assert(c.count() === 10)
 
     // All blocks must have non-zero size
     (0 until NUM_BLOCKS).foreach { id =>
@@ -95,7 +95,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       NonJavaSerializableClass,
       NonJavaSerializableClass](b, new HashPartitioner(3))
     c.setSerializer(new KryoSerializer(conf))
-    assert(c.count === 10)
+    assert(c.count() === 10)
   }
 
   test("zero sized blocks") {
@@ -113,7 +113,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
+    assert(c.count() === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
@@ -138,7 +138,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
+    assert(c.count() === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
@@ -502,7 +502,7 @@ class InterleaveIterators[T, R](
   class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
     def hasNext: Boolean = sub.hasNext
 
-    def next: E = {
+    def next(): E = {
       barrier.await()
       sub.next()
     }

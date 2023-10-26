@@ -41,7 +41,11 @@ object MimaExcludes {
     // [SPARK-44705][PYTHON] Make PythonRunner single-threaded
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.python.BasePythonRunner#ReaderIterator.this"),
     // [SPARK-44198][CORE] Support propagation of the log level to the executors
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages$SparkAppConfig$"),
+    // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
+    // [SPARK-45136][CONNECT] Enhance ClosureCleaner with Ammonite support
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$")
   )
 
   // Default exclude rules

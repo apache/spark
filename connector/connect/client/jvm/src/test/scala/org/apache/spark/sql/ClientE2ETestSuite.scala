@@ -63,7 +63,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         })
 
       val ex = intercept[SparkException] {
-        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
       }
 
       assert(ex.getCause.isInstanceOf[SparkException])
@@ -103,7 +103,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         udf((_: String) => throw new SparkException("test" * 10000))
 
       val ex = intercept[SparkException] {
-        Seq("1").toDS.withColumn("udf_val", throwException($"value")).collect()
+        Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
       }
 
       assert(ex.getErrorClass != null)
@@ -129,6 +129,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
         assert(!ex.messageParameters.isEmpty)
         assert(ex.getSqlState != null)
         assert(!ex.isInternalError)
+        assert(ex.getQueryContext.length == 1)
+        assert(ex.getQueryContext.head.startIndex() == 7)
+        assert(ex.getQueryContext.head.stopIndex() == 7)
+        assert(ex.getQueryContext.head.fragment() == "x")
         assert(
           ex.getStackTrace
             .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
@@ -1007,9 +1011,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(df1.sameSemantics(df3) === false)
     assert(df3.sameSemantics(df4) === true)
 
-    assert(df1.semanticHash === df2.semanticHash)
-    assert(df1.semanticHash !== df3.semanticHash)
-    assert(df3.semanticHash === df4.semanticHash)
+    assert(df1.semanticHash() === df2.semanticHash())
+    assert(df1.semanticHash() !== df3.semanticHash())
+    assert(df3.semanticHash() === df4.semanticHash())
   }
 
   test("toJSON") {
@@ -1410,7 +1414,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val r4 = uuid()
     val r5 = shuffle(col("a"))
     df.select(r, r.as("r"), r2, r2.as("r2"), r3, r3.as("r3"), r4, r4.as("r4"), r5, r5.as("r5"))
-      .collect
+      .collect()
       .foreach { row =>
         (0 until 5).foreach(i => assert(row.get(i * 2) === row.get(i * 2 + 1)))
       }

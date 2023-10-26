@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaUtils, Optional}
 import org.apache.spark.api.java.function.{Function3 => JFunction3, Function4 => JFunction4}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.SparkClosureCleaner
 
 /**
  * :: Experimental ::
@@ -157,7 +157,7 @@ object StateSpec {
   def function[KeyType, ValueType, StateType, MappedType](
       mappingFunction: (Time, KeyType, Option[ValueType], State[StateType]) => Option[MappedType]
     ): StateSpec[KeyType, ValueType, StateType, MappedType] = {
-    ClosureCleaner.clean(mappingFunction, checkSerializable = true)
+    SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
     new StateSpecImpl(mappingFunction)
   }
 
@@ -175,7 +175,7 @@ object StateSpec {
   def function[KeyType, ValueType, StateType, MappedType](
       mappingFunction: (KeyType, Option[ValueType], State[StateType]) => MappedType
     ): StateSpec[KeyType, ValueType, StateType, MappedType] = {
-    ClosureCleaner.clean(mappingFunction, checkSerializable = true)
+    SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
     val wrappedFunction =
       (time: Time, key: KeyType, value: Option[ValueType], state: State[StateType]) => {
         Some(mappingFunction(key, value, state))

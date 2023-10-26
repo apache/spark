@@ -118,9 +118,9 @@
     <maven.version>3.9.5</maven.version>
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.5</asm.version>
+    <asm.version>9.6</asm.version>
     <slf4j.version>2.0.9</slf4j.version>
-    <log4j.version>2.20.0</log4j.version>
+    <log4j.version>2.21.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -143,7 +143,7 @@
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.52.v20230823</jetty.version>
+    <jetty.version>9.4.53.v20231009</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
@@ -311,6 +311,7 @@
       --add-opens=java.base/java.util=ALL-UNNAMED
       --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
       --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+      --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED
       --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
@@ -474,7 +475,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.23</version>
+        <version>4.24</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -2856,12 +2857,6 @@
                     <maxJdkVersion>${java.version}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
-                    <excludes>
-                      <!--
-                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
-                      -->
-                      <exclude>org.threeten:threeten-extra</exclude>
-                    </excludes>
                   </enforceBytecodeVersion>
                 </rules>
               </configuration>
@@ -2964,21 +2959,23 @@
               <arg>-target:17</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
-              <!--
-                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
-              -->
               <arg>-Wconf:cat=scaladoc:wv</arg>
-              <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
-              <arg>-Wconf:cat=other-nullary-override:wv</arg>
               <!--
                 SPARK-33775 Suppress compilation warnings that contain the following contents.
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
               -->
               <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
-              <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
-              <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
-              <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+              <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
+              <!--
+                TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
+                  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.rdd.RDDSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.scheduler.TaskSetManagerSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s</arg>
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`
@@ -3007,6 +3004,16 @@
                 Or use `-Wconf:msg=legacy-binding:s` to silence this warning. [quickfixable]"
               -->
               <arg>-Wconf:msg=legacy-binding:s</arg>
+              <!--
+                SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
+              <!--
+                SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
+                so they are prohibited from being used as variable names in Scala 2.13 to
+                reduce the cost of migration in subsequent versions.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>

@@ -315,17 +315,17 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1, 2)).toDF("a", "b")
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct('a)))),
+      df.select(inline(array(struct(Symbol("a")), struct(Symbol("a"))))),
       Row(1) :: Row(1) :: Nil)
 
     checkAnswer(
-      df.select(inline(array(struct('a, 'b), struct('a, 'b)))),
+      df.select(inline(array(struct(Symbol("a"), Symbol("b")), struct(Symbol("a"), Symbol("b"))))),
       Row(1, 2) :: Row(1, 2) :: Nil)
 
     // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
     checkError(
       exception = intercept[AnalysisException] {
-        df.select(inline(array(struct('a), struct('b))))
+        df.select(inline(array(struct(Symbol("a")), struct(Symbol("b")))))
       },
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
@@ -334,13 +334,13 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"))
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct('b.alias("a"))))),
+      df.select(inline(array(struct(Symbol("a")), struct(Symbol("b").alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     // Spark think [struct<a:int>, struct<col1:int>] is heterogeneous due to name difference.
     checkError(
       exception = intercept[AnalysisException] {
-        df.select(inline(array(struct('a), struct(lit(2)))))
+        df.select(inline(array(struct(Symbol("a")), struct(lit(2)))))
       },
       errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
@@ -349,15 +349,16 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"))
 
     checkAnswer(
-      df.select(inline(array(struct('a), struct(lit(2).alias("a"))))),
+      df.select(inline(array(struct(Symbol("a")), struct(lit(2).alias("a"))))),
       Row(1) :: Row(2) :: Nil)
 
     checkAnswer(
-      df.select(struct('a)).select(inline(array("*"))),
+      df.select(struct(Symbol("a"))).select(inline(array("*"))),
       Row(1) :: Nil)
 
     checkAnswer(
-      df.select(array(struct('a), struct('b.alias("a")))).selectExpr("inline(*)"),
+      df.select(array(struct(Symbol("a")),
+        struct(Symbol("b").alias("a")))).selectExpr("inline(*)"),
       Row(1) :: Row(2) :: Nil)
   }
 
@@ -366,11 +367,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df2 = df.select(
       when($"col1" === 1, null).otherwise(array(struct($"col1", $"col2"))).as("col1"))
     checkAnswer(
-      df2.select(inline('col1)),
+      df2.select(inline(Symbol("col1"))),
       Row(3, "4") :: Row(5, "6") :: Nil
     )
     checkAnswer(
-      df2.select(inline_outer('col1)),
+      df2.select(inline_outer(Symbol("col1"))),
       Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
     )
   }
@@ -442,7 +443,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-30998: Unsupported nested inner generators") {
     checkError(
       exception = intercept[AnalysisException] {
-        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+        sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect()
       },
       errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       parameters = Map("expression" -> "\"explode(explode(v))\""))
@@ -500,21 +501,21 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
          """.stripMargin)
 
     checkAnswer(
-      df.select(inline('b)),
+      df.select(inline(Symbol("b"))),
       Row(0, 1) :: Row(null, null) :: Row(2, 3) :: Row(null, null) :: Nil)
 
     checkAnswer(
-      df.select('a, inline('b)),
+      df.select(Symbol("a"), inline(Symbol("b"))),
       Row(1, 0, 1) :: Row(1, null, null) :: Row(1, 2, 3) :: Row(1, null, null) :: Nil)
   }
 
   test("SPARK-39061: inline should handle null struct") {
-    testNullStruct
+    testNullStruct()
   }
 
   test("SPARK-39496: inline eval path should handle null struct") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      testNullStruct
+      testNullStruct()
     }
   }
 

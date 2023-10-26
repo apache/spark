@@ -34,7 +34,8 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 private[sql] class XmlOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    defaultColumnNameOfCorruptRecord: String,
+    rowTagRequired: Boolean)
   extends FileSourceOptions(parameters) with Logging {
 
   import XmlOptions._
@@ -42,11 +43,13 @@ private[sql] class XmlOptions(
   def this(
       parameters: Map[String, String] = Map.empty,
       defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
-      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord) = {
+      defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord,
+      rowTagRequired: Boolean = false) = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,
-      defaultColumnNameOfCorruptRecord)
+      defaultColumnNameOfCorruptRecord,
+      rowTagRequired)
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
@@ -63,8 +66,10 @@ private[sql] class XmlOptions(
   }
 
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
-  val rowTag = parameters.getOrElse(ROW_TAG, XmlOptions.DEFAULT_ROW_TAG)
-  require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be empty string.")
+  val rowTagOpt = parameters.get(XmlOptions.ROW_TAG).map(_.trim)
+  require(!rowTagRequired || rowTagOpt.isDefined, s"'${XmlOptions.ROW_TAG}' option is required.")
+  val rowTag = rowTagOpt.getOrElse(XmlOptions.DEFAULT_ROW_TAG)
+  require(rowTag.nonEmpty, s"'$ROW_TAG' option should not be an empty string.")
   require(!rowTag.startsWith("<") && !rowTag.endsWith(">"),
           s"'$ROW_TAG' should not include angle brackets")
   val rootTag = parameters.getOrElse(ROOT_TAG, XmlOptions.DEFAULT_ROOT_TAG)
@@ -223,8 +228,8 @@ private[sql] object XmlOptions extends DataSourceOptions {
   newOption(ENCODING, CHARSET)
 
   def apply(parameters: Map[String, String]): XmlOptions =
-    new XmlOptions(parameters, SQLConf.get.sessionLocalTimeZone)
+    new XmlOptions(parameters)
 
   def apply(): XmlOptions =
-    new XmlOptions(Map.empty, SQLConf.get.sessionLocalTimeZone)
+    new XmlOptions(Map.empty)
 }

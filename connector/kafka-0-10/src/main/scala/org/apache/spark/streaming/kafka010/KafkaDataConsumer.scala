@@ -293,7 +293,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
     lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](topicPartition, kafkaParams)
 
-    if (context != null && context.attemptNumber >= 1) {
+    if (context != null && context.attemptNumber() >= 1) {
       // If this is reattempt at running the task, then invalidate cached consumers if any and
       // start with a new one. If prior attempt failures were cache related then this way old
       // problematic consumers can be removed.

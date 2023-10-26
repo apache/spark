@@ -65,7 +65,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = {
+  def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -178,6 +178,15 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+
+  /** Metadata of this stateful operator and its states stores. */
+  def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo =
+      Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
 
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
@@ -506,20 +515,42 @@ case class StateStoreSaveExec(
                 numUpdatedStateRows += 1
               }
             }
-            allRemovalsTimeMs += 0
-            commitTimeMs += timeTakenMs {
-              stateManager.commit(store)
-            }
-            setStoreMetrics(store)
-            setOperatorMetrics()
-            stateManager.values(store).map { valueRow =>
-              numOutputRows += 1
-              valueRow
+
+            // SPARK-45582 - Ensure that store instance is not used after commit is called
+            // to invoke the iterator.
+            val rangeIter = stateManager.values(store)
+
+            new NextIterator[InternalRow] {
+              override protected def getNext(): InternalRow = {
+                if (rangeIter.hasNext) {
+                  val valueRow = rangeIter.next()
+                  numOutputRows += 1
+                  valueRow
+                } else {
+                  finished = true
+                  null
+                }
+              }
+
+              override protected def close(): Unit = {
+                allRemovalsTimeMs += 0
+                commitTimeMs += timeTakenMs {
+                  stateManager.commit(store)
+                }
+                setStoreMetrics(store)
+                setOperatorMetrics()
+              }
             }
 
           // Update and output only rows being evicted from the StateStore
           // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
+            assert(watermarkPredicateForDataForLateEvents.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
+            assert(watermarkPredicateForKeysForEviction.isDefined,
+              "Watermark needs to be defined for streaming aggregation query in append mode")
+
             allUpdatesTimeMs += timeTakenMs {
               val filteredIter = applyRemovingRowsOlderThanWatermark(iter,
                 watermarkPredicateForDataForLateEvents.get)
@@ -735,6 +766,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
+  override def shortName: String = "sessionWindowStateStoreSaveExec"
+
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
@@ -765,18 +798,37 @@ case class SessionWindowStateStoreSaveExec(
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
-          commitTimeMs += timeTakenMs {
-            stateManager.commit(store)
-          }
-          setStoreMetrics(store)
-          stateManager.iterator(store).map { row =>
-            numOutputRows += 1
-            row
+
+          // SPARK-45582 - Ensure that store instance is not used after commit is called
+          // to invoke the iterator.
+          val rangeIter = stateManager.iterator(store)
+
+          new NextIterator[InternalRow] {
+            override protected def getNext(): InternalRow = {
+              if (rangeIter.hasNext) {
+                val valueRow = rangeIter.next()
+                numOutputRows += 1
+                valueRow
+              } else {
+                finished = true
+                null
+              }
+            }
+
+            override protected def close(): Unit = {
+              commitTimeMs += timeTakenMs {
+                stateManager.commit(store)
+              }
+              setStoreMetrics(store)
+            }
           }
 
         // Update and output only rows being evicted from the StateStore
         // Assumption: watermark predicates must be non-empty if append mode is allowed
         case Some(Append) =>
+          assert(watermarkPredicateForDataForEviction.isDefined,
+              "Watermark needs to be defined for session window query in append mode")
+
           allUpdatesTimeMs += timeTakenMs {
             putToStore(iter, store)
           }
@@ -819,6 +871,14 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    val stateStoreInfo = Array(StateStoreMetadataV1(
+      StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
+    OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
+  }
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
       eventTimeWatermarkForEviction.isDefined &&
@@ -837,7 +897,7 @@ case class SessionWindowStateStoreSaveExec(
         val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
         numUpdatedStateRows += upserted
         numRemovedStateRows += deleted
-        curValuesOnKey.clear
+        curValuesOnKey.clear()
       }
     }
 

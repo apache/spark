@@ -1719,7 +1719,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val conf = new SparkConf(false)
     val ser = new KryoSerializer(conf).newInstance()
     val trainer = new GeneralizedLinearRegression()
-    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF)
+    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF())
     ser.serialize[GeneralizedLinearRegressionModel](model)
   }
 }

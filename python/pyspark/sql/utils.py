@@ -263,22 +263,6 @@ def get_active_spark_context() -> SparkContext:
     return sc
 
 
-def try_remote_observation(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        # TODO(SPARK-41527): Add the support of Observation.
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "Observation support for Spark Connect"},
-            )
-        return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
 def try_remote_session_classmethod(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 

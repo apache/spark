@@ -124,7 +124,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     podsAllocatorUnderTest = new StatefulSetPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, null)
-    when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
+    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
   }
 

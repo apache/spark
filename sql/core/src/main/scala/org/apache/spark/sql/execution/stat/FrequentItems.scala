@@ -96,10 +96,10 @@ case class CollectFrequentItems(
         val remainder = count - minCount
         if (remainder >= 0) {
           map += key -> count // something will get kicked out, so we can add this
-          map.retain((k, v) => v > minCount)
-          map.transform((k, v) => v - minCount)
+          map.filterInPlace((k, v) => v > minCount)
+          map.mapValuesInPlace((k, v) => v - minCount)
         } else {
-          map.transform((k, v) => v - count)
+          map.mapValuesInPlace((k, v) => v - count)
         }
       }
     }
@@ -122,7 +122,7 @@ case class CollectFrequentItems(
       input: mutable.Map[Any, Long]): mutable.Map[Any, Long] = {
     val otherIter = input.iterator
     while (otherIter.hasNext) {
-      val (key, count) = otherIter.next
+      val (key, count) = otherIter.next()
       add(buffer, key, count)
     }
     buffer
