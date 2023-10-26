@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
+import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -56,7 +57,7 @@ class Observation(val name: String) {
 
   private val listener: ObservationListener = ObservationListener(this)
 
-  @volatile private var sparkSession: Option[SparkSession] = None
+  @volatile private var ds: Option[Dataset[_]] = None
 
   @volatile private var metrics: Option[Map[String, Any]] = None
 
@@ -74,7 +75,7 @@ class Observation(val name: String) {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
-    register(ds.sparkSession)
+    register(ds)
     ds.observe(name, expr, exprs: _*)
   }
 
@@ -112,27 +113,31 @@ class Observation(val name: String) {
       get.map { case (key, value) => (key, value.asInstanceOf[Object])}.asJava
   }
 
-  private def register(sparkSession: SparkSession): Unit = {
+  private def register(ds: Dataset[_]): Unit = {
     // makes this class thread-safe:
     // only the first thread entering this block can set sparkSession
     // all other threads will see the exception, as it is only allowed to do this once
     synchronized {
-      if (this.sparkSession.isDefined) {
+      if (this.ds.isDefined) {
         throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
       }
-      this.sparkSession = Some(sparkSession)
+      this.ds = Some(ds)
     }
 
-    sparkSession.listenerManager.register(this.listener)
+    ds.sparkSession.listenerManager.register(this.listener)
   }
 
   private def unregister(): Unit = {
-    this.sparkSession.foreach(_.listenerManager.unregister(this.listener))
+    this.ds.foreach(_.sparkSession.listenerManager.unregister(this.listener))
   }
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
     synchronized {
-      if (this.metrics.isEmpty) {
+      if (this.metrics.isEmpty && qe.logical.exists {
+        case CollectMetrics(name, _, _, dataframeId) =>
+          name == this.name && dataframeId == ds.get.id
+        case _ => false
+      }) {
         val row = qe.observedMetrics.get(name)
         this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
         if (metrics.isDefined) {

@@ -29,48 +29,50 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Insert a filter on one side of the join if the other side has a selective predicate.
- * The filter could be an IN subquery (converted to a semi join), a bloom filter, or something
- * else in the future.
+ * Insert a runtime filter on one side of the join (we call this side the application side) if
+ * we can extract a runtime filter from the other side (creation side). A simple case is that
+ * the creation side is a table scan with a selective filter.
+ * The runtime filter is logically an IN subquery with the join keys (converted to a semi join),
+ * but can be something different physically, such as a bloom filter.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
-  // Wraps `expr` with a hash function if its byte size is larger than an integer.
-  private def mayWrapWithHash(expr: Expression): Expression = {
-    if (expr.dataType.defaultSize > IntegerType.defaultSize) {
-      new Murmur3Hash(Seq(expr))
+  // Wraps `joinKey` with a hash function if its byte size is larger than an integer.
+  private def mayWrapWithHash(joinKey: Expression): Expression = {
+    if (joinKey.dataType.defaultSize > IntegerType.defaultSize) {
+      new Murmur3Hash(Seq(joinKey))
     } else {
-      expr
+      joinKey
     }
   }
 
   private def injectFilter(
-      filterApplicationSideExp: Expression,
+      filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSideExp: Expression,
+      filterCreationSideKey: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
       injectBloomFilter(
-        filterApplicationSideExp,
+        filterApplicationSideKey,
         filterApplicationSidePlan,
-        filterCreationSideExp,
+        filterCreationSideKey,
         filterCreationSidePlan
       )
     } else {
       injectInSubqueryFilter(
-        filterApplicationSideExp,
+        filterApplicationSideKey,
         filterApplicationSidePlan,
-        filterCreationSideExp,
+        filterCreationSideKey,
         filterCreationSidePlan
       )
     }
   }
 
   private def injectBloomFilter(
-      filterApplicationSideExp: Expression,
+      filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSideExp: Expression,
+      filterCreationSideKey: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     // Skip if the filter creation side is too big
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
@@ -79,9 +81,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val rowCount = filterCreationSidePlan.stats.rowCount
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)), rowCount.get.longValue)
+        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
       } else {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)))
+        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)))
       }
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
@@ -89,26 +91,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideExp)))
+      new XxHash64(Seq(filterApplicationSideKey)))
     Filter(filter, filterApplicationSidePlan)
   }
 
   private def injectInSubqueryFilter(
-      filterApplicationSideExp: Expression,
+      filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSideExp: Expression,
+      filterCreationSideKey: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(filterApplicationSideExp.dataType == filterCreationSideExp.dataType)
-    val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideExp)
+    require(filterApplicationSideKey.dataType == filterCreationSideKey.dataType)
+    val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideKey)
     val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
     val aggregate =
-      ColumnPruning(Aggregate(Seq(filterCreationSideExp), Seq(alias), filterCreationSidePlan))
+      ColumnPruning(Aggregate(Seq(filterCreationSideKey), Seq(alias), filterCreationSidePlan))
     if (!canBroadcastBySize(aggregate, conf)) {
       // Skip the InSubquery filter if the size of `aggregate` is beyond broadcast join threshold,
       // i.e., the semi-join will be a shuffled join, which is not worthwhile.
       return filterApplicationSidePlan
     }
-    val filter = InSubquery(Seq(mayWrapWithHash(filterApplicationSideExp)),
+    val filter = InSubquery(Seq(mayWrapWithHash(filterApplicationSideKey)),
       ListQuery(aggregate, numCols = aggregate.output.length))
     Filter(filter, filterApplicationSidePlan)
   }
@@ -117,18 +119,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * Extracts a sub-plan which is a simple filter over scan from the input plan. The simple
    * filter should be selective and the filter condition (including expressions in the child
    * plan referenced by the filter condition) should be a simple expression, so that we do
-   * not add a subquery that might have an expensive computation.
+   * not add a subquery that might have an expensive computation. The extracted sub-plan should
+   * produce a superset of the entire creation side output data, so that it's still correct to
+   * use the sub-plan to build the runtime filter to prune the application side.
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideExp: Expression): Option[LogicalPlan] = {
-    @tailrec
+      filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
         hasHitSelectiveFilter: Boolean,
-        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
+        currentPlan: LogicalPlan,
+        targetKey: Expression): Option[(Expression, LogicalPlan)] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -139,41 +143,62 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
             hasHitFilter,
             hasHitSelectiveFilter,
-            currentPlan)
+            currentPlan,
+            targetKey)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
+        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan,
+          targetKey)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
-          currentPlan)
-      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
+          currentPlan,
+          targetKey)
+      case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
-        if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(left, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
-        } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extract(right, AttributeSet.empty,
-            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
+        // We assume other rules have already pushed predicates through join if possible.
+        // So the predicate references won't pass on anymore.
+        if (left.output.exists(_.semanticEquals(targetKey))) {
+          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = left, targetKey = targetKey).orElse {
+            // We can also extract from the right side if the join keys are transitive.
+            lkeys.zip(rkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+              .flatMap { newTargetKey =>
+                extract(right, AttributeSet.empty,
+                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right,
+                  targetKey = newTargetKey)
+              }
+          }
+        } else if (right.output.exists(_.semanticEquals(targetKey))) {
+          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+            currentPlan = right, targetKey = targetKey).orElse {
+            // We can also extract from the left side if the join keys are transitive.
+            rkeys.zip(lkeys).find(_._1.semanticEquals(targetKey)).map(_._2)
+              .flatMap { newTargetKey =>
+                extract(left, AttributeSet.empty,
+                  hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left,
+                  targetKey = newTargetKey)
+              }
+          }
         } else {
           None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
-        Some(currentPlan)
+        Some((targetKey, currentPlan))
       case _ => None
     }
 
     if (!plan.isStreaming) {
-      extract(plan, AttributeSet.empty,
-        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
+      extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
+        currentPlan = plan, targetKey = filterCreationSideKey)
     } else {
       None
     }
@@ -226,7 +251,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Extracts the beneficial filter creation plan with check show below:
-   * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
+   * - The filterApplicationSideKey can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
    * - The max filterApplicationSide scan size is greater than a configurable threshold
@@ -234,12 +259,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
-      filterApplicationSideExp: Expression,
-      filterCreationSideExp: Expression): Option[LogicalPlan] = {
+      filterApplicationSideKey: Expression,
+      filterCreationSideKey: Expression): Option[(Expression, LogicalPlan)] = {
     if (findExpressionAndTrackLineageDown(
-      filterApplicationSideExp, filterApplicationSide).isDefined &&
+      filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp)
+      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideKey)
     } else {
       None
     }
@@ -276,10 +301,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       right: LogicalPlan,
       leftKey: Expression,
       rightKey: Expression): Boolean = {
-    findBloomFilterWithExp(left, leftKey) || findBloomFilterWithExp(right, rightKey)
+    findBloomFilterWithKey(left, leftKey) || findBloomFilterWithKey(right, rightKey)
   }
 
-  private def findBloomFilterWithExp(plan: LogicalPlan, key: Expression): Boolean = {
+  private def findBloomFilterWithKey(plan: LogicalPlan, key: Expression): Boolean = {
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
@@ -311,7 +336,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
-        (leftKeys, rightKeys).zipped.foreach((l, r) => {
+        leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
           // 2. There is already a runtime filter (Bloom filter or IN subquery) on the key
@@ -327,8 +352,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left))) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
-                filterCreationSidePlan =>
-                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
+                case (filterCreationSideKey, filterCreationSidePlan) =>
+                  newLeft = injectFilter(l, newLeft, filterCreationSideKey, filterCreationSidePlan)
               }
             }
             // Did we actually inject on the left? If not, try on the right
@@ -337,8 +362,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right))) {
               extractBeneficialFilterCreatePlan(right, left, r, l).foreach {
-                filterCreationSidePlan =>
-                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
+                case (filterCreationSideKey, filterCreationSidePlan) =>
+                  newRight = injectFilter(
+                    r, newRight, filterCreationSideKey, filterCreationSidePlan)
               }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {

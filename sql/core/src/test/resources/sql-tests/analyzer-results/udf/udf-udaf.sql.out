@@ -65,6 +65,7 @@ SELECT default.udaf1(udf(int_col1)) as udaf1, udf(default.udaf1(udf(int_col1))) 
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
+  "sqlState" : "46103",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",
     "functionName" : "`spark_catalog`.`default`.`udaf1`"

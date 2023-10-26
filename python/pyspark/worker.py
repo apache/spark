@@ -20,11 +20,11 @@ Worker that receives input from Piped RDD.
 """
 import os
 import sys
+import dataclasses
 import time
 from inspect import getfullargspec
 import json
-from typing import Any, Callable, Iterable, Iterator
-
+from typing import Any, Callable, Iterable, Iterator, Optional
 import faulthandler
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -52,7 +52,10 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
+    ArrayType,
     BinaryType,
+    DataType,
+    MapType,
     Row,
     StringType,
     StructType,
@@ -667,7 +670,7 @@ def read_udtf(pickleSer, infile, eval_type):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See `PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
+    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
     num_arg = read_int(infile)
     args_offsets = []
     kwargs_offsets = {}
@@ -680,6 +683,14 @@ def read_udtf(pickleSer, infile, eval_type):
             args_offsets.append(offset)
     num_partition_child_indexes = read_int(infile)
     partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
+    has_pickled_analyze_result = read_bool(infile)
+    if has_pickled_analyze_result:
+        pickled_analyze_result = pickleSer._read_with_length(infile)
+    else:
+        pickled_analyze_result = None
+    # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
+    # although we may set this to false later if we find otherwise.
+    udtf_init_method_accepts_analyze_result = True
     handler = read_command(pickleSer, infile)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -688,10 +699,33 @@ def read_udtf(pickleSer, infile, eval_type):
         )
 
     return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-    if not type(return_type) == StructType:
+    if not isinstance(return_type, StructType):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
+
+    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
+    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
+    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
+    # AnalyzeResult.
+    if has_pickled_analyze_result:
+        prev_handler = handler
+
+        def construct_udtf():
+            nonlocal udtf_init_method_accepts_analyze_result
+            if not udtf_init_method_accepts_analyze_result:
+                return prev_handler()
+            else:
+                try:
+                    # Here we pass the AnalyzeResult to the UDTF's __init__ method.
+                    return prev_handler(dataclasses.replace(pickled_analyze_result))
+                except TypeError:
+                    # This means that the UDTF handler does not accept an AnalyzeResult object in
+                    # its __init__ method.
+                    udtf_init_method_accepts_analyze_result = False
+                    return prev_handler()
+
+        handler = construct_udtf
 
     class UDTFWithPartitions:
         """
@@ -757,6 +791,10 @@ def read_udtf(pickleSer, infile, eval_type):
                 return self._udtf.terminate()
             return iter(())
 
+        def cleanup(self) -> None:
+            if hasattr(self._udtf, "cleanup"):
+                self._udtf.cleanup()
+
         def _check_partition_boundaries(self, arguments: list) -> bool:
             result = False
             if len(self._prev_arguments) > 0:
@@ -805,6 +843,113 @@ def read_udtf(pickleSer, infile, eval_type):
             "implemented the 'eval' method. Please add the 'eval' method and try "
             "the query again."
         )
+
+    def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None]]:
+        def raise_(result_column_index):
+            raise PySparkRuntimeError(
+                error_class="UDTF_EXEC_ERROR",
+                message_parameters={
+                    "method_name": "eval' or 'terminate",
+                    "error": f"Column {result_column_index} within a returned row had a "
+                    + "value of None, either directly or within array/struct/map "
+                    + "subfields, but the corresponding column type was declared as "
+                    + "non-nullable; please update the UDTF to return a non-None value at "
+                    + "this location or otherwise declare the column type as nullable.",
+                },
+            )
+
+        def checker(data_type: DataType, result_column_index: int):
+            if isinstance(data_type, ArrayType):
+                element_checker = checker(data_type.elementType, result_column_index)
+                contains_null = data_type.containsNull
+
+                if element_checker is None and contains_null:
+                    return None
+
+                def check_array(arr):
+                    if isinstance(arr, list):
+                        for e in arr:
+                            if e is None:
+                                if not contains_null:
+                                    raise_(result_column_index)
+                            elif element_checker is not None:
+                                element_checker(e)
+
+                return check_array
+
+            elif isinstance(data_type, MapType):
+                key_checker = checker(data_type.keyType, result_column_index)
+                value_checker = checker(data_type.valueType, result_column_index)
+                value_contains_null = data_type.valueContainsNull
+
+                if value_checker is None and value_contains_null:
+
+                    def check_map(map):
+                        if isinstance(map, dict):
+                            for k, v in map.items():
+                                if k is None:
+                                    raise_(result_column_index)
+                                elif key_checker is not None:
+                                    key_checker(k)
+
+                else:
+
+                    def check_map(map):
+                        if isinstance(map, dict):
+                            for k, v in map.items():
+                                if k is None:
+                                    raise_(result_column_index)
+                                elif key_checker is not None:
+                                    key_checker(k)
+                                if v is None:
+                                    if not value_contains_null:
+                                        raise_(result_column_index)
+                                elif value_checker is not None:
+                                    value_checker(v)
+
+                return check_map
+
+            elif isinstance(data_type, StructType):
+                field_checkers = [checker(f.dataType, result_column_index) for f in data_type]
+                nullables = [f.nullable for f in data_type]
+
+                if all(c is None for c in field_checkers) and all(nullables):
+                    return None
+
+                def check_struct(struct):
+                    if isinstance(struct, tuple):
+                        for value, checker, nullable in zip(struct, field_checkers, nullables):
+                            if value is None:
+                                if not nullable:
+                                    raise_(result_column_index)
+                            elif checker is not None:
+                                checker(value)
+
+                return check_struct
+
+            else:
+                return None
+
+        field_checkers = [
+            checker(f.dataType, result_column_index=i) for i, f in enumerate(return_type)
+        ]
+        nullables = [f.nullable for f in return_type]
+
+        if all(c is None for c in field_checkers) and all(nullables):
+            return None
+
+        def check(row):
+            if isinstance(row, tuple):
+                for i, (value, checker, nullable) in enumerate(zip(row, field_checkers, nullables)):
+                    if value is None:
+                        if not nullable:
+                            raise_(i)
+                    elif checker is not None:
+                        checker(value)
+
+        return check
+
+    check_output_row_against_schema = build_null_checker(return_type)
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
 
@@ -859,28 +1004,36 @@ def read_udtf(pickleSer, infile, eval_type):
             def check_return_value(res):
                 # Check whether the result of an arrow UDTF is iterable before
                 # using it to construct a pandas DataFrame.
-                if res is not None and not isinstance(res, Iterable):
-                    raise PySparkRuntimeError(
-                        error_class="UDTF_RETURN_NOT_ITERABLE",
-                        message_parameters={
-                            "type": type(res).__name__,
-                            "func": f.__name__,
-                        },
-                    )
+                if res is not None:
+                    if not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            error_class="UDTF_RETURN_NOT_ITERABLE",
+                            message_parameters={
+                                "type": type(res).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+                    if check_output_row_against_schema is not None:
+                        for row in res:
+                            if row is not None:
+                                check_output_row_against_schema(row)
+                            yield row
+                    else:
+                        yield from res
 
             def evaluate(*args: pd.Series):
                 if len(args) == 0:
                     res = func()
-                    check_return_value(res)
-                    yield verify_result(pd.DataFrame(res)), arrow_return_type
+                    yield verify_result(pd.DataFrame(check_return_value(res))), arrow_return_type
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
                     row_tuples = zip(*args)
                     for row in row_tuples:
                         res = func(*row)
-                        check_return_value(res)
-                        yield verify_result(pd.DataFrame(res)), arrow_return_type
+                        yield verify_result(
+                            pd.DataFrame(check_return_value(res))
+                        ), arrow_return_type
 
             return evaluate
 
@@ -894,15 +1047,19 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         def mapper(_, it):
             try:
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 
@@ -933,7 +1090,8 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "func": f.__name__,
                             },
                         )
-
+                    if check_output_row_against_schema is not None:
+                        check_output_row_against_schema(result)
                 return toInternal(result)
 
             # Evaluate the function and return a tuple back to the executor.
@@ -977,14 +1135,18 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             terminate = None
 
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
         # Return an iterator of iterators.
         def mapper(_, it):
             try:
                 for a in it:
                     yield eval(*[a[o] for o in args_kwargs_offsets])
-            finally:
                 if terminate is not None:
                     yield terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
 
         return mapper, None, ser, ser
 

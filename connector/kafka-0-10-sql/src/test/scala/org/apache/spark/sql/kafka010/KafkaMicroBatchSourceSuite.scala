@@ -248,7 +248,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
           .option("subscribe", outputTopic)
           .load()
           .select(expr("CAST(value AS string)"))
-          .toDF
+          .toDF()
           .collect().map(_.getAs[String]("value")).toList
       }
 
@@ -439,7 +439,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
 
-    testStream(reader.load)(
+    testStream(reader.load())(
       makeSureGetOffsetCalled,
       StopStream,
       StartStream(),
@@ -853,7 +853,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
         true
       },
       AssertOnQuery { q =>
-        val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest
+        val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest()
         latestOffset.exists { offset =>
           !offset._2.offsets.exists(_.exists(_.json == "{}"))
         }
@@ -2499,7 +2499,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       .trigger(defaultTrigger)
       .start()
     eventually(timeout(streamingTimeout)) {
-      assert(spark.table("kafkaColumnTypes").count == 1,
+      assert(spark.table("kafkaColumnTypes").count() == 1,
         s"Unexpected results: ${spark.table("kafkaColumnTypes").collectAsList()}")
     }
     val row = spark.table("kafkaColumnTypes").head()

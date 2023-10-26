@@ -112,4 +112,12 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     checkType(Map("inferTimestamp" -> "true"), json, TimestampType)
     checkType(Map("inferTimestamp" -> "false"), json, StringType)
   }
+
+  test("SPARK-45433: inferring the schema when timestamps do not match specified timestampFormat" +
+    " with only one row") {
+    checkType(
+      Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "inferTimestamp" -> "true"),
+      """{"a": "2884-06-24T02:45:51.138"}""",
+      StringType)
+  }
 }

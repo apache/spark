@@ -370,7 +370,7 @@ class SessionCatalog(
       validateLocation: Boolean = true): Unit = {
     val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
     if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
-      throw QueryCompilationErrors.createExternalTableWithoutLocationError
+      throw QueryCompilationErrors.createExternalTableWithoutLocationError()
     }
 
     val qualifiedIdent = qualifyIdentifier(tableDefinition.identifier)
@@ -1124,7 +1124,7 @@ class SessionCatalog(
    *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    getLocalOrGlobalTempView(name).map(_.refresh).getOrElse {
+    getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)

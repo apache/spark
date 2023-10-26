@@ -89,7 +89,7 @@ private[sql] trait DataTypeErrorsBase {
     "\"" + elem + "\""
   }
 
-    def getSummary(sqlContext: SQLQueryContext): String = {
+  def getSummary(sqlContext: SQLQueryContext): String = {
     if (sqlContext == null) "" else sqlContext.summary
   }
 

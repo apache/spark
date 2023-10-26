@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import PandasNotImplementedError, DataError
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.resample import (
     MissingPandasLikeDataFrameResampler,
     MissingPandasLikeSeriesResampler,

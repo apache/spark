@@ -376,7 +376,7 @@ object ParquetUtils extends Logging {
           .named(schemaName)
       }
     }
-    (primitiveTypeBuilder.result, valuesBuilder.result)
+    (primitiveTypeBuilder.result(), valuesBuilder.result())
   }
 
   /**

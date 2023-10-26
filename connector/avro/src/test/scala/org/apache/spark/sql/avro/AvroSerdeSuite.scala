@@ -177,7 +177,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       case Serializer =>
         s"Cannot convert SQL type ${catalystSchema.sql} to Avro type $avroSchema."
     }
-    assert(e.getMessage === expectMsg)
+    assert(e.getMessage.contains(expectMsg))
     assert(e.getCause.getMessage === expectedCauseMessage)
   }
 

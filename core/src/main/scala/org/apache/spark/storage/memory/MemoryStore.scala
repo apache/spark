@@ -746,7 +746,7 @@ private class SerializedValuesHolder[T](
     // We successfully unrolled the entirety of this block
     serializationStream.close()
 
-    override def preciseSize(): Long = bbos.size
+    override def preciseSize: Long = bbos.size
 
     override def build(): MemoryEntry[T] =
       SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)

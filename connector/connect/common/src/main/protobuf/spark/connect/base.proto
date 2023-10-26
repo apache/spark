@@ -374,8 +374,13 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
+    // Count rows in `data`. Must match the number of rows inside `data`.
     int64 row_count = 1;
+    // Serialized Arrow data.
     bytes data = 2;
+
+    // If set, row offset of the start of this ArrowBatch in execution results.
+    optional int64 start_offset = 3;
   }
 
   message Metrics {
@@ -399,6 +404,7 @@ message ExecutePlanResponse {
   message ObservedMetrics {
     string name = 1;
     repeated Expression.Literal values = 2;
+    repeated string keys = 3;
   }
 
   message ResultComplete {
@@ -814,13 +820,43 @@ message FetchErrorDetailsResponse {
     int32 line_number = 4;
   }
 
+  // QueryContext defines the schema for the query context of a SparkThrowable.
+  // It helps users understand where the error occurs while executing queries.
+  message QueryContext {
+    // The object type of the query which throws the exception.
+    // If the exception is directly from the main query, it should be an empty string.
+    // Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+    string object_type = 1;
+
+    // The object name of the query which throws the exception.
+    // If the exception is directly from the main query, it should be an empty string.
+    // Otherwise, it should be the object name. For example, a view name "V1".
+    string object_name = 2;
+
+    // The starting index in the query text which throws the exception. The index starts from 0.
+    int32 start_index = 3;
+
+    // The stopping index in the query which throws the exception. The index starts from 0.
+    int32 stop_index = 4;
+
+    // The corresponding fragment of the query which throws the exception.
+    string fragment = 5;
+  }
+
   // SparkThrowable defines the schema for SparkThrowable exceptions.
   message SparkThrowable {
     // Succinct, human-readable, unique, and consistent representation of the error category.
     optional string error_class = 1;
 
-    // message parameters for the error framework.
+    // The message parameters for the error framework.
     map<string, string> message_parameters = 2;
+
+    // The query context of a SparkThrowable.
+    repeated QueryContext query_contexts = 3;
+
+    // Portable error identifier across SQL engines
+    // If null, error class or SQLSTATE is not set.
+    optional string sql_state = 4;
   }
 
   // Error defines the schema for the representing exception.

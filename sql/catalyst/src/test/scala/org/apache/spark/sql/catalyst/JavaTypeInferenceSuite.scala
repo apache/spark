@@ -65,7 +65,7 @@ class LeafBean {
   @BeanProperty var localDateTime: java.time.LocalDateTime = _
   @BeanProperty var duration: java.time.Duration = _
   @BeanProperty var period: java.time.Period = _
-  @BeanProperty var enum: java.time.Month = _
+  @BeanProperty var monthEnum: java.time.Month = _
   @BeanProperty val readOnlyString = "read-only"
   @BeanProperty var genericNestedBean: JavaBeanWithGenericBase = _
   @BeanProperty var genericNestedBean2: JavaBeanWithGenericsABC[Integer] = _
@@ -186,7 +186,6 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("boxedShort", BoxedShortEncoder),
       encoderField("date", STRICT_DATE_ENCODER),
       encoderField("duration", DayTimeIntervalEncoder),
-      encoderField("enum", JavaEnumEncoder(classTag[java.time.Month])),
       encoderField("genericNestedBean", JavaBeanEncoder(
         ClassTag(classOf[JavaBeanWithGenericBase]),
         Seq(
@@ -203,6 +202,7 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
       encoderField("instant", STRICT_INSTANT_ENCODER),
       encoderField("localDate", STRICT_LOCAL_DATE_ENCODER),
       encoderField("localDateTime", LocalDateTimeEncoder),
+      encoderField("monthEnum", JavaEnumEncoder(classTag[java.time.Month])),
       encoderField("nonNullString", StringEncoder, overrideNullable = Option(false)),
       encoderField("period", YearMonthIntervalEncoder),
       encoderField("primitiveBoolean", PrimitiveBooleanEncoder),

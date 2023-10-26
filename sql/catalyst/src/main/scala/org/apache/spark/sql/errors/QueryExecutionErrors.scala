@@ -1342,9 +1342,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionDecodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2151",
+      errorClass = "EXPRESSION_DECODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1352,9 +1351,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def expressionEncodingError(e: Exception, expressions: Seq[Expression]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2152",
+      errorClass = "EXPRESSION_ENCODING_FAILED",
       messageParameters = Map(
-        "e" -> e.toString(),
         "expressions" -> expressions.map(
           _.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")),
       cause = e)
@@ -1363,10 +1361,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def classHasUnexpectedSerializerError(
       clsName: String, objSerializer: Expression): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2153",
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       messageParameters = Map(
-        "clsName" -> clsName,
-        "objSerializer" -> objSerializer.toString()))
+        "className" -> clsName,
+        "expr" -> toSQLExpr(objSerializer)))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(
@@ -1695,7 +1693,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotFetchTablesOfDatabaseError(dbName: String, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2196",
+      errorClass = "UNABLE_TO_FETCH_HIVE_TABLES",
       messageParameters = Map(
         "dbName" -> dbName),
       cause = e)
@@ -2774,5 +2772,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
           messageParameters = errorParmsMap)
       }
     }
+  }
+
+  def bitPositionRangeError(funcName: String, pos: Int, size: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+      messageParameters = Map(
+        "parameter" -> toSQLId("pos"),
+        "functionName" -> toSQLId(funcName),
+        "upper" -> size.toString,
+        "invalidValue" -> pos.toString))
   }
 }

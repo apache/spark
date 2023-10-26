@@ -20,7 +20,6 @@ import unittest
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.dataframe import DataFrame as SDF
 from pyspark.ml import functions as SF
-
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,

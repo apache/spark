@@ -42,6 +42,14 @@ class StreamingQueryException private[sql](
     messageParameters: Map[String, String])
   extends Exception(message, cause) with SparkThrowable {
 
+  private[spark] def this(
+      message: String,
+      cause: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String]) = {
+    this("", message, cause, null, null, errorClass, messageParameters)
+  }
+
   def this(
       queryDebugString: String,
       cause: Throwable,
@@ -61,6 +69,9 @@ class StreamingQueryException private[sql](
 
   /** Time when the exception occurred */
   val time: Long = System.currentTimeMillis
+
+  override def getMessage: String =
+    if (queryDebugString.isEmpty) message else s"${message}\n${queryDebugString}"
 
   override def toString(): String =
     s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}

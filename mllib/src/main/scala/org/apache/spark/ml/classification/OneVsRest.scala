@@ -182,7 +182,7 @@ final class OneVsRestModel private[ml] (
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
       logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
         " because no output columns were set.")
-      return dataset.toDF
+      return dataset.toDF()
     }
 
     val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]

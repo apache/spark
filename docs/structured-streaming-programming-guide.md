@@ -2385,6 +2385,16 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
     <td>0.1</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.allowFAllocate</td>
+    <td>Allow the rocksdb runtime to use fallocate to pre-allocate disk space for logs, etc...  Disable for apps that have many smaller state stores to trade off disk space for write performance.</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compression</td>
+    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). </td>
+    <td>lz4</td>
+  </tr>
 </table>
 
 ##### RocksDB State Store Memory Management

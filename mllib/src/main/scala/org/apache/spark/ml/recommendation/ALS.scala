@@ -47,7 +47,7 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
@@ -245,8 +245,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateStorageLevel -> "MEMORY_AND_DISK", finalStorageLevel -> "MEMORY_AND_DISK",
-    coldStartStrategy -> "nan")
+    intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
+    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(), coldStartStrategy -> "nan")
 
   /**
    * Validates and transforms the input schema.

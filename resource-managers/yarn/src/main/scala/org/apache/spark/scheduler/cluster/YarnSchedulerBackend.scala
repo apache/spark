@@ -138,7 +138,7 @@ private[spark] abstract class YarnSchedulerBackend(
   override def applicationId(): String = {
     appId.map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
   }
 
