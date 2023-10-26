@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,9 +27,12 @@ import java.util.NoSuchElementException;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
+
+  private static final Cleaner CLEANER = Cleaner.create();
 
   private final LevelDB db;
   private final boolean ascending;
@@ -39,6 +43,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+  private final Cleaner.Cleanable cleanable;
 
   private boolean checkedNext;
   private byte[] next;
@@ -53,6 +58,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
+    this.cleanable = CLEANER.register(this, new ResourceCleaner(it, db));
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
@@ -182,23 +188,16 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
-    db.notifyIteratorClosed(this);
     if (!closed) {
-      it.close();
+      cleanable.clean();;
       closed = true;
       next = null;
     }
   }
 
-  /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
-   */
-  @SuppressWarnings("deprecation")
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
+  @VisibleForTesting
+  DBIterator internalIterator() {
+    return it;
   }
 
   private byte[] loadNext() {
@@ -280,4 +279,24 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
+  private record ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) implements Runnable {
+    @Override
+    public void run() {
+      levelDB.getIteratorTracker().removeIf(ref -> {
+        LevelDBIterator<?> levelDBIterator = ref.get();
+        return levelDBIterator != null && dbIterator.equals(levelDBIterator.it);
+      });
+      synchronized (levelDB.getLevelDB()) {
+        DB _db = levelDB.getLevelDB().get();
+        if (_db == null) {
+          return;
+        }
+        try {
+          dbIterator.close();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+  }
 }

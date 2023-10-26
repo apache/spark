@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.lang.ref.Reference;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +34,9 @@ import org.iq80.leveldb.DBIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import javax.swing.*;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -381,6 +385,51 @@ public class LevelDBSuite {
     // skip should always return false after db close
     assertFalse(iter.skip(0));
     assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testResourceCleaner() throws Exception {
+    File dbPathForCleanerTest = File.createTempFile(
+      "test_db_cleaner.", ".rdb");
+    dbPathForCleanerTest.delete();
+
+    LevelDB dbForCleanerTest = new LevelDB(dbPathForCleanerTest);
+    try {
+      for (int i = 0; i < 8192; i++) {
+        dbForCleanerTest.write(createCustomType1(i));
+      }
+      LevelDBIterator<CustomType1> levelDBIterator = (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<LevelDBIterator<?>> reference = getRocksDBIteratorRef(levelDBIterator, dbForCleanerTest);
+      assertNotNull(reference);
+      DBIterator it = levelDBIterator.internalIterator();
+      // it has not been closed yet, hasNext execute normally.
+      assertTrue(it.hasNext());
+      // Manually set rocksDBIterator to null, to be GC.
+      levelDBIterator = null;
+      // 100 times gc, the rocksDBIterator should be GCed.
+      int count = 0;
+      while (count < 100 && !reference.refersTo(null)) {
+        System.gc();
+        count++;
+        Thread.sleep(100);
+      }
+      // check rocksDBIterator should be GCed
+      assertTrue(reference.refersTo(null));
+      // Verify that the Cleaner will be executed after a period of time, there is an exception message. java.lang.AssertionError: This object has been deleted
+      assertThrows(AssertionError.class, it::hasNext, "This object has been deleted");
+    } finally {
+      dbForCleanerTest.close();
+      FileUtils.deleteQuietly(dbPathForCleanerTest);
+    }
+  }
+
+  private Reference<LevelDBIterator<?>> getRocksDBIteratorRef(LevelDBIterator<?> rocksDBIterator, LevelDB levelDB) {
+    for (Reference<LevelDBIterator<?>> levelDBIteratorReference : levelDB.getIteratorTracker()) {
+      if (rocksDBIterator == levelDBIteratorReference.get()) {
+        return levelDBIteratorReference;
+      }
+    }
+    return null;
   }
 
   private CustomType1 createCustomType1(int i) {
