@@ -1354,7 +1354,7 @@ private class BufferReleasingInputStream(
     }
   }
 
-  override def available(): Int = delegate.available()
+  override def available(): Int = tryOrFetchFailedException(delegate.available())
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
@@ -1374,7 +1374,8 @@ private class BufferReleasingInputStream(
   /**
    * Execute a block of code that returns a value, close this stream quietly and re-throwing
    * IOException as FetchFailedException when detectCorruption is true. This method is only
-   * used by the `read` and `skip` methods inside `BufferReleasingInputStream` currently.
+   * used by the `available`, `read` and `skip` methods inside `BufferReleasingInputStream`
+   * currently.
    */
   private def tryOrFetchFailedException[T](block: => T): T = {
     try {
