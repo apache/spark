@@ -294,7 +294,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         try {
           dbIterator.close();
         } catch (IOException e) {
-          throw new RuntimeException(e);
+          throw new UncheckedIOException(e);
         }
       }
     }
