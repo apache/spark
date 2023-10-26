@@ -90,18 +90,16 @@ package object sql {
    * invoke other APIs) only the first `withOrigin` is captured because that is closer to the user
    * code.
    *
-   * @param framesToDrop the number of stack frames we can surely drop before searching for the user
-   *                     code
-   * @param f the function that can use the origin
-   * @return the result of `f`
+   * @param f The function that can use the origin.
+   * @return The result of `f`.
    */
-  private[sql] def withOrigin[T](framesToDrop: Int = 0)(f: => T): T = {
+  private[sql] def withOrigin[T](f: => T): T = {
     if (CurrentOrigin.get.stackTrace.isDefined) {
       f
     } else {
       val st = Thread.currentThread().getStackTrace
-      var i = framesToDrop + 3
-      while (sparkCode(st(i))) i += 1
+      var i = 3
+      while (i < st.length && sparkCode(st(i))) i += 1
       val origin =
         Origin(stackTrace = Some(Thread.currentThread().getStackTrace.slice(i - 1, i + 1)))
       CurrentOrigin.withOrigin(origin)(f)

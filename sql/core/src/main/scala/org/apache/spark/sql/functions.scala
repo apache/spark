@@ -93,13 +93,13 @@ import org.apache.spark.util.Utils
 object functions {
 // scalastyle:on
 
-  private def withExpr(expr: => Expression): Column = withOrigin(1) {
+  private def withExpr(expr: => Expression): Column = withOrigin {
     Column(expr)
   }
 
   private def withAggregateFunction(
     func: => AggregateFunction,
-    isDistinct: Boolean = false): Column = withOrigin(1) {
+    isDistinct: Boolean = false): Column = withOrigin {
     Column(func.toAggregateExpression(isDistinct))
   }
 
@@ -129,7 +129,7 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = withOrigin() {
+  def lit(literal: Any): Column = withOrigin {
     literal match {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
@@ -151,7 +151,7 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = withOrigin() {
+  def typedLit[T : TypeTag](literal: T): Column = withOrigin {
     typedlit(literal)
   }
 
@@ -170,7 +170,7 @@ object functions {
    * @group normal_funcs
    * @since 3.2.0
    */
-  def typedlit[T : TypeTag](literal: T): Column = withOrigin() {
+  def typedlit[T : TypeTag](literal: T): Column = withOrigin {
     literal match {
       case c: Column => c
       case s: Symbol => new ColumnName(s.name)
@@ -5973,7 +5973,7 @@ object functions {
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
 
-  private def createLambda(f: Column => Column) = withOrigin(1) {
+  private def createLambda(f: Column => Column) = withOrigin {
     Column {
       val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
       val function = f(Column(x)).expr
@@ -5981,7 +5981,7 @@ object functions {
     }
   }
 
-  private def createLambda(f: (Column, Column) => Column) = withOrigin(1) {
+  private def createLambda(f: (Column, Column) => Column) = withOrigin {
     Column {
       val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
       val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
@@ -5990,7 +5990,7 @@ object functions {
     }
   }
 
-  private def createLambda(f: (Column, Column, Column) => Column) = withOrigin(1) {
+  private def createLambda(f: (Column, Column, Column) => Column) = withOrigin {
     Column {
       val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
       val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))

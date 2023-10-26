@@ -70,7 +70,7 @@ private[sql] object Column {
       name: String,
       isDistinct: Boolean,
       ignoreNulls: Boolean,
-      inputs: Column*): Column = withOrigin(1) {
+      inputs: Column*): Column = withOrigin {
     Column {
       UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
     }
@@ -150,7 +150,7 @@ class TypedColumn[-T, U](
 @Stable
 class Column(val expr: Expression) extends Logging {
 
-  def this(name: String) = this(withOrigin() {
+  def this(name: String) = this(withOrigin {
     name match {
       case "*" => UnresolvedStar(None)
       case _ if name.endsWith(".*") =>
@@ -184,7 +184,7 @@ class Column(val expr: Expression) extends Logging {
   }
 
   /** Creates a column based on the given expression. */
-  private def withExpr(newExpr: => Expression): Column = withOrigin(1) {
+  private def withExpr(newExpr: => Expression): Column = withOrigin {
     new Column(newExpr)
   }
 
@@ -1376,7 +1376,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def over(window: expressions.WindowSpec): Column = withOrigin() {
+  def over(window: expressions.WindowSpec): Column = withOrigin {
     window.withAggregate(this)
   }
 
