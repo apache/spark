@@ -305,7 +305,7 @@ class RollingEventLogFilesWriter(
   private var countingOutputStream: Option[CountingOutputStream] = None
 
   // index and event log path will be updated soon in rollEventLogFile, which `start` will call
-  private var index: Long = 0L
+  private var index: Long = 1L
   private var currentEventLogFilePath: Path = _
 
   override def start(): Unit = {
@@ -340,7 +340,6 @@ class RollingEventLogFilesWriter(
   private[history] def rollEventLogFile(): Unit = {
     closeWriter()
 
-    index += 1
     currentEventLogFilePath = getEventLogFilePath(logDirForAppPath, appId, appAttemptId, index,
       compressionCodecName)
 
@@ -349,6 +348,7 @@ class RollingEventLogFilesWriter(
       new PrintWriter(
         new OutputStreamWriter(countingOutputStream.get, StandardCharsets.UTF_8))
     }
+    index += 1
   }
 
   override def stop(): Unit = {
