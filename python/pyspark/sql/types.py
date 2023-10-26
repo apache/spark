@@ -1249,7 +1249,7 @@ class StructType(DataType):
         # Intentionally uses SparkSession so one implementation can be shared with/without
         # Spark Connect.
         df = SparkSession.active().createDataFrame(data=[], schema=self)
-        if maxDepth > 0:
+        if maxDepth is not None and maxDepth > 0:
             string = df._tree_string(maxDepth)
         else:
             string = df._tree_string()
