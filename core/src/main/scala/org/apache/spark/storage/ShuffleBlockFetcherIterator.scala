@@ -1370,7 +1370,7 @@ private class BufferReleasingInputStream(
   override def read(b: Array[Byte], off: Int, len: Int): Int =
     tryOrFetchFailedException(delegate.read(b, off, len))
 
-  override def reset(): Unit = delegate.reset()
+  override def reset(): Unit = tryOrFetchFailedException(delegate.reset())
 
   /**
    * Execute a block of code that returns a value, close this stream quietly and re-throwing

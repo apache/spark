@@ -182,7 +182,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blocksByAddress: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
       taskContext: Option[TaskContext] = None,
       streamWrapperLimitSize: Option[Long] = None,
-      corruptAtAvailable: Boolean = false,
+      corruptAtAvailableReset: Boolean = false,
       blockManager: Option[BlockManager] = None,
       maxBytesInFlight: Long = Long.MaxValue,
       maxReqsInFlight: Int = Int.MaxValue,
@@ -204,8 +204,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blocksByAddress.iterator,
       (_, in) => {
         val limited = streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in)
-        if (corruptAtAvailable) {
-          new CorruptAvailableStream(limited)
+        if (corruptAtAvailableReset) {
+          new CorruptAvailableResetStream(limited)
         } else {
           limited
         }
@@ -720,12 +720,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     corruptBuffer
   }
 
-  private class CorruptAvailableStream(in: InputStream) extends InputStream {
+  private class CorruptAvailableResetStream(in: InputStream) extends InputStream {
     override def read(): Int = in.read()
 
     override def read(dest: Array[Byte], off: Int, len: Int): Int = in.read(dest, off, len)
 
     override def available(): Int = throw new IOException("corrupt at available")
+
+    override def reset(): Unit = throw new IOException("corrupt at reset")
   }
 
   private class CorruptStream(corruptAt: Long = 0L) extends InputStream {
@@ -1896,7 +1898,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verifyLocalBlocksFromFallback(iterator)
   }
 
-  test("SPARK-45678: retry corrupt blocks on available()") {
+  test("SPARK-45678: retry corrupt blocks on available() and reset()") {
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
@@ -1918,7 +1920,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
       streamWrapperLimitSize = Some(100),
       detectCorruptUseExtraMemory = false, // Don't use `ChunkedByteBufferInputStream`.
-      corruptAtAvailable = true,
+      corruptAtAvailableReset = true,
       checksumEnabled = false
     )
 
@@ -1927,10 +1929,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id1, stream) = iterator.next()
     assert(id1 === ShuffleBlockId(0, 0, 0))
 
-    val err = intercept[FetchFailedException] {
+    val err1 = intercept[FetchFailedException] {
       stream.available()
     }
 
-    assert(err.getMessage.contains("corrupt at available"))
+    assert(err1.getMessage.contains("corrupt at available"))
+
+    val err2 = intercept[FetchFailedException] {
+      stream.reset()
+    }
+
+    assert(err2.getMessage.contains("corrupt at reset"))
   }
 }
