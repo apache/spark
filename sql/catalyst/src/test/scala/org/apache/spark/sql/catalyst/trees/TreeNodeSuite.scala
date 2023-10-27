@@ -949,9 +949,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  private def newErrorAfterStream(es: Expression*) = {
-    es.toStream.append(
-      throw new NoSuchElementException("Stream should not return more elements")
+  private def newErrorAfterLazyList(es: Expression*) = {
+    es.to(LazyList).lazyAppendedAll(
+      throw new NoSuchElementException("LazyList should not return more elements")
     )
   }
 
@@ -975,8 +975,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => newErrorAfterStream(Literal(10))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case StringLiteral("b") => newErrorAfterLazyList(Literal(10))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected = for {
       a <- Seq(Literal(1), Literal(2), Literal(3))
@@ -990,7 +990,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed2 = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
       case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected2 = for {
       b <- Seq(Literal(10), Literal(20), Literal(30))
@@ -1055,7 +1055,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("multiTransformDown alternatives are generated only if needed") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
-      case StringLiteral("a") => newErrorAfterStream()
+      case StringLiteral("a") => newErrorAfterLazyList()
       case StringLiteral("b") => Seq.empty
     }
     assert(transformed.isEmpty)
