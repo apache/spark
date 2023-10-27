@@ -45,9 +45,7 @@ object MimaExcludes {
     // [SPARK-45427][CORE] Add RPC SSL settings to SSLOptions and SparkTransportConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
     // [SPARK-45136][CONNECT] Enhance ClosureCleaner with Ammonite support
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$"),
-    // [SPARK-43380][SQL] Fix slowdown in Avro read
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.avro.SchemaConverters.toSqlType")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.MethodIdentifier$")
   )
 
   // Default exclude rules
