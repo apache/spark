@@ -2192,6 +2192,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify both version and timestamp when time travelling the table."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
     "message" : [
       "The time travel timestamp expression <expr> is invalid."
@@ -2205,6 +2211,11 @@
       "NON_DETERMINISTIC" : {
         "message" : [
           "Must be deterministic."
+        ]
+      },
+      "OPTION" : {
+        "message" : [
+          "Timestamp string in the options must be able to cast to TIMESTAMP type."
         ]
       },
       "UNEVALUABLE" : {
@@ -2385,6 +2396,12 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTIPLE_TIME_TRAVEL_SPEC" : {
+    "message" : [
+      "Cannot specify time travel in both the time travel clause and options."
+    ],
+    "sqlState" : "42K0E"
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
@@ -5130,11 +5147,6 @@
   "_LEGACY_ERROR_TEMP_1332" : {
     "message" : [
       "<errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1334" : {
-    "message" : [
-      "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1338" : {
