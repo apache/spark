@@ -338,6 +338,14 @@ The codec `<codecName>` is not available. Consider to set the config `<configKey
 
 Cannot find a short name for the codec `<codecName>`.
 
+### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-collection-size-exceed-limit-error-class.html)
+
+[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
+
+Can't create array with `<numberOfElements>` elements which exceeding the array size limit `<maxRoundedArrayLength>`,
+
+For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-collection-size-exceed-limit-error-class.html)
+
 ### COLUMN_ALIASES_IS_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1920,12 +1928,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TOO_MANY_ARRAY_ELEMENTS
-
-[SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
-
-Cannot initialize array with `<numElements>` elements of size `<size>`.
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
