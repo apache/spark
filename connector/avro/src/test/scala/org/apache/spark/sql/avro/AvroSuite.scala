@@ -2147,7 +2147,7 @@ abstract class AvroSuite
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false)
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))

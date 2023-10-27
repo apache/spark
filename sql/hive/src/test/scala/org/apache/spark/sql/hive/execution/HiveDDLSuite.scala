@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
@@ -2709,7 +2709,9 @@ class HiveDDLSuite
     assert(compression === actualCompression)
   }
 
-  Seq(("orc", "ZLIB"), ("parquet", "GZIP")).foreach { case (fileFormat, compression) =>
+  Seq(
+    ("orc", "ZLIB"),
+    ("parquet", ParquetCompressionCodec.GZIP.name)).foreach { case (fileFormat, compression) =>
     test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
       withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
         withTable("t") {
@@ -2804,14 +2806,14 @@ class HiveDDLSuite
           assert(DDLUtils.isHiveTable(table))
           assert(table.storage.serde.get.contains("parquet"))
           val properties = table.properties
-          assert(properties.get("parquet.compression") == Some("GZIP"))
+          assert(properties.get("parquet.compression") == Some(ParquetCompressionCodec.GZIP.name))
           assert(spark.table("t").collect().isEmpty)
 
           sql("INSERT INTO t SELECT 1")
           checkAnswer(spark.table("t"), Row(1))
           val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-          assertCompression(maybeFile, "parquet", "GZIP")
+          assertCompression(maybeFile, "parquet", ParquetCompressionCodec.GZIP.name)
         }
       }
     }

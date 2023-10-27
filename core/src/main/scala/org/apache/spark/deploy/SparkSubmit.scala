@@ -674,7 +674,7 @@ private[spark] class SparkSubmit extends Logging {
         confKey = EXECUTOR_CORES.key),
       OptionAssigner(args.executorMemory, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_MEMORY.key),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
+      OptionAssigner(args.totalExecutorCores, STANDALONE, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = FILES.key),
