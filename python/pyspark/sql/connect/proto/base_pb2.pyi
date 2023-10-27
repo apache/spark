@@ -2829,30 +2829,15 @@ class ReleaseSessionResponse(google.protobuf.message.Message):
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     session_id: builtins.str
-    """Session id of the session on which the release executed.
-    If the session couldn't be found (because e.g. it was concurrently released), will be unset.
-    Otherwise, it will be equal to the session_id from request.
-    """
+    """Session id of the session on which the release executed."""
     def __init__(
         self,
         *,
-        session_id: builtins.str | None = ...,
+        session_id: builtins.str = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_session_id", b"_session_id", "session_id", b"session_id"
-        ],
-    ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_session_id", b"_session_id", "session_id", b"session_id"
-        ],
+        self, field_name: typing_extensions.Literal["session_id", b"session_id"]
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_session_id", b"_session_id"]
-    ) -> typing_extensions.Literal["session_id"] | None: ...
 
 global___ReleaseSessionResponse = ReleaseSessionResponse
 

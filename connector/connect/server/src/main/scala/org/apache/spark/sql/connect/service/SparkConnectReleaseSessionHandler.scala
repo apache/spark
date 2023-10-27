@@ -27,18 +27,12 @@ class SparkConnectReleaseSessionHandler(
   extends Logging {
 
   def handle(v: proto.ReleaseSessionRequest): Unit = {
-    val sessionHolder = SparkConnectService
-      .sessionManager
-      .getSessionOrDefault(SessionKey(v.getUserContext.getUserId, v.getSessionId), null)
-
     val responseBuilder = proto.ReleaseSessionResponse.newBuilder()
+    responseBuilder.setSessionId(v.getSessionId)
 
-    // If the session wasn't found, don't throw error but return without setting sessionId.
-    if (sessionHolder != null) {
-      // In case of a race closing session, this will also return silently as noop.
-      SparkConnectService.sessionManager.closeSession(sessionHolder.key)
-      responseBuilder.setSessionId(sessionHolder.sessionId)
-    }
+    // If the session doesn't exist, this will just be a noop.
+    val key = SessionKey(v.getUserContext.getUserId, v.getSessionId)
+    SparkConnectService.sessionManager.closeSession(key)
 
     responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()

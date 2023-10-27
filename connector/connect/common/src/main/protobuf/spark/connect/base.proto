@@ -805,9 +805,7 @@ message ReleaseSessionRequest {
 
 message ReleaseSessionResponse {
   // Session id of the session on which the release executed.
-  // If the session couldn't be found (because e.g. it was concurrently released), will be unset.
-  // Otherwise, it will be equal to the session_id from request.
-  optional string session_id = 1;
+  string session_id = 1;
 }
 
 message FetchErrorDetailsRequest {

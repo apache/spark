@@ -665,6 +665,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
+    client.releaseSession()
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)

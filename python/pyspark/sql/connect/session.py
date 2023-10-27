@@ -654,6 +654,7 @@ class SparkSession:
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
         with SparkSession._lock:
+            self.client.release_session()
             self.client.close()
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
