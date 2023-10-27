@@ -201,7 +201,7 @@ class Dataset[T] private[sql](
   }
 
   // A globally unique id of this Dataset.
-  private val id = Dataset.curId.getAndIncrement()
+  private[sql] val id = Dataset.curId.getAndIncrement()
 
   queryExecution.assertAnalyzed()
 

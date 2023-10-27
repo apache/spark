@@ -69,7 +69,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + partition)
       val seqOp = getSeqOp(withReplacement, fractions, rng, counts)
-      Iterator(iter.aggregate(zeroU)(seqOp, combOp))
+      Iterator(iter.foldLeft(zeroU)(seqOp))
     }
     mappedPartitionRDD.reduce(combOp)
   }

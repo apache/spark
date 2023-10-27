@@ -100,7 +100,7 @@ case class BatchScanExec(
                 "partition values that are not present in the original partitioning.")
           }
 
-          groupPartitions(newPartitions).get.groupedParts.map(_.parts)
+          groupPartitions(newPartitions).map(_.groupedParts.map(_.parts)).getOrElse(Seq.empty)
 
         case _ =>
           // no validation is needed as the data source did not report any specific partitioning

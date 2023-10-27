@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -102,6 +102,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
       // Explicitly converts it into StringType here.
       Some(StringType)
+    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
+      Some(ByteType)
     } else None
   }
 
@@ -184,6 +186,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
+    case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

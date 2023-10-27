@@ -39,8 +39,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
-    session =
-      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    session = new SparkSession(client, planIdGenerator = new AtomicLong)
   }
 
   test("column resolution") {
@@ -48,7 +47,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     import spark.implicits._
     def assertEqual(left: Column, right: Column): Unit = assert(left == right)
     assertEqual($"x", Column("x"))
-    assertEqual('y, Column("y"))
+    assertEqual(Symbol("y"), Column("y"))
   }
 
   test("test implicit encoder resolution") {

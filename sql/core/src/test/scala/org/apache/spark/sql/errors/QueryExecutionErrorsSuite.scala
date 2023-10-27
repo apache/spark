@@ -25,6 +25,7 @@ import java.util.{Locale, Properties, ServiceConfigurationError}
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -49,13 +51,15 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession {
+  with SharedSparkSession
+  with DataTypeErrorsBase {
 
   import testImplicits._
 
@@ -876,6 +880,52 @@ class QueryExecutionErrorsSuite
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
+  test("CONCURRENT_QUERY: streaming query is resumed from many sessions") {
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+        withTempDir { dir =>
+          val ds = spark.readStream.format("rate").load()
+
+          // Queries have the same ID when they are resumed from the same checkpoint.
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
+
+          // Run an initial query to setup the checkpoint.
+          val initialQuery = ds.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+
+          // Error is thrown due to a race condition. Ensure it happens with high likelihood in the
+          // test by spawning many threads.
+          val exceptions = ThreadUtils.parmap(Seq.range(1, 50), "QueryExecutionErrorsSuite", 50)
+            { _ =>
+              var exception = None : Option[SparkConcurrentModificationException]
+              try {
+                val restartedQuery = ds.writeStream.format("parquet")
+                  .option("checkpointLocation", chkLocation).start(dataLocation)
+                restartedQuery.stop()
+                restartedQuery.awaitTermination()
+              } catch {
+                case e: SparkConcurrentModificationException =>
+                  exception = Some(e)
+              }
+              exception
+            }
+          assert(exceptions.map(e => e.isDefined).reduceLeft(_ || _))
+          exceptions.map { e =>
+            if (e.isDefined) {
+              checkError(
+                e.get,
+                errorClass = "CONCURRENT_QUERY",
+                sqlState = Some("0A000")
+              )
+            }
+          }
+          spark.streams.active.foreach(_.stop())
+        }
+      }
+    }
+  }
+
   test("UNSUPPORTED_EXPR_FOR_WINDOW: to_date is not supported with WINDOW") {
     withTable("t") {
       sql("CREATE TABLE t(c String) USING parquet")
@@ -1015,6 +1065,33 @@ class QueryExecutionErrorsSuite
         parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
       )
     }
+  }
+
+  test("Unexpected `start` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 0, 1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.START",
+      parameters = Map(
+        "parameter" -> toSQLId("start"),
+        "functionName" -> toSQLId("slice")
+      )
+    )
+  }
+
+  test("Unexpected `length` for slice()") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select slice(array(1,2,3), 1, -1)").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("length"),
+        "length" -> (-1).toString,
+        "functionName" -> toSQLId("slice")
+      )
+    )
   }
 }
 

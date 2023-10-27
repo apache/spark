@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.expressions._
@@ -79,6 +79,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
+    val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
+    val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
       treePatternbits.containsPattern(CURRENT_LIKE)
@@ -88,12 +90,17 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case subQuery =>
         subQuery.transformAllExpressionsWithPruning(transformCondition) {
           case cd: CurrentDate =>
-            Literal.create(DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+            currentDates.getOrElseUpdate(cd.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+            })
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
-            val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
-            Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            localTimestamps.getOrElseUpdate(localTimestamp.zoneId, {
+              val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
+              Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            })
         }
     }
   }

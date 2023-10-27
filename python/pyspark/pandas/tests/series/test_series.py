@@ -26,20 +26,13 @@ from pyspark.ml.linalg import SparseVector
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import (
-    have_tabulate,
     PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
-    tabulate_requirement_message,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
-from pyspark.pandas.typedef.typehints import (
-    extension_dtypes,
-    extension_dtypes_available,
-    extension_float_dtypes_available,
-    extension_object_dtypes_available,
-)
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
 
 class SeriesTestsMixin:
