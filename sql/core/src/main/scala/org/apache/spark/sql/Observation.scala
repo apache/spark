@@ -73,7 +73,10 @@ class Observation(val name: String) {
    */
   private[spark] def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
-      throw new IllegalArgumentException("Observation does not support streaming Datasets")
+      throw new IllegalArgumentException("Observation does not support streaming Datasets." +
+        "This is because there will be multiple observed metrics as microbatches are constructed" +
+        ". Please register a StreamingQueryListener and get the metric for each microbatch in " +
+        "QueryProgressEvent.progress, or use query.lastProgress or query.recentProgress.")
     }
     register(ds)
     ds.observe(name, expr, exprs: _*)
