@@ -17,17 +17,11 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Random;
 
 import org.junit.jupiter.api.BeforeAll;
 
-import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.server.OneForOneStreamManager;
-import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.ssl.SslSampleConfigs;
 
