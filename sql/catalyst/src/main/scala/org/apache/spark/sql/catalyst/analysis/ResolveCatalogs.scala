@@ -48,7 +48,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
     case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
       s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-    case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
+    case s @ ShowTablesExtended(UnresolvedNamespace(Seq()), _, _) =>
       s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
     case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
       s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))

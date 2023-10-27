@@ -55,7 +55,7 @@ case class ShowTablesExec(
           val isTemp = isTempView(identifier)
           if (isExtended) {
             val table = catalog.loadTable(identifier)
-              val information = extendedTable(identifier, table)
+              val information = extendedTable(catalog.name, identifier, table)
               rows += toCatalystRow(identifier.namespace().quoted, identifier.name(), isTemp,
                 s"$information\n")
           } else {
@@ -81,8 +81,13 @@ case class ShowTablesExec(
     }
   }
 
-  private def extendedTable(identifier: Identifier, table: Table): String = {
+  private def extendedTable(
+      catalogName: String,
+      identifier: Identifier,
+      table: Table): String = {
     val results = new mutable.LinkedHashMap[String, String]()
+
+    results.put("Catalog", catalogName)
 
     if (!identifier.namespace().isEmpty) {
       results.put("Namespace", identifier.namespace().quoted)

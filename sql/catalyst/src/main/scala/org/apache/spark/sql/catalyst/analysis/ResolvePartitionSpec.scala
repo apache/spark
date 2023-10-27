@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ShowTableExtended, V2PartitionCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsPartitionManagement, TableCatalog}
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils.{castPartitionSpec, normalizePartitionSpec, requireExactMatchedPartitionSpec}
@@ -48,16 +48,6 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
                 partitionSchema,
                 command.allowPartialPartitionSpec)
           }
-        case _ => command
-      }
-    case command @ ShowTableExtended(ResolvedNamespace(catalog: TableCatalog, namespace),
-        pattern, _, _) if command.childrenResolved && !command.resolved =>
-      val table = catalog.loadTable(Identifier.of(namespace.toArray, pattern))
-      table match {
-        case s: SupportsPartitionManagement => command.transformExpressions {
-          case partSpecs: UnresolvedPartitionSpec =>
-            resolvePartitionSpec(table.name, partSpecs, s.partitionSchema(), false)
-        }
         case _ => command
       }
   }
