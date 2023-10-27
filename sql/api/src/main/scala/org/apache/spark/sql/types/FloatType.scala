@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.Try
+
 import org.apache.spark.annotation.Stable
 
 /**
@@ -39,4 +41,35 @@ class FloatType private() extends FractionalType {
  * @since 1.3.0
  */
 @Stable
-case object FloatType extends FloatType
+case object FloatType extends FloatType {
+
+  trait FloatIsConflicted extends Numeric[Float] {
+    def plus(x: Float, y: Float): Float = x + y
+    def minus(x: Float, y: Float): Float = x - y
+    def times(x: Float, y: Float): Float = x * y
+    def negate(x: Float): Float = -x
+    def fromInt(x: Int): Float = x.toFloat
+    def toInt(x: Float): Int = x.toInt
+    def toLong(x: Float): Long = x.toLong
+    def toFloat(x: Float): Float = x
+    def toDouble(x: Float): Double = x.toDouble
+    // logic in Numeric base trait mishandles abs(-0.0f)
+    override def abs(x: Float): Float = math.abs(x)
+    // Added from Scala 2.13; don't override to work in 2.12
+    override def parseString(str: String): Option[Float] =
+      Try(java.lang.Float.parseFloat(str)).toOption
+  }
+
+  trait FloatAsIfIntegral extends FloatIsConflicted with Integral[Float] {
+    def quot(x: Float, y: Float): Float = {
+      (BigDecimal(x.toDouble) quot BigDecimal(y.toDouble)).floatValue
+    }
+    def rem(x: Float, y: Float): Float = {
+      (BigDecimal(x.toDouble) remainder BigDecimal(y.toDouble)).floatValue
+    }
+  }
+
+  object FloatAsIfIntegral extends FloatAsIfIntegral {
+    override def compare(x: Float, y: Float): Int = java.lang.Float.compare(x, y)
+  }
+}

@@ -92,6 +92,7 @@ object PhysicalNumericType {
 
 sealed abstract class PhysicalFractionalType extends PhysicalNumericType {
   private[sql] val fractional: Fractional[InternalType]
+  private[sql] val asIntegral: Integral[InternalType]
 }
 
 object PhysicalFractionalType {
@@ -183,6 +184,7 @@ class PhysicalDoubleType() extends PhysicalFractionalType with PhysicalPrimitive
   private[sql] val numeric = implicitly[Numeric[Double]]
   override private[sql] def exactNumeric = DoubleExactNumeric
   private[sql] val fractional = implicitly[Fractional[Double]]
+  private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 }
 case object PhysicalDoubleType extends PhysicalDoubleType
 
@@ -197,6 +199,7 @@ class PhysicalFloatType() extends PhysicalFractionalType with PhysicalPrimitiveT
   private[sql] val numeric = implicitly[Numeric[Float]]
   override private[sql] def exactNumeric = FloatExactNumeric
   private[sql] val fractional = implicitly[Fractional[Float]]
+  private[sql] val asIntegral = FloatType.FloatAsIfIntegral
 }
 case object PhysicalFloatType extends PhysicalFloatType
 
