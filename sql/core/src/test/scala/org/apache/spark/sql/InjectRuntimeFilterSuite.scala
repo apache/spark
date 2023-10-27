@@ -583,73 +583,67 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
   test("Runtime bloom filter join: should add bf for left outer join even if left side is" +
     " smaller than broadcast threshold") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "300",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+    // left side size : 1278 right side size 2941
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
+      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000") {
       assertRewroteWithBloomFilter(
-        "select * from bf2 left outer join bf1 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1, bf1.b1, bf1.c1, bf1.d1, bf1.e1 from bf3 left outer join bf1 on bf1.c1 =" +
+          " bf3.c3 where bf3.b3 = 3")
     }
   }
 
   test("Runtime bloom filter join: should not add bf for left outer join if right side is" +
     " smaller than broadcast threshold") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "600",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+    // left side size : 1278 right side size 2941
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
+      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000") {
       assertDidNotRewriteWithBloomFilter(
-        "select * from bf2 left outer join bf1 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1, bf1.b1, bf1.c1, bf1.d1, bf1.e1 from bf3 left outer join bf1 on bf1.c1 =" +
+          " bf3.c3 where bf3.b3 = 3")
     }
   }
 
   test("Runtime bloom filter join: should add bf for right outer join even if right side is" +
     " smaller than broadcast threshold") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "300",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+    // left side size : 2914 right side size 1278
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
+      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000") {
       assertRewroteWithBloomFilter(
-        "select * from bf1 right outer join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1, bf1.b1, bf1.c1, bf1.d1, bf1.e1 from bf1 right outer join bf3 on bf1.c1 =" +
+          " bf3.c3 where bf3.b3 = 3")
     }
   }
 
   test("Runtime bloom filter join: should not add bf for right outer join if left side is" +
     " smaller than broadcast threshold") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "600",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+    // left side size : 2914 right side size 1278
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
+      SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000") {
       assertDidNotRewriteWithBloomFilter(
-        "select * from bf1 right outer join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1, bf1.b1, bf1.c1, bf1.d1, bf1.e1 from bf1 right outer join bf3 on bf1.c1 =" +
+          " bf3.c3 where bf3.b3 = 3")
     }
   }
 
   test("Runtime bloom filter join: should add bf for left semi join even if left side is" +
     " smaller than broadcast threshold") {
+    // left side size : 1260 right side size 1278
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1270") {
       assertRewroteWithBloomFilter(
-          "select * from bf2 left semi join bf1 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1 from bf1 left semi join bf2 on bf1.a1 =" +
+          " bf2.a2 where bf1.a1 = 62")
     }
   }
 
   test("Runtime bloom filter join: should not add bf for left semi join if right side is" +
     " smaller than broadcast threshold") {
+    // left side size : 1260 right side size 1278
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "600",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "600",
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000",
-      SQLConf.CBO_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1280") {
       assertDidNotRewriteWithBloomFilter(
-        "select * from bf2 left semi join bf1 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
-      )
+        "select bf1.a1 from bf1 left semi join bf2 on bf1.a1 =" +
+          " bf2.a2 where bf1.a1 = 62")
     }
   }
 }

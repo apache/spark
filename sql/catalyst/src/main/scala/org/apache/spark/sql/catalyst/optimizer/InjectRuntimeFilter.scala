@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -170,9 +169,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  // Whether it is a shuffle join or not should be based on the actual left and
-  // right table. For some join like left outer join, it will be a shuffle join
-  // even if left side table size is smaller than broadcast threshold.
+  // Whether it is a shuffle join or not based on the join type, the left size and right size.
   private def isProbablyShuffleJoin(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -287,7 +284,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
-        lazy val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
