@@ -41,6 +41,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  */
 abstract class QueryStageExec extends LeafExecNode {
 
+  val hasStreamSidePushdownDependent = false
+
   /**
    * An id of this query stage which is unique in the entire query plan.
    */
@@ -231,7 +233,8 @@ case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
     override val _canonicalized: SparkPlan,
-    override val reuseSource: Option[Int] = None) extends ExchangeQueryStageExec {
+    override val reuseSource: Option[Int] = None,
+    override val hasStreamSidePushdownDependent: Boolean = false) extends ExchangeQueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b
@@ -249,7 +252,8 @@ case class BroadcastQueryStageExec(
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
-      _canonicalized, Option(this.id))
+      _canonicalized, Option(this.id),
+      hasStreamSidePushdownDependent = this.hasStreamSidePushdownDependent)
     reuse._resultOption = this._resultOption
     reuse
   }

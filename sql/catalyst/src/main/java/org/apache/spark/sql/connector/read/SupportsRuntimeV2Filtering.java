@@ -91,6 +91,5 @@ public interface SupportsRuntimeV2Filtering extends Scan {
   default int getPushedBroadcastFiltersCount() {
     return 0;
   }
-
-  default void callbackBeforeOpeningIterator() {}
+  
 }

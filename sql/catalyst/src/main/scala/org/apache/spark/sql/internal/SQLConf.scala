@@ -4136,16 +4136,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val LEVEL_WAIT_FOR_DELAYED_STAGE_MATERIALIZATION =
-    buildConf("spark.sql.execution.broadcastHashJoin.levelWaitForDelayedStageMaterialization")
-    .internal()
-    .doc("For level 0, the wait is only for orphan batchscans. For Level 1, the wait is till" +
-      "all the delayed batches are scheduled for materialization. For Level 2, the wait is till" +
-      "the delayed batches are materialized")
-    .version("3.1.0")
-    .intConf
-    .createWithDefault(1)
-
   val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
     buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
     .internal()
@@ -5276,9 +5266,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
-
-  def levelWaitForDelayedStageMaterialization: Int =
-    getConf(LEVEL_WAIT_FOR_DELAYED_STAGE_MATERIALIZATION)
 
   def preferAsBuildSideLegAlreadyBroadcasted: Boolean =
     getConf(PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED)

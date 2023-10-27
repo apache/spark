@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.optimizer.BuildSide
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -2179,4 +2180,9 @@ object AsOfJoin {
           Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
     }
   }
+}
+
+object Join {
+  val PRESERVE_JOIN_WITH_SELF_PUSH_HASH =
+    TreeNodeTag[(BuildSide, LogicalPlan)]("buildside_original_build_plan_self_push")
 }

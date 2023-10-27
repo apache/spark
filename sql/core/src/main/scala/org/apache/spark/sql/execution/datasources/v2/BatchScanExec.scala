@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
@@ -98,7 +99,7 @@ case class BatchScanExec(
       if (dataSourceFilters.nonEmpty) {
         filterableScan.filter(dataSourceFilters.toArray)
       }
-      filterableScan.callbackBeforeOpeningIterator()
+
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
@@ -302,6 +303,9 @@ case class BatchScanExec(
   }
 }
 
+object BatchScanExec {
+    val PRESERVE_BATCH_EXEC_TO_USE = TreeNodeTag[BatchScanExec]("preserve_batch_scan_exec")
+}
 case class StoragePartitionJoinParams(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,

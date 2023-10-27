@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -81,7 +82,7 @@ case class DynamicPruningSubquery(
     copy(
       pruningKey = pruningKey.canonicalized,
       buildQuery = buildQuery.canonicalized,
-      buildKeys = buildKeys.map(_.canonicalized),
+      buildKeys = buildKeys.map(QueryPlan.normalizeExpressions(_, buildQuery.output)),
       exprId = ExprId(0))
   }
 

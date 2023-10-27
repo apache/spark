@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SELF_PUSH}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -208,7 +209,23 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = this.applyLocal(plan, checkHashHint = true)
+
+    def applyLocal(plan: LogicalPlan, checkHashHint: Boolean): Seq[SparkPlan] = plan match {
+
+      case j: Join if checkHashHint &&
+        j.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH).isDefined =>
+        val (buildSide, originalBuildLp) = j.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH).get
+        val hintInfo = Option(HintInfo(Option(BROADCAST)))
+        val joinWithHint = buildSide match {
+          case BuildRight => j.copy(hint = JoinHint(None, hintInfo))
+          case BuildLeft => j.copy(hint = JoinHint(hintInfo, None))
+        }
+        val bhj = this.applyLocal(joinWithHint, checkHashHint = false).head.
+          asInstanceOf[BroadcastHashJoinExec].copy(bcVarPushNode = SELF_PUSH)
+        bhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+
+        bhj :: Nil
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
       //      have the broadcast hints, choose the smaller side (based on stats) to broadcast.

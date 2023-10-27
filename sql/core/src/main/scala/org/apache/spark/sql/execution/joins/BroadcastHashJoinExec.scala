@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -81,7 +82,7 @@ case class BroadcastHashJoinExec(
     val canonicalizedBuildKeys = this.canonicalized.asInstanceOf[BroadcastHashJoinExec].buildKeys
     val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(
       canonicalizedBuildKeys, this.streamedPlan,
-      BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->
+      BroadcastHashJoinUtil.getOriginalLogicalPlanForBuildPlan(this.logicalLink.get) ->
         BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan).flatMap(
           _.proxyForPushedBroadcastVar.getOrElse(Seq.empty)))
 
@@ -288,12 +289,19 @@ case class BroadcastHashJoinExec(
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
+
+  def preserveLogicalJoinAsHashSelfPush(originalBuildLP: LogicalPlan): Unit =
+    this.logicalLink.foreach(
+      _.setTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH, (this.buildSide, originalBuildLP)))
+
 }
 
 trait BCVarPushNodeType extends LeafExpression with Unevaluable {
-  override lazy val canonicalized: Expression = PASS_THROUGH
+  // override lazy val canonicalized: Expression = PASS_THROUGH
 
   override def nullable: Boolean = false
+
+  override lazy val canonicalized: Expression = PASS_THROUGH
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression.  It is

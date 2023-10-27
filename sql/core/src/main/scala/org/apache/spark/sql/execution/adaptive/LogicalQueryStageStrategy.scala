@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingl
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins.{BCVarPushNodeType, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, PASS_THROUGH, SELF_PUSH}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -43,13 +43,32 @@ object LogicalQueryStageStrategy extends Strategy {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
-          left, right, hint)
-        if isBroadcastStage(left) || isBroadcastStage(right) =>
-      val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
+          left, right, hint) if isBroadcastStage(left) || isBroadcastStage(right) =>
 
-      Seq(BroadcastHashJoinExec(
+      val preserveBuildPlan = plan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH)
+
+      def bcVarPushType(lp: LogicalPlan): BCVarPushNodeType =
+            if (lp.asInstanceOf[LogicalQueryStage].physicalPlan.
+                asInstanceOf[BroadcastQueryStageExec].hasStreamSidePushdownDependent
+            || preserveBuildPlan.isDefined) {
+              SELF_PUSH
+            } else {
+              PASS_THROUGH
+            }
+      val (buildSide, bcVarPush) = if (isBroadcastStage(left)) {
+          (BuildLeft, bcVarPushType(left))
+        } else {
+          (BuildRight, bcVarPushType(right))
+        }
+
+      val newbhj = BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
-        planLater(right)))
+        planLater(right), bcVarPushNode = bcVarPush)
+
+      preserveBuildPlan.foreach {
+        case (_, originalBuildLp) => newbhj.preserveLogicalJoinAsHashSelfPush(originalBuildLp)
+      }
+      Seq(newbhj)
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>

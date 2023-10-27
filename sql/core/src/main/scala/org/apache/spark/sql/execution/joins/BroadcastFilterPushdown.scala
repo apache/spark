@@ -120,7 +120,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
             buildKeys, streamedPlan, buildPlan, batchScanToJoinLegMapping,
             buildLegsBlockingPushFromAncestors)
         val groupingOnBasisOfBatchScanExec = temp.groupBy(_.targetBatchScanExec)
-        val logicalNode = BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan)
+        val logicalNode = buildPlan.logicalLink.get
         buildLegPlanToOriginalBatchScans.put(logicalNode, BroadcastHashJoinUtil
             .getAllBatchScansForSparkPlan(buildPlan))
 
@@ -167,7 +167,10 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
         }
         if (pushingAnyFilter) {
           val newBhj = bhj.copy(bcVarPushNode = SELF_PUSH)
-          bhj.logicalLink.foreach(newBhj.setLogicalLink)
+          bhj.logicalLink.foreach(lp => {
+            newBhj.setLogicalLink(lp)
+            newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink.get)
+          })
           newBhj
         } else {
           bhj
@@ -256,8 +259,8 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
           case BuildLeft => bhj.copy(right = newStreamPlan, left = newBuildPlan)
         }
         bhj.logicalLink.foreach(newBhj.setLogicalLink)
+        newBhj.preserveLogicalJoinAsHashSelfPush(buildPlan.logicalLink.get)
         newBhj
-
       case _ =>
         if (sparkPlan.children.isEmpty) {
           sparkPlan

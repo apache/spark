@@ -22,11 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, LogicalQueryStage, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning
@@ -104,11 +104,12 @@ object BroadcastHashJoinUtil {
 
   // Not to be invoked for Stage. this is used only for join condition
   // identification. it goes below a query stage it it encounters one
-  def getAllBatchScansForSparkPlan(plan: SparkPlan): Seq[BatchScanExec] =
+  def getAllBatchScansForSparkPlan(plan: SparkPlan, goInsideStageExec: Boolean = true):
+  Seq[BatchScanExec] =
     plan.collectLeaves().flatMap {
       case bs: BatchScanExec => Seq(bs)
-      case qs: QueryStageExec => getAllBatchScansForSparkPlan(qs.plan)
-      case re: ReusedExchangeExec => getAllBatchScansForSparkPlan(re.child)
+      case qs: QueryStageExec if goInsideStageExec => getAllBatchScansForSparkPlan(qs.plan)
+      case re: ReusedExchangeExec if goInsideStageExec => getAllBatchScansForSparkPlan(re.child)
       case _ => Seq.empty
     }
 
@@ -164,18 +165,24 @@ object BroadcastHashJoinUtil {
     seq.map(quoteIfNeeded).mkString(".")
   }
 
+  /*
   def getLogicalPlanFor(plan: SparkPlan): LogicalPlan = {
     val logicalNodeOpt = plan.logicalLink.orElse(plan.collectFirst {
       case p if p.logicalLink.isDefined => p.logicalLink.get
     })
     assert(logicalNodeOpt.isDefined)
-    logicalNodeOpt.map {
-      // in the second pass in adaptive query exec, the build leg would be wrappbed
-      // in LogicalQueryStage
-      case LogicalQueryStage(lp, _) => lp
-      case x => x
-    }.get
+    def deconstructLogicalQueryStage(logicalPlan: LogicalPlan): LogicalPlan = {
+      logicalPlan transformUp {
+        case LogicalQueryStage(lp, _) => deconstructLogicalQueryStage(lp)
+      }
+    }
+
+    logicalNodeOpt.map(deconstructLogicalQueryStage).get
   }
+  */
+  def getOriginalLogicalPlanForBuildPlan(joinPlan: LogicalPlan): LogicalPlan =
+    joinPlan.getTagValue(Join.PRESERVE_JOIN_WITH_SELF_PUSH_HASH).map(_._2).get
+
 
   private def getPushDownDataSkipBuildSideCheck(
       conf: SQLConf,

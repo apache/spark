@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression,
-  InWithBroadcastVar, SortOrder, SpecializedGetters}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression, InWithBroadcastVar, SortOrder, SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -31,8 +30,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl,
-  BroadcastHashJoinExec, BroadcastHashJoinUtil, HashedRelation}
+import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl, BroadcastHashJoinExec, BroadcastHashJoinUtil, HashedRelation}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -168,17 +166,36 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   override protected def doProduce(ctx: CodegenContext): String = {
     if (!processedBCVar) {
       processedBCVar = true
-      // Do not evaluate filter for the bottom most broadcast hash join as if
-      // the tuple is filtered to be selected, then it would unnecessary be again have to be
-      // evaluated.
-      val ignoreBroadcastVar = this.parent match {
-        case bhj: BroadcastHashJoinExec => bhj.getBroadcastID
-        case _ => None
-      }
+
       val (batchScanOpt, pushedBroadcastFiltersTemp) = getPushedBroadcastVarFilters
       if (pushedBroadcastFiltersTemp.isEmpty) {
         checkForWarning(batchScanOpt)
       }
+      // Do not evaluate filter for the bottom most broadcast hash join as if
+      // the tuple is filtered to be selected, then it would unnecessary be again have to be
+      // evaluated.
+      val ignoreBroadcastVar = if (pushedBroadcastFiltersTemp.nonEmpty) {
+        var bhjToIgnore: Option[Long] = None
+        var current = this.parent
+        var keepGoing = true
+        while(keepGoing) {
+          bhjToIgnore = current match {
+            case bhj: BroadcastHashJoinExec =>
+              keepGoing = false
+              bhj.getBroadcastID
+            case x : CodegenSupport if x.isInstanceOf [UnaryExecNode] =>
+              current = current.parent
+              None
+            case _ =>
+              keepGoing = false
+              None
+          }
+        }
+        bhjToIgnore
+      } else {
+        None
+      }
+
       val pushedBroadcastFilters = ignoreBroadcastVar.fold(pushedBroadcastFiltersTemp)(
           id => pushedBroadcastFiltersTemp.filterNot(_.bcVar.getBroadcastVarId == id))
       if (pushedBroadcastFilters.isEmpty) {

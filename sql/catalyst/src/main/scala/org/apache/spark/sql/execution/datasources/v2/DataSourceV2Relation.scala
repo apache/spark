@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import com.google.common.base.Objects
+
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -24,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -132,6 +134,42 @@ case class DataSourceV2ScanRelation(
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+  }
+
+  // because in case of proxy broadcast var push, the build leg plan in a cached stage
+  // would already have materialized the stage so the runtime vars may have been pushed to
+  // the Scan instance. While the lookup physical plan will have a buildleg whose leaf relation's
+  // scan is not materialied , so that runtime vars are not pushed yet. So to consider equality
+  // of scans here , we have to ignore runtime filters.
+
+  override def equals(other: Any): Boolean = other match {
+    case dsvsr: DataSourceV2ScanRelation =>
+      val commonEquality = this.relation == dsvsr.relation &&
+        this.output == dsvsr.output &&
+        this.keyGroupedPartitioning == dsvsr.keyGroupedPartitioning &&
+        this.ordering == dsvsr.ordering
+      if (commonEquality) {
+        (this.scan, dsvsr.scan) match {
+          case (sr1: SupportsRuntimeV2Filtering, sr2: SupportsRuntimeV2Filtering) =>
+            sr1.equalToIgnoreRuntimeFilters(sr2)
+
+          case _ if this.scan != null => this.scan == dsvsr.scan
+        }
+      } else {
+        false
+      }
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val batchHashCode = scan match {
+      case sr: SupportsRuntimeV2Filtering => sr.hashCodeIgnoreRuntimeFilters()
+
+      case _ => this.scan.hashCode()
+    }
+    Objects.hashCode(Integer.valueOf(batchHashCode), this.relation, this.output, this.ordering,
+      this.keyGroupedPartitioning)
   }
 
   override def computeStats(): Statistics = {
