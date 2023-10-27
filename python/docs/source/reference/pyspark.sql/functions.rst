@@ -547,6 +547,7 @@ XML Functions
 
     from_xml
     schema_of_xml
+    to_xml
     xpath
     xpath_boolean
     xpath_double

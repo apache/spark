@@ -37,9 +37,16 @@ class XmlOutputWriter(
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
 
-  private val gen = new StaxXmlGenerator(dataSchema, writer, options, true)
+  private val gen = new StaxXmlGenerator(dataSchema, writer, options)
 
-  override def write(row: InternalRow): Unit = gen.write(row)
+  private var firstRow: Boolean = true
+  override def write(row: InternalRow): Unit = {
+    if (firstRow) {
+      gen.writeDeclaration()
+      firstRow = false
+    }
+    gen.write(row)
+  }
 
   override def close(): Unit = gen.close()
 }

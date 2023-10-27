@@ -1,6 +1,6 @@
 -- to_xml
-select to_xml(named_struct('a', 1, 'b', 2));
-select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+select to_xml(named_struct('a', 1, 'b', 2), map('indent', ''));
+select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy', 'indent', ''));
 -- Check if errors handled
 select to_xml(array(named_struct('a', 1, 'b', 2)));
 select to_xml(map('a', 1));

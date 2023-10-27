@@ -1879,6 +1879,10 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                 cdf.select(CF.from_xml("b", schema, {"mode": "FAILFAST"})),
                 sdf.select(SF.from_xml("b", schema, {"mode": "FAILFAST"})),
             )
+            self.compare_by_show(
+                sdf.select(SF.to_xml(SF.struct(SF.from_xml("b", schema)), {"rowTag": "person"})),
+                sdf.select(SF.to_xml(SF.struct(SF.from_xml("b", schema)), {"rowTag": "person"})),
+            )
 
         c_schema = CF.schema_of_xml(CF.lit("""<p><a>1</a></p>"""))
         s_schema = SF.schema_of_xml(SF.lit("""<p><a>1</a></p>"""))
