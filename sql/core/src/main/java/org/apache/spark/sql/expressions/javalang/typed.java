@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.aggregate.TypedSumLong;
  * @since 2.0.0
  * @deprecated As of release 3.0.0, please use the untyped builtin aggregate functions.
  */
-@Deprecated
+@Deprecated(since = "3.0.0")
 public class typed {
   // Note: make sure to keep in sync with typed.scala
 

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import datetime
 import unittest
 
 import pandas as pd

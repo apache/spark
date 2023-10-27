@@ -79,6 +79,7 @@ from pyspark.errors.exceptions.connect import (
     SparkConnectGrpcException,
 )
 from pyspark.sql.connect.expressions import (
+    LiteralExpression,
     PythonUDF,
     CommonInlineUserDefinedFunction,
     JavaUDF,
@@ -87,6 +88,7 @@ from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
     PythonUDTF,
 )
+from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
@@ -429,9 +431,10 @@ class PlanMetrics:
 
 
 class PlanObservedMetrics:
-    def __init__(self, name: str, metrics: List[pb2.Expression.Literal]):
+    def __init__(self, name: str, metrics: List[pb2.Expression.Literal], keys: List[str]):
         self._name = name
         self._metrics = metrics
+        self._keys = keys if keys else [f"observed_metric_{i}" for i in range(len(self.metrics))]
 
     def __repr__(self) -> str:
         return f"Plan observed({self._name}={self._metrics})"
@@ -443,6 +446,10 @@ class PlanObservedMetrics:
     @property
     def metrics(self) -> List[pb2.Expression.Literal]:
         return self._metrics
+
+    @property
+    def keys(self) -> List[str]:
+        return self._keys
 
 
 class AnalyzeResult:
@@ -798,33 +805,37 @@ class SparkConnectClient(object):
     def _build_observed_metrics(
         self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
     ) -> Iterator[PlanObservedMetrics]:
-        return (PlanObservedMetrics(x.name, [v for v in x.values]) for x in metrics)
+        return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
 
-    def to_table_as_iterator(self, plan: pb2.Plan) -> Iterator[Union[StructType, "pa.Table"]]:
+    def to_table_as_iterator(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Iterator[Union[StructType, "pa.Table"]]:
         """
         Return given plan as a PyArrow Table iterator.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        for response in self._execute_and_fetch_as_iterator(req):
+        for response in self._execute_and_fetch_as_iterator(req, observations):
             if isinstance(response, StructType):
                 yield response
             elif isinstance(response, pa.RecordBatch):
                 yield pa.Table.from_batches([response])
 
-    def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
+    def to_table(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, schema, _, _, _ = self._execute_and_fetch(req)
+        table, schema, _, _, _ = self._execute_and_fetch(req, observations)
         assert table is not None
         return table, schema
 
-    def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+    def to_pandas(self, plan: pb2.Plan, observations: Dict[str, Observation]) -> "pd.DataFrame":
         """
         Return given plan as a pandas DataFrame.
         """
@@ -836,7 +847,7 @@ class SparkConnectClient(object):
         )
         self_destruct = cast(str, self_destruct_conf).lower() == "true"
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, self_destruct=self_destruct
+            req, observations, self_destruct=self_destruct
         )
         assert table is not None
 
@@ -945,7 +956,7 @@ class SparkConnectClient(object):
         return result
 
     def execute_command(
-        self, command: pb2.Command
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
     ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
         """
         Execute given command.
@@ -955,7 +966,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, _, properties = self._execute_and_fetch(req)
+        data, _, _, _, properties = self._execute_and_fetch(req, observations or {})
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -1155,7 +1166,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
-        self, req: pb2.ExecutePlanRequest
+        self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
     ) -> Iterator[
         Union[
             "pa.RecordBatch",
@@ -1191,7 +1202,13 @@ class SparkConnectClient(object):
                 yield from self._build_metrics(b.metrics)
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
-                yield from self._build_observed_metrics(b.observed_metrics)
+                for observed_metrics in self._build_observed_metrics(b.observed_metrics):
+                    if observed_metrics.name in observations:
+                        observations[observed_metrics.name]._result = {
+                            key: LiteralExpression._to_value(metric)
+                            for key, metric in zip(observed_metrics.keys, observed_metrics.metrics)
+                        }
+                    yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")
                 dt = types.proto_schema_to_pyspark_data_type(b.schema)
@@ -1262,7 +1279,10 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch(
-        self, req: pb2.ExecutePlanRequest, self_destruct: bool = False
+        self,
+        req: pb2.ExecutePlanRequest,
+        observations: Dict[str, Observation],
+        self_destruct: bool = False,
     ) -> Tuple[
         Optional["pa.Table"],
         Optional[StructType],
@@ -1278,7 +1298,7 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        for response in self._execute_and_fetch_as_iterator(req):
+        for response in self._execute_and_fetch_as_iterator(req, observations):
             if isinstance(response, StructType):
                 schema = response
             elif isinstance(response, pa.RecordBatch):

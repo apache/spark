@@ -180,7 +180,7 @@ object SizeEstimator extends Logging {
 
     def dequeue(): AnyRef = {
       val elem = stack.last
-      stack.trimEnd(1)
+      stack.dropRightInPlace(1)
       elem
     }
   }

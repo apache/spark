@@ -18,12 +18,14 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
+import java.util.Locale
 
 import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -50,7 +52,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
       .setIfMissing("orc.compression", "snappy")
-      .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
+      .setIfMissing("spark.sql.parquet.compression.codec",
+        ParquetCompressionCodec.SNAPPY.name().toLowerCase(Locale.ROOT))
 
     SparkSession.builder().config(conf).getOrCreate()
   }
