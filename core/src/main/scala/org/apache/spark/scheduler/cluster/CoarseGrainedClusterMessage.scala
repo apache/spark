@@ -25,7 +25,6 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.{ExecutorLossReason, MiscellaneousProcessDetails}
 import org.apache.spark.util.SerializableBuffer
 
-
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {

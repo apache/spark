@@ -70,15 +70,24 @@ private[spark] trait ResourceAllocator {
    * Map from an address to its availability default to RESOURCE_TOTAL_AMOUNT, a value > 0 means
    * the address is available, while value of 0 means the address is fully assigned.
    */
-  protected lazy val addressAvailabilityMap = {
+  private lazy val addressAvailabilityMap = {
     mutable.HashMap(resourceAddresses.map(address => address -> RESOURCE_TOTAL_AMOUNT): _*)
   }
 
   /**
-   * Sequence of currently available resource addresses which is not fully assigned.
+   * Get the resources and its amounts.
+   * @return the resources amounts
+   */
+  def resourcesAmounts: Map[String, Double] = addressAvailabilityMap.map {
+    case (address, internalAmount) =>
+      address -> (internalAmount.toDouble / RESOURCE_TOTAL_AMOUNT)
+  }.toMap
+
+  /**
+   * Sequence of currently available resource addresses which are not fully assigned.
    */
   def availableAddrs: Seq[String] = addressAvailabilityMap
-      .filter(addresses => addresses._2 > 0).keys.toSeq.sorted
+    .filter(addresses => addresses._2 > 0).keys.toSeq.sorted
 
   /**
    * Sequence of currently assigned resource addresses.

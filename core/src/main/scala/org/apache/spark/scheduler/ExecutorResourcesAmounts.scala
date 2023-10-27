@@ -57,7 +57,9 @@ private[spark] class ExecutorResourcesAmounts(
     rName -> addressMap.size
   }
 
-  // convert internal resources back to the public.
+  /**
+   * for testing purpose. convert internal resources back to the "fraction" resources.
+   */
   def availableResources: Map[String, Map[String, Double]] = {
     internalResources.map { case (rName, addressMap) =>
       rName -> addressMap.map { case (address, amount) =>
@@ -66,7 +68,10 @@ private[spark] class ExecutorResourcesAmounts(
     }
   }
 
-  // Acquire the resource and update the resource
+  /**
+   * Acquire the resource and update the resource
+   * @param assignedResource the assigned resource information
+   */
   def acquire(assignedResource: Map[String, Map[String, Double]]): Unit = {
     assignedResource.foreach { case (rName, taskResAmounts) =>
       val availableResourceAmounts = internalResources.getOrElse(rName,
@@ -84,14 +89,14 @@ private[spark] class ExecutorResourcesAmounts(
             s"after acquiring $rName address $address should be >= 0")
         }
         internalResources(rName)(address) = internalLeft
-        // scalastyle:off println
-        println(s"Acquired. left ${realLeft}")
-        // scalastyle:on println
       }
     }
   }
 
-  // release the resources and update the values
+  /**
+   * release the assigned resources to the resource pool
+   * @param assignedResource resource to be released
+   */
   def release(assignedResource: Map[String, Map[String, Double]]): Unit = {
     assignedResource.foreach { case (rName, taskResAmounts) =>
       val availableResourceAmounts = internalResources.getOrElse(rName,
@@ -108,15 +113,17 @@ private[spark] class ExecutorResourcesAmounts(
             s"after releasing $rName address $address should be <= 1.0")
         }
         internalResources(rName)(address) = internalTotal
-        // scalastyle:off println
-        println(s"Released. amount ${internalTotal.toDouble / RESOURCE_TOTAL_AMOUNT}")
-        // scalastyle:on println
       }
     }
   }
 
-  // Try to assign the address according to the task requirement.
-  // Please note that this function will not update the values.
+  /**
+   * Try to assign the address according to the task requirement.
+   * Please note that this function will not update the values.
+   *
+   * @param taskSetProf assign resources based on which resource profile
+   * @return the resource
+   */
   def assignResources(taskSetProf: ResourceProfile):
       Option[(Map[String, ResourceInformation], Map[String, Map[String, Double]])] = {
 
@@ -132,10 +139,8 @@ private[spark] class ExecutorResourcesAmounts(
     // we go through all resources here so that we can make sure they match and also get what the
     // assignments are for the next task
     for ((rName, taskReqs) <- tsResources) {
-      // if taskAmount = 1.5, we assign 2.0 gpu for user or
-      // just throw an exception in a very begging?
-      // TODO, just remove it, since we enabled the check at the very beginning.
-      val taskAmount = if (taskReqs.amount < 1.0) taskReqs.amount else Math.ceil(taskReqs.amount)
+      // TaskResourceRequest checks the task amount should be in (0, 1] or a whole number
+      val taskAmount = taskReqs.amount
 
       internalResources.get(rName) match {
         case Some(addressesAmountMap) =>
@@ -154,7 +159,7 @@ private[spark] class ExecutorResourcesAmounts(
               // Try to assign this whole address first
               if (internalTaskAmount >= RESOURCE_TOTAL_AMOUNT) {
                 internalTaskAmount -= RESOURCE_TOTAL_AMOUNT
-                // Assign the whole resource of the address
+                // Assign the full resource of the address
                 allocatedAddressesMap(address) = 1.0
               } else {
                 // Assign the part of the address.
@@ -186,10 +191,14 @@ private[spark] class ExecutorResourcesAmounts(
 
 private[spark] object ExecutorResourcesAmounts {
 
-  // Create an empty ExecutorResourcesAmounts
+  /**
+   * Create an empty ExecutorResourcesAmounts
+   */
   def empty: ExecutorResourcesAmounts = new ExecutorResourcesAmounts(Map.empty)
 
-  // Converts executor infos to ExecutorResourcesAmounts
+  /**
+   * Converts executor infos to ExecutorResourcesAmounts
+   */
   def apply(executorInfos: Map[String, ExecutorResourceInfo]): ExecutorResourcesAmounts = {
     new ExecutorResourcesAmounts(
       executorInfos.map { case (rName, rInfo) => rName -> rInfo.resourcesAmounts }

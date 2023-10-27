@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.resource.ResourceUtils.GPU
 
-
 class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Track Executor Resource information") {

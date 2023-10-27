@@ -20,7 +20,6 @@ package org.apache.spark.deploy.master
 import scala.collection.mutable
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -37,16 +36,13 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
    */
   def acquire(amount: Int): ResourceInformation = {
 
-    var count = amount
-    val allocated: mutable.HashMap[String, Double] = mutable.HashMap.empty
-    for (address <- availableAddrs if count > 0) {
-      if (addressAvailabilityMap(address) == RESOURCE_TOTAL_AMOUNT) {
-        allocated(address) = 1.0
-        count -= 1
-      }
-    }
-    acquire(allocated.toMap)
-    new ResourceInformation(resourceName, allocated.keys.toArray)
+    // Any available address from availableAddrs must be a whole resource
+    // since worker needs to do full resources to the executors.
+    val addresses = availableAddrs.take(amount)
+    assert(addresses.length == amount)
+
+    acquire(addresses.map(addr => addr -> 1.0).toMap)
+    new ResourceInformation(resourceName, addresses.toArray)
   }
 }
 

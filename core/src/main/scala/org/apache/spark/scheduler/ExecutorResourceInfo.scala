@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
-import org.apache.spark.resource.ResourceAmountUtils.RESOURCE_TOTAL_AMOUNT
 
 /**
  * Class to hold information about a type of Resource on an Executor. This information is managed
@@ -49,14 +48,5 @@ private[spark] class ExecutorResourceInfo(
       addresses.length * Math.floor(1.0 / taskAmount).toInt
     }
   }
-
-  /**
-   * Convert the internal address availability to the public resource format
-   * @return the resources amounts
-   */
-  def resourcesAmounts: Map[String, Double] = addressAvailabilityMap.map {
-    case (address, internalAmount) =>
-      address -> (internalAmount.toDouble / RESOURCE_TOTAL_AMOUNT)
-  }.toMap
 
 }

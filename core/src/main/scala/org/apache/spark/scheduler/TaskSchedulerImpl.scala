@@ -457,8 +457,8 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    * Returns None if the resources don't meet the task requirements, otherwise returns
-   * the task resource assignments to give to the next task. Note that the assignments maybe
-   * be empty if no custom resources are used.
+   * the task resource assignments and the resource amounts to give to the next task.
+   * Note that the assignments maybe be empty if no custom resources are used.
    */
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,

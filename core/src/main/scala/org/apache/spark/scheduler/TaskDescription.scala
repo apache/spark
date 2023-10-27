@@ -58,6 +58,8 @@ private[spark] class TaskDescription(
     val properties: Properties,
     val cpus: Int,
     val resources: immutable.Map[String, ResourceInformation],
+    // resourcesAmounts is the total resources assigned to the task
+    // Eg, Map("gpu" -> Map("0" -> 0.7)): assign 0.7 of the gpu address "0" to this task
     val resourcesAmounts: immutable.Map[String, immutable.Map[String, Double]],
     val serializedTask: ByteBuffer) {
 
