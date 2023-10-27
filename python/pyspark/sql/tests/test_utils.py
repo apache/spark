@@ -1681,9 +1681,6 @@ class UtilsTestsMixin:
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
-    def test_dataframe_show_only_diff(self):
-        super().test_dataframe_show_only_diff()
-
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
