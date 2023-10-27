@@ -215,12 +215,15 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
-  protected def withClient(f: SparkConnectClient => Unit): Unit = {
+  protected def withClient(
+      f: SparkConnectClient => Unit,
+      sessionId: String = defaultSessionId,
+      userId: String = defaultUserId): Unit = {
     val client = SparkConnectClient
       .builder()
       .port(serverPort)
-      .sessionId(defaultSessionId)
-      .userId(defaultUserId)
+      .sessionId(sessionId)
+      .userId(userId)
       .enableReattachableExecute()
       .build()
     try f(client)

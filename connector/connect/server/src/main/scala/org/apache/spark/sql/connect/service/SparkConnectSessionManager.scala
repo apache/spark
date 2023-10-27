@@ -55,12 +55,22 @@ class SparkConnectSessionManager extends Logging {
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
    */
-  def getOrCreateIsolatedSession(key: SessionKey): SessionHolder = {
+  private[connect] def getOrCreateIsolatedSession(key: SessionKey): SessionHolder = {
     // Lock to guard against concurrent removal and insertion into closedSessionsCache.
     sessionsLock.synchronized {
-      getSessionOrDefault(
+      getSession(
         key,
-        () => {
+        Some(() => {
+          // Validate that sessionId is formatted like UUID before creating session.
+          try {
+            UUID.fromString(key.sessionId).toString
+          } catch {
+            case _: IllegalArgumentException =>
+              throw new SparkSQLException(
+                errorClass = "INVALID_HANDLE.FORMAT",
+                messageParameters = Map("handle" -> key.sessionId))
+          }
+          // Validate that session with that key has not been already closed.
           if (closedSessionsCache.getIfPresent(key) != null) {
             throw new SparkSQLException(
               errorClass = "INVALID_HANDLE.SESSION_CLOSED",
@@ -69,7 +79,7 @@ class SparkConnectSessionManager extends Logging {
           val holder = SessionHolder(key.userId, key.sessionId, newIsolatedSession())
           holder.eventManager.postStarted()
           holder
-        }
+        })
       )
     }
   }
@@ -77,38 +87,38 @@ class SparkConnectSessionManager extends Logging {
   /**
    * Based on the userId and sessionId, find an existing SparkSession or throw error.
    */
-  def getIsolatedSession(key: SessionKey): SessionHolder = {
-    getSessionOrDefault(
+  private[connect] def getIsolatedSession(key: SessionKey): SessionHolder = {
+    getSession(
       key,
-      () => {
+      Some(() => {
         logDebug(s"Session not found: $key")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.SESSION_NOT_FOUND",
           messageParameters = Map("handle" -> key.sessionId))
-      })
+      }))
   }
 
-  private[service] def getSessionOrDefault(
-    key: SessionKey,
-    default: Callable[SessionHolder]): SessionHolder = {
-    // Validate that sessionId is formatted like UUID before creating session.
-    try {
-      UUID.fromString(key.sessionId).toString
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new SparkSQLException(
-          errorClass = "INVALID_HANDLE.FORMAT",
-          messageParameters = Map("handle" -> key.sessionId))
-    }
+  /**
+   * Based on the userId and sessionId, get an existing SparkSession if present.
+   */
+  private[connect] def getIsolatedSessionIfPresent(key: SessionKey): Option[SessionHolder] = {
+    Option(getSession(key, None))
+  }
 
+  private def getSession(
+    key: SessionKey,
+    default: Option[Callable[SessionHolder]]): SessionHolder = {
+    val session = default match {
+      case Some(callable) => sessionStore.get(key, callable)
+      case None => sessionStore.getIfPresent(key)
+    }
     // record access time before returning
-    sessionStore.get(key, default) match {
+    session match {
       case s: SessionHolder =>
-        s.lastRpcAccessTime = System.currentTimeMillis()
+        s.updateAccessTime()
         s
-      case other =>
-        // may be null, return
-        other
+      case null =>
+        null
     }
   }
 
@@ -125,14 +135,6 @@ class SparkConnectSessionManager extends Logging {
         // First put into releasedSessionsCache, so that it cannot get accidentally recreated by
         // getOrCreateIsolatedSession.
         closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
-
-        // After postClosed(), SessionHolder.addExecuteHolder() will not allow new executions for
-        // this session. Because both SessionHolder.addExecuteHolder() and
-        // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
-        // executionsLock, this guarantees that removeAllExecutionsForSession triggered from
-        // sessionHolder.close() below will remove all executions and no new executions will be
-        // added while the session is being removed.
-        sessionHolder.eventManager.postClosed()
       }
       // Rest of the cleanup outside sessionLock - the session cannot be accessed anymore by
       // getOrCreateIsolatedSession.

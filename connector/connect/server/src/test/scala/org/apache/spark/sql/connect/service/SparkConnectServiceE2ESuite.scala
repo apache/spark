@@ -23,6 +23,40 @@ import org.apache.spark.sql.connect.SparkConnectServerTest
 
 class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
+  test("ReleaseSession releases all queries and does not allow more requests in the session") {
+    withClient { client =>
+      val query1 = client.execute(buildPlan("select * from range(10)"))
+      val query2 = client.execute(buildPlan("select * from range(1)"))
+      // just creating the iterator is lazy, trigger the query to be sent.
+      query1.hasNext
+      query2.hasNext
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        SparkConnectService.executionManager.listExecuteHolders.length == 2
+      }
+
+      client.releaseSession()
+
+      // queries get cancelled
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        SparkConnectService.executionManager.listExecuteHolders.length == 0
+        // SparkConnectService.sessionManager.
+      }
+
+      //
+      val queryError = intercept[Exception] {
+        while (query1.hasNext) query1.next()
+      }
+      println("-->")
+      println(queryError)
+
+      val requestError = intercept[Exception] {
+        client.interruptAll()
+      }
+      println("-->")
+      println(requestError)
+    }
+  }
+
   test("SPARK-45133 query should reach FINISHED state when results are not consumed") {
     withRawBlockingStub { stub =>
       val iter =

@@ -49,7 +49,9 @@ case class SessionKey(userId: String, sessionId: String)
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  @volatile var lastRpcAccessTime: Long = System.currentTimeMillis()
+  @volatile private var lastRpcAccessTime: Option[Long] = None
+
+  @volatile private var isClosing: Boolean = false
 
   private val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
@@ -64,6 +66,15 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     .build[String, Throwable]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
+
+  private[connect] def initializeSession(): Unit = {
+    updateAccessTime()
+    eventManager.postStarted()
+  }
+
+  private[connect] def updateAccessTime(): Unit = {
+    lastRpcAccessTime = Some(System.currentTimeMillis())
+  }
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
@@ -86,7 +97,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * Called only by SparkConnectExecutionManager under executionsLock.
    */
   private[service] def addExecuteHolder(executeHolder: ExecuteHolder): Unit = {
-    if (eventManager.status == SessionStatus.Closed) {
+    if (isClosing) {
+      // Do not accept new executions if the session is closing.
       throw new SparkSQLException(
         errorClass = "INVALID_HANDLE.SESSION_CLOSED",
         messageParameters = Map("handle" -> sessionId))
@@ -180,11 +192,18 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   /**
    * Expire this session and trigger state cleanup mechanisms.
    *
-   * Called only by SparkConnectSessionManager under sessionsLock.
+   * Called only by SparkConnectSessionManager.
    */
   private[connect] def close(): Unit = {
     logInfo(s"Closing session with userId: $userId and sessionId: $sessionId")
-    assert(eventManager.status == SessionStatus.Closed) // already called before
+
+    // After isClosing=true, SessionHolder.addExecuteHolder() will not allow new executions for
+    // this session. Because both SessionHolder.addExecuteHolder() and
+    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+    // executionsLock, this guarantees that removeAllExecutionsForSession triggered from
+    // sessionHolder.close() below will remove all executions and no new executions will be
+    // added while the session is being removed.
+    isClosing = true
 
     // Note on the below notes about concurrency:
     // While closing the session can potentially race with operations started on the session, the
@@ -204,6 +223,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // Clean up all executions
     // It is guaranteed at this point that no new addExecuteHolder are getting started.
     SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+    eventManager.postClosed()
   }
 
   /**
@@ -334,4 +355,4 @@ case class SessionHolderInfo(
   userId: String,
   sessionId: String,
   status: SessionStatus,
-  lastRpcAccesTime: Long)
+  lastRpcAccesTime: Option[Long])
