@@ -342,8 +342,6 @@ def assertSchemaEqual(
 
     Examples
     --------
-    >>> from pyspark.pandas.utils import default_session
-    >>> spark = default_session()
     >>> from pyspark.sql.types import StructType, StructField, ArrayType, IntegerType, DoubleType
     >>> s1 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
     >>> s2 = StructType([StructField("names", ArrayType(DoubleType(), True), True)])
@@ -377,7 +375,7 @@ def assertSchemaEqual(
     + StructType([StructField('id', StringType(), True), StructField('amount', LongType(), True)])
     ?                               ^^^^                              ++++ ^
 
-    Different schemas (ignoring column order)
+    Compare two schemas ignoring the column order.
 
     >>> s1 = StructType(
     ...     [StructField("a", IntegerType(), True), StructField("b", DoubleType(), True)]
@@ -387,7 +385,7 @@ def assertSchemaEqual(
     ... )
     >>> assertSchemaEqual(s1, s2, ignoreColumnOrder=True)
 
-    Different schemas (ignoring column names)
+    Compare two schemas ignoring the column names.
 
     >>> s1 = StructType(
     ...     [StructField("a", IntegerType(), True), StructField("c", DoubleType(), True)]
