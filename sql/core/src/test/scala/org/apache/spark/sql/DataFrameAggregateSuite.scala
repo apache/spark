@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -157,7 +158,7 @@ class DataFrameAggregateSuite extends QueryTest
       Fact(20151123, 18, 36, "room2", 25.6))).toDF()
 
     val cube0 = df0.cube("date", "hour", "minute", "room_name").agg(Map("temp" -> "avg"))
-    assert(cube0.where("date IS NULL").count > 0)
+    assert(cube0.where("date IS NULL").count() > 0)
   }
 
   test("grouping and grouping_id") {
@@ -849,7 +850,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(testData.groupBy(col("key")).toString.contains(
       "[grouping expressions: [key], value: [key: int, value: string], type: GroupBy]"))
     assert(testData.groupBy(current_date()).toString.contains(
-      "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
+      "grouping expressions: ['current_date()], value: [key: int, value: string], " +
         "type: GroupBy]"))
   }
 
@@ -959,7 +960,7 @@ class DataFrameAggregateSuite extends QueryTest
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
-        sql("SELECT max_by(x, y) FROM tempView").show
+        sql("SELECT max_by(x, y) FROM tempView").show()
       }
       checkError(
         exception = error,
@@ -1029,7 +1030,7 @@ class DataFrameAggregateSuite extends QueryTest
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
       val error = intercept[AnalysisException] {
-        sql("SELECT min_by(x, y) FROM tempView").show
+        sql("SELECT min_by(x, y) FROM tempView").show()
       }
       checkError(
         exception = error,
@@ -1241,7 +1242,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq(
       A(None),
       A(Some(B(None))),
-      A(Some(B(Some(1.0))))).toDF
+      A(Some(B(Some(1.0))))).toDF()
     val groupBy = df.groupBy("b").agg(count("*"))
     checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
   }
@@ -1410,20 +1411,21 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofSeconds(14)) ::
       Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    val metadata = new MetadataBuilder().putString(AUTO_GENERATED_ALIAS, "true").build()
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
-      StructField("sum(year-month)", YearMonthIntervalType()),
-      StructField("sum(year)", YearMonthIntervalType(YEAR)),
-      StructField("sum(month)", YearMonthIntervalType(MONTH)),
-      StructField("sum(day-second)", DayTimeIntervalType()),
-      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE)),
-      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR)),
-      StructField("sum(day)", DayTimeIntervalType(DAY)),
-      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND)),
-      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE)),
-      StructField("sum(hour)", DayTimeIntervalType(HOUR)),
-      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND)),
-      StructField("sum(minute)", DayTimeIntervalType(MINUTE)),
-      StructField("sum(second)", DayTimeIntervalType(SECOND)))))
+      StructField("sum(year-month)", YearMonthIntervalType(), metadata = metadata),
+      StructField("sum(year)", YearMonthIntervalType(YEAR), metadata = metadata),
+      StructField("sum(month)", YearMonthIntervalType(MONTH), metadata = metadata),
+      StructField("sum(day-second)", DayTimeIntervalType(), metadata = metadata),
+      StructField("sum(day-minute)", DayTimeIntervalType(DAY, MINUTE), metadata = metadata),
+      StructField("sum(day-hour)", DayTimeIntervalType(DAY, HOUR), metadata = metadata),
+      StructField("sum(day)", DayTimeIntervalType(DAY), metadata = metadata),
+      StructField("sum(hour-second)", DayTimeIntervalType(HOUR, SECOND), metadata = metadata),
+      StructField("sum(hour-minute)", DayTimeIntervalType(HOUR, MINUTE), metadata = metadata),
+      StructField("sum(hour)", DayTimeIntervalType(HOUR), metadata = metadata),
+      StructField("sum(minute-second)", DayTimeIntervalType(MINUTE, SECOND), metadata = metadata),
+      StructField("sum(minute)", DayTimeIntervalType(MINUTE), metadata = metadata),
+      StructField("sum(second)", DayTimeIntervalType(SECOND), metadata = metadata))))
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
@@ -1545,21 +1547,22 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofMinutes(4).plusSeconds(20),
         Duration.ofSeconds(7)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    val metadata = new MetadataBuilder().putString(AUTO_GENERATED_ALIAS, "true").build()
     assert(avgDF2.schema == StructType(Seq(
       StructField("class", IntegerType, false),
-      StructField("avg(year-month)", YearMonthIntervalType()),
-      StructField("avg(year)", YearMonthIntervalType()),
-      StructField("avg(month)", YearMonthIntervalType()),
-      StructField("avg(day-second)", DayTimeIntervalType()),
-      StructField("avg(day-minute)", DayTimeIntervalType()),
-      StructField("avg(day-hour)", DayTimeIntervalType()),
-      StructField("avg(day)", DayTimeIntervalType()),
-      StructField("avg(hour-second)", DayTimeIntervalType()),
-      StructField("avg(hour-minute)", DayTimeIntervalType()),
-      StructField("avg(hour)", DayTimeIntervalType()),
-      StructField("avg(minute-second)", DayTimeIntervalType()),
-      StructField("avg(minute)", DayTimeIntervalType()),
-      StructField("avg(second)", DayTimeIntervalType()))))
+      StructField("avg(year-month)", YearMonthIntervalType(), metadata = metadata),
+      StructField("avg(year)", YearMonthIntervalType(), metadata = metadata),
+      StructField("avg(month)", YearMonthIntervalType(), metadata = metadata),
+      StructField("avg(day-second)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(day-minute)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(day-hour)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(day)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(hour-second)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(hour-minute)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(hour)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(minute-second)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(minute)", DayTimeIntervalType(), metadata = metadata),
+      StructField("avg(second)", DayTimeIntervalType(), metadata = metadata))))
 
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
@@ -1610,7 +1613,7 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("SPARK-38185: Fix data incorrect if aggregate function is empty") {
     val emptyAgg = Map.empty[String, String]
-    assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count == 1)
+    assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count() == 1)
   }
 
   test("SPARK-38221: group by stream of complex expressions should not fail") {

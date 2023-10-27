@@ -82,10 +82,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k",
-      // TODO: XML functions will soon be added to SQL Function registry and removed from this list
-      // https://issues.apache.org/jira/browse/SPARK-44787
-      "from_xml", "schema_of_xml"
+      "collect_top_k"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
@@ -179,7 +176,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
     val e1 = intercept[SparkException] {
-      df5.select(map_from_arrays($"k", $"v")).collect
+      df5.select(map_from_arrays($"k", $"v")).collect()
     }
     assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
@@ -190,7 +187,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
-      df6.select(map_from_arrays($"k", $"v")).collect
+      df6.select(map_from_arrays($"k", $"v")).collect()
     }.getMessage
     assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
@@ -227,7 +224,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col1", IntegerType, nullable = false),
       StructField("b", StringType)
     ))
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Row(Row(2, "str")))
   }
 
@@ -240,7 +237,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row(2, 5.0)), Row(Row(4, 5.0))))
   }
 
@@ -253,7 +250,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("col2", DoubleType, nullable = false)
     ))
 
-    assert(result.first.schema(0).dataType === expectedType)
+    assert(result.first().schema(0).dataType === expectedType)
     checkAnswer(result, Seq(Row(Row("v", 5.0)), Row(Row("v", 5.0))))
   }
 
@@ -404,7 +401,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="
     val encryptedGcm = "y5la3muiuxN2suj6VsYXB+0XUFjtrUD0/zv5eDafsA3U"
     val encryptedCbc = "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY="
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
 
     // Successful decryption of fixed values
     Seq(
@@ -429,7 +426,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f"
     val cbcIv = "00000000000000000000000000000000"
     val encryptedCbc = "AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg="
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
     Seq(
       (key32, encryptedGcm, "GCM", gcmIv),
       (key32, encryptedCbc, "CBC", cbcIv)).foreach {
@@ -454,7 +451,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val gcmIv = "000000000000000000000000"
     val aad = "This is an AAD mixed into the input"
     val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4"
-    val df1 = Seq("Spark").toDF
+    val df1 = Seq("Spark").toDF()
     Seq(
       (key32, encryptedGcm, "GCM", gcmIv, aad)).foreach {
       case (key, ciphertext, mode, iv, aad) =>
@@ -484,7 +481,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
 
     // Successful encryption
     Seq(
@@ -767,7 +764,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> """"array_sort\(a, lambdafunction\(\(x_\d+ - y_\d+\), x_\d+, y_\d+\)\)"""",
+        "sqlExpr" -> """"array_sort\(a, lambdafunction\(`-`\(x_\d+, y_\d+\), x_\d+, y_\d+\)\)"""",
         "paramIndex" -> "1",
         "requiredType" -> "\"ARRAY\"",
         "inputSql" -> "\"a\"",
@@ -973,7 +970,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       val qualifiedDF = df.as("foo")
 
       // Fields are UnresolvedAttribute
-      val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
+      val zippedDF1 =
+        qualifiedDF.select(Column(ArraysZip(Seq($"foo.val1".expr, $"foo.val2".expr))) as "zipped")
       val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
       assert(maybeAlias1.isInstanceOf[Alias])
       val maybeArraysZip1 = maybeAlias1.children.head
@@ -987,7 +985,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames1.toSeq === Seq("val1", "val2"))
 
       // Fields are resolved NamedExpression
-      val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
+      val zippedDF2 =
+        df.select(Column(ArraysZip(Seq(df("val1").expr, df("val2").expr))) as "zipped")
       val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
       assert(maybeAlias2.isInstanceOf[Alias])
       val maybeArraysZip2 = maybeAlias2.children.head
@@ -1002,7 +1001,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames2.toSeq === Seq("val1", "val2"))
 
       // Fields are unresolved NamedExpression
-      val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
+      val zippedDF3 = df.select(
+        Column(ArraysZip(Seq(($"val1" as "val3").expr, ($"val2" as "val4").expr))) as "zipped")
       val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
       assert(maybeAlias3.isInstanceOf[Alias])
       val maybeArraysZip3 = maybeAlias3.children.head
@@ -1016,7 +1016,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(fieldNames3.toSeq === Seq("val3", "val4"))
 
       // Fields are neither UnresolvedAttribute nor NamedExpression
-      val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
+      val zippedDF4 = df.select(
+        Column(ArraysZip(Seq(array_sort($"val1").expr, array_sort($"val2").expr))) as "zipped")
       val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
       assert(maybeAlias4.isInstanceOf[Alias])
       val maybeArraysZip4 = maybeAlias4.children.head
@@ -3231,7 +3232,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("a", "b")
     val result10 = df10.select(array_except($"a", $"b"))
     val expectedType10 = ArrayType(IntegerType, containsNull = true)
-    assert(result10.first.schema(0).dataType === expectedType10)
+    assert(result10.first().schema(0).dataType === expectedType10)
   }
 
   test("array_intersect functions") {
@@ -3745,7 +3746,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       matchPVals = true,
       parameters = Map(
-        "sqlExpr" -> """"map_filter\(i, lambdafunction\(\(x_\d+ > y_\d+\), x_\d+, y_\d+\)\)"""",
+        "sqlExpr" -> """"map_filter\(i, lambdafunction\(`>`\(x_\d+, y_\d+\), x_\d+, y_\d+\)\)"""",
         "paramIndex" -> "1",
         "inputSql" -> "\"i\"",
         "inputType" -> "\"INT\"",
@@ -5230,7 +5231,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         matchPVals = true,
         parameters = Map(
           "sqlExpr" ->
-            """"transform_values\(x, lambdafunction\(\(x_\d+ \+ 1\), x_\d+, y_\d+\)\)"""",
+              """"transform_values\(x, lambdafunction\(`\+`\(x_\d+, 1\), x_\d+, y_\d+\)\)"""",
           "paramIndex" -> "1",
           "inputSql" -> "\"x\"",
           "inputType" -> "\"ARRAY<INT>\"",
@@ -5953,7 +5954,7 @@ object DataFrameFunctionsSuite {
   case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
     override def nullable: Boolean = child.nullable
     override def dataType: DataType = child.dataType
-    override lazy val resolved = true
+    override lazy val resolved = child.resolved
     override def eval(input: InternalRow): Any = child.eval(input)
     override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpr =
       copy(child = newChild)

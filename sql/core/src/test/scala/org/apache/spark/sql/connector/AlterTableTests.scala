@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -359,6 +359,35 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
             .add("a", StringType)
             .add(StructField("b", IntegerType)
               .withExistenceDefaultValue("5")))
+      }
+    }
+  }
+
+  test("SPARK-45075: ALTER COLUMN with invalid default value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      withTable("t") {
+        sql(s"create table t(i boolean) using $v2Format")
+        // The default value fails to analyze.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("alter table t add column s bigint default badvalue")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "ALTER TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
+
+        sql("alter table t add column s bigint default 3L")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("alter table t alter column s set default badvalue")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "ALTER TABLE ALTER COLUMN",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
       }
     }
   }

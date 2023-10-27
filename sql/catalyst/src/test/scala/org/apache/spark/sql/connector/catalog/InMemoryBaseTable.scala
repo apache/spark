@@ -464,14 +464,14 @@ abstract class InMemoryBaseTable(
               val matchingKeys = getKeysMthd.invoke(valueArray(0)).
                 asInstanceOf[java.util.Set[Any]].asScala.map(_.toString)
               data = data.filter(partition => {
-                val key = partition.asInstanceOf[BufferedRows].keyString
+                val key = partition.asInstanceOf[BufferedRows].keyString()
                 matchingKeys.contains(key)
               })
 
             case In(attrName, values) if attrName == colName =>
               val matchingKeys = values.map(_.toString).toSet
               data = data.filter(partition => {
-                val key = partition.asInstanceOf[BufferedRows].keyString
+                val key = partition.asInstanceOf[BufferedRows].keyString()
                 matchingKeys.contains(key)
               })
 
@@ -613,7 +613,7 @@ abstract class InMemoryBaseTable(
 
   protected object TruncateAndAppend extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      dataMap.clear
+      dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
@@ -651,7 +651,7 @@ abstract class InMemoryBaseTable(
   protected object StreamingTruncateAndAppend extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
-        dataMap.clear
+        dataMap.clear()
         withData(messages.map(_.asInstanceOf[BufferedRows]))
       }
     }
@@ -735,7 +735,7 @@ private class BufferedRowsReader(
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
-      case "_partition" => UTF8String.fromString(partition.keyString)
+      case "_partition" => UTF8String.fromString(partition.keyString())
     }.toArray)
     new JoinedRow(row, metadataRow)
   }

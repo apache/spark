@@ -63,7 +63,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
       this.getClass.getName, other.getClass.getName)
   }
 
-  override def isZero(): Boolean = _value == _zeroValue
+  override def isZero: Boolean = _value == _zeroValue
 
   override def add(v: Long): Unit = {
     if (_value < 0) _value = 0

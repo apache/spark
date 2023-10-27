@@ -2385,6 +2385,16 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
     <td>0.1</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.allowFAllocate</td>
+    <td>Allow the rocksdb runtime to use fallocate to pre-allocate disk space for logs, etc...  Disable for apps that have many smaller state stores to trade off disk space for write performance.</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compression</td>
+    <td>Compression type used in RocksDB. The string is converted RocksDB compression type through RocksDB Java API getCompressionType(). </td>
+    <td>lz4</td>
+  </tr>
 </table>
 
 ##### RocksDB State Store Memory Management
@@ -3265,6 +3275,8 @@ Here are the different kinds of triggers that are supported.
                 if the last batch advances the watermark. This helps to maintain smaller and predictable
                 state size and smaller latency on the output of stateful operators.</li>
         </ul>
+        NOTE: this trigger will be deactivated when there is any source which does not support Trigger.AvailableNow.
+        Spark will perform one-time micro-batch as a fall-back. Check the above differences for a risk of fallback.
     </td>
   </tr>
   <tr>
@@ -3835,10 +3847,10 @@ class Listener(StreamingQueryListener):
         print("Query started: " + queryStarted.id)
 
     def onQueryProgress(self, event):
-        println("Query terminated: " + queryTerminated.id)
+        print("Query made progress: " + queryProgress.progress)
 
     def onQueryTerminated(self, event):
-        println("Query made progress: " + queryProgress.progress)
+    	print("Query terminated: " + queryTerminated.id)
 
 
 spark.streams.addListener(Listener())

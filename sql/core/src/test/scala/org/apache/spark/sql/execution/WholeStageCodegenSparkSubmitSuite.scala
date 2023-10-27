@@ -26,6 +26,7 @@ import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.functions.{array, col, count, lit}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
@@ -70,39 +71,41 @@ class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
 
 object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
 
-  var spark: SparkSession = _
-
   def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j2("INFO")
 
-    spark = SparkSession.builder().getOrCreate()
+    val spark = SparkSession.builder()
+      .config(SQLConf.SHUFFLE_PARTITIONS.key, "2")
+      .getOrCreate()
 
-    // Make sure the test is run where the driver and the executors uses different object layouts
-    val driverArrayHeaderSize = Platform.BYTE_ARRAY_OFFSET
-    val executorArrayHeaderSize =
-      spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect.head.toInt
-    assert(driverArrayHeaderSize > executorArrayHeaderSize)
+    try {
+      // Make sure the test is run where the driver and the executors uses different object layouts
+      val driverArrayHeaderSize = Platform.BYTE_ARRAY_OFFSET
+      val executorArrayHeaderSize =
+        spark.sparkContext.range(0, 1).map(_ => Platform.BYTE_ARRAY_OFFSET).collect().head
+      assert(driverArrayHeaderSize > executorArrayHeaderSize)
 
-    val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
-      .groupBy(array(col("v"))).agg(count(col("*")))
-    val plan = df.queryExecution.executedPlan
-    assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
+      val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
+        .groupBy(array(col("v"))).agg(count(col("*")))
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
 
-    val expectedAnswer =
-      Row(Array(0), 7178) ::
-        Row(Array(1), 7178) ::
-        Row(Array(2), 7178) ::
-        Row(Array(3), 7177) ::
-        Row(Array(4), 7177) ::
-        Row(Array(5), 7177) ::
-        Row(Array(6), 7177) ::
-        Row(Array(7), 7177) ::
-        Row(Array(8), 7177) ::
-        Row(Array(9), 7177) :: Nil
-    val result = df.collect
-    QueryTest.sameRows(result.toSeq, expectedAnswer) match {
-      case Some(errMsg) => fail(errMsg)
-      case _ =>
+      val expectedAnswer =
+        Row(Array(0), 7178) ::
+          Row(Array(1), 7178) ::
+          Row(Array(2), 7178) ::
+          Row(Array(3), 7177) ::
+          Row(Array(4), 7177) ::
+          Row(Array(5), 7177) ::
+          Row(Array(6), 7177) ::
+          Row(Array(7), 7177) ::
+          Row(Array(8), 7177) ::
+          Row(Array(9), 7177) :: Nil
+
+      QueryTest.checkAnswer(df, expectedAnswer)
+    } finally {
+      spark.stop()
     }
+
   }
 }

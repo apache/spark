@@ -20,8 +20,8 @@ package org.apache.spark.storage
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -43,6 +43,8 @@ private[storage] class BlockManagerDecommissioner(
   private val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
+  private val blockSavedOnDecommissionedBlockManagerException =
+    classOf[BlockSavedOnDecommissionedBlockManagerException].getSimpleName
 
   // Used for tracking if our migrations are complete. Readable for testing
   @volatile private[storage] var lastRDDMigrationTime: Long = 0
@@ -101,6 +103,7 @@ private[storage] class BlockManagerDecommissioner(
         try {
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+          var isTargetDecommissioned = false
           // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.isEmpty) {
             logInfo(s"Ignore deleted shuffle block $shuffleBlockInfo")
@@ -143,6 +146,11 @@ private[storage] class BlockManagerDecommissioner(
                     // have been used in the try-block above so there's no point trying again
                     && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                   fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
+                } else if (e.getCause != null && e.getCause.getMessage != null
+                  && e.getCause.getMessage
+                  .contains(blockSavedOnDecommissionedBlockManagerException)) {
+                  isTargetDecommissioned = true
+                  keepRunning = false
                 } else {
                   logError(s"Error occurred during migrating $shuffleBlockInfo", e)
                   keepRunning = false
@@ -156,8 +164,14 @@ private[storage] class BlockManagerDecommissioner(
             numMigratedShuffles.incrementAndGet()
           } else {
             logWarning(s"Stop migrating shuffle blocks to $peer")
+
+            val newRetryCount = if (isTargetDecommissioned) {
+              retryCount
+            } else {
+              retryCount + 1
+            }
             // Do not mark the block as migrated if it still needs retry
-            if (!allowRetry(shuffleBlockInfo, retryCount + 1)) {
+            if (!allowRetry(shuffleBlockInfo, newRetryCount)) {
               numMigratedShuffles.incrementAndGet()
             }
           }

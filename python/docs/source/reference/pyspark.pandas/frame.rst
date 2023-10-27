@@ -127,6 +127,7 @@ Function application, GroupBy & Window
 
    DataFrame.apply
    DataFrame.applymap
+   DataFrame.map
    DataFrame.pipe
    DataFrame.agg
    DataFrame.aggregate
@@ -275,7 +276,6 @@ Serialization / IO / Conversion
    DataFrame.to_table
    DataFrame.to_delta
    DataFrame.to_parquet
-   DataFrame.to_spark_io
    DataFrame.to_csv
    DataFrame.to_orc
    DataFrame.to_pandas

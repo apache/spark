@@ -28,6 +28,7 @@ from typing import (
 from warnings import warn
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
+from pyspark.loose_version import LooseVersion
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
@@ -98,7 +99,6 @@ class PandasConversionMixin:
                 require_minimum_pyarrow_version()
                 to_arrow_schema(self.schema)
             except Exception as e:
-
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
@@ -125,12 +125,12 @@ class PandasConversionMixin:
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    import pyarrow
+                    import pyarrow as pa
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
                     if len(batches) > 0:
-                        table = pyarrow.Table.from_batches(batches)
+                        table = pa.Table.from_batches(batches)
                         # Ensure only the table has a reference to the batches, so that
                         # self_destruct (if enabled) is effective
                         del batches
@@ -138,6 +138,17 @@ class PandasConversionMixin:
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
                         pandas_options = {"date_as_object": True}
+
+                        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
+                            # A legacy option to coerce date32, date64, duration, and timestamp
+                            # time units to nanoseconds when converting to pandas.
+                            # This option can only be added since 13.0.0.
+                            pandas_options.update(
+                                {
+                                    "coerce_temporal_nanoseconds": True,
+                                }
+                            )
+
                         if self_destruct:
                             # Configure PyArrow to use as little memory as possible:
                             # self_destruct - free columns as they are converted
@@ -373,7 +384,6 @@ class SparkConversionMixin:
         list
             list of records
         """
-        import pandas as pd
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
@@ -383,7 +393,8 @@ class SparkConversionMixin:
                 _check_series_convert_timestamps_tz_local,
                 _get_local_timezone,
             )
-            from pandas.core.dtypes.common import is_datetime64tz_dtype, is_timedelta64_dtype
+            import pandas as pd
+            from pandas.core.dtypes.common import is_timedelta64_dtype
 
             copied = False
             if isinstance(schema, StructType):
@@ -482,7 +493,11 @@ class SparkConversionMixin:
                 should_localize = not is_timestamp_ntz_preferred()
                 for column, series in pdf.items():
                     s = series
-                    if should_localize and is_datetime64tz_dtype(s.dtype) and s.dt.tz is not None:
+                    if (
+                        should_localize
+                        and isinstance(s.dtype, pd.DatetimeTZDtype)
+                        and s.dt.tz is not None
+                    ):
                         s = _check_series_convert_timestamps_tz_local(series, timezone)
                     if s is not series:
                         if not copied:
@@ -579,9 +594,9 @@ class SparkConversionMixin:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
+        import pandas as pd
         from pandas.api.types import (  # type: ignore[attr-defined]
             is_datetime64_dtype,
-            is_datetime64tz_dtype,
         )
         import pyarrow as pa
 
@@ -607,7 +622,9 @@ class SparkConversionMixin:
         else:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
-                TimestampType() if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
+                TimestampType()
+                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                else None
                 for t in pdf.dtypes
             ]
 

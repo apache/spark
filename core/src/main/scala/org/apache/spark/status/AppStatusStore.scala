@@ -21,8 +21,8 @@ import java.io.File
 import java.io.IOException
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging

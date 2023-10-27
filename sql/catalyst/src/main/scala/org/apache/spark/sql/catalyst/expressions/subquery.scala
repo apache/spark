@@ -41,7 +41,7 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
     bits
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal
+  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal()
 
   override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
     plan.deterministic
@@ -295,7 +295,7 @@ case class ScalarSubquery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
 }
 
 object ScalarSubquery {
@@ -339,7 +339,7 @@ case class LateralSubquery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(LATERAL_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LATERAL_SUBQUERY)
 }
 
 /**
@@ -397,7 +397,7 @@ case class ListQuery(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(LIST_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(LIST_SUBQUERY)
 }
 
 /**
@@ -452,5 +452,5 @@ case class Exists(
       outerAttrs = newChildren.take(outerAttrs.size),
       joinCond = newChildren.drop(outerAttrs.size))
 
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
 }

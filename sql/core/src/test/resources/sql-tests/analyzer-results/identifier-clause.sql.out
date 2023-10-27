@@ -187,10 +187,11 @@ Project [coalesce(cast(null as int), 1) AS coalesce(NULL, 1)#x]
 
 
 -- !query
-SELECT IDENTIFIER('abs')(-1)
+SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query analysis
-Project [abs(-1) AS abs(-1)#x]
-+- OneRowRelation
+Project [abs(c1#x) AS abs(c1)#x]
++- SubqueryAlias T
+   +- LocalRelation [c1#x]
 
 
 -- !query
@@ -369,6 +370,7 @@ REPAIR TABLE IDENTIFIER('ta' || 'b')
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NOT_A_PARTITIONED_TABLE",
+  "sqlState" : "42809",
   "messageParameters" : {
     "operation" : "MSCK REPAIR TABLE",
     "tableIdentWithDB" : "`spark_catalog`.`default`.`tab`"
@@ -704,6 +706,27 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 19,
     "stopIndex" : 48,
     "fragment" : "SUBSTR('HELLO', 1, RAND() + 1)"
+  } ]
+}
+
+
+-- !query
+SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`IDENTIFIER`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "`IDENTIFIER`('abs')"
   } ]
 }
 

@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
 import org.apache.commons.codec.binary.Base64

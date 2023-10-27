@@ -21,13 +21,12 @@ import java.io._
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
-import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files => JavaFiles, Path}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -84,7 +83,7 @@ private object BasePythonRunner {
 
   private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
-  private def faultHandlerLogPath(pid: Int): Path = {
+  private def faultHandlerLogPath(pid: Long): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
   }
 }
@@ -200,7 +199,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
-    val (worker: PythonWorker, pid: Option[Int]) = env.createPythonWorker(
+    val (worker: PythonWorker, pid: Option[Long]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -222,7 +221,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     if (reuseWorker) {
-      val key = (worker, context.taskAttemptId)
+      val key = (worker, context.taskAttemptId())
       // SPARK-35009: avoid creating multiple monitor threads for the same python worker
       // and task context
       if (PythonRunner.runningMonitorThreads.add(key)) {
@@ -253,7 +252,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      pid: Option[Long],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
@@ -322,10 +321,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
                       barrierAndServe(requestMethod, sock)
                     case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
-                      val length = input.readInt()
-                      val message = new Array[Byte](length)
-                      input.readFully(message)
-                      barrierAndServe(requestMethod, sock, new String(message, UTF_8))
+                      val message = PythonWorkerUtils.readUTF(input)
+                      barrierAndServe(requestMethod, sock, message)
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -402,7 +399,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.flush()
       } catch {
         case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
-          if (context.isCompleted || context.isInterrupted) {
+          if (context.isCompleted() || context.isInterrupted()) {
             logDebug("Exception/NonFatal Error thrown after task completion (likely due to " +
               "cleanup)", t)
             if (worker.channel.isConnected) {
@@ -463,7 +460,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      pid: Option[Long],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
     extends Iterator[OUT] {
@@ -510,17 +507,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         init, finish))
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
-      context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
-      context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
+      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val exLength = stream.readInt()
-      val obj = new Array[Byte](exLength)
-      stream.readFully(obj)
-      new PythonException(new String(obj, StandardCharsets.UTF_8),
-        writer.exception.orNull)
+      val msg = PythonWorkerUtils.readUTF(stream)
+      new PythonException(msg, writer.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {
@@ -539,7 +533,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
-      case e: Exception if context.isInterrupted =>
+      case e: Exception if context.isInterrupted() =>
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
@@ -576,16 +570,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private def monitorWorker(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
-      while (!context.isInterrupted && !context.isCompleted) {
+      while (!context.isInterrupted() && !context.isCompleted()) {
         Thread.sleep(2000)
       }
-      if (!context.isCompleted) {
+      if (!context.isCompleted()) {
         Thread.sleep(taskKillTimeout)
-        if (!context.isCompleted) {
+        if (!context.isCompleted()) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
-              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
+            val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
+              s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
             env.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
@@ -602,7 +596,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         monitorWorker()
       } finally {
         if (reuseWorker) {
-          val key = (worker, context.taskAttemptId)
+          val key = (worker, context.taskAttemptId())
           PythonRunner.runningMonitorThreads.remove(key)
         }
       }
@@ -816,9 +810,7 @@ private[spark] class PythonRunner(
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        val command = funcs.head.funcs.head.command
-        dataOut.writeInt(command.length)
-        dataOut.write(command.toArray)
+        PythonWorkerUtils.writePythonFunction(funcs.head.funcs.head, dataOut)
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
@@ -838,7 +830,7 @@ private[spark] class PythonRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      pid: Option[Long],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
@@ -850,11 +842,8 @@ private[spark] class PythonRunner(
         }
         try {
           stream.readInt() match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              stream.readFully(obj)
-              obj
-            case 0 => Array.emptyByteArray
+            case length if length >= 0 =>
+              PythonWorkerUtils.readBytes(length, stream)
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()

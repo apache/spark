@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.api.python
 
-import scala.collection.JavaConverters
+import scala.collection.immutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.clustering.GaussianMixtureModel
@@ -37,7 +38,7 @@ private[python] class GaussianMixtureModelWrapper(model: GaussianMixtureModel) {
     val modelGaussians = model.gaussians.map { gaussian =>
       Array[Any](gaussian.mu, gaussian.sigma)
     }
-    SerDe.dumps(JavaConverters.seqAsJavaListConverter(modelGaussians).asJava)
+    SerDe.dumps(immutable.ArraySeq.unsafeWrapArray(modelGaussians).asJava)
   }
 
   def predictSoft(point: Vector): Vector = {

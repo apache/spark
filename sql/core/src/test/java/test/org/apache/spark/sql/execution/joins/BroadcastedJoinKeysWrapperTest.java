@@ -48,9 +48,9 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class BroadcastedJoinKeysWrapperTest {
   private transient SparkSession spark;
@@ -81,7 +81,7 @@ public class BroadcastedJoinKeysWrapperTest {
   // new StructField("calCol", DataTypes.CalendarIntervalType, false, Metadata.empty()),
 
 
-  @Before
+  @BeforeAll
   public void setUp() {
     spark = SparkSession.builder()
         .master("local[*]")
@@ -111,7 +111,7 @@ public class BroadcastedJoinKeysWrapperTest {
     sp = df.queryExecution().sparkPlan();
   }
 
-  @After
+  @AfterAll
   public void tearDown() {
     spark.stop();
     spark = null;

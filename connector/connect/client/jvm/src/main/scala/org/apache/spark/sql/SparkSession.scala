@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -39,8 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.client.util.Cleaner
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -66,7 +65,6 @@ import org.apache.spark.sql.types.StructType
  */
 class SparkSession private[sql] (
     private[sql] val client: SparkConnectClient,
-    private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
     extends Serializable
     with Closeable
@@ -134,8 +132,6 @@ class SparkSession private[sql] (
         } else {
           val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
-            .setUserId(client.userId)
-            .setSessionId(client.sessionId)
             .setHash(hash)
         }
       } else {
@@ -237,8 +233,9 @@ class SparkSession private[sql] (
    *   An array of Java/Scala objects that can be converted to SQL literal expressions. See <a
    *   href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html"> Supported Data
    *   Types</a> for supported value types in Scala/Java. For example: 1, "Steven",
-   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of literal expression, in that
-   *   case it is taken as is.
+   *   LocalDate.of(2023, 4, 2). A value can be also a `Column` of a literal or collection
+   *   constructor functions such as `map()`, `array()`, `struct()`, in that case it is taken as
+   *   is.
    *
    * @since 3.5.0
    */
@@ -250,7 +247,7 @@ class SparkSession private[sql] (
         proto.SqlCommand
           .newBuilder()
           .setSql(sqlText)
-          .addAllPosArgs(args.map(toLiteralProto).toIterable.asJava)))
+          .addAllPosArguments(args.map(lit(_).expr).toIterable.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     // .toBuffer forces that the iterator is consumed and closed
     val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -274,7 +271,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -294,7 +292,8 @@ class SparkSession private[sql] (
    *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
    *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   *   can be also a `Column` of a literal or collection constructor functions such as `map()`,
+   *   `array()`, `struct()`, in that case it is taken as is.
    *
    * @since 3.4.0
    */
@@ -307,7 +306,7 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.mapValues(lit(_).expr).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       // .toBuffer forces that the iterator is consumed and closed
       val responseSeq = client.execute(plan.build()).toBuffer.toSeq
@@ -535,7 +534,6 @@ class SparkSession private[sql] (
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder, timeZoneId)
-    cleaner.register(result)
     result
   }
 
@@ -674,6 +672,22 @@ class SparkSession private[sql] (
   /**
    * Add a tag to be assigned to all the operations started by this thread in this session.
    *
+   * Often, a unit of execution in an application consists of multiple Spark executions.
+   * Application programmers can use this method to group all those jobs together and give a group
+   * tag. The application can use `org.apache.spark.sql.SparkSession.interruptTag` to cancel all
+   * running running executions with this tag. For example:
+   * {{{
+   * // In the main thread:
+   * spark.addTag("myjobs")
+   * spark.range(10).map(i => { Thread.sleep(10); i }).collect()
+   *
+   * // In a separate thread:
+   * spark.interruptTag("myjobs")
+   * }}}
+   *
+   * There may be multiple tags present at the same time, so different parts of application may
+   * use different tags to perform cancellation at different levels of granularity.
+   *
    * @param tag
    *   The tag to be added. Cannot contain ',' (comma) character or be an empty string.
    *
@@ -757,7 +771,7 @@ object SparkSession extends Logging {
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
   private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(configuration.toSparkConnectClient, cleaner, planIdGenerator)
+    new SparkSession(configuration.toSparkConnectClient, planIdGenerator)
   }
 
   /**
@@ -778,14 +792,11 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder()
 
-  private[sql] lazy val cleaner = {
-    val cleaner = new Cleaner
-    cleaner.start()
-    cleaner
-  }
-
   class Builder() extends Logging {
-    private val builder = SparkConnectClient.builder()
+    // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
+    // by default, if it exists. The connection string can be overridden using
+    // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
+    private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -891,7 +902,7 @@ object SparkSession extends Logging {
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null) {
-        Option(new SparkSession(client, cleaner, planIdGenerator))
+        Option(new SparkSession(client, planIdGenerator))
       } else {
         None
       }

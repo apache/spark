@@ -39,7 +39,7 @@ object BroadcastFilterPushdown extends Rule[SparkPlan] with PredicateHelper {
     if (shouldAttemptBroadcastVarPushdown) {
       val (newPlan, removedDpps) = useTopDownPush(plan)
       if (!removedDpps.isEmpty) {
-        import scala.collection.JavaConverters._
+        import scala.jdk.CollectionConverters._
         val allDpps = removedDpps.values().asScala.flatten.toSeq
         val newlpOpt = plan.logicalLink.map(lp =>
           lp.transformAllExpressionsWithPruning(

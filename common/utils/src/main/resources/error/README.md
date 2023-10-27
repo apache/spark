@@ -1,6 +1,6 @@
 # Guidelines
 
-To throw a standardized user-facing error or exception, developers should specify the error class
+To throw a standardized user-facing error or exception, developers should specify the error class, a SQLSTATE,
 and message parameters rather than an arbitrary error message.
 
 ## Usage
@@ -10,7 +10,7 @@ and message parameters rather than an arbitrary error message.
    If true, use the error class `INTERNAL_ERROR` and skip to step 4.
 2. Check if an appropriate error class already exists in `error-classes.json`.
    If true, use the error class and skip to step 4.
-3. Add a new class to `error-classes.json`; keep in mind the invariants below.
+3. Add a new class with a new or existing SQLSTATE to `error-classes.json`; keep in mind the invariants below.
 4. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 6.
 5. Mix `SparkThrowable` into the exception.
@@ -26,9 +26,9 @@ Throw with arbitrary error message:
 
 `error-classes.json`
 
-    "PROBLEM_BECAUSE": {
-      "message": ["Problem <problem> because <cause>"],
-      "sqlState": "XXXXX"
+    "PROBLEM_BECAUSE" : {
+      "message" : ["Problem <problem> because <cause>"],
+      "sqlState" : "XXXXX"
     }
 
 `SparkException.scala`
@@ -70,6 +70,8 @@ Error classes are a succinct, human-readable representation of the error categor
 
 An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
 
+You should not introduce new uncategorized errors. Instead, convert them to proper errors whenever encountering them in new code.
+
 #### Invariants
 
 - Unique
@@ -79,7 +81,10 @@ An uncategorized errors can be assigned to a legacy error class with the prefix 
 ### Message
 
 Error messages provide a descriptive, human-readable representation of the error.
-The message format accepts string parameters via the C-style printf syntax.
+The message format accepts string parameters via the HTML tag syntax: e.g. <relationName>.
+
+The values passed to the message shoudl not themselves be messages.
+They should be: runtime-values, keywords, identifiers, or other values that are not translated.
 
 The quality of the error message should match the
 [guidelines](https://spark.apache.org/error-message-guidelines.html).
@@ -90,21 +95,24 @@ The quality of the error message should match the
 
 ### SQLSTATE
 
-SQLSTATE is an optional portable error identifier across SQL engines.
+SQLSTATE is an mandatory portable error identifier across SQL engines.
 SQLSTATE comprises a 2-character class value followed by a 3-character subclass value.
 Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
 For extension Spark claims the 'K**' subclass range.
 If a new class is needed it will also claim the 'K0' class.
 
+Internal errors should use the 'XX' class. You can subdivide internal errors by component. 
+For example: The existing 'XXKD0' is used for an internal analyzer error.
+
 #### Invariants
 
-- Consistent across releases
+- Consistent across releases unless the error is internal.
 
 #### ANSI/ISO standard
 
 The following SQLSTATEs are collated from:
 - SQL2016
-- DB2 zOS
+- DB2 zOS/LUW
 - PostgreSQL 15
 - Oracle 12 (last published)
 - SQL Server
@@ -467,6 +475,10 @@ The following SQLSTATEs are collated from:
 |22546    |22   |Data Exception                                    |546     |The value for a routine argument is not valid.              |DB2            |N       |DB2                                                                         |
 |22547    |22   |Data Exception                                    |547     |Multiple result values cannot be returned from the scalar function.|DB2            |N       |DB2                                                                         |
 |225DE    |22   |Data Exception                                    |5DE     |An XML schema cannot be enabled for decomposition.          |DB2            |N       |DB2                                                                         |
+|22KD0    |22   |Data Exception                                    |KD0     |Transient error                                             |Databricks     |N       |Databricks                                                                  |
+|22KD1    |22   |Data Exception                                    |KD1     |Invalid URI or PATH                                         |Databricks     |N       |Databricks                                                                  |
+|22KD2    |22   |Data Exception                                    |KD2     |Identity claim is unset                                     |Databricks     |N       |Databricks                                                                  |
+|22KD3    |22   |Data Exception                                    |KD3     |Cannot evolve source type to target type.                   |Databricks     |N       |Databricks                                                                  |
 |22P01    |22   |Data Exception                                    |P01     |floating_point_exception                                    |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |22P02    |22   |Data Exception                                    |P02     |invalid_text_representation                                 |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |22P03    |22   |Data Exception                                    |P03     |invalid_binary_representation                               |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
@@ -860,6 +872,14 @@ The following SQLSTATEs are collated from:
 |42K09    |42   |Syntax Error or Access Rule Violation             |K09     |Data type mismatch                                          |Spark          |N       |Spark                                                                       |
 |42K0A    |42   |Syntax error or Access Rule violation             |K0A     |Invalid UNPIVOT clause                                      |Spark          |N       |Spark                                                                       |
 |42K0B    |42   |Syntax error or Access Rule violation             |K0B     |Legacy feature blocked                                      |Spark          |N       |Spark                                                                       |
+|42K0C    |42   |Syntax error or Access Rule violation             |K0C     |Ambiguous reference to constraint                           |Spark          |N       |Spark                                                                       |
+|42K0D    |42   |Syntax error or Access Rule violation             |K0D     |Invalid lambda function                                     |Spark          |N       |Spark                                                                       |
+|42K0E    |42   |Syntax error or Access Rule violation             |K0E     |An expression is not valid in teh context it is used        |Spark          |N       |Spark                                                                       |
+|42K0F    |42   |Syntax error or Access Rule violation             |K0F     |A persisted object cannot reference a temporary object.     |Spark          |N       |Spark                                                                       |
+|42K0G    |42   |Syntax error or Access Rule violation             |K0G     |A protobuf is invalid                                       |Spark          |N       |Spark                                                                       |
+|42K0H    |42   |Syntax error or Access Rule violation             |K0H     |A cyclic invocation has been detected.                      |Spark          |N       |Spark                                                                       |
+|42K0I    |42   |Syntax error or Access Rule violation             |K0I     |SQL Config not found.                                       |Spark          |N       |Spark                                                                       |
+|42K0J    |42   |Syntax error or Access Rule violation             |K0J     |Property not found.                                         |Spark          |N       |Spark                                                                       |
 |42KD0    |42   |Syntax error or Access Rule violation             |KD0     |Ambiguous name reference.                                   |Databricks     |N       |Databricks                                                                  |
 |42KD1    |42   |Syntax error or Access Rule violation             |KD1     |Operation not supported in READ ONLY session mode.          |Databricks     |N       |Databricks                                                                  |
 |42KD2    |42   |Syntax error or Access Rule violation             |KD2     |The source and target table names of a SYNC operaton must be the same.|Databricks     |N       |Databricks                                                                  |
@@ -871,6 +891,10 @@ The following SQLSTATEs are collated from:
 |42KD8    |42   |Syntax error or Access Rule violation             |KD8     |Column position out of range.                               |Databricks     |N       |Databricks                                                                  |
 |42KD9    |42   |Syntax error or Access Rule violation             |KD9     |Cannot infer table schema.                                  |Databricks     |N       |Databricks                                                                  |
 |42KDA    |42   |Syntax error or Access Rule violation             |KDA     |Failed to merge file into table schema.                     |Databricks     |N       |Databricks                                                                  |
+|42KDB    |42   |Syntax error or Access Rule violation             |KDB     |Invalid URL                                                 |Databricks     |N       |Databricks                                                                  |
+|42KDC    |42   |Syntax error or Access Rule violation             |KDC     |Archived file reference.                                    |Databricks     |N       |Databricks                                                                  |
+|42KDD    |42   |Syntax error or Access Rule violation             |KDD     |Unsupported operation in streaming view.                    |Databricks     |N       |Databricks                                                                  |
+|42KDE    |42   |Syntax error or Access Rule violation             |KDE     |Unsupported operation on streaming dataset.                 |Databricks     |N       |Databricks                                                                  |
 |42P01    |42   |Syntax error or Access Rule violation             |P01     |undefined_table                                             |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |42P02    |42   |Syntax Error or Access Rule Violation             |P02     |undefined_parameter                                         |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |42P03    |42   |Syntax Error or Access Rule Violation             |P03     |duplicate_cursor                                            |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
@@ -1001,6 +1025,8 @@ The following SQLSTATEs are collated from:
 |54058    |54   |SQL or Product Limit Exceeded                     |058     |The internal representation of an XML path is too long.     |DB2            |N       |DB2                                                                         |
 |54065    |54   |SQL or Product Limit Exceeded                     |065     |The maximum of 99999 implicitly generated object names has been exceeded.|DB2            |N       |DB2                                                                         |
 |54068    |54   |SQL or Product Limit Exceeded                     |068     |Seamless automatic client reroute retry limit exceeded.     |DB2            |N       |DB2                                                                         |
+|54K00    |54   |SQL or Product Limit Exceeded                     |K00     |Maximum depth of nested views was exceeded.                 |Spark          |N       |Spark                                                                       |
+|54KD0    |54   |SQL or Product Limit Exceeded                     |KD0     |Maximum UDF count in query plan exceeded.                   |Databricks     |N       |Databricks                                                                  |
 |55000    |55   |Object Not In Prerequisite State                  |000     |object_not_in_prerequisite_state                            |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |55002    |55   |Object Not in Prerequisite State                  |002     |The explanation table is not defined properly.              |DB2            |N       |DB2                                                                         |
 |55003    |55   |Object Not in Prerequisite State                  |003     |The DDL registration table is not defined properly.         |DB2            |N       |DB2                                                                         |
@@ -1027,6 +1053,7 @@ The following SQLSTATEs are collated from:
 |55P02    |55   |Object Not In Prerequisite State                  |P02     |cant_change_runtime_param                                   |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |55P03    |55   |Object Not In Prerequisite State                  |P03     |lock_not_available                                          |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |55P04    |55   |Object Not In Prerequisite State                  |P04     |unsafe_new_enum_value_usage                                 |PostgreSQL     |N       |PostgreSQL                                                                  |
+|56000    |56   |Miscellaneous SQL or Product Error                |000     |(no subclass)                                               |DB2            |N       |DB2                                                                         |
 |56010    |56   |Miscellaneous SQL or Product Error                |010     |The subtype of a string variable is not the same as the subtype at bind time, and the difference cannot be resolved by character conversion.|DB2            |N       |DB2                                                                         |
 |56016    |56   |Miscellaneous SQL or Product Error                |016     |The ranges specified for data partitions are not valid.     |DB2            |N       |DB2                                                                         |
 |56018    |56   |Miscellaneous SQL or Product Error                |018     |A column cannot be added to the table, because it has an edit procedure.|DB2            |N       |DB2                                                                         |
@@ -1091,7 +1118,8 @@ The following SQLSTATEs are collated from:
 |560CV    |56   |Miscellaneous SQL or Product Error                |0CV     |Invalid table reference for table locator.                  |DB2            |N       |DB2                                                                         |
 |560CY    |56   |Miscellaneous SQL or Product Error                |0CY     |A period specification or period clause is not valid as specified.|DB2            |N       |DB2                                                                         |
 |560D5    |56   |Miscellaneous SQL or Product Error                |0D5     |The statement cannot be executed by the query accelerator.  |DB2            |N       |DB2                                                                         |
-|560DC    |56   |Miscellaneous SQL or Product Error                |0DC     |An error was detected while using the z/OS Unicode Services.|DB2            |N       |DB2                                                                         |
+|560DC    |56   |Miscellaneous SQL or Product Error                |0DC     |An error was detected while using the z/OS Unicode Services.|DB2            |N       |DB2
+|56K00    |56   |Miscellaneous SQL or Product Error                |0DC     |Spark Connect error                                         |Spark          |N       |Spark                                                                       |
 |57000    |57   |Operator Intervention                             |000     |operator_intervention                                       |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |57001    |57   |Resource Not Available or Operator Intervention   |001     |The table is unavailable, because it does not have a primary index.|DB2            |N       |DB2                                                                         |
 |57002    |57   |Resource Not Available or Operator Intervention   |002     |GRANT and REVOKE are invalid, because authorization has been disabled.|DB2            |N       |DB2                                                                         |
@@ -1121,7 +1149,7 @@ The following SQLSTATEs are collated from:
 |57P03    |57   |Operator Intervention                             |P03     |cannot_connect_now                                          |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |57P04    |57   |Operator Intervention                             |P04     |database_dropped                                            |PostgreSQL     |N       |PostgreSQL                                                                  |
 |57P05    |57   |Operator Intervention                             |P05     |idle_session_timeout                                        |PostgreSQL     |N       |PostgreSQL                                                                  |
-|58000    |58   |System Error (error external to PostgreSQL itself)|000     |system_error                                                |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
+|58000    |58   |System Error (error external to PostgreSQL itself)|000     |System error                                                |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |58001    |58   |System Error                                      |001     |The database cannot be created, because the assigned DBID is a duplicate.|DB2            |N       |DB2                                                                         |
 |58002    |58   |System Error                                      |002     |An exit has returned an error or invalid data.              |DB2            |N       |DB2                                                                         |
 |58003    |58   |System Error                                      |003     |An invalid section number was detected.                     |DB2            |N       |DB2                                                                         |
@@ -1139,9 +1167,9 @@ The following SQLSTATEs are collated from:
 |58017    |58   |System Error                                      |017     |The DDM parameter value is not supported.                   |DB2            |N       |DB2                                                                         |
 |58018    |58   |System Error                                      |018     |The DDM reply message is not supported.                     |DB2            |N       |DB2                                                                         |
 |58026    |58   |System Error                                      |026     |The number of variables in the statement is not equal to the number of variables in SQLSTTVRB.|DB2            |N       |DB2                                                                         |
-|58030    |58   |System Error (error external to PostgreSQL itself)|030     |io_error                                                    |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
-|58P01    |58   |System Error (error external to PostgreSQL itself)|P01     |undefined_file                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
-|58P02    |58   |System Error (error external to PostgreSQL itself)|P02     |duplicate_file                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
+|58030    |58   |System Error (error external to PostgreSQL itself)|030     |I/O error                                                   |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
+|58P01    |58   |System Error (error external to PostgreSQL itself)|P01     |Undefined file                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
+|58P02    |58   |System Error (error external to PostgreSQL itself)|P02     |Duplicate file                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |5UA01    |5U   |Common Utilities and Tools                        |A01     |The task cannot be removed because it is currently executing.|DB2            |N       |DB2                                                                         |
 |60000    |60   |system error                                      |000     |system error                                                |Oracle         |N       |Oracle                                                                      |
 |61000    |61   |shared server and detached process errors         |000     |shared server and detached process errors                   |Oracle         |N       |Oracle                                                                      |
@@ -1317,4 +1345,9 @@ The following SQLSTATEs are collated from:
 |XX000    |XX   |Internal Error                                    |000     |internal_error                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |XX001    |XX   |Internal Error                                    |001     |data_corrupted                                              |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
 |XX002    |XX   |Internal Error                                    |002     |index_corrupted                                             |PostgreSQL     |N       |PostgreSQL Redshift                                                         |
+|XXKD0    |XX   |Internal Error                                    |KD0     |Analysis - Bad plan                                         |Databricks     |N       |Databricks                                                                  |
+|XXKDA    |XX   |Internal Error                                    |KAS     |Scheduler (Aether Scheduler)                                |Databricks     |N       |Databricks                                                                  |
+|XXKDS    |XX   |Internal Error                                    |KDS     |Delta Storage                                               |Databricks     |N       |Databricks                                                                  |
+|XXKUC    |XX   |Internal Error                                    |KUC     |Catalog Service (Unity Catalog)                             |Databricks     |N       |Databricks                                                                  |
+|XXKST    |XX   |Internal Error                                    |KST     |Streaming                                                   |Databricks     |N       |Databricks                                                                  |
 <!-- SQLSTATE table stop -->

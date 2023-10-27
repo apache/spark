@@ -50,19 +50,18 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def apply(s: Sort): LogicalPlan = {
-    val resolvedNoOuter = s.order.map(resolveExpressionByPlanOutput(_, s.child))
-    val resolvedWithAgg = resolvedNoOuter.map(resolveColWithAgg(_, s.child))
+    val resolvedBasic = s.order.map(resolveExpressionByPlanOutput(_, s.child))
+    val resolvedWithAgg = resolvedBasic.map(resolveColWithAgg(_, s.child))
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
       s.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
-    val resolvedWithOuter = orderByAllResolved.map(e => resolveOuterRef(e))
-    val finalOrdering = resolvedWithOuter.map(e => resolveVariables(e)
-      .asInstanceOf[SortOrder])
+    val resolvedFinal = orderByAllResolved
+      .map(e => resolveColsLastResort(e).asInstanceOf[SortOrder])
     if (s.child.output == newChild.output) {
-      s.copy(order = finalOrdering)
+      s.copy(order = resolvedFinal)
     } else {
       // Add missing attributes and then project them away.
-      val newSort = s.copy(order = finalOrdering, child = newChild)
+      val newSort = s.copy(order = resolvedFinal, child = newChild)
       Project(s.child.output, newSort)
     }
   }

@@ -338,4 +338,17 @@ class CanonicalizeSuite extends SparkFunSuite {
 
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
+
+  test("toJSON works properly with MultiCommutativeOp") {
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, "1")
+
+    val d = Decimal(1.2)
+    val literal1 = Literal.create(d, DecimalType(2, 1))
+    val literal2 = Literal.create(d, DecimalType(2, 1))
+    val literal3 = Literal.create(d, DecimalType(3, 2))
+    val op = Add(literal1, Add(literal2, literal3))
+    assert(op.canonicalized.toJSON.nonEmpty)
+    SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+  }
 }

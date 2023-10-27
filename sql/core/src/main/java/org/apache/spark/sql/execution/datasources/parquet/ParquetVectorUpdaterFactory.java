@@ -109,7 +109,8 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
+        } else if (isTimestamp(sparkType) &&
+            isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongUpdater();
@@ -117,7 +118,8 @@ public class ParquetVectorUpdaterFactory {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
+        } else if (isTimestamp(sparkType) &&
+            isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           validateTimestampType(sparkType);
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongAsMicrosUpdater();
@@ -1143,18 +1145,20 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static boolean isLongDecimal(DataType dt) {
-    if (dt instanceof DecimalType) {
-      DecimalType d = (DecimalType) dt;
+    if (dt instanceof DecimalType d) {
       return d.precision() == 20 && d.scale() == 0;
     }
     return false;
   }
 
+  private static boolean isTimestamp(DataType dt) {
+    return dt == DataTypes.TimestampType || dt == DataTypes.TimestampNTZType;
+  }
+
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
     DecimalType d = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
-      DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation decimalType) {
       // It's OK if the required decimal precision is larger than or equal to the physical decimal
       // precision in the Parquet metadata, as long as the decimal scale is the same.
       return decimalType.getPrecision() <= d.precision() && decimalType.getScale() == d.scale();

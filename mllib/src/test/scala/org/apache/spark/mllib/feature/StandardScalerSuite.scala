@@ -87,27 +87,27 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summary2 = computeSummary(data2RDD)
     val summary3 = computeSummary(data3RDD)
 
-    assert((denseData, data1, data1RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data1).lazyZip(data1RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((denseData, data2, data2RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((denseData, data3, data3RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data3).lazyZip(data3RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((data1, data1RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data3, data3RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data1.lazyZip(data1RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data2.lazyZip(data2RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data3.lazyZip(data3RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
     assert(summary1.mean ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)
     assert(summary1.variance ~== Vectors.dense(1.0, 1.0, 1.0) absTol 1E-5)
@@ -151,27 +151,27 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summary2 = computeSummary(data2RDD)
     val summary3 = computeSummary(data3RDD)
 
-    assert((denseData, data1, data1RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data1).lazyZip(data1RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((denseData, data2, data2RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((denseData, data3, data3RDD.collect()).zipped.forall {
+    assert(denseData.lazyZip(data3).lazyZip(data3RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((data1, data1RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data3, data3RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data1.lazyZip(data1RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data2.lazyZip(data2RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data3.lazyZip(data3RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
     assert(summary1.mean ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)
     assert(summary1.variance ~== Vectors.dense(1.0, 1.0, 1.0) absTol 1E-5)
@@ -219,15 +219,15 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summary2 = computeSummary(data2RDD)
     val summary3 = computeSummary(data3RDD)
 
-    assert((sparseData, data2, data2RDD.collect()).zipped.forall {
+    assert(sparseData.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((data1, data1RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data3, data3RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data1.lazyZip(data1RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data2.lazyZip(data2RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data3.lazyZip(data3RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
     assert(summary1.mean ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)
     assert(summary1.variance ~== Vectors.dense(1.0, 1.0, 1.0) absTol 1E-5)
@@ -268,15 +268,15 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summary2 = computeSummary(data2RDD)
     val summary3 = computeSummary(data3RDD)
 
-    assert((sparseData, data2, data2RDD.collect()).zipped.forall {
+    assert(sparseData.lazyZip(data2).lazyZip(data2RDD.collect()).forall {
       case (v1: DenseVector, v2: DenseVector, v3: DenseVector) => true
       case (v1: SparseVector, v2: SparseVector, v3: SparseVector) => true
       case _ => false
     }, "The vector type should be preserved after standardization.")
 
-    assert((data1, data1RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
-    assert((data3, data3RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data1.lazyZip(data1RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data2.lazyZip(data2RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
+    assert(data3.lazyZip(data3RDD.collect()).forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
     assert(summary1.mean ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)
     assert(summary1.variance ~== Vectors.dense(1.0, 1.0, 1.0) absTol 1E-5)

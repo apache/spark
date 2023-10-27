@@ -90,7 +90,7 @@ abstract class PercentileBase
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage",
+          "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(percentageExpression.dataType),
           "inputExpr" -> toSQLExpr(percentageExpression))
       )
@@ -368,6 +368,11 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
     val direction = if (reverse) " DESC" else ""
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    percentile.checkInputDataTypes()
+  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
     this.copy(left = newLeft, right = newRight)

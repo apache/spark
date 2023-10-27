@@ -21,7 +21,7 @@ import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
 
 import com.google.common.base.Splitter
@@ -207,6 +207,7 @@ private[spark] trait PagedTable[T] {
           .withKeyValueSeparator("=")
           .split(search)
           .asScala
+          .view
           .filterKeys(_ != pageSizeFormField)
           .filterKeys(_ != pageNumberFormField)
           .mapValues(URLDecoder.decode(_, UTF_8.name()))

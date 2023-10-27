@@ -254,18 +254,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
 
-      // StreamingQueryException
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.message"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.cause"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.startOffset"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.endOffset"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryException.time"),
-
       // Classes missing from streaming API
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState"),
@@ -335,6 +323,14 @@ object CheckConnectJvmClientCompatibility {
           "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
+
+      // New private API added in the client
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner"),
+      ProblemFilters
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
 
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](

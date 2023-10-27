@@ -25,6 +25,7 @@ import java.util.{Locale, Properties, ServiceConfigurationError}
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
@@ -49,6 +50,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -103,7 +105,7 @@ class QueryExecutionErrorsSuite
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    val df1 = Seq("Spark", "").toDF
+    val df1 = Seq("Spark", "").toDF()
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -117,7 +119,7 @@ class QueryExecutionErrorsSuite
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
         parameters = Map(
@@ -154,7 +156,7 @@ class QueryExecutionErrorsSuite
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       checkError(
         exception = intercept[SparkException] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
@@ -172,7 +174,7 @@ class QueryExecutionErrorsSuite
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
         exception = intercept[SparkException] {
-          df.collect
+          df.collect()
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
@@ -222,7 +224,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-      "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
+      "type" -> "unknown"),
       sqlState = "0A000")
   }
 
@@ -874,6 +876,52 @@ class QueryExecutionErrorsSuite
     }
     assert(e.getErrorClass === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
+  }
+
+  test("CONCURRENT_QUERY: streaming query is resumed from many sessions") {
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+        withTempDir { dir =>
+          val ds = spark.readStream.format("rate").load()
+
+          // Queries have the same ID when they are resumed from the same checkpoint.
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
+
+          // Run an initial query to setup the checkpoint.
+          val initialQuery = ds.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+
+          // Error is thrown due to a race condition. Ensure it happens with high likelihood in the
+          // test by spawning many threads.
+          val exceptions = ThreadUtils.parmap(Seq.range(1, 50), "QueryExecutionErrorsSuite", 50)
+            { _ =>
+              var exception = None : Option[SparkConcurrentModificationException]
+              try {
+                val restartedQuery = ds.writeStream.format("parquet")
+                  .option("checkpointLocation", chkLocation).start(dataLocation)
+                restartedQuery.stop()
+                restartedQuery.awaitTermination()
+              } catch {
+                case e: SparkConcurrentModificationException =>
+                  exception = Some(e)
+              }
+              exception
+            }
+          assert(exceptions.map(e => e.isDefined).reduceLeft(_ || _))
+          exceptions.map { e =>
+            if (e.isDefined) {
+              checkError(
+                e.get,
+                errorClass = "CONCURRENT_QUERY",
+                sqlState = Some("0A000")
+              )
+            }
+          }
+          spark.streams.active.foreach(_.stop())
+        }
+      }
+    }
   }
 
   test("UNSUPPORTED_EXPR_FOR_WINDOW: to_date is not supported with WINDOW") {

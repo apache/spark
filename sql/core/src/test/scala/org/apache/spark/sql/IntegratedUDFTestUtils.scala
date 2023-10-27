@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.scalatest.Assertions._
@@ -30,7 +30,7 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
 
@@ -97,14 +97,14 @@ import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, 
 object IntegratedUDFTestUtils extends SQLHelper {
   import scala.sys.process._
 
-  private lazy val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
+  private[spark] lazy val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
 
   // Note that we will directly refer pyspark's source, not the zip from a regular build.
   // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
   private lazy val py4jPath = Paths.get(
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
-  private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
+  private[spark] lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
   private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 
@@ -215,6 +215,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
     }
     assert(binaryPythonUDTF != null)
     binaryPythonUDTF
+  }
+
+  private def createPythonDataSource(dataSourceName: String, pythonScript: String): Array[Byte] = {
+    if (!shouldTestPythonUDFs) {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+    var binaryPythonDataSource: Array[Byte] = null
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              s"ds = $dataSourceName(options=dict());" +
+              "f.write(CloudPickleSerializer().dumps(ds))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPythonDataSource = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPythonDataSource != null)
+    binaryPythonDataSource
   }
 
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
@@ -363,7 +389,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestPythonUDF(name: String) extends TestUDF {
+  case class TestPythonUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -381,17 +407,37 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+              "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Regular Python UDF"
+  }
+
+  def createUserDefinedPythonDataSource(
+      name: String,
+      pythonScript: String,
+      schema: StructType): UserDefinedPythonDataSource = {
+    UserDefinedPythonDataSource(
+      dataSource = SimplePythonFunction(
+        command = createPythonDataSource(name, pythonScript),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      schema = schema
+    )
   }
 
   def createUserDefinedPythonTableFunction(
@@ -521,8 +567,15 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val name: String = "UDTFWithSinglePartition"
     val pythonScript: String =
       s"""
+        |import json
+        |from dataclasses import dataclass
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
+        |
+        |@dataclass
+        |class AnalyzeResultWithBuffer(AnalyzeResult):
+        |    buffer: str = ""
+        |
         |class $name:
         |    def __init__(self):
         |        self._count = 0
@@ -530,18 +583,25 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |        self._last = None
         |
         |    @staticmethod
-        |    def analyze(self):
-        |        return AnalyzeResult(
+        |    def analyze(initial_count, input_table):
+        |        buffer = ""
+        |        if initial_count.value is not None:
+        |            assert(not initial_count.isTable)
+        |            assert(initial_count.dataType == IntegerType())
+        |            count = initial_count.value
+        |            buffer = json.dumps({"initial_count": count})
+        |        return AnalyzeResultWithBuffer(
         |            schema=StructType()
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
-        |            with_single_partition=True,
-        |            order_by=[
+        |            withSinglePartition=True,
+        |            orderBy=[
         |                OrderingColumn("input"),
-        |                OrderingColumn("partition_col")])
+        |                OrderingColumn("partition_col")],
+        |            buffer=buffer)
         |
-        |    def eval(self, row: Row):
+        |    def eval(self, initial_count, row):
         |        self._count += 1
         |        self._last = row["input"]
         |        self._sum += row["input"]
@@ -582,10 +642,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("count", IntegerType())
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
-        |            partition_by=[
+        |            partitionBy=[
         |                PartitioningColumn("partition_col")
         |            ],
-        |            order_by=[
+        |            orderBy=[
         |                OrderingColumn("input")
         |            ])
         |
@@ -611,7 +671,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "Python UDTF exporting input table partitioning and ordering requirement from 'analyze'"
   }
 
-  object TestPythonUDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
+  object InvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val name: String = "UDTFInvalidPartitionByAndWithSinglePartition"
     val pythonScript: String =
       s"""
@@ -626,8 +686,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
-         |            with_single_partition=True,
-         |            partition_by=[
+         |            withSinglePartition=True,
+         |            partitionBy=[
          |                PartitioningColumn("partition_col")
          |            ])
          |
@@ -648,10 +708,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
     val prettyName: String =
       "Python UDTF exporting invalid input table partitioning requirement from 'analyze' " +
-        "because the 'with_single_partition' property is also exported to true"
+        "because the 'withSinglePartition' property is also exported to true"
   }
 
-  object TestPythonUDTFInvalidOrderByWithoutPartitionBy extends TestUDTF {
+  object InvalidOrderByWithoutPartitionBy extends TestUDTF {
     val name: String = "UDTFInvalidOrderByWithoutPartitionBy"
     val pythonScript: String =
       s"""
@@ -666,7 +726,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |        return AnalyzeResult(
          |            schema=StructType()
          |                .add("last", IntegerType()),
-         |            order_by=[
+         |            orderBy=[
          |                OrderingColumn("input")
          |            ])
          |
@@ -690,6 +750,403 @@ object IntegratedUDFTestUtils extends SQLHelper {
         "without a corresponding partitioning table requirement"
   }
 
+  object TestPythonUDTFForwardStateFromAnalyze extends TestUDTF {
+    val name: String = "TestPythonUDTFForwardStateFromAnalyze"
+    val pythonScript: String =
+      s"""
+         |from dataclasses import dataclass
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import StringType, StructType
+         |
+         |@dataclass
+         |class AnalyzeResultWithBuffer(AnalyzeResult):
+         |    buffer: str = ""
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(argument):
+         |        assert(argument.dataType == StringType())
+         |        return AnalyzeResultWithBuffer(
+         |            schema=StructType()
+         |                .add("result", StringType()),
+         |            buffer=argument.value)
+         |
+         |    def eval(self, argument):
+         |        pass
+         |
+         |    def terminate(self):
+         |        yield self._analyze_result.buffer,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String = "Python UDTF whose 'analyze' method sets state and reads it later"
+  }
+
+  object InvalidEvalReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnScalarType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", StringType(), False)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield None,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'eval' method returns None to a non-nullable scalar column"
+  }
+
+  object InvalidEvalReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnArrayType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import ArrayType, IntegerType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", ArrayType(IntegerType(), containsNull=True), False)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield None,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'eval' method returns None to a non-nullable array column"
+  }
+
+  object InvalidEvalReturnsNoneToNonNullableColumnArrayElementType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnArrayElementType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import ArrayType, IntegerType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", ArrayType(IntegerType(), containsNull=False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield [1, 2, None, 3],
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'eval' method returns None to a non-nullable array element"
+  }
+
+  object InvalidEvalReturnsNoneToNonNullableColumnStructType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnStructType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, Row, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", StructType().add("field", IntegerType(), False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield Row(field=None),
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'eval' method returns None to a non-nullable struct column"
+  }
+
+  object InvalidEvalReturnsNoneToNonNullableColumnMapType extends TestUDTF {
+    val name: String = "InvalidEvalReturnsNoneToNonNullableColumnMapType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, MapType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", MapType(IntegerType(), StringType(), False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield {42: None},
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'eval' method returns None to a non-nullable map column"
+  }
+
+  object InvalidTerminateReturnsNoneToNonNullableColumnScalarType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnScalarType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", StringType(), False)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield 'abc',
+         |
+         |    def terminate(self):
+         |        yield None,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable column"
+  }
+
+  object InvalidTerminateReturnsNoneToNonNullableColumnArrayType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnArrayType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import ArrayType, IntegerType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", ArrayType(IntegerType(), containsNull=True), False)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield [1, 2, 3, 4],
+         |
+         |    def terminate(self):
+         |        yield None,
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable array column"
+  }
+
+  object InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import ArrayType, IntegerType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", ArrayType(IntegerType(), containsNull=False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |        yield [1, 2, 3, 4],
+         |
+         |    def terminate(self):
+         |        yield [1, 2, None, 3],
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable array element"
+  }
+
+  object InvalidTerminateReturnsNoneToNonNullableColumnStructType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnStructType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, Row, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", StructType().add("field", IntegerType(), False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |       yield Row(field=42),
+         |
+         |    def terminate(self):
+         |       yield Row(field=None),
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable struct column"
+  }
+
+  object InvalidTerminateReturnsNoneToNonNullableColumnMapType extends TestUDTF {
+    val name: String = "InvalidTerminateReturnsNoneToNonNullableColumnMapType"
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, MapType, StringType, StructType
+         |
+         |class $name:
+         |    def __init__(self, analyze_result):
+         |        self._analyze_result = analyze_result
+         |
+         |    @staticmethod
+         |    def analyze(*args):
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("result", MapType(IntegerType(), StringType(), False), True)
+         |            )
+         |
+         |    def eval(self, *args):
+         |       yield {42: 'abc'},
+         |
+         |    def terminate(self):
+         |        yield {42: None},
+         |""".stripMargin
+
+    val udtf: UserDefinedPythonTableFunction = createUserDefinedPythonTableFunction(
+      name = name,
+      pythonScript = pythonScript,
+      returnType = None)
+
+    def apply(session: SparkSession, exprs: Column*): DataFrame =
+      udtf.apply(session, exprs: _*)
+
+    val prettyName: String =
+      "Invalid Python UDTF whose 'terminate' method returns None to a non-nullable map column"
+  }
+
   /**
    * A Scalar Pandas UDF that takes one column, casts into string, executes the
    * Python native function, and casts back to the type of input column.
@@ -705,7 +1162,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestScalarPandasUDF(name: String) extends TestUDF {
+  case class TestScalarPandasUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -723,11 +1182,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")
         val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
         val pythonUDF = new PythonUDFWithoutId(
           super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
+        Cast(pythonUDF, rt)
       }
     }
 
@@ -826,7 +1288,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema("col").dataType)
    * }}}
    */
-  class TestInternalScalaUDF(name: String) extends SparkUserDefinedFunction(
+  class TestInternalScalaUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends SparkUserDefinedFunction(
     (input: Any) => if (input == null) {
       null
     } else {
@@ -839,9 +1303,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     override def apply(exprs: Column*): Column = {
       assert(exprs.length == 1, "Defined UDF only has one column")
       val expr = exprs.head.expr
-      assert(expr.resolved, "column should be resolved to use the same type " +
-        "as input. Try df(name) or df.col(name)")
-      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), expr.dataType))
+      val rt = returnType.getOrElse {
+        assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+        expr.dataType
+      }
+      Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), rt))
     }
 
     override def withName(name: String): TestInternalScalaUDF = {
@@ -851,8 +1318,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     }
   }
 
-  case class TestScalaUDF(name: String) extends TestUDF {
-    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name)
+  case class TestScalaUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new TestInternalScalaUDF(name, returnType)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 

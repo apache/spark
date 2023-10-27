@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.connector.catalog.TableCapability._

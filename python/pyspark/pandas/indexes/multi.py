@@ -24,8 +24,6 @@ from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defi
 from pyspark.sql import functions as F, Column as PySparkColumn, Window
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import get_column_class
-
-# For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
@@ -1266,14 +1264,6 @@ class MultiIndex(Index):
         """
         # Always returns "mixed" for MultiIndex
         return "mixed"
-
-    @property
-    def asi8(self) -> None:
-        """
-        Integer representation of the values.
-        """
-        # Always returns None for MultiIndex
-        return None
 
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1

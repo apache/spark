@@ -477,6 +477,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
     ]
   },
+  "NOT_COLUMN_OR_STR_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a StructType, Column or str, got <arg_type>."
+    ]
+  },
   "NOT_DATAFRAME" : {
     "message" : [
       "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
@@ -635,6 +640,21 @@ ERROR_CLASSES_JSON = """
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_CREATE_ERROR" : {
+    "message" : [
+        "Unable to create the Python data source <type>: <error>."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED" : {
+    "message" : [
+        "Unable to create the Python data source <type> because the '<method>' method hasn't been implemented."
+    ]
+  },
+  "PYTHON_DATA_SOURCE_TYPE_MISMATCH" : {
+    "message" : [
+      "Expected <expected>, but got <actual>."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET" : {

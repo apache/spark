@@ -77,6 +77,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }.head
   }
 
+  test("invalid data source") {
+    intercept[IllegalArgumentException] {
+      spark.read.format(classOf[InvalidDataSource].getName).load()
+    }
+  }
+
   test("simplest implementation") {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
@@ -891,7 +897,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
           case "i" => current
           case "j" => -current
         }
-        InternalRow.fromSeq(values.to[Seq])
+        InternalRow.fromSeq(values)
       }
 
       override def close(): Unit = {}
@@ -1058,8 +1064,8 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(
-        Option(options.get("partitionKeys")).map(_.split(",").to[Seq]),
-        Option(options.get("orderKeys")).map(_.split(",").to[Seq]).getOrElse(Seq.empty)
+        Option(options.get("partitionKeys")).map(_.split(",").toSeq),
+        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
       )
     }
   }
@@ -1154,4 +1160,10 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
       }
     }
   }
+}
+
+class InvalidDataSource extends TestingV2Source {
+  throw new IllegalArgumentException("test error")
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = null
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.planner
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf
 import com.google.protobuf.ByteString
@@ -606,7 +606,7 @@ class SparkConnectServiceSuite
           }
 
           override def onError(throwable: Throwable): Unit = {
-            verifyEvents.onCanceled
+            verifyEvents.onCanceled()
           }
 
           override def onCompleted(): Unit = {

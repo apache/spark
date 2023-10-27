@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.execution.ColumnarToRowExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 
 /**
@@ -33,11 +34,11 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  *      Results will be written to "benchmarks/InMemoryColumnarBenchmark-results.txt".
  * }}}
  */
-object InMemoryColumnarBenchmark extends SqlBasedBenchmark {
+object InMemoryColumnarBenchmark extends SqlBasedBenchmark with AdaptiveSparkPlanHelper {
   def intCache(rowsNum: Long, numIters: Int): Unit = {
     val data = spark.range(0, rowsNum, 1, 1).toDF("i").cache()
 
-    val inMemoryScan = data.queryExecution.executedPlan.collect {
+    val inMemoryScan = collect(data.queryExecution.executedPlan) {
       case m: InMemoryTableScanExec => m
     }
 

@@ -30,12 +30,11 @@ from typing import (
 )
 
 import numpy as np
-
 import pandas as pd
+
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
-
 import pyspark.pandas as ps
 
 
@@ -1156,6 +1155,7 @@ class StringMethods:
         2    [b, b]
         dtype: object
         """
+
         # type hint does not support to specify array type yet.
         @pandas_udf(  # type: ignore[call-overload]
             returnType=ArrayType(StringType(), containsNull=True)

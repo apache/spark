@@ -29,7 +29,6 @@ from contextlib import redirect_stdout
 from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
-from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -1024,6 +1023,24 @@ class DataFrameTestsMixin:
         self.assertGreaterEqual(row.cnt, 0)
         self.assertGreaterEqual(row.sum, 0)
 
+    def test_observe_with_same_name_on_different_dataframe(self):
+        # SPARK-45656: named observations with the same name on different datasets
+        from pyspark.sql import Observation
+
+        observation1 = Observation("named")
+        df1 = self.spark.range(50)
+        observed_df1 = df1.observe(observation1, count(lit(1)).alias("cnt"))
+
+        observation2 = Observation("named")
+        df2 = self.spark.range(100)
+        observed_df2 = df2.observe(observation2, count(lit(1)).alias("cnt"))
+
+        observed_df1.collect()
+        observed_df2.collect()
+
+        self.assertEqual(observation1.get, dict(cnt=50))
+        self.assertEqual(observation2.get, dict(cnt=100))
+
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.range(1).sample()
@@ -1139,7 +1156,6 @@ class DataFrameTestsMixin:
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
-
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
@@ -1436,10 +1452,8 @@ class DataFrameTestsMixin:
         self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
-        pandas_requirement_message
-        or pyarrow_requirement_message
-        or "Pyarrow version must be 2.0.0 or higher",
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_to_pandas_for_array_of_struct(self):
         for is_arrow_enabled in [True, False]:

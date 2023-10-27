@@ -896,7 +896,6 @@ class TorchDistributor(Distributor):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-
         if not run_pytorch_file_fn:
             run_pytorch_file_fn = TorchDistributor._run_training_on_pytorch_file
 

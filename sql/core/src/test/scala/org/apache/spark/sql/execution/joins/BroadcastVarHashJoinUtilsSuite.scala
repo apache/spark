@@ -37,7 +37,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
 
   test("test identification of batchscans for broadcast variables on simple join") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(nonPartTable2, Inner,
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(nonPartTable2, Inner,
         Option("c1_2".attr === "c2_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq(BroadcastVarPushDownData(1, getBatchScans(
@@ -49,7 +49,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on simple join with multi " +
     "column join") {
    runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(nonPartTable2, Inner,
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(nonPartTable2, Inner,
         Option("c1_2".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val targetBatchScan = getBatchScans(plan, nonPartTable2.schema).head
@@ -64,9 +64,9 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on nested joins with single " +
     "target batch scan") {
    runWithDefaultConfig({
-        val lp = nonPartTable1.where('c1_2.attr > 100).join(nonPartTable2, Inner,
+        val lp = nonPartTable1.where("c1_2".attr > 100).join(nonPartTable2, Inner,
           Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(nonPartTable3.
-          where('c3_1.attr > 500), Inner, Option("c2_1".attr === "c3_2".attr))
+          where("c3_1".attr > 500), Inner, Option("c2_1".attr === "c3_2".attr))
           val plan = lp.toDF().queryExecution.sparkPlan
           val targetBatchScan = getBatchScans(plan, nonPartTable2.schema).head
           val expectedPushDownData = Seq(
@@ -81,9 +81,9 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on nested joins with multi " +
     "target batch scan") {
     runWithDefaultConfig({
-        val lp = nonPartTable1.where('c1_2.attr > 100).join(nonPartTable2, Inner,
+        val lp = nonPartTable1.where("c1_2".attr > 100).join(nonPartTable2, Inner,
           Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(nonPartTable3.
-          where('c3_1.attr > 500), Inner, Option("c1_1".attr === "c3_2".attr))
+          where("c3_1".attr > 500), Inner, Option("c1_1".attr === "c3_2".attr))
         val plan = lp.toDF().queryExecution.sparkPlan
         val targetBatchScan1 = getBatchScans(plan, nonPartTable2.schema).head
         val targetBatchScan2 = getBatchScans(plan, nonPartTable1.schema).head
@@ -99,10 +99,10 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on nested joins with union " +
     "resulting in multi target batch scan") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_2.attr > 100).join(nonPartTable2.union
+      val lp = nonPartTable1.where("c1_2".attr > 100).join(nonPartTable2.union
       (nonPartTable1).union(nonPartTable3), Inner, Option("c1_1".attr === "c2_2".attr &&
         "c1_3".attr === "c2_3".attr)).join(nonPartTable3.
-        where('c3_1.attr > 500), Inner, Option("c2_1".attr === "c3_2".attr))
+        where("c3_1".attr > 500), Inner, Option("c2_1".attr === "c3_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val targetBatchScans = plan.collectFirst {
         case u: UnionExec => u
@@ -121,8 +121,8 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
 
   test("test  batch scan selected because of group by on join key ") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(
-        nonPartTable2.groupBy('c2_2.attr)('c2_2.attr, sum('c2_3.attr)), Inner,
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(
+        nonPartTable2.groupBy("c2_2".attr)("c2_2".attr, sum("c2_3".attr)), Inner,
         Option("c1_2".attr === "c2_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
 
@@ -136,8 +136,8 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
 
   test("test no batch scan selected because of group by not on join key ") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(
-        nonPartTable2.groupBy('c2_3.attr)('c2_3.attr, sum('c2_2.attr).as("c2_2")), Inner,
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(
+        nonPartTable2.groupBy("c2_3".attr)("c2_3".attr, sum("c2_2".attr).as("c2_2")), Inner,
         Option("c1_2".attr === "c2_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq.empty
@@ -147,8 +147,8 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
 
   test("test project node aliasing still identifies  batchscan for broadcast variables") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(nonPartTable2.select('c2_2.as
-      ("c22_2"), 'c2_1.as("c22_1"), 'c2_3.as("c22_3"), 'c2_4.as("c22_4"), 'c2_5.as("c22_5")),
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(nonPartTable2.select("c2_2".as
+      ("c22_2"), "c2_1".as("c22_1"), "c2_3".as("c22_3"), "c2_4".as("c22_4"), "c2_5".as("c22_5")),
         Inner, Option("c1_2".attr === "c22_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq(BroadcastVarPushDownData(1,
@@ -159,9 +159,9 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
 
   test("test no batchscan selected as join key is not directly mapped to column in BatchScan") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_1.attr > 100).join(nonPartTable2.select(
-        Add('c2_2.attr, Literal.apply(4)).as("c22_2"), 'c2_1.as("c22_1"), 'c2_3.as("c22_3"),
-        'c2_4.as("c22_4"), 'c2_5.as("c22_5")),
+      val lp = nonPartTable1.where("c1_1".attr > 100).join(nonPartTable2.select(
+        Add("c2_2".attr, Literal.apply(4)).as("c22_2"), "c2_1".as("c22_1"), "c2_3".as("c22_3"),
+        "c2_4".as("c22_4"), "c2_5".as("c22_5")),
         Inner, Option("c1_2".attr === "c22_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq.empty
@@ -172,9 +172,9 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on nested joins with single " +
     "target batch scan and same joining column in both joins") {
     runWithDefaultConfig({
-      val lp = nonPartTable1.where('c1_2.attr > 100).join(nonPartTable2, Inner,
+      val lp = nonPartTable1.where("c1_2".attr > 100).join(nonPartTable2, Inner,
         Option("c1_1".attr === "c2_2".attr && "c1_3".attr === "c2_3".attr)).join(nonPartTable3.
-        where('c3_1.attr > 500), Inner, Option("c2_2".attr === "c3_2".attr))
+        where("c3_1".attr > 500), Inner, Option("c2_2".attr === "c3_2".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val targetBatchScan = getBatchScans(plan, nonPartTable2.schema).head
       val expectedPushDownData = Seq(
@@ -189,7 +189,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on simple join using partition " +
     "column") {
      runWithDefaultConfig({
-      val lp = partTable1.where('c1_1.attr > 100).join(partTable2, Inner,
+      val lp = partTable1.where("c1_1".attr > 100).join(partTable2, Inner,
         Option("c1_2".attr === "c2_1".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq(BroadcastVarPushDownData(0,
@@ -199,7 +199,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
     })
 
     runWithIntactDPP({
-      val lp = partTable1.where('c1_1.attr > 100).join(partTable2, Inner,
+      val lp = partTable1.where("c1_1".attr > 100).join(partTable2, Inner,
         Option("c1_2".attr === "c2_1".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val expectedPushDownData = Seq.empty
@@ -210,7 +210,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test("test identification of batchscans for broadcast variables on simple join with multi " +
     "column join involving partition columns") {
     runWithDefaultConfig({
-      val lp = partTable1.where('c1_1.attr > 100).join(partTable2, Inner,
+      val lp = partTable1.where("c1_1".attr > 100).join(partTable2, Inner,
         Option("c1_2".attr === "c2_1".attr && "c1_3".attr === "c2_3".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val targetBatchScan = getBatchScans(plan, partTable2.schema).head
@@ -222,7 +222,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
     })
 
     runWithIntactDPP({
-      val lp = partTable1.where('c1_1.attr > 100).join(partTable2, Inner,
+      val lp = partTable1.where("c1_1".attr > 100).join(partTable2, Inner,
         Option("c1_2".attr === "c2_1".attr && "c1_3".attr === "c2_3".attr))
       val plan = lp.toDF().queryExecution.sparkPlan
       val targetBatchScan = getBatchScans(plan, partTable2.schema).head

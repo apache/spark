@@ -268,7 +268,7 @@ case class GetArrayItem(
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
         throw QueryExecutionErrors.invalidArrayIndexError(
-          index, baseValue.numElements, getContextOrNull())
+          index, baseValue.numElements(), getContextOrNull())
       } else {
         null
       }

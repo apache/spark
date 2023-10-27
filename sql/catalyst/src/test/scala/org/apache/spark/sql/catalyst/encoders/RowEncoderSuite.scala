@@ -276,8 +276,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val schema = new StructType().add("int", IntegerType)
     val encoder = ExpressionEncoder(schema)
     val e = intercept[RuntimeException](toRow(encoder, null))
-    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level Product or row object"))
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getCause.getMessage.contains("top level Product or row object"))
   }
 
   test("RowEncoder should validate external type") {
@@ -286,14 +286,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1.toShort))
     }
-    assert(e1.getMessage.contains("java.lang.Short is not a valid external type"))
+    assert(e1.getCause.getMessage.contains("java.lang.Short is not a valid external type"))
 
     val e2 = intercept[RuntimeException] {
       val schema = new StructType().add("a", StringType)
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1))
     }
-    assert(e2.getMessage.contains("java.lang.Integer is not a valid external type"))
+    assert(e2.getCause.getMessage.contains("java.lang.Integer is not a valid external type"))
 
     val e3 = intercept[RuntimeException] {
       val schema = new StructType().add("a",
@@ -301,21 +301,21 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1 -> "a"))
     }
-    assert(e3.getMessage.contains("scala.Tuple2 is not a valid external type"))
+    assert(e3.getCause.getMessage.contains("scala.Tuple2 is not a valid external type"))
 
     val e4 = intercept[RuntimeException] {
       val schema = new StructType().add("a", ArrayType(TimestampType))
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(Array("a")))
     }
-    assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
+    assert(e4.getCause.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
     val schema = new StructType().add("a", ArrayType(dt, nullable))
-    test(s"RowEncoder should return WrappedArray with properly typed array for $schema") {
+    test(s"RowEncoder should return mutable.ArraySeq with properly typed array for $schema") {
       val encoder = ExpressionEncoder(schema).resolveAndBind()
-      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.WrappedArray[_]](0)
+      val result = fromRow(encoder, toRow(encoder, Row(data))).getAs[mutable.ArraySeq[_]](0)
       assert(result.array.getClass === data.getClass)
       assert(result === data)
     }
@@ -473,13 +473,13 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
-  test("Encoding an ArraySeq/WrappedArray in scala-2.13") {
+  test("Encoding an mutable.ArraySeq in scala-2.13") {
     val schema = new StructType()
       .add("headers", ArrayType(new StructType()
         .add("key", StringType)
         .add("value", BinaryType)))
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
-    val data = Row(mutable.WrappedArray.make(Array(Row("key", "value".getBytes))))
+    val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
   }
 }

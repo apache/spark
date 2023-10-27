@@ -19,8 +19,6 @@ Additional Spark functions used in pandas-on-Spark.
 """
 from pyspark import SparkContext
 from pyspark.sql.column import Column
-
-# For supporting Spark Connect
 from pyspark.sql.utils import is_remote
 
 
@@ -50,7 +48,6 @@ def stddev(col: Column, ddof: int) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
@@ -66,7 +63,6 @@ def var(col: Column, ddof: int) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
@@ -81,7 +77,6 @@ def skew(col: Column) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
@@ -96,7 +91,6 @@ def kurt(col: Column) -> Column:
         )
 
     else:
-
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 

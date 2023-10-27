@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.adaptive
 import java.util
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -349,7 +349,7 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
 
         val schdlStagesWithDpndntStrm = stagesToMaterialize.filter(
-          _.hasStreamSidePushdownDependent).map(_.id).to[mutable.Set]
+          _.hasStreamSidePushdownDependent).map(_.id).to(mutable.Set)
         val immutableSchdlStagesWithDpndntStrm = schdlStagesWithDpndntStrm.toSet
         if (stagesToMaterialize.nonEmpty || result.newStages.nonEmpty) {
           if (result.newStages.nonEmpty) {

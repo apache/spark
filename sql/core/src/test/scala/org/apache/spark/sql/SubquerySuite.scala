@@ -767,32 +767,30 @@ class SubquerySuite extends QueryTest
       Seq((2, 1)).toDF("c1", "c2").createOrReplaceTempView("t3")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
 
-      // Simplest case
-      val exception1 = intercept[AnalysisException] {
+      checkAnswer(
         sql(
           """
             | select t1.c1
             | from   t1
             | where  t1.c1 in (select max(t2.c1)
             |                  from   t2
-            |                  where  t1.c2 >= t2.c2)""".stripMargin).collect()
-      }
-      checkErrorMatchPVals(
-        exception1,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment =
-            """select max(t2.c1)
-              |                  from   t2
-              |                  where  t1.c2 >= t2.c2""".stripMargin,
-          start = 44,
-          stop = 128))
+            |                  where  t1.c2 >= t2.c2)""".stripMargin),
+        Nil)
+
+      // Same but with a COUNT aggregate
+      checkAnswer(
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  t1.c1 in (select count(t2.c1)
+            |                  from   t2
+            |                  where  t1.c2 <= t2.c2)""".stripMargin),
+        Row(1) :: Nil)
+
 
       // Add a HAVING on top and augmented within an OR predicate
-      val exception2 = intercept[AnalysisException] {
+      checkAnswer(
         sql(
           """
             | select t1.c1
@@ -801,25 +799,10 @@ class SubquerySuite extends QueryTest
             |                  from   t2
             |                  where  t1.c2 >= t2.c2
             |                  having count(*) > 0 )
-            |         or t1.c2 >= 0""".stripMargin).collect()
-      }
-      checkErrorMatchPVals(
-        exception2,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment =
-            """select max(t2.c1)
-              |                  from   t2
-              |                  where  t1.c2 >= t2.c2
-              |                  having count(*) > 0""".stripMargin,
-          start = 44,
-          stop = 166))
+            |         or t1.c2 >= 0""".stripMargin),
+        Row(1) :: Nil)
 
-      // Add a HAVING on top and augmented within an OR predicate
-      val exception3 = intercept[AnalysisException] {
+      checkAnswer(
         sql(
           """
             | select t1.c1
@@ -829,47 +812,18 @@ class SubquerySuite extends QueryTest
             |                   from   t2
             |                   where  t1.c2 = t2.c2
             |                          or t3.c2 = t2.c2)
-            |        )""".stripMargin).collect()
-      }
-      checkErrorMatchPVals(
-        exception3,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment =
-            """select max(t2.c1)
-              |                   from   t2
-              |                   where  t1.c2 = t2.c2
-              |                          or t3.c2 = t2.c2""".stripMargin,
-          start = 77,
-          stop = 205))
+            |        )""".stripMargin),
+        Row(1) :: Nil)
 
-      // In Window expression: changing the data set to
-      // demonstrate if this query ran, it would return incorrect result.
-      val exception4 = intercept[AnalysisException] {
+      checkAnswer(
         sql(
           """
-          | select c1
-          | from   t3
-          | where  c1 in (select max(t4.c1) over ()
-          |               from   t4
-          |               where t3.c2 >= t4.c2)""".stripMargin).collect()
-      }
-      checkErrorMatchPVals(
-        exception4,
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("treeNode" -> "(?s).*"),
-        sqlState = None,
-        context = ExpectedContext(
-          fragment =
-            """select max(t4.c1) over ()
-              |               from   t4
-              |               where t3.c2 >= t4.c2""".stripMargin,
-          start = 38,
-          stop = 123))
+            | select c1
+            | from   t3
+            | where  c1 in (select max(t4.c1) over ()
+            |               from   t4
+            |               where t3.c2 <= t4.c2)""".stripMargin),
+        Row(2) :: Nil)
     }
   }
   // This restriction applies to
@@ -1243,7 +1197,7 @@ class SubquerySuite extends QueryTest
 
   test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
     // before the fix this would throw AnalysisException
-    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count()
   }
 
   test("SPARK-24085 scalar subquery in partitioning expression") {
@@ -2755,6 +2709,30 @@ class SubquerySuite extends QueryTest
       assert(filter.isEmpty,
         "Filter should be removed after OptimizeSubqueries and OptimizeOneRowRelationSubquery")
       checkAnswer(df, Row(1, "foo", 1, "foo"))
+    }
+  }
+
+  test("SPARK-45584: subquery execution should not fail with ORDER BY and LIMIT") {
+    withTable("t1") {
+      sql(
+        """
+          |CREATE TABLE t1 USING PARQUET
+          |AS SELECT * FROM VALUES
+          |(1, "a"),
+          |(2, "a"),
+          |(3, "a") t(id, value)
+          |""".stripMargin)
+      val df = sql(
+        """
+          |WITH t2 AS (
+          |  SELECT * FROM t1 ORDER BY id
+          |)
+          |SELECT *, (SELECT COUNT(*) FROM t2) FROM t2 LIMIT 10
+          |""".stripMargin)
+      // This should not fail with IllegalArgumentException.
+      checkAnswer(
+        df,
+        Row(1, "a", 3) :: Row(2, "a", 3) :: Row(3, "a", 3) :: Nil)
     }
   }
 }

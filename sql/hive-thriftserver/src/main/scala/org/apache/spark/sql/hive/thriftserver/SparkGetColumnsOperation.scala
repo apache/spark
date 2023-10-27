@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
@@ -87,7 +87,7 @@ private[hive] class SparkGetColumnsOperation(
     }.toMap
 
     if (isAuthV2Enabled) {
-      val privObjs = seqAsJavaListConverter(getPrivObjs(db2Tabs)).asJava
+      val privObjs = getPrivObjs(db2Tabs).asJava
       authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
     }
 
