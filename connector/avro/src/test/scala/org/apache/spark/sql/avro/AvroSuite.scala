@@ -2629,8 +2629,8 @@ abstract class AvroSuite
                   Row(rebased))
               }
 
-              // Force to not rebase to prove the written datetime values are rebased and we will get
-              // wrong result if we don't rebase while reading.
+              // Force to not rebase to prove the written datetime values are rebased and we will
+              // get wrong result if we don't rebase while reading.
               withSQLConf("spark.test.forceNoRebase" -> "true") {
                 checkAnswer(
                   spark.read
