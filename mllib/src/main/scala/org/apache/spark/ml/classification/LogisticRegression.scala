@@ -672,7 +672,7 @@ class LogisticRegression @Since("1.2.0") (
       denseCoefficientMatrix.foreachActive { case (i, j, v) =>
         centers(j) += v
       }
-      centers.transform(_ / numCoefficientSets)
+      centers.mapInPlace(_ / numCoefficientSets)
       denseCoefficientMatrix.foreachActive { case (i, j, v) =>
         denseCoefficientMatrix.update(i, j, v - centers(j))
       }
